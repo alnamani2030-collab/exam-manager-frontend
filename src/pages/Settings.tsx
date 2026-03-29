@@ -62,10 +62,8 @@ export default function Settings() {
   const [tick, setTick] = useState(0);
   const [isStatsFull, setIsStatsFull] = useState(false);
 
-  // ✅ NEW: sort direction for table
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
-  // ✅ Firestore exams (tenant-scoped)
   const [fsExams, setFsExams] = useState<any[]>([]);
 
   useEffect(() => {
@@ -98,7 +96,11 @@ export default function Settings() {
         border-radius: 16px;
         padding: 12px;
         box-shadow: 0 18px 35px rgba(0,0,0,0.6), inset 0 2px 0 rgba(255,255,255,0.05);
-        overflow: hidden;
+        overflow-x: auto;
+        overflow-y: hidden;
+        direction: rtl;
+        scrollbar-width: thin;
+        scrollbar-color: #b8860b rgba(255,255,255,0.08);
       }
 
       .distStats3D::before{
@@ -120,7 +122,8 @@ export default function Settings() {
       }
 
       .distTable{
-        width:100%;
+        width: max-content;
+        min-width: 100%;
         border-collapse: separate;
         border-spacing: 8px;
         color: rgba(255,255,255,0.95);
@@ -151,6 +154,7 @@ export default function Settings() {
         padding: 12px;
         border-radius: 14px;
         text-align:center;
+        white-space: nowrap;
         box-shadow: 0 8px 18px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.05);
         transition: transform .15s ease, box-shadow .15s ease;
       }
@@ -181,8 +185,26 @@ export default function Settings() {
         outline: 2px solid rgba(255,0,0,0.55);
       }
 
+      .distStats3D::-webkit-scrollbar{
+        height: 12px;
+      }
+      .distStats3D::-webkit-scrollbar-track{
+        background: rgba(255,255,255,0.08);
+        border-radius: 10px;
+      }
+      .distStats3D::-webkit-scrollbar-thumb{
+        background: linear-gradient(180deg,#b8860b,#7a5c00);
+        border-radius: 10px;
+      }
+      .distStats3D::-webkit-scrollbar-thumb:hover{
+        background: linear-gradient(180deg,#d4af37,#8f6b00);
+      }
+
       @media print{
-        .distStats3D{ box-shadow: none !important; }
+        .distStats3D{
+          box-shadow: none !important;
+          overflow: visible !important;
+        }
         .distStats3D::before{ display:none !important; }
         .distTh, .distTd{ box-shadow:none !important; transform:none !important; }
       }
@@ -363,9 +385,8 @@ export default function Settings() {
       };
     });
 
-    // ✅ SORT BY date then period (AM before PM) with direction control
     const toKey = (dateISO: string, period: "AM" | "PM") => {
-      const d = String(dateISO || "").trim(); // expected YYYY-MM-DD
+      const d = String(dateISO || "").trim();
       const p = period === "PM" ? 1 : 0;
       return `${d}-${p}`;
     };
@@ -460,7 +481,6 @@ export default function Settings() {
     });
   };
 
-  // ✅ WhatsApp auto alert
   const lastWhatsAppAlertRef = useRef<string>("");
 
   useEffect(() => {
