@@ -13,25 +13,48 @@ const USE_FUNCTIONS = !Boolean((import.meta as any).env?.DEV);
 
 import { auth } from "../firebase/firebase";
 import { useAuth } from "../auth/AuthContext";
-import { buildAuthzSnapshot, canAccessCapability, canManageAdminSystemRole, resolvePrimaryRoleLabel } from "../features/authz";
+import {
+  buildAuthzSnapshot,
+  canAccessCapability,
+  canManageAdminSystemRole,
+  resolvePrimaryRoleLabel,
+} from "../features/authz";
 import { callFn } from "../services/functionsClient";
 import { getActionErrorMessage } from "../services/functionsRuntimePolicy";
 import { useAdminTenants } from "../features/system-admin/hooks/useAdminTenants";
 import { useAdminUsers } from "../features/system-admin/hooks/useAdminUsers";
 import type { AllowUser } from "../features/system-admin/types";
-import { createTenantAction, deleteTenantAction, saveTenantConfigAction, toggleTenantEnabledAction } from "../features/system-admin/services/adminTenantsService";
-import { createAllowUserAction, inviteSingleOwnerAction, loadOwnerForTenantAction, removeAllowUserAction, updateAllowUserAction } from "../features/system-admin/services/adminUsersService";
-import { isValidTenantId, normalizeRoleClient, resolveTenantGovernorate } from "../features/system-admin/services/adminSystemShared";
+import {
+  createTenantAction,
+  deleteTenantAction,
+  saveTenantConfigAction,
+  toggleTenantEnabledAction,
+} from "../features/system-admin/services/adminTenantsService";
+import {
+  createAllowUserAction,
+  inviteSingleOwnerAction,
+  loadOwnerForTenantAction,
+  removeAllowUserAction,
+  updateAllowUserAction,
+} from "../features/system-admin/services/adminUsersService";
+import {
+  isValidTenantId,
+  normalizeRoleClient,
+  resolveTenantGovernorate,
+} from "../features/system-admin/services/adminSystemShared";
 
 export default function AdminSystem() {
-  const { user, profile, isSuperAdmin, isSuper, canSupport, startSupportForTenant, logout } = useAuth() as any;
+  const { user, profile, isSuperAdmin, isSuper, canSupport, startSupportForTenant, logout } =
+    useAuth() as any;
   const navigate = useNavigate();
 
-  const authzSnapshot = useMemo(() => buildAuthzSnapshot({ user, profile, isSuperAdmin, isSuper }), [user, profile, isSuperAdmin, isSuper]);
+  const authzSnapshot = useMemo(
+    () => buildAuthzSnapshot({ user, profile, isSuperAdmin, isSuper }),
+    [user, profile, isSuperAdmin, isSuper]
+  );
   const roleLabel = resolvePrimaryRoleLabel(authzSnapshot);
   const isPlatformOwner = canAccessCapability(authzSnapshot, "PLATFORM_OWNER");
   const canManageUsers = canAccessCapability(authzSnapshot, "USERS_MANAGE");
-
 
   const {
     visibleTenants,
@@ -109,13 +132,20 @@ export default function AdminSystem() {
     return true;
   }, [canManageUsers, newUserEmail, newUserTenantId]);
 
-  const canAssignNewUserRole = useMemo(() => canManageAdminSystemRole(authzSnapshot, normalizeRoleClient(newUserRole, newUserGovernorate)), [authzSnapshot, newUserRole, newUserGovernorate]);
-
+  const canAssignNewUserRole = useMemo(
+    () => canManageAdminSystemRole(authzSnapshot, normalizeRoleClient(newUserRole, newUserGovernorate)),
+    [authzSnapshot, newUserRole, newUserGovernorate]
+  );
 
   const createTenant = async () => {
     if (!user || !canSaveTenant) return;
     try {
-      await createTenantAction({ user, tenantId: newTenantId, tenantName: newTenantName, enabled: newTenantEnabled });
+      await createTenantAction({
+        user,
+        tenantId: newTenantId,
+        tenantName: newTenantName,
+        enabled: newTenantEnabled,
+      });
       setNewTenantName("");
       setNewTenantIdRaw("");
       setNewTenantEnabled(true);
@@ -128,7 +158,11 @@ export default function AdminSystem() {
   const saveTenantConfig = async () => {
     if (!user || !selectedTenantId) return;
     try {
-      await saveTenantConfigAction({ user, tenantId: selectedTenantId, config: selectedTenantConfig });
+      await saveTenantConfigAction({
+        user,
+        tenantId: selectedTenantId,
+        config: selectedTenantConfig,
+      });
       alert("تم حفظ إعدادات المدرسة.");
     } catch (e: any) {
       alert(getActionErrorMessage(e, "تعذر حفظ إعدادات المدرسة."));
@@ -144,7 +178,6 @@ export default function AdminSystem() {
     }
   };
 
-  // حذف مدرسة + بياناتها
   const deleteTenant = async (tenantId: string) => {
     if (!user) return;
     if (tenantId === "system") {
@@ -204,7 +237,15 @@ export default function AdminSystem() {
   const updateUser = async (email: string, patch: Partial<AllowUser>) => {
     if (!user) return;
     try {
-      await updateAllowUserAction({ user, users, authzSnapshot, isSuper, resolveTenantGovernorate, email, patch });
+      await updateAllowUserAction({
+        user,
+        users,
+        authzSnapshot,
+        isSuper,
+        resolveTenantGovernorate,
+        email,
+        patch,
+      });
     } catch (e: any) {
       alert(getActionErrorMessage(e, "تعذر تعديل المستخدم."));
     }
@@ -245,7 +286,6 @@ export default function AdminSystem() {
   };
 
   return (
-
     <div className="system-shell">
       <header className="system-header">
         <div className="system-header-inner">
@@ -259,15 +299,23 @@ export default function AdminSystem() {
           <div className="system-actions">
             <span style={{ opacity: 0.85 }}>{roleLabel}</span>
             {user?.email ? <span style={{ opacity: 0.75 }}>({String(user.email)})</span> : null}
+
+            <Button variant="ghost" onClick={() => navigate("/super/suggestions")} style={{ padding: "8px 10px" }}>
+              رسائل التطوير
+            </Button>
+
             <Button variant="ghost" onClick={() => navigate("/system/supers")} style={{ padding: "8px 10px" }}>
               إدارة سوبر المحافظات
             </Button>
+
             <Button variant="ghost" onClick={() => navigate("/super-system")} style={{ padding: "8px 10px" }}>
               صفحة السوبر (المحافظات)
             </Button>
+
             <Button variant="ghost" onClick={() => navigate("/super")} style={{ padding: "8px 10px" }}>
               العودة إلى صفحة Super
             </Button>
+
             <Button variant="ghost" onClick={logout} style={{ padding: "8px 10px" }}>
               تسجيل خروج
             </Button>
@@ -291,7 +339,9 @@ export default function AdminSystem() {
               title="لوحة مالك المنصة - إدارة المدارس والمستخدمين"
               right={
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <div style={{ opacity: 0.85 }}>{isPlatformOwner ? "صلاحيات المالك الكاملة مفعلة" : roleLabel}</div>
+                  <div style={{ opacity: 0.85 }}>
+                    {isPlatformOwner ? "صلاحيات المالك الكاملة مفعلة" : roleLabel}
+                  </div>
                   <Button variant="ghost" onClick={refreshMyPermissions} disabled={refreshingPerms}>
                     {refreshingPerms ? "..." : "تحديث الصلاحيات"}
                   </Button>
