@@ -1,6 +1,7 @@
 // src/pages/AdminSystem.tsx
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
 import "./adminSystem.theme.css";
 import AdminTenantsSection from "../features/system-admin/components/AdminTenantsSection";
 import AdminUsersSection from "../features/system-admin/components/AdminUsersSection";
@@ -11,7 +12,7 @@ import { Button, Card, GOLD, Input, LINE } from "../features/system-admin/ui";
 const MINISTRY_LOGO_URL = "https://i.imgur.com/vdDhSMh.png";
 const USE_FUNCTIONS = !Boolean((import.meta as any).env?.DEV);
 
-import { auth } from "../firebase/firebase";
+import { auth, db } from "../firebase/firebase";
 import { useAuth } from "../auth/AuthContext";
 import {
   buildAuthzSnapshot,
@@ -77,6 +78,7 @@ export default function AdminSystem() {
   const [ownerEmail, setOwnerEmail] = useState<string>("");
   const [ownerDoc, setOwnerDoc] = useState<any | null>(null);
   const [ownerDocLoading, setOwnerDocLoading] = useState(false);
+  const [hasNewSuggestions, setHasNewSuggestions] = useState(false);
 
   const {
     newUserEmail,
@@ -104,6 +106,23 @@ export default function AdminSystem() {
 
   const [supportError, setSupportError] = useState<string>("");
 
+  useEffect(() => {
+    const q = query(collection(db, "systemSuggestions"), where("status", "==", "new"));
+
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        setHasNewSuggestions(!snap.empty);
+      },
+      (error) => {
+        console.error("systemSuggestions listener error:", error);
+        setHasNewSuggestions(false);
+      }
+    );
+
+    return () => unsub();
+  }, []);
+
   const [refreshingPerms, setRefreshingPerms] = useState(false);
   async function refreshMyPermissions() {
     try {
@@ -113,7 +132,7 @@ export default function AdminSystem() {
         await fn({});
       }
     } catch {
-      // ignore
+        // ignore
     } finally {
       try {
         await auth.currentUser?.getIdToken(true);
@@ -287,6 +306,30 @@ export default function AdminSystem() {
 
   return (
     <div className="system-shell">
+      <style>{`
+        @keyframes bellPulseGlow {
+          0% {
+            transform: scale(1);
+            box-shadow: 0 0 0 rgba(212,175,55,0);
+            opacity: 1;
+          }
+          50% {
+            transform: scale(1.08);
+            box-shadow: 0 0 18px rgba(212,175,55,0.55);
+            opacity: 0.92;
+          }
+          100% {
+            transform: scale(1);
+            box-shadow: 0 0 0 rgba(212,175,55,0);
+            opacity: 1;
+          }
+        }
+
+        .new-suggestions-bell {
+          animation: bellPulseGlow 1s infinite;
+        }
+      `}</style>
+
       <header className="system-header">
         <div className="system-header-inner">
           <div className="system-brand">
@@ -300,8 +343,19 @@ export default function AdminSystem() {
             <span style={{ opacity: 0.85 }}>{roleLabel}</span>
             {user?.email ? <span style={{ opacity: 0.75 }}>({String(user.email)})</span> : null}
 
-            <Button variant="ghost" onClick={() => navigate("/super/suggestions")} style={{ padding: "8px 10px" }}>
-              رسائل التطوير
+            <Button
+              variant="ghost"
+              onClick={() => navigate("/super/suggestions")}
+              className={hasNewSuggestions ? "new-suggestions-bell" : ""}
+              style={{
+                padding: "8px 10px",
+                position: "relative",
+                border: hasNewSuggestions ? "1px solid rgba(212,175,55,0.45)" : undefined,
+                background: hasNewSuggestions ? "rgba(212,175,55,0.12)" : undefined,
+              }}
+              title={hasNewSuggestions ? "يوجد رسائل تطوير جديدة" : "رسائل التطوير"}
+            >
+              {hasNewSuggestions ? "🔔 رسائل جديدة" : "🔔 رسائل التطوير"}
             </Button>
 
             <Button variant="ghost" onClick={() => navigate("/system/supers")} style={{ padding: "8px 10px" }}>
