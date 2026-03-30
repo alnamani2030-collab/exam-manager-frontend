@@ -29,7 +29,7 @@ import Sync from "./pages/Sync";
 import Unavailability from "./pages/Unavailability";
 import Settings from "./pages/Settings";
 import Settings1 from "./pages/Settings1";
-import SuggestionsPage from "./pages/SuggestionsPage";
+import SuggestionsPage from "./pages/SuggestionsPage.";
 import Gallery from "./pages/Gallery";
 import About from "./pages/About";
 import TeamMembers from "./pages/TeamMembers";
@@ -45,6 +45,7 @@ import MultiRolePage from "./pages/MultiRolePage";
 import { useI18n } from "./i18n/I18nProvider";
 import LegacyTenantRedirect from "./pages/LegacyTenantRedirect";
 import { LEGACY_TENANT_PATHS } from "./config/tenantRoutes";
+import SuperSuggestions from "./pages/SuperSuggestions";
 
 // Root redirect (split: SuperAdmin vs Super)
 import RootRedirect from "./pages/RootRedirect";
@@ -144,6 +145,23 @@ export default function App() {
           <SuperAdminRoute>
             <Migrate />
           </SuperAdminRoute>
+        }
+      />
+
+      <Route
+        path="/super/suggestions"
+        element={
+         <SuperAdminRoute>
+         <SuperSuggestions />
+         </SuperAdminRoute>
+        }
+      />
+      <Route
+        path="/super/suggestions"
+        element={
+         <SuperAdminRoute>
+         <SuperSuggestions />
+         </SuperAdminRoute>
         }
       />
 
