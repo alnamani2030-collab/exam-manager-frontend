@@ -29,6 +29,7 @@ import Sync from "./pages/Sync";
 import Unavailability from "./pages/Unavailability";
 import Settings from "./pages/Settings";
 import Settings1 from "./pages/Settings1";
+import SuggestionsPage from "./pages/SuggestionsPage";
 import Gallery from "./pages/Gallery";
 import About from "./pages/About";
 import TeamMembers from "./pages/TeamMembers";
@@ -37,8 +38,8 @@ import AdminSystem from "./pages/AdminSystem";
 import SuperSystem from "./pages/SuperSystem";
 import SuperGovernorates from "./pages/SuperGovernorates";
 import Migrate from "./pages/Migrate";
-import Analytics1Page from "./pages/Analytics1Page";
 import AnalyticsPage from "./pages/AnalyticsPage";
+import Analytics1Page from "./pages/Analytics1Page";
 import VersioningPage from "./pages/VersioningPage";
 import MultiRolePage from "./pages/MultiRolePage";
 import { useI18n } from "./i18n/I18nProvider";
@@ -56,8 +57,7 @@ export default function App() {
   const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
 
   useEffect(() => {
-    // التأكد من حالة المستخدم قبل التفاعل مع الصفحة
-    setTimeout(() => setLoading(false), 1000); // فترة تحميل مؤقتة لتفادي التوجيه السريع.
+    setTimeout(() => setLoading(false), 1000);
   }, []);
 
   if (loading) {
@@ -179,6 +179,7 @@ export default function App() {
         <Route path="unavailability" element={<Unavailability />} />
         <Route path="settings" element={<Settings />} />
         <Route path="settings1" element={<Settings1 />} />
+        <Route path="suggestions" element={<SuggestionsPage />} />
         <Route path="gallery" element={<Gallery />} />
         <Route path="about" element={<About />} />
 
@@ -187,11 +188,10 @@ export default function App() {
         <Route path="audit" element={<Audit />} />
         <Route path="activity-logs" element={<ActivityLogs />} />
         <Route path="sync" element={<Sync />} />
-        <Route path="analytics1" element={<Analytics1Page />} />
         <Route path="analytics" element={<AnalyticsPage />} />
+         <Route path="analytics1" element={<Analytics1Page />} />
         <Route path="versioning" element={<VersioningPage />} />
         <Route path="multi-role" element={<MultiRolePage />} />
-
       </Route>
 
       {LEGACY_TENANT_PATHS.map((legacyPath) => (
