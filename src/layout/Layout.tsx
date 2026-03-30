@@ -74,19 +74,17 @@ export default function Layout() {
 
     const items = [
       { to: tp(""), label: tr("لوحة التحكم", "Dashboard"), icon: "📊" },
-       { to: tp("settings1"), label: tr("بيانات المدرسة", "School Profile"), icon: "🏷️" },
+      { to: tp("settings1"), label: tr("بيانات المدرسة", "School Profile"), icon: "🏷️" },
       { to: tp("teachers"), label: tr("الكادر التعليمي", "Teachers"), icon: "👥" },
       { to: tp("exams"), label: tr("جدول الامتحانات", "Exam Schedule"), icon: "📅" },
       { to: tp("rooms"), label: tr("القاعات", "Rooms"), icon: "🏫" },
       { to: tp("room-blocks"), label: tr("حظر القاعات", "Room Blocks"), icon: "⛔" },
-     
       { to: tp("unavailability"), label: tr("الغياب", "Unavailability"), icon: "🕒" },
       { to: tp("task-distribution/run"), label: tr("توزيع المهام", "Task Distribution"), icon: "🔀" },
       { to: tp("task-distribution/results"), label: tr("الجدول الشامل", "Master Table"), icon: "🧾" },
       { to: tp("settings"), label: tr("تقرير إحصائية التوزيع", "Distribution Statistics"), icon: "⚙️" },
       { to: tp("task-distribution/print"), label: tr("التقارير والكشوفات", "Reports & Sheets"), icon: "📑" },
-          
-      
+
       { to: tp("archive"), label: tr("الأرشيف", "Archive"), icon: "📦", adminOnly: true },
       { to: tp("audit"), label: tr("السجلات", "Audit"), icon: "🧩", adminOnly: true },
       { to: tp("activity-logs"), label: tr("سجل النشاط", "Activity Logs"), icon: "🧾", adminOnly: true },
@@ -95,9 +93,11 @@ export default function Layout() {
       { to: tp("analytics"), label: tr("الإحصائيات والرسوم البيانية", "Analytics & Charts"), icon: "📈" },
       { to: tp("versioning"), label: tr("إدارة الإصدارات", "Versioning"), icon: "🗂️", adminOnly: true },
       { to: tp("multi-role"), label: tr("صلاحيات Multi-Role", "Multi-Role Permissions"), icon: "🔐", adminOnly: true },
-      
+
       { to: tp("gallery"), label: tr("مكتبة الصور", "Gallery"), icon: "🖼️" },
       { to: tp("about"), label: tr("مصمم البرنامج", "About Developer"), icon: "🛠️" },
+      { to: tp("suggestions"), label: tr("تطوير البرنامج", "Suggestions"), icon: "💡" },
+
       { to: "/system/migrate", label: tr("ترحيل البيانات", "Data Migration"), icon: "🚚", superOnly: true },
       { to: "/system", label: tr("مدير النظام", "System Admin"), icon: "🧠", systemOnly: true },
     ];
@@ -138,7 +138,6 @@ export default function Layout() {
 
   const sideProp = isRTL ? "right" : "left";
   const oppositeMarginProp = isRTL ? "marginRight" : "marginLeft";
-  const asideJustify = sidebarCollapsed ? "center" : isRTL ? "flex-start" : "flex-start";
 
   return (
     <div style={{ direction: isRTL ? "rtl" : "ltr", display: "flex", minHeight: "100vh" }}>
@@ -334,7 +333,9 @@ export default function Layout() {
           height: "100vh",
           width: 14,
           pointerEvents: "none",
-          background: isRTL ? "linear-gradient(90deg, rgba(0,0,0,0.35), transparent)" : "linear-gradient(270deg, rgba(0,0,0,0.35), transparent)",
+          background: isRTL
+            ? "linear-gradient(90deg, rgba(0,0,0,0.35), transparent)"
+            : "linear-gradient(270deg, rgba(0,0,0,0.35), transparent)",
           zIndex: 998,
           transition: `${sideProp} 280ms ease`,
         } as React.CSSProperties}
