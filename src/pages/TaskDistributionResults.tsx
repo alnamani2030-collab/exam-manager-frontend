@@ -98,7 +98,8 @@ export default function TaskDistributionResults() {
     onArchived: () => nav("/archive"),
   });
 
-  const tableActions = useResultsTableActions({ tenantId, 
+  const tableActions = useResultsTableActions({
+    tenantId,
     run,
     teacherNameToId: dataModel.teacherNameToId,
     colKeyToExamId: dataModel.colKeyToExamId,
@@ -197,14 +198,6 @@ export default function TaskDistributionResults() {
         </div>
       ) : null}
 
-      <input
-        ref={interaction.fileInputRef}
-        type="file"
-        accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
-        style={{ display: "none" }}
-        onChange={pageActions.handleImportFileSelected}
-      />
-
       <div ref={printAreaRef}>
         <ResultsTable
           displayDates={dataModel.displayDates}
@@ -254,6 +247,18 @@ export default function TaskDistributionResults() {
           />
         </div>
       </div>
+    </>
+  );
+
+  const sharedImportControls = (
+    <>
+      <input
+        ref={interaction.fileInputRef}
+        type="file"
+        accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+        style={{ display: "none" }}
+        onChange={pageActions.handleImportFileSelected}
+      />
 
       <ResultsImportConfirmDialog
         open={interaction.importDialogOpen}
@@ -276,6 +281,7 @@ export default function TaskDistributionResults() {
               showTeacherSidebar={showTeacherSidebar}
               onToggleTeacherSidebar={() => setShowTeacherSidebar((v) => !v)}
             />
+            {sharedImportControls}
             {content}
           </div>
         </div>
@@ -285,7 +291,10 @@ export default function TaskDistributionResults() {
 
   return (
     <div style={pageDark}>
-      <div style={{ ...container, width: "min(1880px, 100%)", maxWidth: "100%" }}>{content}</div>
+      <div style={{ ...container, width: "min(1880px, 100%)", maxWidth: "100%" }}>
+        {sharedImportControls}
+        {content}
+      </div>
     </div>
   );
 }
