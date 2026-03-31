@@ -9,12 +9,7 @@ import SettingsDistributionStatsSection from "../features/settings/components/Se
 const EXAMS_KEY = "exam-manager:exams:v1";
 const LOGO_KEY = "exam-manager:app-logo";
 const MASTER_TABLE_KEY = "exam-manager:task-distribution:master-table:v1";
-
-// ✅ رقم مسؤول الواتساب (ضعه في LocalStorage)
-// localStorage.setItem("exam-manager:whatsapp-admin:v1", "9689XXXXXXXX"); // مثال عمان
 const WHATSAPP_ADMIN_KEY = "exam-manager:whatsapp-admin:v1";
-
-// ✅ لمنع فتح واتساب بشكل متكرر لنفس الحالة
 const WHATSAPP_LAST_ALERT_KEY = "exam-manager:dist-stats:last-wa-alert:v1";
 
 type Exam = {
@@ -53,17 +48,53 @@ function formatPeriodAr(p: "AM" | "PM" | string) {
 }
 
 function normalizePhone(raw: string) {
-  const digits = String(raw || "").replace(/[^\d]/g, "");
-  return digits;
+  return String(raw || "").replace(/[^\d]/g, "");
+}
+
+function normalizePeriod(value: any): "AM" | "PM" {
+  return String(value || "").toUpperCase() === "PM" ? "PM" : "AM";
+}
+
+function getRowSubject(row: any) {
+  return String(
+    row?.subject ??
+      row?.examSubject ??
+      row?.subjectName ??
+      row?.examName ??
+      row?.name ??
+      ""
+  ).trim();
+}
+
+function getRowDateISO(row: any) {
+  return String(row?.dateISO ?? row?.date ?? "").trim();
+}
+
+function getRowPeriod(row: any): "AM" | "PM" {
+  return normalizePeriod(row?.period ?? row?.periodKey ?? row?.p ?? "AM");
+}
+
+function getRowExamId(row: any) {
+  return String(
+    row?.examId ??
+      row?.id ??
+      `${getRowDateISO(row)}-${getRowSubject(row)}-${getRowPeriod(row)}`
+  );
+}
+
+function getRowCommitteeNo(row: any) {
+  const value = row?.committeeNo ?? row?.committee ?? row?.roomNo ?? row?.room;
+  if (value === undefined || value === null || value === "") return "";
+  return String(value);
 }
 
 export default function Settings() {
-  const { tenantId } = useAuth();
+  const auth = useAuth() as any;
+  const tenantId = String(auth?.tenantId || auth?.profile?.tenantId || "").trim();
+
   const [tick, setTick] = useState(0);
   const [isStatsFull, setIsStatsFull] = useState(false);
-
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-
   const [fsExams, setFsExams] = useState<any[]>([]);
 
   useEffect(() => {
@@ -89,18 +120,13 @@ export default function Settings() {
   useEffect(() => {
     const style = document.createElement("style");
     style.innerHTML = `
-      /* ===== Distribution Stats 3D Table ===== */
       .distStats3D{
         position: relative;
         background: linear-gradient(145deg, #111111, #1a1a1a);
         border-radius: 16px;
         padding: 12px;
         box-shadow: 0 18px 35px rgba(0,0,0,0.6), inset 0 2px 0 rgba(255,255,255,0.05);
-        overflow-x: auto;
-        overflow-y: hidden;
-        direction: rtl;
-        scrollbar-width: thin;
-        scrollbar-color: #b8860b rgba(255,255,255,0.08);
+        overflow: visible;
       }
 
       .distStats3D::before{
@@ -115,6 +141,7 @@ export default function Settings() {
         animation: distShine 10s infinite;
         pointer-events:none;
       }
+
       @keyframes distShine{
         0%, 88% { transform: translateX(-120%) skewX(-12deg); opacity: 0; }
         90% { opacity: 1; }
@@ -122,8 +149,8 @@ export default function Settings() {
       }
 
       .distTable{
-        width: max-content;
-        min-width: 100%;
+        width:100%;
+        min-width: 1200px;
         border-collapse: separate;
         border-spacing: 8px;
         color: rgba(255,255,255,0.95);
@@ -154,10 +181,10 @@ export default function Settings() {
         padding: 12px;
         border-radius: 14px;
         text-align:center;
-        white-space: nowrap;
         box-shadow: 0 8px 18px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.05);
         transition: transform .15s ease, box-shadow .15s ease;
       }
+
       .distTd:hover{
         transform: translateY(-3px);
         box-shadow: 0 14px 28px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.1);
@@ -170,6 +197,7 @@ export default function Settings() {
         color:#fff1c4;
         box-shadow: inset 0 2px 0 rgba(255,255,255,0.18), 0 10px 20px rgba(0,0,0,0.65);
       }
+
       .distColSubject{
         min-width: 220px;
         font-weight: 950;
@@ -181,30 +209,30 @@ export default function Settings() {
       tr.row-deficit .distTd{
         outline: 1px solid rgba(255,77,77,0.35);
       }
-      tr.row-big-deficit .distTd{
-        outline: 2px solid rgba(255,0,0,0.55);
+
+      tr.row-big-deficit .distTd,
+      .row-big-deficit .distTd,
+      .row-big-deficit td{
+        outline: 2px solid rgba(255,0,0,0.55) !important;
+        animation: deficit-shake 700ms ease-in-out infinite !important;
+        box-shadow: inset 0 0 0 1px rgba(255,0,0,0.25);
       }
 
-      .distStats3D::-webkit-scrollbar{
-        height: 12px;
-      }
-      .distStats3D::-webkit-scrollbar-track{
-        background: rgba(255,255,255,0.08);
-        border-radius: 10px;
-      }
-      .distStats3D::-webkit-scrollbar-thumb{
-        background: linear-gradient(180deg,#b8860b,#7a5c00);
-        border-radius: 10px;
-      }
-      .distStats3D::-webkit-scrollbar-thumb:hover{
-        background: linear-gradient(180deg,#d4af37,#8f6b00);
+      @keyframes deficit-shake {
+        0%, 100% { transform: translateX(0); }
+        10% { transform: translateX(-2px); }
+        20% { transform: translateX(2px); }
+        30% { transform: translateX(-3px); }
+        40% { transform: translateX(3px); }
+        50% { transform: translateX(-2px); }
+        60% { transform: translateX(2px); }
+        70% { transform: translateX(-1px); }
+        80% { transform: translateX(1px); }
+        90% { transform: translateX(-1px); }
       }
 
       @media print{
-        .distStats3D{
-          box-shadow: none !important;
-          overflow: visible !important;
-        }
+        .distStats3D{ box-shadow: none !important; }
         .distStats3D::before{ display:none !important; }
         .distTh, .distTd{ box-shadow:none !important; transform:none !important; }
       }
@@ -237,13 +265,11 @@ export default function Settings() {
     window.addEventListener(RUN_UPDATED_EVENT, onRunUpdated as any);
     window.addEventListener("storage", onStorage);
     window.addEventListener("focus", bump);
-    const iv = window.setInterval(bump, 2000);
 
     return () => {
       window.removeEventListener(RUN_UPDATED_EVENT, onRunUpdated as any);
       window.removeEventListener("storage", onStorage);
       window.removeEventListener("focus", bump);
-      window.clearInterval(iv);
     };
   }, []);
 
@@ -256,14 +282,11 @@ export default function Settings() {
   }, [isStatsFull]);
 
   const run = useMemo(() => {
-    const candidates = [tenantId, tenantId || "system", "system", ""].filter((v, i, a) => a.indexOf(v as any) === i);
-
-    for (const t of candidates) {
-      try {
-        const r = loadRun(String(t));
-        if (r && Array.isArray((r as any).assignments)) return r;
-      } catch {}
-    }
+    if (!tenantId) return null;
+    try {
+      const r = loadRun(String(tenantId));
+      if (r && Array.isArray((r as any).assignments)) return r;
+    } catch {}
     return null;
   }, [tenantId, tick]);
 
@@ -281,22 +304,26 @@ export default function Settings() {
   }, [tick]);
 
   const assignments = useMemo(() => {
+    const fromMaster = Array.isArray(masterPayload?.rows) ? masterPayload!.rows : [];
+    if (fromMaster.length > 0) {
+      return { rows: fromMaster, source: "master-table", meta: masterPayload?.meta || null };
+    }
+
     const fromRun = Array.isArray((run as any)?.assignments) ? (run as any).assignments : [];
-    if (fromRun.length > 0)
+    if (fromRun.length > 0) {
       return {
         rows: fromRun,
         source: "run",
         meta: { runId: (run as any)?.runId, runCreatedAtISO: (run as any)?.createdAtISO },
       };
-    const fromMaster = Array.isArray(masterPayload?.rows) ? masterPayload!.rows : [];
-    if (fromMaster.length > 0) return { rows: fromMaster, source: "master-table", meta: masterPayload?.meta || null };
+    }
+
     return { rows: [], source: "none", meta: null };
   }, [run, masterPayload]);
 
   const branding = useMemo(() => {
     const logo = String(localStorage.getItem(LOGO_KEY) || "").trim();
-    const appName = "نظام إدارة الامتحانات الذكي";
-    return { appName, logo };
+    return { appName: "نظام إدارة الامتحانات الذكي", logo };
   }, [tick]);
 
   const exams = useMemo(() => {
@@ -348,7 +375,7 @@ export default function Settings() {
       return inv_12 || 2;
     };
 
-    const computed = exams.map((ex) => {
+    const computedFromExams = exams.map((ex) => {
       const invAssigned = rows.filter(
         (a: any) => a?.taskType === "INVIGILATION" && String(a?.examId || "") === String(ex.id)
       ).length;
@@ -362,11 +389,9 @@ export default function Settings() {
 
       const invPerRoom = invigilatorsPerRoomForSubject(ex.subject);
       const requiredTotal = Math.max(0, (Number(ex.roomsCount) || 0) * Math.max(0, Number(invPerRoom) || 0));
-
       const covered = invAssigned + reserveAssigned;
       const deficit = Math.max(0, requiredTotal - covered);
       const coveragePct = requiredTotal > 0 ? Math.round((covered / requiredTotal) * 100) : 100;
-
       const deficitWithoutReserve = Math.max(0, requiredTotal - invAssigned);
       const total = covered;
 
@@ -385,6 +410,86 @@ export default function Settings() {
       };
     });
 
+    let computed = computedFromExams;
+
+    if ((computed.length === 0 || assignments.source === "master-table") && rows.length > 0) {
+      const grouped = new Map<string, any>();
+
+      for (const row of rows as any[]) {
+        const subject = getRowSubject(row);
+        const dateISO = getRowDateISO(row);
+        const period = getRowPeriod(row);
+        const examId = getRowExamId(row);
+
+        if (!subject || !dateISO) continue;
+
+        const key = `${dateISO}__${period}__${subject}__${examId}`;
+        if (!grouped.has(key)) {
+          grouped.set(key, {
+            id: examId,
+            subject,
+            dateISO,
+            dayLabel: dayNameArFromISO(dateISO),
+            period,
+            committeeSet: new Set<string>(),
+            invAssigned: 0,
+          });
+        }
+
+        const item = grouped.get(key);
+        const taskType = String(row?.taskType || "").toUpperCase();
+        const committeeNo = getRowCommitteeNo(row);
+
+        if (committeeNo) item.committeeSet.add(committeeNo);
+        if (taskType === "INVIGILATION") item.invAssigned += 1;
+      }
+
+      const reserveByDatePeriod = new Map<string, number>();
+      for (const row of rows as any[]) {
+        const taskType = String(row?.taskType || "").toUpperCase();
+        if (taskType !== "RESERVE") continue;
+
+        const dateISO = getRowDateISO(row);
+        const period = getRowPeriod(row);
+        if (!dateISO) continue;
+
+        const key = `${dateISO}__${period}`;
+        reserveByDatePeriod.set(key, (reserveByDatePeriod.get(key) || 0) + 1);
+      }
+
+      computed = Array.from(grouped.values()).map((item: any) => {
+        const roomsCount = Math.max(0, item.committeeSet.size || 0);
+        const invPerRoom = invigilatorsPerRoomForSubject(item.subject);
+        const requiredTotal = Math.max(0, roomsCount * Math.max(0, Number(invPerRoom) || 0));
+        const reserveAssigned = reserveByDatePeriod.get(`${item.dateISO}__${item.period}`) || 0;
+        const covered = item.invAssigned + reserveAssigned;
+        const deficit = Math.max(0, requiredTotal - covered);
+        const coveragePct = requiredTotal > 0 ? Math.round((covered / requiredTotal) * 100) : 100;
+        const deficitWithoutReserve = Math.max(0, requiredTotal - item.invAssigned);
+        const total = covered;
+
+        return {
+          id: item.id,
+          subject: item.subject,
+          dateISO: item.dateISO,
+          dayLabel: item.dayLabel,
+          period: item.period,
+          roomsCount,
+          durationMinutes: undefined,
+          day: item.dayLabel || dayNameArFromISO(item.dateISO),
+          periodLabel: formatPeriodAr(item.period),
+          invAssigned: item.invAssigned,
+          reserveAssigned,
+          invPerRoom,
+          requiredTotal,
+          deficitWithoutReserve,
+          coveragePct,
+          deficit,
+          total,
+        };
+      });
+    }
+
     const toKey = (dateISO: string, period: "AM" | "PM") => {
       const d = String(dateISO || "").trim();
       const p = period === "PM" ? 1 : 0;
@@ -400,7 +505,7 @@ export default function Settings() {
       });
 
     return sortDir === "desc" ? sorted.reverse() : sorted;
-  }, [exams, assignments.rows, sortDir]);
+  }, [exams, assignments.rows, assignments.source, sortDir]);
 
   const totals = useMemo(() => {
     const t = { committees: 0, inv: 0, reserve: 0, deficit: 0, total: 0, requiredTotal: 0 };
@@ -417,7 +522,6 @@ export default function Settings() {
 
   const totalDeficit = totals.deficit;
   const totalCoveragePct = totals.requiredTotal > 0 ? Math.round((totals.total / totals.requiredTotal) * 100) : 100;
-
   const BIG_DEFICIT_THRESHOLD = 4;
 
   const exportPDF = async () => {
@@ -524,41 +628,16 @@ export default function Settings() {
 
   return (
     <div style={{ padding: 20, direction: "rtl", background: "#0f0f0f", minHeight: "100vh" }}>
-      <style>{`
-        @keyframes deficit-shake {
-          0%, 100% { transform: translateX(0); }
-          10% { transform: translateX(-2px); }
-          20% { transform: translateX(2px); }
-          30% { transform: translateX(-3px); }
-          40% { transform: translateX(3px); }
-          50% { transform: translateX(-2px); }
-          60% { transform: translateX(2px); }
-          70% { transform: translateX(-1px); }
-          80% { transform: translateX(1px); }
-          90% { transform: translateX(-1px); }
-        }
-        .row-deficit {
-          background: rgba(255, 0, 0, 0.09);
-        }
-        .row-deficit .cell-deficit,
-        .row-deficit .cell-subject {
-          color: #ff4d4d !important;
-          font-weight: 900 !important;
-        }
-        .row-big-deficit {
-          animation: deficit-shake 700ms ease-in-out infinite;
-          box-shadow: inset 0 0 0 1px rgba(255,0,0,0.25);
-        }
-        @media print {
-          .no-print { display: none !important; }
-          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-        }
-      `}</style>
-
       <SettingsReportHeader
         logo={branding.logo}
         appName={branding.appName}
-        sourceLabel={assignments.source === "run" ? "آخر تشغيل (Run)" : assignments.source === "master-table" ? "الجدول الشامل" : "-"}
+        sourceLabel={
+          assignments.source === "master-table"
+            ? "الجدول الشامل"
+            : assignments.source === "run"
+            ? "آخر تشغيل (Run)"
+            : "-"
+        }
         totalDeficit={totalDeficit}
         sortDir={sortDir}
         isStatsFull={isStatsFull}
