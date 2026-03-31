@@ -75,10 +75,15 @@ export default function Layout() {
     const items = [
       { to: tp(""), label: tr("لوحة التحكم", "Dashboard"), icon: "📊" },
       { to: tp("settings1"), label: tr("بيانات المدرسة", "School Profile"), icon: "🏷️" },
+      
       { to: tp("teachers"), label: tr("الكادر التعليمي", "Teachers"), icon: "👥" },
-      { to: tp("exams"), label: tr("جدول الامتحانات", "Exam Schedule"), icon: "📅" },
+
       { to: tp("rooms"), label: tr("القاعات", "Rooms"), icon: "🏫" },
       { to: tp("room-blocks"), label: tr("حظر القاعات", "Room Blocks"), icon: "⛔" },
+
+      { to: tp("exams"), label: tr("جدول الامتحانات", "Exam Schedule"), icon: "📅" },
+      
+      
       { to: tp("unavailability"), label: tr("الغياب", "Unavailability"), icon: "🕒" },
       { to: tp("task-distribution/run"), label: tr("توزيع المهام", "Task Distribution"), icon: "🔀" },
       { to: tp("task-distribution/results"), label: tr("الجدول الشامل", "Master Table"), icon: "🧾" },
@@ -86,8 +91,9 @@ export default function Layout() {
       { to: tp("task-distribution/print"), label: tr("التقارير والكشوفات", "Reports & Sheets"), icon: "📑" },
 
       { to: tp("archive"), label: tr("الأرشيف", "Archive"), icon: "📦", adminOnly: true },
-      { to: tp("audit"), label: tr("السجلات", "Audit"), icon: "🧩", adminOnly: true },
-      { to: tp("activity-logs"), label: tr("سجل النشاط", "Activity Logs"), icon: "🧾", adminOnly: true },
+
+      
+
       { to: tp("sync"), label: tr("قاعدة البيانات", "Database"), icon: "💾", adminOnly: true },
       { to: tp("analytics1"), label: tr("الإحصائيات توزيع الكادر التعليمي", "Analytics1 & Charts"), icon: "📈" },
       { to: tp("analytics"), label: tr("الإحصائيات والرسوم البيانية", "Analytics & Charts"), icon: "📈" },
