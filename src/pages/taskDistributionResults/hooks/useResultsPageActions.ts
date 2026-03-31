@@ -1,8 +1,16 @@
 import * as React from 'react';
-import { saveRun } from '../../../utils/taskDistributionStorage';
+import { saveRun, RUN_UPDATED_EVENT } from '../../../utils/taskDistributionStorage';
 import { parseExcelToAssignments } from '../excelImport';
-import { buildImportedResultsRun, isExcelImportFilenameSupported, toImportErrorMessage } from '../services/resultsPageActionHelpers';
-import { buildClosedImportDialogState, buildResultsPdfActionPayload, finalizeImportedResultsRun } from '../services/resultsPageActionPayloads';
+import {
+  buildImportedResultsRun,
+  isExcelImportFilenameSupported,
+  toImportErrorMessage,
+} from '../services/resultsPageActionHelpers';
+import {
+  buildClosedImportDialogState,
+  buildResultsPdfActionPayload,
+  finalizeImportedResultsRun,
+} from '../services/resultsPageActionPayloads';
 import { exportResultsPdfDocument } from '../services/resultsPdfActions';
 import { archiveResultsRunSnapshot, openResultsImportPicker } from '../services/resultsImportArchive';
 import { persistEditedResultsRun, undoEditedResultsRun } from '../services/resultsRunMutations';
@@ -44,81 +52,129 @@ export function useResultsPageActions({
     openResultsImportPicker(fileInputRef.current);
   }, [fileInputRef, setImportError]);
 
-  const persistEditedAssignments = React.useCallback((nextAssignments: any[], note?: string, opts?: { skipUndo?: boolean }) => {
-    if (!run) return;
+  const persistEditedAssignments = React.useCallback(
+    (nextAssignments: any[], note?: string, opts?: { skipUndo?: boolean }) => {
+      if (!run) return;
 
-    if (!opts?.skipUndo) {
-      setUndoStack((prev) => {
-        try {
-          const snap = JSON.parse(JSON.stringify(run.assignments || []));
-          return [snap, ...prev].slice(0, 30);
-        } catch {
-          return prev;
-        }
+      if (!opts?.skipUndo) {
+        setUndoStack((prev) => {
+          try {
+            const snap = JSON.parse(JSON.stringify(run.assignments || []));
+            return [snap, ...prev].slice(0, 30);
+          } catch {
+            return prev;
+          }
+        });
+      }
+
+      const updated = persistEditedResultsRun({
+        tenantId,
+        run,
+        nextAssignments,
+        note,
       });
-    }
+      setRun(updated);
 
-    const updated = persistEditedResultsRun({
-      tenantId,
-      run,
-      nextAssignments,
-      note,
-    });
-    setRun(updated);
-  }, [run, setRun, setUndoStack, tenantId]);
+      try {
+        window.dispatchEvent(new Event(RUN_UPDATED_EVENT));
+      } catch {}
+    },
+    [run, setRun, setUndoStack, tenantId]
+  );
 
-  const handleUndo = React.useCallback((undoStack: any[][]) => {
-    if (!run) return;
-    const last = undoStack[0];
-    if (!last) return;
+  const handleUndo = React.useCallback(
+    (undoStack: any[][]) => {
+      if (!run) return;
+      const last = undoStack[0];
+      if (!last) return;
 
-    const updated = undoEditedResultsRun({
-      tenantId,
-      run,
-      assignments: last,
-    });
-    setRun(updated);
-    setUndoStack((prev) => prev.slice(1));
-  }, [run, setRun, setUndoStack, tenantId]);
+      const updated = undoEditedResultsRun({
+        tenantId,
+        run,
+        assignments: last,
+      });
+      setRun(updated);
+      setUndoStack((prev) => prev.slice(1));
 
-  const handleImportFileSelected = React.useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    setImportError(null);
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
+      try {
+        window.dispatchEvent(new Event(RUN_UPDATED_EVENT));
+      } catch {}
+    },
+    [run, setRun, setUndoStack, tenantId]
+  );
 
-    if (!isExcelImportFilenameSupported(file.name)) {
-      setImportError('الرجاء اختيار ملف Excel بصيغة .xlsx أو .xls');
-      return;
-    }
+  const handleImportFileSelected = React.useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      setImportError(null);
+      const file = e.target.files?.[0];
+      e.target.value = '';
+      if (!file) return;
 
-    try {
-      const assignments = await parseExcelToAssignments(file, run);
-      const importedRun = buildImportedResultsRun({ assignments, filename: file.name });
+      if (!isExcelImportFilenameSupported(file.name)) {
+        setImportError('الرجاء اختيار ملف Excel بصيغة .xlsx أو .xls');
+        return;
+      }
 
-      setPendingImported({ run: importedRun, assignments });
-      setPendingImportedFilename(file.name);
-      setImportDialogOpen(true);
-    } catch (err: any) {
-      setImportError(toImportErrorMessage(err));
-    }
-  }, [run, setImportDialogOpen, setImportError, setPendingImported, setPendingImportedFilename]);
+      try {
+        const assignments = await parseExcelToAssignments(file, run);
+        const importedRun = buildImportedResultsRun({
+          assignments,
+          filename: file.name,
+        });
+
+        setPendingImported({ run: importedRun, assignments });
+        setPendingImportedFilename(file.name);
+        setImportDialogOpen(true);
+      } catch (err: any) {
+        setImportError(toImportErrorMessage(err));
+      }
+    },
+    [run, setImportDialogOpen, setImportError, setPendingImported, setPendingImportedFilename]
+  );
 
   const confirmImportReplace = React.useCallback(() => {
     if (!pendingImported) return;
+
     const importedRun = finalizeImportedResultsRun(pendingImported);
+
+    // حفظ الـ run
     saveRun(tenantId, importedRun);
     setRun(importedRun);
+
+    // حفظ الجدول الشامل المستورد
     writeMasterTable(importedRun.assignments || [], {
       runId: importedRun.runId,
       runCreatedAtISO: importedRun.createdAtISO,
       source: 'import',
     });
+
+    // إشعار الصفحات الأخرى بالتحديث
+    try {
+      window.dispatchEvent(new Event(RUN_UPDATED_EVENT));
+    } catch {}
+
+    try {
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: 'exam-manager:task-distribution:master-table:v1',
+        })
+      );
+    } catch {}
+
     const nextDialogState = buildClosedImportDialogState();
     setImportDialogOpen(nextDialogState.importDialogOpen);
     setPendingImported(nextDialogState.pendingImported);
     setPendingImportedFilename(nextDialogState.pendingImportedFilename);
-  }, [pendingImported, setImportDialogOpen, setPendingImported, setPendingImportedFilename, setRun, tenantId]);
+    setImportError(null);
+  }, [
+    pendingImported,
+    setImportDialogOpen,
+    setPendingImported,
+    setPendingImportedFilename,
+    setRun,
+    tenantId,
+    setImportError,
+  ]);
 
   const closeImportDialog = React.useCallback(() => {
     const nextDialogState = buildClosedImportDialogState();
@@ -129,27 +185,31 @@ export function useResultsPageActions({
 
   const handlePrintTableOnly = React.useCallback(() => {
     if (!run) return;
-    exportResultsPdfDocument(buildResultsPdfActionPayload({
-      run,
-      htmlBody: printAreaRef.current?.innerHTML || '',
-      mode: 'print',
-    }));
+    exportResultsPdfDocument(
+      buildResultsPdfActionPayload({
+        run,
+        htmlBody: printAreaRef.current?.innerHTML || '',
+        mode: 'print',
+      })
+    );
   }, [printAreaRef, run]);
 
   const handleExportPdf = React.useCallback(() => {
     if (!run) return;
-    exportResultsPdfDocument(buildResultsPdfActionPayload({
-      run,
-      htmlBody: printAreaRef.current?.innerHTML || '',
-      mode: 'pdf',
-    }));
+    exportResultsPdfDocument(
+      buildResultsPdfActionPayload({
+        run,
+        htmlBody: printAreaRef.current?.innerHTML || '',
+        mode: 'pdf',
+      })
+    );
   }, [printAreaRef, run]);
 
   const handleArchiveSnapshot = React.useCallback(() => {
     if (!run) return;
     archiveResultsRunSnapshot(tenantId, run);
     onArchived();
-  }, [onArchived, run, setRun, tenantId]);
+  }, [onArchived, run, tenantId]);
 
   return {
     importError,
