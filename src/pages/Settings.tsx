@@ -55,15 +55,19 @@ function normalizePeriod(value: any): "AM" | "PM" {
   return String(value || "").toUpperCase() === "PM" ? "PM" : "AM";
 }
 
+function normalizeSubjectText(value: any) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
 function getRowSubject(row: any) {
-  return String(
+  return normalizeSubjectText(
     row?.subject ??
       row?.examSubject ??
       row?.subjectName ??
       row?.examName ??
       row?.name ??
       ""
-  ).trim();
+  );
 }
 
 function getRowDateISO(row: any) {
@@ -74,18 +78,16 @@ function getRowPeriod(row: any): "AM" | "PM" {
   return normalizePeriod(row?.period ?? row?.periodKey ?? row?.p ?? "AM");
 }
 
-function getRowExamId(row: any) {
-  return String(
-    row?.examId ??
-      row?.id ??
-      `${getRowDateISO(row)}-${getRowSubject(row)}-${getRowPeriod(row)}`
-  );
-}
-
 function getRowCommitteeNo(row: any) {
-  const value = row?.committeeNo ?? row?.committee ?? row?.roomNo ?? row?.room;
+  const value =
+    row?.committeeNo ??
+    row?.committee ??
+    row?.roomNo ??
+    row?.room ??
+    row?.committeeLabel ??
+    row?.committeeNumber;
   if (value === undefined || value === null || value === "") return "";
-  return String(value);
+  return String(value).trim();
 }
 
 export default function Settings() {
@@ -334,14 +336,15 @@ export default function Settings() {
     return list
       .map((e) => {
         const id = String(e?.id ?? e?._id ?? `${e?.dateISO ?? e?.date}-${e?.subject ?? ""}-${e?.period ?? ""}`);
-        const dateISO = String(e?.dateISO ?? e?.date ?? "");
+        const dateISO = String(e?.dateISO ?? e?.date ?? "").trim();
+        const subject = normalizeSubjectText(e?.subject ?? "");
         const period =
           (String(e?.period ?? e?.periodKey ?? e?.p ?? "AM").toUpperCase() === "PM" ? "PM" : "AM") as "AM" | "PM";
         const roomsCount = Number(e?.roomsCount ?? e?.rooms ?? e?.committees ?? 0) || 0;
 
         return {
           id,
-          subject: String(e?.subject ?? ""),
+          subject,
           dateISO,
           dayLabel: String(e?.dayLabel ?? e?.day ?? "") || undefined,
           period,
@@ -375,16 +378,33 @@ export default function Settings() {
       return inv_12 || 2;
     };
 
+    // fallback من جدول الامتحانات: نفس المادة + التاريخ + الفترة
+    const examsSummaryMap = new Map<
+      string,
+      { roomsCount: number; dayLabel?: string }
+    >();
+
+    for (const ex of exams) {
+      const key = `${ex.dateISO}__${ex.period}__${normalizeSubjectText(ex.subject)}`;
+      const prev = examsSummaryMap.get(key);
+      examsSummaryMap.set(key, {
+        roomsCount: Math.max(prev?.roomsCount || 0, Number(ex.roomsCount || 0)),
+        dayLabel: prev?.dayLabel || ex.dayLabel,
+      });
+    }
+
     const computedFromExams = exams.map((ex) => {
       const invAssigned = rows.filter(
-        (a: any) => a?.taskType === "INVIGILATION" && String(a?.examId || "") === String(ex.id)
+        (a: any) =>
+          String(a?.taskType || "").toUpperCase() === "INVIGILATION" &&
+          String(a?.examId || "") === String(ex.id)
       ).length;
 
       const reserveAssigned = rows.filter(
         (a: any) =>
-          a?.taskType === "RESERVE" &&
+          String(a?.taskType || "").toUpperCase() === "RESERVE" &&
           String(a?.dateISO || "") === String(ex.dateISO) &&
-          String(a?.period || "") === String(ex.period)
+          normalizePeriod(a?.period || "") === ex.period
       ).length;
 
       const invPerRoom = invigilatorsPerRoomForSubject(ex.subject);
@@ -412,21 +432,22 @@ export default function Settings() {
 
     let computed = computedFromExams;
 
-    if ((computed.length === 0 || assignments.source === "master-table") && rows.length > 0) {
+    if (rows.length > 0 && assignments.source === "master-table") {
       const grouped = new Map<string, any>();
 
       for (const row of rows as any[]) {
-        const subject = getRowSubject(row);
+        const subject = normalizeSubjectText(getRowSubject(row));
         const dateISO = getRowDateISO(row);
         const period = getRowPeriod(row);
-        const examId = getRowExamId(row);
 
         if (!subject || !dateISO) continue;
 
-        const key = `${dateISO}__${period}__${subject}__${examId}`;
+        // ✅ بدون examId حتى لا تتكرر نفس المادة في نفس اليوم/الفترة
+        const key = `${dateISO}__${period}__${subject}`;
+
         if (!grouped.has(key)) {
           grouped.set(key, {
-            id: examId,
+            key,
             subject,
             dateISO,
             dayLabel: dayNameArFromISO(dateISO),
@@ -458,7 +479,15 @@ export default function Settings() {
       }
 
       computed = Array.from(grouped.values()).map((item: any) => {
-        const roomsCount = Math.max(0, item.committeeSet.size || 0);
+        const fallbackKey = `${item.dateISO}__${item.period}__${item.subject}`;
+        const fallbackExamSummary = examsSummaryMap.get(fallbackKey);
+
+        const roomsFromAssignments = Math.max(0, item.committeeSet.size || 0);
+        const roomsFromExams = Math.max(0, Number(fallbackExamSummary?.roomsCount || 0));
+
+        // ✅ نأخذ الأكبر حتى لا تظهر القاعات = صفر
+        const roomsCount = Math.max(roomsFromAssignments, roomsFromExams);
+
         const invPerRoom = invigilatorsPerRoomForSubject(item.subject);
         const requiredTotal = Math.max(0, roomsCount * Math.max(0, Number(invPerRoom) || 0));
         const reserveAssigned = reserveByDatePeriod.get(`${item.dateISO}__${item.period}`) || 0;
@@ -469,14 +498,14 @@ export default function Settings() {
         const total = covered;
 
         return {
-          id: item.id,
+          id: item.key,
           subject: item.subject,
           dateISO: item.dateISO,
-          dayLabel: item.dayLabel,
+          dayLabel: fallbackExamSummary?.dayLabel || item.dayLabel,
           period: item.period,
           roomsCount,
           durationMinutes: undefined,
-          day: item.dayLabel || dayNameArFromISO(item.dateISO),
+          day: (fallbackExamSummary?.dayLabel || item.dayLabel) || dayNameArFromISO(item.dateISO),
           periodLabel: formatPeriodAr(item.period),
           invAssigned: item.invAssigned,
           reserveAssigned,
