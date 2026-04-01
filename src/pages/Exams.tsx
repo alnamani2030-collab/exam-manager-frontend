@@ -11,6 +11,7 @@ import { createId, isRoomBlockedForExam } from "../lib/roomScheduling";
 
 const APP_NAME = "نظام إدارة الامتحانات المطوّر";
 const SUBCOLLECTION = "exams";
+const ASSIGNMENTS_STORAGE_PREFIX = "exam_room_assignments";
 
 const SUBJECT_OPTIONS_RAW = [
   "",
@@ -129,6 +130,17 @@ const emptyExam: Exam = {
   roomsCount: 1,
 };
 
+type PersistedExamRoomAssignment = {
+  id: string;
+  examId: string;
+  roomId: string;
+  roomName: string;
+  dateISO: string;
+  time: string;
+  period: string;
+  createdBy?: string;
+};
+
 function safeParseExams(v: string | null): Exam[] {
   if (!v) return [];
   try {
@@ -147,6 +159,28 @@ function safeParseExams(v: string | null): Exam[] {
         roomsCount: rooms < 1 ? 1 : rooms,
       };
     });
+  } catch {
+    return [];
+  }
+}
+
+function safeParseExamRoomAssignments(v: string | null): PersistedExamRoomAssignment[] {
+  if (!v) return [];
+  try {
+    const arr = JSON.parse(v);
+    if (!Array.isArray(arr)) return [];
+    return arr
+      .map((x) => ({
+        id: String(x?.id ?? "").trim() || createId("exam_room"),
+        examId: String(x?.examId ?? "").trim(),
+        roomId: String(x?.roomId ?? "").trim(),
+        roomName: String(x?.roomName ?? "").trim(),
+        dateISO: String(x?.dateISO ?? "").trim(),
+        time: String(x?.time ?? "").trim(),
+        period: String(x?.period ?? "").trim(),
+        createdBy: String(x?.createdBy ?? "").trim() || undefined,
+      }))
+      .filter((x) => x.examId && x.roomId);
   } catch {
     return [];
   }
@@ -337,6 +371,30 @@ function sortExamsByDate(a: Exam, b: Exam, order: "asc" | "desc") {
   return order === "asc" ? result : -result;
 }
 
+function sortRoomsByCode(a: Room, b: Room) {
+  const codeA = String(a.code || "").trim();
+  const codeB = String(b.code || "").trim();
+
+  if (!codeA && !codeB) {
+    return String(a.roomName || "").localeCompare(String(b.roomName || ""), "ar", {
+      sensitivity: "base",
+    });
+  }
+  if (!codeA) return 1;
+  if (!codeB) return -1;
+
+  const byCode = codeA.localeCompare(codeB, "ar", {
+    numeric: true,
+    sensitivity: "base",
+  });
+
+  if (byCode !== 0) return byCode;
+
+  return String(a.roomName || "").localeCompare(String(b.roomName || ""), "ar", {
+    sensitivity: "base",
+  });
+}
+
 function fixExam(e: Exam): Exam {
   const rooms = Number(e.roomsCount) || 1;
   return {
@@ -366,6 +424,13 @@ type RoomManagerState = {
   selectedRoomIds: string[];
 };
 
+type AvailableRoomRow = Room & {
+  blocked: boolean;
+  inactive: boolean;
+  sameDateConflict: boolean;
+  sameDateConflictLabel: string;
+};
+
 export default function Exams() {
   const { tenantId, exams, setExams } = useExamsData();
   const [query, setQuery] = useState("");
@@ -390,8 +455,19 @@ export default function Exams() {
   const { user } = useAuth() as any;
   const { rooms } = useRoomsData();
   const { roomBlocks } = useRoomBlocksData();
-  const { examRoomAssignments, setExamRoomAssignments } = useExamRoomAssignmentsData();
+  const {
+    examRoomAssignments,
+    setExamRoomAssignments,
+    persistExamRoomAssignmentsNow,
+  } = useExamRoomAssignmentsData();
   const [roomManager, setRoomManager] = useState<RoomManagerState>({ open: false, examId: "", selectedRoomIds: [] });
+  const assignmentsHydratedRef = useRef(false);
+  const assignmentsHydrationKeyRef = useRef("");
+
+  const assignmentsStorageKey = useMemo(() => {
+    const suffix = String(tenantId || "default").trim() || "default";
+    return `${ASSIGNMENTS_STORAGE_PREFIX}_${suffix}`;
+  }, [tenantId]);
 
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -400,6 +476,40 @@ export default function Exams() {
       document.body.style.overflow = prev;
     };
   }, [tableFullScreen]);
+
+  useEffect(() => {
+    if (assignmentsHydrationKeyRef.current !== assignmentsStorageKey) {
+      assignmentsHydrationKeyRef.current = assignmentsStorageKey;
+      assignmentsHydratedRef.current = false;
+    }
+  }, [assignmentsStorageKey]);
+
+  useEffect(() => {
+    if (assignmentsHydratedRef.current) return;
+
+    try {
+      const savedAssignments = safeParseExamRoomAssignments(
+        localStorage.getItem(assignmentsStorageKey)
+      );
+
+      if (!examRoomAssignments.length && savedAssignments.length) {
+        setExamRoomAssignments(savedAssignments as any);
+      }
+    } catch {
+      // ignore localStorage read errors
+    } finally {
+      assignmentsHydratedRef.current = true;
+    }
+  }, [assignmentsStorageKey, examRoomAssignments.length, setExamRoomAssignments]);
+
+  useEffect(() => {
+    if (!assignmentsHydratedRef.current) return;
+    try {
+      localStorage.setItem(assignmentsStorageKey, JSON.stringify(examRoomAssignments));
+    } catch {
+      // ignore localStorage write errors
+    }
+  }, [assignmentsStorageKey, examRoomAssignments]);
 
   useEffect(() => {
     const style = document.createElement("style");
@@ -498,6 +608,7 @@ export default function Exams() {
 
   const todayISO = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const roomsById = useMemo(() => new Map(rooms.map((room) => [room.id, room])), [rooms]);
+  const examsById = useMemo(() => new Map(exams.map((exam) => [exam.id, exam])), [exams]);
 
   const assignmentsByExamId = useMemo(() => {
     const map = new Map<string, typeof examRoomAssignments>();
@@ -522,13 +633,37 @@ export default function Exams() {
   );
 
   const selectedExamAvailableRooms = useMemo(() => {
-    if (!selectedExam) return [] as (Room & { blocked: boolean; inactive: boolean })[];
-    return rooms.map((room) => ({
-      ...room,
-      blocked: isRoomBlockedForExam(room.id, selectedExam, activeBlocks),
-      inactive: (room.status || "active") !== "active",
-    }));
-  }, [rooms, selectedExam, activeBlocks]);
+    if (!selectedExam) return [] as AvailableRoomRow[];
+
+    return [...rooms]
+      .sort(sortRoomsByCode)
+      .map((room) => {
+        const sameDateAssignments = examRoomAssignments.filter((assignment) => {
+          if (assignment.roomId !== room.id) return false;
+          if (assignment.examId === selectedExam.id) return false;
+          const otherExam = examsById.get(assignment.examId);
+          const otherDateISO = String(otherExam?.dateISO || assignment.dateISO || "").trim();
+          return otherDateISO === selectedExam.dateISO;
+        });
+
+        const sameDateConflictLabel = sameDateAssignments
+          .map((assignment) => {
+            const otherExam = examsById.get(assignment.examId);
+            const subject = String(otherExam?.subject || "مادة أخرى").trim();
+            const period = String(otherExam?.period || assignment.period || "").trim();
+            return period ? `${subject} — ${period}` : subject;
+          })
+          .join("، ");
+
+        return {
+          ...room,
+          blocked: isRoomBlockedForExam(room.id, selectedExam, activeBlocks),
+          inactive: (room.status || "active") !== "active",
+          sameDateConflict: sameDateAssignments.length > 0,
+          sameDateConflictLabel,
+        };
+      });
+  }, [rooms, selectedExam, activeBlocks, examRoomAssignments, examsById]);
 
   const filtered = useMemo(() => {
     const q = query.trim();
@@ -735,20 +870,37 @@ export default function Exams() {
     setRoomManager({ open: false, examId: "", selectedRoomIds: [] });
   }
 
-  function saveRoomAssignments() {
+  async function saveRoomAssignments() {
     if (!selectedExam) return;
+
     const required = Math.max(1, Number(selectedExam.roomsCount) || 1);
     const selectedSet = new Set(roomManager.selectedRoomIds);
+
     if (selectedSet.size > required) {
       alert(`لا يمكن ربط أكثر من ${required} قاعات لهذا الامتحان.`);
       return;
     }
-    const invalid = selectedExamAvailableRooms.find((room) => selectedSet.has(room.id) && (room.blocked || room.inactive));
-    if (invalid) {
-      alert(`القاعات المحظورة أو الموقوفة لا يمكن ربطها: ${invalid.roomName}`);
+
+    const invalidBlockedOrInactive = selectedExamAvailableRooms.find(
+      (room) => selectedSet.has(room.id) && (room.blocked || room.inactive)
+    );
+    if (invalidBlockedOrInactive) {
+      alert(`القاعات المحظورة أو الموقوفة لا يمكن ربطها: ${invalidBlockedOrInactive.roomName}`);
       return;
     }
+
+    const sameDateConflictRoom = selectedExamAvailableRooms.find(
+      (room) => selectedSet.has(room.id) && room.sameDateConflict
+    );
+    if (sameDateConflictRoom) {
+      alert(
+        `لا يمكن اختيار القاعة ${sameDateConflictRoom.roomName} في نفس التاريخ لأنها مرتبطة بالفعل بـ ${sameDateConflictRoom.sameDateConflictLabel}.`
+      );
+      return;
+    }
+
     const remaining = examRoomAssignments.filter((row) => row.examId !== selectedExam.id);
+
     const next = [
       ...remaining,
       ...selectedExamAvailableRooms
@@ -764,7 +916,19 @@ export default function Exams() {
           createdBy: String(user?.email || "").trim() || undefined,
         })),
     ];
-    setExamRoomAssignments(next);
+
+    // ✅ تحديث فوري للواجهة
+    setExamRoomAssignments(next as any);
+
+    // ✅ حفظ فوري مؤكد حتى لا تضيع البيانات عند الخروج من الصفحة
+    try {
+      await persistExamRoomAssignmentsNow(next as any);
+    } catch (error) {
+      console.error("persistExamRoomAssignmentsNow error:", error);
+      alert("تم تحديث القاعات في الصفحة ولكن تعذر حفظها بشكل دائم.");
+      return;
+    }
+
     closeRoomManager();
   }
 
@@ -866,7 +1030,7 @@ export default function Exams() {
   };
 
   const modalCard: React.CSSProperties = {
-    width: "min(720px, 96vw)",
+    width: "min(860px, 96vw)",
     background: "linear-gradient(180deg, #0b1220, #09101d)",
     border: "1px solid rgba(212,175,55,0.25)",
     borderRadius: 18,
@@ -948,10 +1112,17 @@ export default function Exams() {
                   <div style={{ fontWeight: 900, marginBottom: 8 }}>الحالة الحالية</div>
                   <div>القاعات المطلوبة: {selectedExam.roomsCount}</div>
                   <div>القاعات المربوطة فعليًا: {selectedExamAssignments.length}</div>
-                  <div>القاعات المتاحة للاختيار: {selectedExamAvailableRooms.filter((room) => !room.blocked && !room.inactive).length}</div>
+                  <div>
+                    القاعات المتاحة للاختيار:{" "}
+                    {
+                      selectedExamAvailableRooms.filter(
+                        (room) => !room.blocked && !room.inactive && !room.sameDateConflict
+                      ).length
+                    }
+                  </div>
                 </div>
                 <div style={tableWrap}>
-                  <table style={{ width: "100%", minWidth: 860 }}>
+                  <table style={{ width: "100%", minWidth: 980 }}>
                     <thead>
                       <tr>
                         <th style={thStyle}>اختيار</th>
@@ -967,9 +1138,14 @@ export default function Exams() {
                       {selectedExamAvailableRooms.map((room) => {
                         const checked = roomManager.selectedRoomIds.includes(room.id);
                         const disabled =
-                          room.blocked ||
-                          room.inactive ||
-                          (!checked && roomManager.selectedRoomIds.length >= selectedExam.roomsCount);
+                          !checked &&
+                          (
+                            room.blocked ||
+                            room.inactive ||
+                            room.sameDateConflict ||
+                            roomManager.selectedRoomIds.length >= selectedExam.roomsCount
+                          );
+
                         return (
                           <tr key={room.id}>
                             <td style={tdStyle}>
@@ -984,9 +1160,19 @@ export default function Exams() {
                             <td style={tdStyle}>{room.code || "—"}</td>
                             <td style={tdStyle}>{room.building}</td>
                             <td style={tdStyle}>{room.capacity}</td>
-                            <td style={tdStyle}>{room.blocked ? "محظورة" : room.inactive ? "موقوفة" : "متاحة"}</td>
                             <td style={tdStyle}>
-                              {room.blocked
+                              {room.sameDateConflict
+                                ? "مرتبطة بمادة أخرى"
+                                : room.blocked
+                                ? "محظورة"
+                                : room.inactive
+                                ? "موقوفة"
+                                : "متاحة"}
+                            </td>
+                            <td style={tdStyle}>
+                              {room.sameDateConflict
+                                ? `مرتبطة في نفس التاريخ مع: ${room.sameDateConflictLabel}`
+                                : room.blocked
                                 ? "يوجد حظر في نفس التاريخ/الفترة"
                                 : room.inactive
                                 ? "القاعة غير نشطة"
