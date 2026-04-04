@@ -1,257 +1,519 @@
-// src/pages/About.tsx
 import React from "react";
+import { useNavigate } from "react-router-dom";
 
 const glass: React.CSSProperties = {
-  background: "rgba(20, 28, 45, 0.55)",
+  background: "rgba(15, 23, 42, 0.62)",
   backdropFilter: "blur(18px)",
   WebkitBackdropFilter: "blur(18px)",
-  border: "1px solid rgba(255,255,255,0.06)",
-  boxShadow: "0 15px 50px rgba(0,0,0,0.55)",
-  borderRadius: 24,
+  border: "1px solid rgba(255,255,255,0.07)",
+  boxShadow: "0 18px 55px rgba(0,0,0,0.45)",
+  borderRadius: 26,
 };
 
-const glowGold = "0 0 25px rgba(255, 190, 0, 0.35), 0 0 60px rgba(255,190,0,0.15)";
+const gold = "#fbbf24";
+const goldSoft = "rgba(251,191,36,0.16)";
+const glowGold = "0 0 24px rgba(251,191,36,0.22), 0 0 60px rgba(251,191,36,0.10)";
+const textMain = "#f8fafc";
+const textMuted = "rgba(248,250,252,0.78)";
+const textSoft = "rgba(248,250,252,0.58)";
+
+const sectionTitleStyle: React.CSSProperties = {
+  fontSize: 24,
+  fontWeight: 900,
+  color: textMain,
+  marginBottom: 18,
+};
 
 export default function About() {
+  const navigate = useNavigate();
+
+  const infoCards = [
+    { icon: "🏫", title: "المدرسة الحالية", value: "مدرسة عزان بن تميم" },
+    { icon: "🏢", title: "جهة العمل", value: "المديرية العامة للتعليم بمحافظة شمال الشرقية" },
+    { icon: "📞", title: "التواصل", value: "97760020" },
+    { icon: "💼", title: "المسمى الوظيفي", value: "فني مختبرات مدارس" },
+  ];
+
+  const systemFeatures = [
+    "توزيع ذكي وعادل للمراقبين حسب القيود والجاهزية",
+    "إدارة كاملة للمعلمين والامتحانات والقاعات والحظر",
+    "تقارير وكشوفات رسمية للطباعة بصيغة احترافية",
+    "إحصائيات توزيع فورية واكتشاف العجز تلقائيًا",
+    "إدارة نسخ وأرشفة وتوثيق السجلات والنشاط",
+    "قابلية توسع للمدارس والإدارات والصلاحيات متعددة الأدوار",
+  ];
+
+  const technologies = [
+    "React",
+    "TypeScript",
+    "Firebase",
+    "Firestore",
+    "Cloud Functions",
+    "IndexedDB",
+    "Excel Import/Export",
+    "AI Integration",
+  ];
+
+  const achievements = [
+    { number: "100%", label: "منظومة متكاملة لإدارة الامتحانات" },
+    { number: "24/24", label: "جاهزية تشغيل ومتابعة" },
+    { number: "A4", label: "تقارير احترافية للطباعة والتسليم" },
+    { number: "Multi-Role", label: "صلاحيات متعددة وإدارة مركزية" },
+  ];
+
   return (
     <div
       style={{
         direction: "rtl",
         minHeight: "100vh",
-        background:
-          "radial-gradient(circle at 15% 20%, #1b2438 0%, #0d1324 45%, #070b16 100%)",
-        color: "#e6edf7",
+        color: textMain,
         fontFamily: "'Segoe UI', system-ui, sans-serif",
+        background: `
+          radial-gradient(circle at 10% 10%, rgba(251,191,36,0.08), transparent 24%),
+          radial-gradient(circle at 85% 20%, rgba(96,165,250,0.09), transparent 22%),
+          linear-gradient(180deg, #08111f 0%, #060d18 45%, #040910 100%)
+        `,
       }}
     >
-      {/* ================= HEADER ================= */}
-      <header
-        style={{
-          margin: "28px auto 0",
-          width: "92%",
-          maxWidth: 1450,
-          padding: "22px 34px",
-          borderRadius: 28,
-          background: "linear-gradient(135deg, #7c3aed, #d946ef)",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          boxShadow: "0 25px 70px rgba(168,85,247,0.5)",
-          animation: "fadeIn 0.8s ease",
-        }}
-      >
-        <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-          <div
-            style={{
-              width: 58,
-              height: 58,
-              borderRadius: 18,
-              background: "rgba(255,255,255,0.15)",
-              display: "grid",
-              placeItems: "center",
-              fontSize: 26,
-              boxShadow: glowGold,
-            }}
-          >
-            ⚙️
-          </div>
-          <div>
-            <div style={{ fontSize: 28, fontWeight: 900, color: "#fff" }}>
-              مصمم البرنامج
-            </div>
-            <div style={{ fontSize: 14, opacity: 0.9 }}>
-              الهندسة البرمجية والتطوير التقني
-            </div>
-          </div>
-        </div>
+      <style>{`
+        @keyframes aboutFadeUp {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes aboutPulse {
+          0%, 100% { box-shadow: 0 0 0 rgba(251,191,36,0.0), 0 0 28px rgba(251,191,36,0.16); }
+          50% { box-shadow: 0 0 0 rgba(251,191,36,0.0), 0 0 38px rgba(251,191,36,0.28); }
+        }
+        .about-card-hover {
+          transition: transform 0.28s ease, box-shadow 0.28s ease, border-color 0.28s ease;
+        }
+        .about-card-hover:hover {
+          transform: translateY(-6px);
+          box-shadow: 0 18px 55px rgba(0,0,0,0.42), 0 0 24px rgba(251,191,36,0.14);
+          border-color: rgba(251,191,36,0.28) !important;
+        }
+        .about-chip {
+          transition: all 0.25s ease;
+        }
+        .about-chip:hover {
+          transform: translateY(-2px);
+          background: rgba(251,191,36,0.18) !important;
+          border-color: rgba(251,191,36,0.5) !important;
+        }
+      `}</style>
 
-        <div
-          style={{
-            padding: "8px 18px",
-            borderRadius: 999,
-            background: "rgba(255,255,255,0.12)",
-            fontSize: 13,
-            fontWeight: 700,
-            boxShadow: glowGold,
-          }}
-        >
-          v2.5.0 (Beta)
-        </div>
-      </header>
-
-      {/* ================= LAYOUT ================= */}
-      <div
-        style={{
-          width: "92%",
-          maxWidth: 1450,
-          margin: "36px auto",
-          display: "flex",
-          gap: 36,
-          flexWrap: "wrap",
-        }}
-      >
-        {/* ============ PROFILE CARD ============ */}
-        <div
+      <div style={{ width: "92%", maxWidth: 1500, margin: "0 auto", padding: "28px 0 42px" }}>
+        <header
           style={{
             ...glass,
-            width: 360,
-            padding: "32px 24px",
-            textAlign: "center",
-            transition: "0.4s",
+            padding: "28px 34px",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 20,
+            flexWrap: "wrap",
+            animation: "aboutFadeUp 0.7s ease",
+            background:
+              "linear-gradient(135deg, rgba(15,23,42,0.88), rgba(88,28,135,0.55), rgba(30,41,59,0.92))",
+            border: "1px solid rgba(251,191,36,0.18)",
             boxShadow: glowGold,
           }}
         >
-          <div
-            style={{
-              width: 150,
-              height: 150,
-              margin: "0 auto",
-              borderRadius: "50%",
-              padding: 5,
-              background: "linear-gradient(135deg, #fbbf24, #f59e0b)",
-              boxShadow: glowGold,
-            }}
-          >
+          <div style={{ display: "flex", gap: 18, alignItems: "center", flexWrap: "wrap" }}>
             <div
               style={{
-                width: "100%",
-                height: "100%",
-                borderRadius: "50%",
-                background: "#0d1324",
+                width: 72,
+                height: 72,
+                borderRadius: 22,
                 display: "grid",
                 placeItems: "center",
-                fontSize: 70,
+                fontSize: 30,
+                background: "linear-gradient(135deg, #fbbf24, #f59e0b)",
+                color: "#111827",
+                boxShadow: glowGold,
+                animation: "aboutPulse 2.8s ease-in-out infinite",
               }}
             >
               👨‍💻
             </div>
-          </div>
 
-          <div style={{ marginTop: 20, fontSize: 24, fontWeight: 900, color: "#fff" }}>
-            يوسف راشد النعماني
+            <div>
+              <div style={{ fontSize: 34, fontWeight: 900, color: "#fff" }}>مصمم البرنامج</div>
+              <div style={{ marginTop: 6, fontSize: 15, color: textMuted }}>
+                واجهة تعريف احترافية تليق بمنظومة إدارة الامتحانات المطورة
+              </div>
+            </div>
           </div>
 
           <div
             style={{
-              marginTop: 10,
-              padding: "6px 18px",
+              padding: "10px 18px",
               borderRadius: 999,
-              background: "linear-gradient(135deg, #fbbf24, #f59e0b)",
-              color: "#111",
+              background: "rgba(255,255,255,0.10)",
+              color: "#fff",
               fontWeight: 800,
-              display: "inline-block",
+              border: "1px solid rgba(251,191,36,0.25)",
               boxShadow: glowGold,
             }}
           >
-            Full Stack Developer
+            إصدار النظام المتقدم
           </div>
+        </header>
 
-          <p style={{ marginTop: 16, fontSize: 14, opacity: 0.85, lineHeight: 1.8 }}>
-            متخصص في بناء الأنظمة الذكية وأتمتة العمليات التعليمية باستخدام أحدث
-            تقنيات الويب والذكاء الاصطناعي.
-          </p>
-
-          <button
+        <section
+          style={{
+            marginTop: 28,
+            display: "grid",
+            gridTemplateColumns: "minmax(320px, 380px) 1fr",
+            gap: 28,
+            alignItems: "stretch",
+            animation: "aboutFadeUp 0.9s ease",
+          }}
+        >
+          <div
             style={{
-              marginTop: 22,
-              width: "100%",
-              padding: "14px",
-              borderRadius: 16,
-              border: "none",
-              fontWeight: 800,
-              background: "linear-gradient(135deg,#fbbf24,#f59e0b)",
-              cursor: "pointer",
-              boxShadow: glowGold,
-              transition: "0.3s",
+              ...glass,
+              padding: "30px 24px",
+              textAlign: "center",
+              border: "1px solid rgba(251,191,36,0.16)",
             }}
+            className="about-card-hover"
           >
-            العودة للوحة التحكم
-          </button>
-        </div>
+            <div
+              style={{
+                width: 164,
+                height: 164,
+                margin: "0 auto",
+                borderRadius: "50%",
+                padding: 6,
+                background: "linear-gradient(135deg, #fbbf24, #f59e0b)",
+                boxShadow: glowGold,
+              }}
+            >
+              <div
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  borderRadius: "50%",
+                  background: "linear-gradient(180deg, #0f172a, #111827)",
+                  display: "grid",
+                  placeItems: "center",
+                  fontSize: 72,
+                }}
+              >
+                👨‍💻
+              </div>
+            </div>
 
-        {/* ============ RIGHT SIDE ============ */}
-        <div style={{ flex: 1, minWidth: 320 }}>
-          <div style={{ fontSize: 22, fontWeight: 900, marginBottom: 18 }}>
-            البيانات الوظيفية
+            <div style={{ marginTop: 22, fontSize: 28, fontWeight: 900, color: "#fff" }}>
+              يوسف راشد النعماني
+            </div>
+
+            <div
+              style={{
+                marginTop: 12,
+                display: "inline-block",
+                padding: "8px 18px",
+                borderRadius: 999,
+                background: "linear-gradient(135deg, #fbbf24, #f59e0b)",
+                color: "#111827",
+                fontWeight: 900,
+                boxShadow: glowGold,
+              }}
+            >
+              Full Stack Developer
+            </div>
+
+            <p style={{ marginTop: 18, lineHeight: 1.95, fontSize: 15, color: textMuted }}>
+              مطور متخصص في بناء الأنظمة المؤسسية الذكية، يركز على تحويل الإجراءات
+              الإدارية المعقدة إلى حلول رقمية متكاملة، دقيقة، وقابلة للتوسع.
+            </p>
+
+            <div style={{ marginTop: 18, display: "grid", gap: 12 }}>
+              <button
+                onClick={() => navigate(-1)}
+                style={{
+                  width: "100%",
+                  padding: "14px 16px",
+                  borderRadius: 16,
+                  border: "none",
+                  cursor: "pointer",
+                  fontWeight: 900,
+                  fontSize: 15,
+                  background: "linear-gradient(135deg,#fbbf24,#f59e0b)",
+                  color: "#111827",
+                  boxShadow: glowGold,
+                }}
+              >
+                العودة للصفحة السابقة
+              </button>
+
+              <button
+                onClick={() => navigate("/")}
+                style={{
+                  width: "100%",
+                  padding: "14px 16px",
+                  borderRadius: 16,
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  cursor: "pointer",
+                  fontWeight: 800,
+                  fontSize: 15,
+                  background: "rgba(255,255,255,0.05)",
+                  color: "#fff",
+                }}
+              >
+                الذهاب إلى لوحة التحكم
+              </button>
+            </div>
           </div>
+
+          <div
+            style={{
+              ...glass,
+              padding: "30px",
+              border: "1px solid rgba(251,191,36,0.14)",
+            }}
+            className="about-card-hover"
+          >
+            <div style={sectionTitleStyle}>رسالة هذا العمل</div>
+
+            <p style={{ lineHeight: 2, fontSize: 16, color: textMuted, margin: 0 }}>
+              هذا النظام ليس مجرد صفحة لإدارة بيانات الامتحانات، بل هو منظومة تشغيل
+              متكاملة صُممت لتقديم تجربة احترافية تبدأ من إدخال الكادر وجدول الامتحانات
+              والقاعات، وتمر عبر التوزيع الذكي والتقارير والإحصائيات، وتنتهي بإخراج
+              كشوفات رسمية دقيقة تليق بالعمل المؤسسي في البيئة التعليمية.
+            </p>
+
+            <div
+              style={{
+                marginTop: 26,
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                gap: 16,
+              }}
+            >
+              {achievements.map((item) => (
+                <div
+                  key={item.label}
+                  style={{
+                    ...glass,
+                    padding: "18px 16px",
+                    border: "1px solid rgba(251,191,36,0.12)",
+                    textAlign: "center",
+                    background: "rgba(255,255,255,0.03)",
+                  }}
+                  className="about-card-hover"
+                >
+                  <div style={{ fontSize: 28, fontWeight: 900, color: gold }}>{item.number}</div>
+                  <div style={{ marginTop: 8, fontSize: 14, color: textMuted }}>{item.label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section style={{ marginTop: 30, animation: "aboutFadeUp 1.05s ease" }}>
+          <div style={sectionTitleStyle}>البيانات المهنية</div>
 
           <div
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-              gap: 20,
+              gap: 18,
             }}
           >
-            {[
-              ["🏫", "المدرسة الحالية", "مدرسة عزان بن تميم"],
-              ["🏢", "جهة العمل", "المديرية العامة للتعليم بمحافظة شمال الشرقية"],
-              ["📞", "التواصل", "97760020"],
-              ["💼", "المسمى الوظيفي", "فني مختبرات مدارس"],
-            ].map((item, i) => (
+            {infoCards.map((item) => (
               <div
-                key={i}
+                key={item.title}
                 style={{
                   ...glass,
-                  padding: "20px",
+                  padding: "22px 20px",
                   display: "flex",
                   alignItems: "center",
                   gap: 14,
-                  transition: "0.3s",
+                  border: "1px solid rgba(255,255,255,0.06)",
                 }}
+                className="about-card-hover"
               >
                 <div
                   style={{
-                    width: 46,
-                    height: 46,
-                    borderRadius: 14,
+                    width: 52,
+                    height: 52,
+                    borderRadius: 16,
                     display: "grid",
                     placeItems: "center",
                     background: "linear-gradient(135deg,#fbbf24,#f59e0b)",
+                    color: "#111827",
+                    fontSize: 22,
                     boxShadow: glowGold,
+                    flexShrink: 0,
                   }}
                 >
-                  {item[0]}
+                  {item.icon}
                 </div>
+
                 <div>
-                  <div style={{ fontSize: 13, opacity: 0.6 }}>{item[1]}</div>
-                  <div style={{ fontWeight: 800 }}>{item[2]}</div>
+                  <div style={{ fontSize: 13, color: textSoft }}>{item.title}</div>
+                  <div style={{ marginTop: 5, fontWeight: 800, color: textMain }}>{item.value}</div>
                 </div>
               </div>
             ))}
           </div>
+        </section>
 
-          {/* ============ SYSTEM SECTION ============ */}
-          <div style={{ ...glass, marginTop: 40, padding: 30, position: "relative" }}>
-            <div style={{ fontSize: 22, fontWeight: 900, marginBottom: 16 }}>
-              لمحة عن النظام
+        <section
+          style={{
+            marginTop: 32,
+            display: "grid",
+            gridTemplateColumns: "1.1fr 0.9fr",
+            gap: 24,
+            animation: "aboutFadeUp 1.2s ease",
+          }}
+        >
+          <div
+            style={{
+              ...glass,
+              padding: 28,
+              border: "1px solid rgba(251,191,36,0.14)",
+            }}
+            className="about-card-hover"
+          >
+            <div style={sectionTitleStyle}>نبذة متقدمة عن النظام</div>
+
+            <p style={{ lineHeight: 2, fontSize: 15.5, color: textMuted, margin: 0 }}>
+              تم تصميم نظام إدارة الامتحانات المطور ليخدم بيئة تشغيل حقيقية تحتاج إلى
+              سرعة، موثوقية، عدالة في التوزيع، ووضوح كامل في التقارير. وتم الاهتمام
+              بالتفاصيل التشغيلية الدقيقة مثل توزيع المراقبين، إدارة القاعات، كشف العجز،
+              التنبيهات، الربط الذكي بين البيانات، والطباعة الرسمية المناسبة للاعتماد
+              الإداري.
+            </p>
+
+            <div style={{ marginTop: 22, display: "grid", gap: 12 }}>
+              {systemFeatures.map((feature, i) => (
+                <div
+                  key={feature}
+                  style={{
+                    display: "flex",
+                    gap: 12,
+                    alignItems: "flex-start",
+                    padding: "12px 14px",
+                    borderRadius: 16,
+                    background: "rgba(255,255,255,0.035)",
+                    border: "1px solid rgba(255,255,255,0.05)",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: 999,
+                      display: "grid",
+                      placeItems: "center",
+                      background: goldSoft,
+                      color: gold,
+                      fontWeight: 900,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {i + 1}
+                  </div>
+                  <div style={{ lineHeight: 1.85, color: textMuted, fontSize: 14.5 }}>{feature}</div>
+                </div>
+              ))}
             </div>
+          </div>
 
-            <p style={{ lineHeight: 1.9, fontSize: 15, opacity: 0.9 }}>
-              تم تطوير هذا النظام لتسهيل عمليات توزيع المراقبة المدرسية بشكل عادل
-              وذكي، مع مراعاة كافة اللوائح والأنظمة المعمول بها، بالاعتماد على
-              خوارزميات ذكية تقلل الأخطاء البشرية.
+          <div
+            style={{
+              ...glass,
+              padding: 28,
+              border: "1px solid rgba(251,191,36,0.14)",
+            }}
+            className="about-card-hover"
+          >
+            <div style={sectionTitleStyle}>التقنيات المستخدمة</div>
+
+            <p style={{ lineHeight: 1.9, color: textMuted, fontSize: 15 }}>
+              تم بناء النظام بأسلوب حديث يجمع بين واجهات الاستخدام المتقدمة، إدارة
+              الحالة، التخزين السحابي، وقابلية التوسع مستقبلًا.
             </p>
 
             <div style={{ marginTop: 18, display: "flex", gap: 10, flexWrap: "wrap" }}>
-              {["Gemini AI", "Supabase", "Tailwind", "TypeScript", "React"].map(
-                (tech) => (
-                  <div
-                    key={tech}
-                    style={{
-                      padding: "6px 14px",
-                      borderRadius: 999,
-                      background: "rgba(255,190,0,0.1)",
-                      border: "1px solid rgba(255,190,0,0.4)",
-                      fontSize: 13,
-                    }}
-                  >
-                    {tech}
-                  </div>
-                )
-              )}
+              {technologies.map((tech) => (
+                <div
+                  key={tech}
+                  className="about-chip"
+                  style={{
+                    padding: "8px 14px",
+                    borderRadius: 999,
+                    background: "rgba(251,191,36,0.10)",
+                    border: "1px solid rgba(251,191,36,0.28)",
+                    color: "#fff",
+                    fontSize: 13,
+                    fontWeight: 700,
+                  }}
+                >
+                  {tech}
+                </div>
+              ))}
+            </div>
+
+            <div
+              style={{
+                marginTop: 26,
+                padding: "18px 16px",
+                borderRadius: 20,
+                background: "linear-gradient(135deg, rgba(251,191,36,0.10), rgba(96,165,250,0.08))",
+                border: "1px solid rgba(251,191,36,0.18)",
+                boxShadow: glowGold,
+              }}
+            >
+              <div style={{ fontWeight: 900, fontSize: 17, color: "#fff", marginBottom: 8 }}>
+                قيمة المشروع
+              </div>
+              <div style={{ color: textMuted, lineHeight: 1.9, fontSize: 14.5 }}>
+                هذا العمل يمثل منتجًا مؤسسيًا فعليًا، وليس مجرد نموذج تجريبي؛ إذ يجمع
+                بين التصميم، المنطق التشغيلي، دقة البيانات، والتقارير التنفيذية في منصة
+                واحدة متكاملة.
+              </div>
             </div>
           </div>
-        </div>
+        </section>
+
+        <footer
+          style={{
+            ...glass,
+            marginTop: 34,
+            padding: "22px 28px",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 16,
+            flexWrap: "wrap",
+            border: "1px solid rgba(251,191,36,0.14)",
+            animation: "aboutFadeUp 1.35s ease",
+          }}
+        >
+          <div>
+            <div style={{ fontWeight: 900, color: "#fff", fontSize: 18 }}>نظام إدارة الامتحانات المطور</div>
+            <div style={{ marginTop: 6, color: textSoft, fontSize: 13 }}>
+              صفحة تعريف احترافية بمصمم المنظومة ورؤية المشروع التقني
+            </div>
+          </div>
+
+          <div
+            style={{
+              padding: "8px 14px",
+              borderRadius: 999,
+              background: "rgba(251,191,36,0.10)",
+              border: "1px solid rgba(251,191,36,0.24)",
+              color: gold,
+              fontWeight: 800,
+            }}
+          >
+            Built with vision, precision, and care
+          </div>
+        </footer>
       </div>
     </div>
   );
