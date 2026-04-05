@@ -241,85 +241,133 @@ export default function Rooms() {
     style.innerHTML = `
       .roomsTableLuxury {
         position: relative;
-        background: linear-gradient(180deg, #0a0d14 0%, #090c13 100%);
+        background:
+          linear-gradient(180deg, rgba(8,12,19,0.98) 0%, rgba(7,10,16,0.98) 100%);
         border: 1px solid rgba(212,175,55,0.18);
-        border-radius: 26px;
-        padding: 14px;
+        border-radius: 30px;
+        padding: 16px;
         box-shadow:
-          0 24px 60px rgba(0,0,0,0.45),
+          0 28px 70px rgba(0,0,0,0.48),
           inset 0 1px 0 rgba(255,255,255,0.03);
         overflow: auto;
       }
+      .roomsTableLuxury::before {
+        content: "";
+        position: sticky;
+        top: 0;
+        display: block;
+        height: 0;
+      }
       .roomsTableLuxury table {
         width: 100%;
-        min-width: 1500px;
+        min-width: 1560px;
         border-collapse: separate;
-        border-spacing: 10px 12px;
+        border-spacing: 0 12px;
       }
       .roomsTableLuxury thead th {
         position: sticky;
         top: 0;
-        z-index: 5;
-        background: linear-gradient(180deg, #8a6500 0%, #6f5100 100%) !important;
+        z-index: 6;
+        background: linear-gradient(180deg, #9a7200 0%, #6f5100 100%) !important;
         color: #fff3cf !important;
         text-align: right;
         font-weight: 1000;
-        font-size: 18px;
-        padding: 18px 20px;
-        border: 1px solid rgba(255, 214, 102, 0.35) !important;
-        border-radius: 22px;
+        font-size: 17px;
+        padding: 18px 18px;
+        border-top: 1px solid rgba(255,214,102,0.35) !important;
+        border-bottom: 1px solid rgba(255,214,102,0.20) !important;
         white-space: nowrap;
         box-shadow:
           inset 0 2px 0 rgba(255,255,255,0.08),
-          0 10px 20px rgba(0,0,0,0.28);
+          0 12px 24px rgba(0,0,0,0.30);
+      }
+      .roomsTableLuxury thead th:first-child {
+        border-right: 1px solid rgba(255,214,102,0.35) !important;
+        border-top-right-radius: 22px;
+        border-bottom-right-radius: 22px;
+      }
+      .roomsTableLuxury thead th:last-child {
+        border-left: 1px solid rgba(255,214,102,0.35) !important;
+        border-top-left-radius: 22px;
+        border-bottom-left-radius: 22px;
+      }
+      .roomsTableLuxury tbody tr {
+        position: relative;
+      }
+      .roomsTableLuxury tbody tr td:first-child {
+        border-top-right-radius: 22px;
+        border-bottom-right-radius: 22px;
+      }
+      .roomsTableLuxury tbody tr td:last-child {
+        border-top-left-radius: 22px;
+        border-bottom-left-radius: 22px;
       }
       .roomsTableLuxury tbody td {
         background:
           linear-gradient(90deg, rgba(9,12,18,0.98) 0%, rgba(13,16,23,0.96) 60%, rgba(10,13,19,0.98) 100%) !important;
         color: #f0c94d !important;
-        padding: 14px 16px;
-        border-radius: 22px;
-        border: 1px solid rgba(212,175,55,0.16);
+        padding: 16px 16px;
+        border-top: 1px solid rgba(212,175,55,0.12);
+        border-bottom: 1px solid rgba(212,175,55,0.12);
         white-space: nowrap;
         vertical-align: middle;
         box-shadow:
           0 10px 24px rgba(0,0,0,0.35),
           inset 0 1px 0 rgba(255,255,255,0.03);
-        transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
+        transition: transform .18s ease, box-shadow .18s ease, filter .18s ease, border-color .18s ease;
+      }
+      .roomsTableLuxury tbody td:first-child {
+        border-right: 1px solid rgba(212,175,55,0.12);
+      }
+      .roomsTableLuxury tbody td:last-child {
+        border-left: 1px solid rgba(212,175,55,0.12);
       }
       .roomsTableLuxury tbody tr:hover td {
         transform: translateY(-2px);
         box-shadow:
-          0 16px 30px rgba(0,0,0,0.42),
+          0 18px 34px rgba(0,0,0,0.46),
           inset 0 1px 0 rgba(255,255,255,0.04);
-        filter: brightness(1.03);
+        filter: brightness(1.04);
+        border-top-color: rgba(212,175,55,0.24);
+        border-bottom-color: rgba(212,175,55,0.24);
       }
       .roomsTableLuxury .cell-main {
         font-size: 18px;
         font-weight: 900;
-        color: #f2cf63 !important;
+        color: #f8df87 !important;
       }
       .roomsTableLuxury .cell-subtle {
         color: #e8c65a !important;
-        opacity: 0.95;
+        opacity: 0.96;
         font-weight: 800;
+      }
+      .roomsTableLuxury .cell-muted {
+        color: rgba(242,207,99,0.72) !important;
+        font-size: 13px;
+        font-weight: 700;
+        margin-top: 4px;
       }
       .roomsTableLuxury .cell-badge {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        min-width: 92px;
+        min-width: 96px;
         padding: 10px 16px;
-        border-radius: 18px;
+        border-radius: 999px;
         font-weight: 1000;
-        font-size: 15px;
+        font-size: 14px;
         border: 1px solid rgba(255,255,255,0.08);
         box-shadow: 0 8px 18px rgba(0,0,0,0.28);
       }
-      .roomsTableLuxury .badge-active {
+      .roomsTableLuxury .badge-capacity {
         background: linear-gradient(180deg, #111827, #0b1220);
         color: #f2cf63;
         border-color: rgba(212,175,55,0.22);
+      }
+      .roomsTableLuxury .badge-active {
+        background: linear-gradient(180deg, #102415, #0b1a10);
+        color: #bbf7d0;
+        border-color: rgba(34,197,94,0.24);
       }
       .roomsTableLuxury .badge-inactive {
         background: linear-gradient(180deg, #4b5563, #374151);
@@ -341,17 +389,18 @@ export default function Rooms() {
       }
       .roomsTableLuxury .actionBtn {
         border: none;
-        border-radius: 20px;
-        padding: 14px 20px;
+        border-radius: 18px;
+        padding: 12px 16px;
         font-weight: 1000;
-        font-size: 15px;
+        font-size: 14px;
         cursor: pointer;
         box-shadow: 0 10px 22px rgba(0,0,0,0.28);
-        transition: transform .15s ease, filter .15s ease;
+        transition: transform .15s ease, filter .15s ease, box-shadow .15s ease;
       }
       .roomsTableLuxury .actionBtn:hover {
         transform: translateY(-1px);
         filter: brightness(1.03);
+        box-shadow: 0 14px 26px rgba(0,0,0,0.34);
       }
       .roomsTableLuxury .btnEdit {
         background: linear-gradient(180deg, #6daeff, #5b95e6);
@@ -374,7 +423,7 @@ export default function Rooms() {
         font-size: 18px;
         font-weight: 900;
         color: #f2cf63 !important;
-        padding: 22px !important;
+        padding: 24px !important;
       }
     `;
     document.head.appendChild(style);
@@ -446,14 +495,23 @@ export default function Rooms() {
     const capacity = rooms.reduce((sum, room) => sum + (Number(room.capacity) || 0), 0);
     return { total, active, blocked, capacity };
   }, [rooms, blockedRoomIdsToday]);
-  const pageStyle: React.CSSProperties = { padding: 16, color: "#e6c76a" };
+  const pageStyle: React.CSSProperties = {
+    padding: 18,
+    color: "#e6c76a",
+    minHeight: "100vh",
+    background:
+      "radial-gradient(circle at top, rgba(212,175,55,0.14), transparent 24%), radial-gradient(circle at 88% 18%, rgba(59,130,246,0.10), transparent 24%), linear-gradient(180deg, #070b12 0%, #0b1220 42%, #060a12 100%)",
+    position: "relative",
+    overflowX: "hidden",
+  };
   const card: React.CSSProperties = {
-    background: "linear-gradient(180deg, #0b1220, #09101d)",
+    background: "linear-gradient(180deg, rgba(11,18,32,0.94), rgba(9,16,29,0.96))",
     border: "1px solid rgba(212,175,55,0.15)",
-    borderRadius: 18,
-    padding: 16,
-    boxShadow: "0 18px 60px rgba(0,0,0,0.35)",
+    borderRadius: 24,
+    padding: 18,
+    boxShadow: "0 22px 60px rgba(0,0,0,0.36)",
     marginBottom: 14,
+    backdropFilter: "blur(6px)",
   };
   const header: React.CSSProperties = {
     display: "flex",
@@ -462,9 +520,9 @@ export default function Rooms() {
     gap: 12,
     background: "linear-gradient(135deg, #f1d27a, #d4af37, #b8962e)",
     color: "#0b1220",
-    borderRadius: 18,
-    padding: 14,
-    boxShadow: "0 14px 60px rgba(212,175,55,0.25)",
+    borderRadius: 22,
+    padding: 16,
+    boxShadow: "0 18px 60px rgba(212,175,55,0.25)",
     marginBottom: 14,
   };
   const btn = (bg: string, fg = "#0b1220"): React.CSSProperties => ({
@@ -722,6 +780,167 @@ export default function Rooms() {
   }
   return (
     <div style={pageStyle} ref={topRef}>
+      <div
+        style={{
+          position: "absolute",
+          top: -180,
+          left: "50%",
+          transform: "translateX(-50%)",
+          width: 620,
+          height: 620,
+          borderRadius: "50%",
+          background: "radial-gradient(circle, rgba(212,175,55,0.18) 0%, rgba(212,175,55,0.05) 38%, transparent 72%)",
+          filter: "blur(12px)",
+          pointerEvents: "none",
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          right: -120,
+          top: 260,
+          width: 340,
+          height: 340,
+          borderRadius: "50%",
+          background: "radial-gradient(circle, rgba(16,185,129,0.10), transparent 72%)",
+          filter: "blur(12px)",
+          pointerEvents: "none",
+        }}
+      />
+
+      <div style={{ maxWidth: 1500, margin: "0 auto", position: "relative", zIndex: 1 }}>
+        <div
+          style={{
+            display: "grid",
+            gap: 18,
+            border: "1px solid rgba(212,175,55,0.18)",
+            borderRadius: 34,
+            padding: 28,
+            background:
+              "linear-gradient(135deg, rgba(30,22,2,0.95), rgba(8,8,8,0.98), rgba(27,21,3,0.94))",
+            boxShadow:
+              "0 32px 100px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.05), inset 0 -1px 0 rgba(255,255,255,0.03)",
+            marginBottom: 18,
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 18, flexWrap: "wrap", alignItems: "start" }}>
+            <div style={{ display: "grid", gap: 14, maxWidth: 900 }}>
+              <div
+                style={{
+                  display: "inline-flex",
+                  width: "fit-content",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "8px 14px",
+                  borderRadius: 999,
+                  background: "rgba(16,185,129,0.12)",
+                  border: "1px solid rgba(16,185,129,0.22)",
+                  color: "#a7f3d0",
+                  fontWeight: 900,
+                  fontSize: 12,
+                }}
+              >
+                إدارة تشغيلية مباشرة للقاعات والحظر
+              </div>
+
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 900, color: "rgba(255,241,196,0.88)", marginBottom: 10 }}>
+                  {APP_NAME}
+                </div>
+                <h1
+                  style={{
+                    margin: 0,
+                    fontSize: "clamp(34px, 5vw, 64px)",
+                    lineHeight: 1.05,
+                    fontWeight: 950,
+                    color: "#fff1c4",
+                    letterSpacing: "-0.03em",
+                    textShadow: "0 8px 28px rgba(212,175,55,0.16)",
+                  }}
+                >
+                  مركز إدارة القاعات
+                </h1>
+              </div>
+
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 16,
+                  lineHeight: 2,
+                  color: "rgba(255,241,196,0.82)",
+                  maxWidth: 940,
+                }}
+              >
+                تمنح هذه الصفحة الإدارة رؤية تنفيذية فاخرة لحالة القاعات، والسعة، والحظر الحالي، مع تجربة منظمة
+                لإضافة القاعات وتعديلها واستيرادها وتصديرها وإدارة سجل الحظر في واجهة مؤسسية أنيقة وسريعة.
+              </p>
+
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                {[
+                  { label: "حالة البيانات", value: loaded ? "مرتبطة ببيانات فعلية" : "جاري التحميل" },
+                  { label: "البحث الحالي", value: query.trim() || "بدون فلترة" },
+                  { label: "الحالة المختارة", value: statusFilter === "all" ? "كل الحالات" : statusFilter === "active" ? "نشطة" : statusFilter === "inactive" ? "موقوفة" : "محظورة اليوم" },
+                ].map((item) => (
+                  <div
+                    key={item.label}
+                    style={{
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      background: "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
+                      borderRadius: 18,
+                      padding: "12px 14px",
+                      minWidth: 190,
+                      boxShadow: "0 14px 28px rgba(0,0,0,0.22)",
+                    }}
+                  >
+                    <div style={{ fontSize: 12, color: "rgba(255,241,196,0.64)", fontWeight: 800 }}>{item.label}</div>
+                    <div style={{ marginTop: 6, fontSize: 16, color: "#fff8dc", fontWeight: 900 }}>{item.value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div
+              style={{
+                minWidth: 300,
+                maxWidth: 390,
+                width: "100%",
+                border: "1px solid rgba(255,255,255,0.08)",
+                borderRadius: 28,
+                padding: 22,
+                background: "linear-gradient(180deg, rgba(212,175,55,0.08), rgba(255,255,255,0.02))",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
+                display: "grid",
+                gap: 16,
+              }}
+            >
+              <div
+                style={{
+                  display: "inline-flex",
+                  width: "fit-content",
+                  padding: "8px 12px",
+                  borderRadius: 999,
+                  background: stats.blocked > 0 ? "rgba(239,68,68,0.14)" : "rgba(16,185,129,0.14)",
+                  border: stats.blocked > 0 ? "1px solid rgba(239,68,68,0.24)" : "1px solid rgba(16,185,129,0.24)",
+                  color: stats.blocked > 0 ? "#fecaca" : "#a7f3d0",
+                  fontWeight: 900,
+                  fontSize: 12,
+                }}
+              >
+                {stats.blocked > 0 ? "يوجد حظر نشط يحتاج متابعة" : "الوضع التشغيلي مستقر"}
+              </div>
+
+              <div style={{ fontSize: 28, lineHeight: 1.5, fontWeight: 950, color: "#fff1c4" }}>
+                واجهة القاعات أصبحت أوضح وأجمل وتعرض الجاهزية والسعة والحظر في أول نظرة.
+              </div>
+
+              <div style={{ fontSize: 14, lineHeight: 1.95, color: "rgba(255,241,196,0.78)" }}>
+                يمكنك من هنا إدارة القاعات، تنفيذ الحظر السريع، مراجعة سجل الحظر، واستيراد أو تصدير البيانات
+                مع تسلسل بصري فاخر يعكس جودة منتج مؤسسي.
+              </div>
+            </div>
+          </div>
+        </div>
+
       {quickBlock.open && (
         <div style={modalOverlay} onClick={() => setQuickBlock((prev) => ({ ...prev, open: false }))}>
           <div style={modalCard} onClick={(e) => e.stopPropagation()}>
@@ -1113,8 +1332,9 @@ export default function Rooms() {
                   const roomStatus = (r.status || "active") === "active" ? "نشطة" : "موقوفة";
                   return (
                     <tr key={r.id}>
-                      <td style={tdStyle} className="cell-main">
-                        {r.roomName}
+                      <td style={tdStyle}>
+                        <div className="cell-main">{r.roomName}</div>
+                        <div className="cell-muted">{r.code ? `رمز القاعة: ${r.code}` : "بدون كود"}</div>
                       </td>
                       <td style={tdStyle} className="cell-subtle">
                         {r.code || "—"}
@@ -1126,7 +1346,7 @@ export default function Rooms() {
                         {r.type}
                       </td>
                       <td style={tdStyle}>
-                        <span className="cell-badge badge-open">{r.capacity}</span>
+                        <span className="cell-badge badge-capacity">{r.capacity}</span>
                       </td>
                       <td style={tdStyle}>
                         <span
@@ -1142,8 +1362,8 @@ export default function Rooms() {
                           {blockedNow ? "محظورة اليوم" : "متاحة"}
                         </span>
                       </td>
-                      <td style={tdStyle} className="cell-subtle" title={r.notes}>
-                        {r.notes || "—"}
+                      <td style={tdStyle} title={r.notes}>
+                        <div className="cell-subtle">{r.notes || "—"}</div>
                       </td>
                       <td style={tdStyle}>
                         <div className="actionStack">
@@ -1168,6 +1388,7 @@ export default function Rooms() {
             </tbody>
           </table>
         </div>
+      </div>
       </div>
     </div>
   );
