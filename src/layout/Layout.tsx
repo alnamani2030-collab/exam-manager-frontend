@@ -95,8 +95,8 @@ export default function Layout() {
       
 
       { to: tp("sync"), label: tr("قاعدة البيانات", "Database"), icon: "💾", adminOnly: true },
-      { to: tp("analytics1"), label: tr("الإحصائيات توزيع الكادر التعليمي", "Analytics1 & Charts"), icon: "📈" },
-      { to: tp("analytics"), label: tr("الإحصائيات والرسوم البيانية", "Analytics & Charts"), icon: "📈" },
+      { to: tp("analytics1"), label: tr("لوحة التحكم الذكي", "Analytics1 & Charts"), icon: "📈" },
+      { to: tp("analytics"), label: tr("مركز التحكم التحليلي لمنظومة الامتحانات", "Analytics & Charts"), icon: "📈" },
       { to: tp("versioning"), label: tr("إدارة الإصدارات", "Versioning"), icon: "🗂️", adminOnly: true },
       { to: tp("multi-role"), label: tr("صلاحيات Multi-Role", "Multi-Role Permissions"), icon: "🔐", adminOnly: true },
 
