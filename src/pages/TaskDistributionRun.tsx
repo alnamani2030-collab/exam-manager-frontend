@@ -3242,13 +3242,15 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
   const LINE = "rgba(201,162,39,.18)";
 
   const page: React.CSSProperties = {
-  color: GOLD_2,
-
+    color: GOLD_2,
     direction: "rtl",
     minHeight: "100vh",
-    background: "#0a1020",
+    background:
+      "radial-gradient(circle at top, rgba(201,162,39,0.12), transparent 24%), radial-gradient(circle at 88% 18%, rgba(59,130,246,0.10), transparent 24%), linear-gradient(180deg, #07101f 0%, #0a1020 42%, #060b16 100%)",
     padding: 18,
     boxSizing: "border-box",
+    position: "relative",
+    overflowX: "hidden",
   };
 
   const header: React.CSSProperties = {
@@ -3574,6 +3576,239 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
 
   return (
     <div style={page}>
+      <div
+        style={{
+          maxWidth: 1460,
+          margin: "0 auto 18px auto",
+          display: "grid",
+          gap: 18,
+          position: "relative",
+          zIndex: 1,
+        }}
+      >
+        <div
+          style={{
+            position: "relative",
+            overflow: "hidden",
+            border: `1px solid ${LINE}`,
+            borderRadius: 32,
+            padding: 28,
+            background: `linear-gradient(135deg, rgba(11,27,58,0.96), rgba(8,18,34,0.98), rgba(11,27,58,0.94))`,
+            boxShadow: "0 28px 80px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.05)",
+          }}
+        >
+          <div
+            style={{
+              position: "absolute",
+              top: -120,
+              left: "50%",
+              transform: "translateX(-50%)",
+              width: 560,
+              height: 560,
+              borderRadius: "50%",
+              background: "radial-gradient(circle, rgba(201,162,39,0.16), rgba(201,162,39,0.05) 38%, transparent 72%)",
+              filter: "blur(10px)",
+              pointerEvents: "none",
+            }}
+          />
+          <div
+            style={{
+              position: "absolute",
+              insetInlineStart: -80,
+              bottom: -120,
+              width: 280,
+              height: 280,
+              borderRadius: "50%",
+              background: "radial-gradient(circle, rgba(16,185,129,0.10), transparent 72%)",
+              filter: "blur(8px)",
+              pointerEvents: "none",
+            }}
+          />
+
+          <div style={{ display: "grid", gap: 18, position: "relative", zIndex: 1 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 18, flexWrap: "wrap", alignItems: "start" }}>
+              <div style={{ maxWidth: 860, display: "grid", gap: 14 }}>
+                <div
+                  style={{
+                    display: "inline-flex",
+                    width: "fit-content",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "8px 14px",
+                    borderRadius: 999,
+                    background: "rgba(16,185,129,0.12)",
+                    border: "1px solid rgba(16,185,129,0.22)",
+                    color: "#a7f3d0",
+                    fontWeight: 950,
+                    fontSize: 12,
+                  }}
+                >
+                  تشغيل فعلي مباشر من بيانات الكادر والامتحانات
+                </div>
+
+                <div style={{ display: "grid", gap: 8 }}>
+                  <div style={{ fontSize: 18, fontWeight: 900, color: "rgba(201,162,39,.84)" }}>{APP_NAME}</div>
+                  <h1
+                    style={{
+                      margin: 0,
+                      fontSize: "clamp(34px, 5vw, 64px)",
+                      lineHeight: 1.02,
+                      fontWeight: 950,
+                      color: "#f8e7a6",
+                      letterSpacing: "-0.03em",
+                      textShadow: "0 10px 30px rgba(201,162,39,.18)",
+                    }}
+                  >
+                    منصة تشغيل توزيع المهام
+                  </h1>
+                </div>
+
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: 16,
+                    lineHeight: 2,
+                    color: "rgba(201,162,39,.86)",
+                    maxWidth: 900,
+                  }}
+                >
+                  هذه الصفحة تمثل مركز التشغيل التنفيذي للتوزيع، حيث تُحمّل بيانات الكادر والامتحانات والقيود
+                  الفعلية، ثم تُنتج توزيعًا ذكيًا ومنظمًا مع قياس العدالة والعجز والتنبيهات في واجهة مؤسسية
+                  فاخرة تساعد الإدارة على الانطلاق بسرعة وثقة.
+                </p>
+
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  {[
+                    { label: "مصدر التشغيل", value: fsLoaded ? "بيانات الجهة المباشرة" : "بيانات التطبيق الحالية" },
+                    { label: "الجاهزية", value: hasBasics ? "جاهز للتشغيل" : "ينتظر اكتمال البيانات" },
+                    { label: "آخر تشغيل", value: latestRunSummary?.createdAtISO ? String(latestRunSummary.createdAtISO).slice(0, 16).replace("T", " ") : "لا يوجد" },
+                  ].map((item) => (
+                    <div
+                      key={item.label}
+                      style={{
+                        minWidth: 190,
+                        border: `1px solid ${LINE}`,
+                        borderRadius: 18,
+                        padding: "12px 14px",
+                        background: "rgba(255,255,255,.05)",
+                        boxShadow: "0 10px 26px rgba(0,0,0,.22)",
+                      }}
+                    >
+                      <div style={{ fontSize: 12, color: "rgba(201,162,39,.68)", fontWeight: 800 }}>{item.label}</div>
+                      <div style={{ marginTop: 6, fontSize: 16, color: "#f8e7a6", fontWeight: 950 }}>{item.value}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  minWidth: 300,
+                  maxWidth: 390,
+                  width: "100%",
+                  border: `1px solid ${LINE}`,
+                  borderRadius: 28,
+                  padding: 22,
+                  background: "linear-gradient(180deg, rgba(201,162,39,.08), rgba(255,255,255,.02))",
+                  boxShadow: "inset 0 1px 0 rgba(255,255,255,.05)",
+                  display: "grid",
+                  gap: 14,
+                }}
+              >
+                <div
+                  style={{
+                    display: "inline-flex",
+                    width: "fit-content",
+                    padding: "8px 12px",
+                    borderRadius: 999,
+                    background: runtimeError || errors.length ? "rgba(239,68,68,.14)" : "rgba(16,185,129,.14)",
+                    border: runtimeError || errors.length ? "1px solid rgba(239,68,68,.24)" : "1px solid rgba(16,185,129,.24)",
+                    color: runtimeError || errors.length ? "#fecaca" : "#a7f3d0",
+                    fontWeight: 950,
+                    fontSize: 12,
+                  }}
+                >
+                  {runtimeError || errors.length ? "يحتاج مراجعة قبل التشغيل" : "الوضع التشغيلي جاهز"}
+                </div>
+
+                <div style={{ fontSize: 30, lineHeight: 1.45, fontWeight: 950, color: "#f8e7a6" }}>
+                  {runOut
+                    ? "تم ربط الصفحة بآخر تشغيل محفوظ ويمكنك مراجعة العدالة والعجز والتحسينات مباشرة."
+                    : "ابدأ تشغيل التوزيع من هنا وشاهد النتائج والعدالة والتنبيهات في تدفق واحد منظم."}
+                </div>
+
+                <div style={{ fontSize: 14, lineHeight: 1.95, color: "rgba(201,162,39,.78)" }}>
+                  الواجهة المطورة تبرز حالة الجاهزية، وعدد البيانات الأساسية، وإجمالي التكليفات، مع انتقال بصري أنيق
+                  من لوحة التشغيل إلى أقسام العدالة والجاهزية والتفاصيل.
+                </div>
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
+                gap: 14,
+              }}
+            >
+              {[
+                {
+                  label: "المعلمون",
+                  value: teachersCount,
+                  hint: "الكادر الجاهز للتوزيع",
+                  tone: "#f8e7a6",
+                },
+                {
+                  label: "الاختبارات",
+                  value: examsCount,
+                  hint: "المواد/الفترات الفعلية",
+                  tone: "#93c5fd",
+                },
+                {
+                  label: "اللجان",
+                  value: derived.totalRooms,
+                  hint: "إجمالي القاعات المطلوبة",
+                  tone: "#86efac",
+                },
+                {
+                  label: "أيام الامتحانات",
+                  value: derived.uniqueDates,
+                  hint: "عدد الأيام الفعلية",
+                  tone: "#c4b5fd",
+                },
+                {
+                  label: "إسنادات آخر تشغيل",
+                  value: latestRunSummary?.totalAssignments ?? 0,
+                  hint: "إجمالي ما تم توليده",
+                  tone: "#fde68a",
+                },
+                {
+                  label: "تحذيرات آخر تشغيل",
+                  value: latestRunSummary?.warnings ?? 0,
+                  hint: "رسائل تحتاج انتباهًا",
+                  tone: (latestRunSummary?.warnings ?? 0) > 0 ? "#fca5a5" : "#bbf7d0",
+                },
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  style={{
+                    border: `1px solid ${LINE}`,
+                    borderRadius: 24,
+                    background: "linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.02))",
+                    padding: 18,
+                    boxShadow: "0 18px 40px rgba(0,0,0,.24)",
+                  }}
+                >
+                  <div style={{ fontSize: 13, color: "rgba(201,162,39,.66)", fontWeight: 800 }}>{item.label}</div>
+                  <div style={{ marginTop: 10, fontSize: 36, fontWeight: 950, color: item.tone }}>{item.value}</div>
+                  <div style={{ marginTop: 8, fontSize: 12, color: "rgba(201,162,39,.56)", lineHeight: 1.8 }}>{item.hint}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
       <TaskDistributionConstraintsSection
         constraints={constraints}
         allowTwo={allowTwo}
