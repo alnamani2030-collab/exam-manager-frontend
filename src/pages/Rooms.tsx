@@ -6,7 +6,7 @@ import { useRoomBlocksData } from "../hooks/useRoomBlocksData";
 import { createId, isRoomBlockedToday } from "../lib/roomScheduling";
 import type { Room } from "../services/rooms.service";
 import type { RoomBlock } from "../services/roomBlocks.service";
-const APP_NAME = "نظام إدارة الامتحانات المطوّر";
+const APP_NAME = "";
 const BUILDING_OPTIONS = [
   { value: "", label: "— اختر المبنى —" },
   { value: "المبنى A", label: "المبنى A" },
