@@ -87,20 +87,20 @@ export default function Layout() {
       { to: tp("unavailability"), label: tr("الغياب", "Unavailability"), icon: "🕒" },
       { to: tp("task-distribution/run"), label: tr("توزيع المهام", "Task Distribution"), icon: "🔀" },
       { to: tp("task-distribution/results"), label: tr("الجدول الشامل", "Master Table"), icon: "🧾" },
-      { to: tp("settings"), label: tr("تقرير إحصائية التوزيع", "Distribution Statistics"), icon: "⚙️" },
+      { to: tp("settings"), label: tr("مركز رقابة التوزيع", "Distribution Statistics"), icon: "⚙️" },
       { to: tp("task-distribution/print"), label: tr("التقارير والكشوفات", "Reports & Sheets"), icon: "📑" },
 
-      { to: tp("archive"), label: tr("الأرشيف", "Archive"), icon: "📦", adminOnly: true },
+      { to: tp("archive"), label: tr("الإرشيف الذكي", "Archive"), icon: "📦", adminOnly: true },
 
       
 
-      { to: tp("sync"), label: tr("قاعدة البيانات", "Database"), icon: "💾", adminOnly: true },
+      { to: tp("sync"), label: tr("قاعدة البيانات و النسخ الإحتياطي و السحابي", "Database"), icon: "💾", adminOnly: true },
       { to: tp("analytics1"), label: tr("لوحة التحكم الذكي", "Analytics1 & Charts"), icon: "📈" },
       { to: tp("analytics"), label: tr("مركز التحكم التحليلي لمنظومة الامتحانات", "Analytics & Charts"), icon: "📈" },
-      { to: tp("versioning"), label: tr("إدارة الإصدارات", "Versioning"), icon: "🗂️", adminOnly: true },
-      { to: tp("multi-role"), label: tr("صلاحيات Multi-Role", "Multi-Role Permissions"), icon: "🔐", adminOnly: true },
+      { to: tp("versioning"), label: tr("مركز إدارة النسخ والتوثيق التشغيلي", "Versioning"), icon: "🗂️", adminOnly: true },
+      { to: tp("multi-role"), label: tr("منصة إدارة المستخدمين ", "Multi-Role Permissions"), icon: "🔐", adminOnly: true },
 
-      { to: tp("gallery"), label: tr("مكتبة الصور", "Gallery"), icon: "🖼️" },
+      { to: tp("gallery"), label: tr("مكتبة الشعار و الهوية البصرية", "Gallery"), icon: "🖼️" },
       { to: tp("about"), label: tr("مصمم البرنامج", "About Developer"), icon: "🛠️" },
       { to: tp("suggestions"), label: tr("تطوير البرنامج", "Suggestions"), icon: "💡" },
 
