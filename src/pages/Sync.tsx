@@ -1,3 +1,4 @@
+
 // src/pages/Sync.tsx
 import React, { useMemo, useRef, useState, useEffect } from "react";
 
@@ -51,6 +52,12 @@ type BackupV1 = {
 };
 
 const BACKUP_SCHEMA = 1 as const;
+const GOLD = "#f5c451";
+const AMBER = "#f59e0b";
+const GREEN = "#34d399";
+const RED = "#ef4444";
+const BLUE = "#60a5fa";
+const SLATE = "#94a3b8";
 
 function downloadJson(filename: string, obj: any) {
   const blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json;charset=utf-8" });
@@ -82,7 +89,6 @@ function isBackupV1(x: any): x is BackupV1 {
 }
 
 async function hasActiveWork(): Promise<boolean> {
-  // تصميم “مرن”: لو لم يوجد status/state، لا نمنع.
   const runs = await getAll<any>(STORES.runs).catch(() => []);
   const tasks = await getAll<any>(STORES.tasks).catch(() => []);
 
@@ -105,7 +111,6 @@ async function exportBackupBoth(tenantId: string): Promise<BackupV1> {
   const data = await exportAll();
   const archiveLocal = listArchivedRuns(tenantId);
 
-  // Cloud archive — عبر خدمة runtime موحدة
   let archiveCloud: any[] = [];
   try {
     archiveCloud = await fetchCloudArchiveViaFn(tenantId);
@@ -127,7 +132,6 @@ async function exportBackupBoth(tenantId: string): Promise<BackupV1> {
 }
 
 async function importDbReplace(data: any) {
-  // استبدال كامل لبيانات IndexedDB
   await Promise.all([
     clear(STORES.teachers),
     clear(STORES.exams),
@@ -162,48 +166,99 @@ async function syncArchiveWithCloud(tenantId: string) {
   };
 }
 
-
-const page = {
-  minHeight: "100vh",
-  background: "#0b1020",
-  color: "#f5e7b2",
-  direction: "rtl" as const,
-  padding: 18,
-};
-
-const card = {
-  border: "1px solid rgba(212,175,55,0.25)",
-  borderRadius: 14,
-  padding: 14,
-  background: "rgba(255,255,255,0.03)",
-  boxShadow: "0 10px 28px rgba(0,0,0,0.35)",
-};
-
-const btn = (kind?: "soft" | "danger" | "brand"): React.CSSProperties => {
-  kind ??= "soft";
-  const base: React.CSSProperties = {
-    borderRadius: 12,
-    padding: "10px 12px",
-    border: "1px solid rgba(212,175,55,0.25)",
-    fontWeight: 900,
-    cursor: "pointer",
-    color: "#f5e7b2",
-    background: "rgba(255,255,255,0.04)",
+function glassCard(border = "rgba(245,196,81,0.18)", background = "linear-gradient(180deg, rgba(17,24,39,0.88), rgba(2,6,23,0.92))"): React.CSSProperties {
+  return {
+    border: `1px solid ${border}`,
+    borderRadius: 24,
+    background,
+    boxShadow: "0 22px 60px rgba(0,0,0,0.35)",
+    backdropFilter: "blur(14px)",
   };
-  if (kind === "brand")
-    return {
-      ...base,
-      background: "rgba(212,175,55,0.16)",
-      borderColor: "rgba(212,175,55,0.45)",
-    };
-  if (kind === "danger")
-    return {
-      ...base,
-      background: "rgba(239,68,68,0.12)",
-      borderColor: "rgba(239,68,68,0.35)",
-    };
-  return base;
-};
+}
+
+function statusTone(ok: boolean) {
+  return ok ? GREEN : RED;
+}
+
+function HeroBadge({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div style={{
+      ...glassCard("rgba(255,255,255,0.08)", "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))"),
+      padding: 16,
+      display: "grid",
+      gap: 6,
+    }}>
+      <div style={{ color: "rgba(226,232,240,0.78)", fontSize: 12, fontWeight: 800 }}>{label}</div>
+      <div style={{ color: "#fff3bf", fontWeight: 900, fontSize: 20, lineHeight: 1.3 }}>{value}</div>
+    </div>
+  );
+}
+
+function ActionCard(props: {
+  title: string;
+  subtitle: string;
+  points: string[];
+  buttonLabel: string;
+  onClick: () => void;
+  disabled?: boolean;
+  accent?: string;
+  danger?: boolean;
+}) {
+  const accent = props.accent || GOLD;
+  return (
+    <div
+      style={{
+        ...glassCard(props.danger ? "rgba(239,68,68,0.28)" : `${accent}33`),
+        padding: 22,
+        display: "grid",
+        gap: 14,
+        position: "relative",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          insetInlineEnd: -30,
+          top: -40,
+          width: 110,
+          height: 110,
+          borderRadius: "50%",
+          background: props.danger ? "rgba(239,68,68,0.10)" : `${accent}14`,
+          filter: "blur(2px)",
+        }}
+      />
+      <div style={{ position: "relative", display: "grid", gap: 8 }}>
+        <div style={{ fontSize: 19, fontWeight: 950, color: props.danger ? "#fecaca" : "#fff3bf" }}>{props.title}</div>
+        <div style={{ color: "rgba(245,231,178,0.74)", fontSize: 13, lineHeight: 1.85 }}>{props.subtitle}</div>
+      </div>
+      <div style={{ position: "relative", display: "grid", gap: 8 }}>
+        {props.points.map((p) => (
+          <div key={p} style={{ display: "flex", gap: 8, alignItems: "start", color: "#e5e7eb", fontSize: 13, lineHeight: 1.8 }}>
+            <span style={{ color: props.danger ? "#fca5a5" : accent }}>•</span>
+            <span>{p}</span>
+          </div>
+        ))}
+      </div>
+      <button
+        style={{
+          borderRadius: 14,
+          padding: "12px 14px",
+          border: `1px solid ${props.danger ? "rgba(239,68,68,0.35)" : `${accent}55`}`,
+          background: props.danger ? "rgba(239,68,68,0.12)" : `${accent}16`,
+          color: props.danger ? "#fecaca" : "#fff3bf",
+          fontWeight: 900,
+          cursor: props.disabled ? "not-allowed" : "pointer",
+          opacity: props.disabled ? 0.6 : 1,
+        }}
+        onClick={props.onClick}
+        disabled={props.disabled}
+      >
+        {props.buttonLabel}
+      </button>
+    </div>
+  );
+}
 
 export default function Sync() {
   const nav = useNavigate();
@@ -224,16 +279,14 @@ export default function Sync() {
 
   const [cloudBackups, setCloudBackups] = useState<any[]>([]);
 
-  // ✅ Auto cloud backup ON by default
   const autoCloud = useAutoCloudBackup({
     tenantId,
     uid: user?.uid,
     email: user?.email,
     intervalMs: 10 * 60 * 1000,
-    defaultEnabled: true, // ✅ ON افتراضي
+    defaultEnabled: true,
   });
 
-  // ✅ Safe auto-restore for Archive (merge only, no delete)
   useEffect(() => {
     if (!tenantId) return;
     autoRestoreArchiveFromCloud(tenantId).catch(() => {});
@@ -252,7 +305,6 @@ export default function Sync() {
     refreshCloudBackups();
   }, [tenantId]);
 
-  // ✅ فحص اتصال السحابة/الدوال (للأرشيف)
   const checkCloud = async () => {
     try {
       const list = callFn<any, any>("tenantListDocs");
@@ -426,7 +478,6 @@ export default function Sync() {
     }
   };
 
-  // ✅ Manual cloud backup now (FULL localStorage snapshot using dbBackupManager v2 chunking-safe)
   const onCloudBackupNow = async () => {
     try {
       setBusy("cloud");
@@ -442,7 +493,6 @@ export default function Sync() {
         prefix: "exam-manager",
       });
 
-      // sanity check
       validateBackupFile(file);
 
       const id = await uploadBackupToCloud({ tenantId, file });
@@ -456,7 +506,6 @@ export default function Sync() {
     }
   };
 
-  // ✅ Import from cloud (restore localStorage snapshot)
   const onImportFromCloud = async (backupId: string) => {
     try {
       if (await hasActiveWork()) {
@@ -470,19 +519,6 @@ export default function Sync() {
       const cloudFile = await fetchCloudBackup(tenantId, backupId);
       validateBackupFile(cloudFile);
 
-      // Dry-run preview
-      // (يعطي فقط عدد مفاتيح exam-manager)
-      const incomingCount = (() => {
-        try {
-          // lazy import to avoid circular deps? no need; use build module only.
-          // We'll just compute by parsing payload indirectly:
-          // dbBackupManager has previewImport but we didn't import it to keep imports minimal.
-          return "—";
-        } catch {
-          return "—";
-        }
-      })();
-
       const ok = window.confirm(
         `⚠️ سيتم استيراد نسخة السحابة إلى localStorage (مفاتيح exam-manager).\n` +
           `لن نحذف مفاتيح خارج exam-manager.\n\n` +
@@ -490,17 +526,12 @@ export default function Sync() {
       );
       if (!ok) return;
 
-      // ✅ restore snapshot into localStorage
-      // NOTE: dbBackupManager.importDatabase is intentionally not imported here to keep file stable.
-      // We'll do minimal restore locally using payload.
-      // But since you already have dbBackupManager with importDatabase, you can import and call it.
       const { importDatabase } = await import("../utils/dbBackupManager");
       importDatabase(cloudFile, { prefix: "exam-manager" });
 
-      // reload app data (if needed)
       await reloadAll();
 
-      setMsg(`✅ تم الاستيراد من السحابة بنجاح. ${incomingCount !== "—" ? `(${incomingCount})` : ""}`);
+      setMsg(`✅ تم الاستيراد من السحابة بنجاح.`);
     } catch (e: any) {
       setMsg(`❌ فشل الاستيراد من السحابة: ${e?.message || "خطأ غير معروف"}`);
     } finally {
@@ -508,7 +539,6 @@ export default function Sync() {
     }
   };
 
-  // ✅ Delete one cloud backup (manual)
   const onDeleteCloudBackup = async (backupId: string) => {
     const ok = window.confirm("⚠️ هل تريد حذف هذه النسخة السحابية نهائيًا؟");
     if (!ok) return;
@@ -526,7 +556,6 @@ export default function Sync() {
     }
   };
 
-  // ✅ Prune old backups: keep last N
   const pruneCloudBackups = async (keepLast = 10) => {
     const ok = window.confirm(`⚠️ سيتم حذف النسخ السحابية القديمة وترك آخر ${keepLast} نسخ فقط. هل تريد المتابعة؟`);
     if (!ok) return;
@@ -535,7 +564,7 @@ export default function Sync() {
       setBusy("cloud");
       setMsg("");
 
-      const items = await listCloudBackups(tenantId, 200); // لازم rules تسمح limit <= 100 أو ارفعها
+      const items = await listCloudBackups(tenantId, 200);
       if (!items.length) {
         setMsg("لا توجد نسخ سحابية للحذف.");
         return;
@@ -562,86 +591,210 @@ export default function Sync() {
     }
   };
 
+  const cloudTone = statusTone(cloudStatus.ok);
+  const syncModeLabel = autoCloud.enabled ? "النسخ التلقائي مفعل" : "النسخ التلقائي متوقف";
+  const syncModeColor = autoCloud.enabled ? GREEN : SLATE;
+
   return (
-    <div style={page}>
-      <div style={{ maxWidth: 1200, margin: "0 auto" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-          <div>
-            <h1 style={{ margin: 0, fontSize: 22, fontWeight: 950, letterSpacing: 0.2 }}>قاعدة البيانات / النسخ الاحتياطي</h1>
-            <div style={{ marginTop: 6, color: "rgba(245,231,178,0.8)", fontWeight: 800, fontSize: 13 }}>
-              تصدير/استيراد: بيانات البرنامج الأساسية + دمج الأرشيف المحلي والسحابي.
-            </div>
-            <div style={{ marginTop: 6, color: "rgba(245,231,178,0.75)", fontWeight: 800, fontSize: 12 }}>
-              حالة السحابة (للأرشيف): <b>{cloudStatus.ok ? "✅ متاح" : "❌ غير متاح"}</b> — {cloudStatus.note}
-            </div>
-          </div>
+    <div
+      style={{
+        minHeight: "100vh",
+        background:
+          "radial-gradient(circle at top, rgba(245,196,81,0.14), transparent 22%), radial-gradient(circle at 85% 25%, rgba(96,165,250,0.12), transparent 18%), linear-gradient(180deg, #07101f 0%, #030712 62%, #02040a 100%)",
+        color: "#f5e7b2",
+        direction: "rtl",
+        padding: 20,
+      }}
+    >
+      <div style={{ maxWidth: 1380, margin: "0 auto", display: "grid", gap: 20 }}>
+        <div
+          style={{
+            ...glassCard("rgba(245,196,81,0.22)", "linear-gradient(120deg, rgba(41,31,5,0.92), rgba(7,12,25,0.96) 42%, rgba(5,10,20,0.98) 100%)"),
+            padding: 26,
+            position: "relative",
+            overflow: "hidden",
+          }}
+        >
+          <div style={{ position: "absolute", top: -60, left: -40, width: 180, height: 180, borderRadius: "50%", background: "rgba(245,196,81,0.10)", filter: "blur(8px)" }} />
+          <div style={{ position: "absolute", bottom: -70, right: -30, width: 200, height: 200, borderRadius: "50%", background: "rgba(96,165,250,0.10)", filter: "blur(10px)" }} />
+          <div style={{ position: "relative", display: "grid", gap: 18 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 12, flexWrap: "wrap" }}>
+              <div style={{ display: "grid", gap: 8 }}>
+                <div style={{ display: "inline-flex", width: "fit-content", padding: "8px 12px", borderRadius: 999, background: "rgba(52,211,153,0.12)", border: "1px solid rgba(52,211,153,0.24)", color: "#a7f3d0", fontWeight: 900, fontSize: 12 }}>
+                  مركز الحماية والنسخ الاحتياطي للنظام
+                </div>
+                <h1 style={{ margin: 0, fontSize: "clamp(28px, 4.8vw, 54px)", lineHeight: 1.04, fontWeight: 950, color: "#fff3bf" }}>
+                  قاعدة البيانات / النسخ الاحتياطي / المزامنة السحابية
+                </h1>
+                <div style={{ maxWidth: 980, color: "rgba(245,231,178,0.82)", fontSize: 15, lineHeight: 1.95 }}>
+                  لوحة تنفيذية فائقة التنظيم لإدارة النسخ الاحتياطية، الاستيراد والاستعادة، مزامنة الأرشيف، وفحص جاهزية السحابة.
+                  تم تطويرها لتمنح المسؤول رؤية أوضح وتحكمًا أعلى بثقة أكبر.
+                </div>
+              </div>
 
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <button style={btn("soft")} onClick={() => nav(-1)} disabled={!!busy}>
-              رجوع
-            </button>
-            <button style={btn("soft")} onClick={checkCloud} disabled={!!busy}>
-              فحص السحابة
-            </button>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <button
+                  style={{
+                    borderRadius: 14,
+                    padding: "11px 14px",
+                    border: "1px solid rgba(255,255,255,0.10)",
+                    background: "rgba(255,255,255,0.04)",
+                    color: "#f5e7b2",
+                    fontWeight: 900,
+                    cursor: busy ? "not-allowed" : "pointer",
+                    opacity: busy ? 0.6 : 1,
+                  }}
+                  onClick={() => nav(-1)}
+                  disabled={!!busy}
+                >
+                  رجوع
+                </button>
+                <button
+                  style={{
+                    borderRadius: 14,
+                    padding: "11px 14px",
+                    border: `1px solid ${cloudTone}55`,
+                    background: `${cloudTone}16`,
+                    color: "#fff3bf",
+                    fontWeight: 900,
+                    cursor: busy ? "not-allowed" : "pointer",
+                    opacity: busy ? 0.6 : 1,
+                  }}
+                  onClick={checkCloud}
+                  disabled={!!busy}
+                >
+                  فحص السحابة
+                </button>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.3fr) minmax(300px, 0.9fr)", gap: 16 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
+                <HeroBadge label="الجهة الحالية" value={tenantId || "—"} />
+                <HeroBadge label="حالة السحابة" value={<span style={{ color: cloudTone }}>{cloudStatus.ok ? "✅ متاح" : "❌ غير متاح"}</span>} />
+                <HeroBadge label="النسخ السحابية" value={cloudBackups.length} />
+                <HeroBadge label="الوضع التلقائي" value={<span style={{ color: syncModeColor }}>{syncModeLabel}</span>} />
+              </div>
+
+              <div style={{ ...glassCard("rgba(255,255,255,0.08)", "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))"), padding: 18, display: "grid", gap: 10 }}>
+                <div style={{ color: "#fff3bf", fontWeight: 900, fontSize: 16 }}>لوحة الحالة التنفيذية</div>
+                <div style={{ color: "rgba(245,231,178,0.78)", lineHeight: 1.85, fontSize: 13 }}>
+                  {cloudStatus.note}
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 999, background: `${cloudTone}16`, border: `1px solid ${cloudTone}33`, color: cloudTone, fontWeight: 900, fontSize: 12 }}>
+                    {cloudStatus.ok ? "Cloud Ready" : "Cloud Needs Attention"}
+                  </span>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 999, background: `${syncModeColor}16`, border: `1px solid ${syncModeColor}33`, color: syncModeColor, fontWeight: 900, fontSize: 12 }}>
+                    {syncModeLabel}
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 12 }}>
-          <div style={card}>
-            <div style={{ fontWeight: 950, fontSize: 16 }}>تصدير نسخة احتياطية (JSON)</div>
-            <div style={{ marginTop: 8, color: "rgba(245,231,178,0.78)", fontWeight: 800, fontSize: 12, lineHeight: 1.7 }}>
-              سيتم تضمين:
-              <br />• بيانات البرنامج الأساسية (IndexedDB)
-              <br />• أرشيف محلي (LocalStorage)
-              <br />• أرشيف سحابي (Firestore) إن كان متاحًا
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 14 }}>
+          <ActionCard
+            title="تصدير نسخة احتياطية (JSON)"
+            subtitle="إنشاء ملف احتياطي متكامل يحفظ بيانات النظام الأساسية مع الأرشيف المحلي والسحابي المتاح."
+            points={[
+              "يشمل بيانات البرنامج الأساسية من IndexedDB",
+              "يشمل الأرشيف المحلي من LocalStorage",
+              "يشمل الأرشيف السحابي إذا كان متاحًا",
+            ]}
+            buttonLabel={busy === "export" ? "جاري التصدير…" : "تصدير النسخة الاحتياطية"}
+            onClick={onExport}
+            disabled={!!busy}
+            accent={GOLD}
+          />
+
+          <ActionCard
+            title="استيراد نسخة احتياطية (JSON)"
+            subtitle="استعادة نسخة محفوظة سابقًا مع استبدال بيانات البرنامج الأساسية ودمج الأرشيف بأمان."
+            points={[
+              "يستبدل بيانات البرنامج الأساسية",
+              "يدمج الأرشيف المحلي والسحابي دون حذف الموجود",
+              "يمنع الاستيراد أثناء وجود تشغيل أو توزيع نشط",
+            ]}
+            buttonLabel={busy === "import" ? "جاري الاستيراد…" : "استيراد نسخة احتياطية"}
+            onClick={onPickImport}
+            disabled={!!busy}
+            accent={BLUE}
+          />
+
+          <ActionCard
+            title="منطقة الخطر"
+            subtitle="إعادة ضبط بيانات البرنامج الأساسية فقط مع الحفاظ على الأرشيف المحلي والسحابي دون حذف."
+            points={[
+              "يحذف بيانات التشغيل الأساسية من IndexedDB",
+              "يبقي الأرشيف المحلي والسحابي كما هو",
+              "يعيد القيم الافتراضية المطلوبة للنظام",
+            ]}
+            buttonLabel={busy === "reset" ? "جاري الحذف…" : "حذف بيانات البرنامج الأساسية"}
+            onClick={onReset}
+            disabled={!!busy}
+            danger
+          />
+        </div>
+
+        <input ref={fileRef} type="file" accept="application/json" style={{ display: "none" }} onChange={onImportFile} />
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 18 }}>
+          <div style={{ ...glassCard(), padding: 18 }}>
+            <div style={{ color: "#fff3bf", fontWeight: 900, fontSize: 19, marginBottom: 8 }}>مزامنة الأرشيف والنسخ السحابية</div>
+            <div style={{ color: "rgba(245,231,178,0.75)", lineHeight: 1.8, fontSize: 13, marginBottom: 14 }}>
+              الأقسام التالية مرتبطة مباشرة بمنطق النظام الحالي: مزامنة الأرشيف، النسخ السحابية اليدوية، الاستيراد من السحابة، والتنظيف الذكي للنسخ القديمة.
             </div>
-            <button style={{ ...btn("brand"), marginTop: 12, width: "100%" }} onClick={onExport} disabled={!!busy}>
-              {busy === "export" ? "جاري التصدير…" : "تصدير (Download JSON)"}
-            </button>
+            <SyncArchiveSection card={{ ...glassCard(), padding: 14 }} btn={(kind?: "soft" | "danger" | "brand") => {
+              const border = kind === "danger" ? "rgba(239,68,68,0.35)" : kind === "brand" ? "rgba(245,196,81,0.40)" : "rgba(255,255,255,0.10)";
+              const bg = kind === "danger" ? "rgba(239,68,68,0.12)" : kind === "brand" ? "rgba(245,196,81,0.14)" : "rgba(255,255,255,0.05)";
+              return {
+                borderRadius: 12,
+                padding: "10px 12px",
+                border: `1px solid ${border}`,
+                fontWeight: 900,
+                cursor: "pointer",
+                color: "#f5e7b2",
+                background: bg,
+              };
+            }} busy={busy ?? ""} onSyncArchive={onSyncArchive} />
           </div>
 
-          <div style={card}>
-            <div style={{ fontWeight: 950, fontSize: 16 }}>استيراد نسخة احتياطية (JSON)</div>
-            <div style={{ marginTop: 8, color: "rgba(245,231,178,0.78)", fontWeight: 800, fontSize: 12, lineHeight: 1.7 }}>
-              • سيتم استبدال بيانات البرنامج الأساسية.
-              <br />• سيتم دمج الأرشيف المحلي والسحابي (بدون حذف الموجود).
-            </div>
-
-            <button style={{ ...btn("brand"), marginTop: 12, width: "100%" }} onClick={onPickImport} disabled={!!busy}>
-              {busy === "import" ? "جاري الاستيراد…" : "استيراد (Upload JSON)"}
-            </button>
-            <input ref={fileRef} type="file" accept="application/json" style={{ display: "none" }} onChange={onImportFile} />
-          </div>
-
-          <div style={{ ...card, borderColor: "rgba(239,68,68,0.35)" }}>
-            <div style={{ fontWeight: 950, fontSize: 16, color: "#ffb4b4" }}>منطقة الخطر</div>
-            <div style={{ marginTop: 8, color: "rgba(245,231,178,0.78)", fontWeight: 800, fontSize: 12, lineHeight: 1.7 }}>
-              حذف بيانات البرنامج الأساسية (IndexedDB) فقط.
-              <br />لن نحذف الأرشيف المحلي أو السحابي.
-            </div>
-            <button style={{ ...btn("danger"), marginTop: 12, width: "100%" }} onClick={onReset} disabled={!!busy}>
-              {busy === "reset" ? "جاري الحذف…" : "حذف بيانات البرنامج الأساسية"}
-            </button>
+          <div style={{ ...glassCard(), padding: 18 }}>
+            <SyncCloudBackupsSection
+              card={{ ...glassCard(), padding: 14 }}
+              btn={(kind?: "soft" | "danger" | "brand") => {
+                const border = kind === "danger" ? "rgba(239,68,68,0.35)" : kind === "brand" ? "rgba(96,165,250,0.40)" : "rgba(255,255,255,0.10)";
+                const bg = kind === "danger" ? "rgba(239,68,68,0.12)" : kind === "brand" ? "rgba(96,165,250,0.14)" : "rgba(255,255,255,0.05)";
+                return {
+                  borderRadius: 12,
+                  padding: "10px 12px",
+                  border: `1px solid ${border}`,
+                  fontWeight: 900,
+                  cursor: "pointer",
+                  color: "#f5e7b2",
+                  background: bg,
+                };
+              }}
+              tenantId={tenantId}
+              busy={busy ?? ""}
+              autoCloud={autoCloud}
+              cloudBackups={cloudBackups}
+              onCloudBackupNow={onCloudBackupNow}
+              refreshCloudBackups={refreshCloudBackups}
+              pruneCloudBackups={pruneCloudBackups}
+              onImportFromCloud={onImportFromCloud}
+              onDeleteCloudBackup={onDeleteCloudBackup}
+            />
           </div>
         </div>
 
-        <SyncArchiveSection card={card} btn={btn} busy={busy ?? ""} onSyncArchive={onSyncArchive} />
-
-        <SyncCloudBackupsSection
-          card={card}
-          btn={btn}
-          tenantId={tenantId}
-          busy={busy ?? ""}
-          autoCloud={autoCloud}
-          cloudBackups={cloudBackups}
-          onCloudBackupNow={onCloudBackupNow}
-          refreshCloudBackups={refreshCloudBackups}
-          pruneCloudBackups={pruneCloudBackups}
-          onImportFromCloud={onImportFromCloud}
-          onDeleteCloudBackup={onDeleteCloudBackup}
-        />
-
-        {msg && <SyncStatusBanner card={card} message={msg} />}
+        {msg ? (
+          <div style={{ ...glassCard("rgba(255,255,255,0.10)", "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))"), padding: 16 }}>
+            <SyncStatusBanner card={{ background: "transparent", border: "none", borderRadius: 0, padding: 0, boxShadow: "none" } as React.CSSProperties} message={msg} />
+          </div>
+        ) : null}
       </div>
     </div>
   );
