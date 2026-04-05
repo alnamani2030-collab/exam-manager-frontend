@@ -548,17 +548,23 @@ export default function Teachers() {
   }
 
   const pageStyle: React.CSSProperties = {
-    padding: 16,
+    padding: 18,
     color: "#e6c76a",
+    minHeight: "100vh",
+    background:
+      "radial-gradient(circle at top, rgba(212,175,55,0.14), transparent 24%), radial-gradient(circle at 88% 18%, rgba(59,130,246,0.10), transparent 24%), linear-gradient(180deg, #070b12 0%, #0b1220 42%, #060a12 100%)",
+    position: "relative",
+    overflowX: "hidden",
   };
 
   const card: React.CSSProperties = {
-    background: "linear-gradient(180deg, #0b1220, #09101d)",
+    background: "linear-gradient(180deg, rgba(11,18,32,0.94), rgba(9,16,29,0.96))",
     border: "1px solid rgba(212,175,55,0.15)",
-    borderRadius: 18,
-    padding: 16,
-    boxShadow: "0 18px 60px rgba(0,0,0,0.35)",
+    borderRadius: 24,
+    padding: 18,
+    boxShadow: "0 22px 60px rgba(0,0,0,0.36)",
     marginBottom: 14,
+    backdropFilter: "blur(6px)",
   };
 
   const btn = (bg: string, fg = "#0b1220"): React.CSSProperties => ({
@@ -700,6 +706,176 @@ export default function Teachers() {
           </div>
         </div>
       )}
+
+      <div
+        style={{
+          maxWidth: 1500,
+          margin: "0 auto 18px auto",
+          display: "grid",
+          gap: 18,
+          position: "relative",
+          zIndex: 1,
+        }}
+      >
+        <div
+          style={{
+            display: "grid",
+            gap: 18,
+            border: "1px solid rgba(212,175,55,0.18)",
+            borderRadius: 34,
+            padding: 28,
+            background:
+              "linear-gradient(135deg, rgba(30,22,2,0.95), rgba(8,8,8,0.98), rgba(27,21,3,0.94))",
+            boxShadow:
+              "0 32px 100px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.05), inset 0 -1px 0 rgba(255,255,255,0.03)",
+          }}
+        >
+          <div
+            style={{
+              position: "absolute",
+              top: -120,
+              left: "50%",
+              transform: "translateX(-50%)",
+              width: 560,
+              height: 560,
+              borderRadius: "50%",
+              background: "radial-gradient(circle, rgba(212,175,55,0.16), rgba(212,175,55,0.05) 38%, transparent 72%)",
+              filter: "blur(10px)",
+              pointerEvents: "none",
+            }}
+          />
+          <div
+            style={{
+              position: "absolute",
+              right: -100,
+              bottom: -120,
+              width: 320,
+              height: 320,
+              borderRadius: "50%",
+              background: "radial-gradient(circle, rgba(16,185,129,0.10), transparent 72%)",
+              filter: "blur(10px)",
+              pointerEvents: "none",
+            }}
+          />
+
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 18, flexWrap: "wrap", alignItems: "start", position: "relative", zIndex: 1 }}>
+            <div style={{ display: "grid", gap: 14, maxWidth: 900 }}>
+              <div
+                style={{
+                  display: "inline-flex",
+                  width: "fit-content",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "8px 14px",
+                  borderRadius: 999,
+                  background: "rgba(16,185,129,0.12)",
+                  border: "1px solid rgba(16,185,129,0.22)",
+                  color: "#a7f3d0",
+                  fontWeight: 900,
+                  fontSize: 12,
+                }}
+              >
+                إدارة ذكية ومباشرة للكادر التعليمي
+              </div>
+
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 900, color: "rgba(255,241,196,0.88)", marginBottom: 10 }}>
+                  نظام إدارة الامتحانات المطوّر
+                </div>
+                <h1
+                  style={{
+                    margin: 0,
+                    fontSize: "clamp(34px, 5vw, 64px)",
+                    lineHeight: 1.05,
+                    fontWeight: 950,
+                    color: "#fff1c4",
+                    letterSpacing: "-0.03em",
+                    textShadow: "0 8px 28px rgba(212,175,55,0.16)",
+                  }}
+                >
+                  مركز إدارة الكادر التعليمي
+                </h1>
+              </div>
+
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 16,
+                  lineHeight: 2,
+                  color: "rgba(255,241,196,0.82)",
+                  maxWidth: 940,
+                }}
+              >
+                تمنح هذه الصفحة الإدارة واجهة فاخرة ومنظمة لإدارة بيانات المعلمين والمواد والصفوف والاتصال، مع
+                تجربة سلسة للإضافة والتعديل والاستيراد والتصدير، وإبراز قوي للجدول التشغيلي في صورة مؤسسية راقية.
+              </p>
+
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                {[
+                  { label: "إجمالي المعلمين", value: teachers.length },
+                  { label: "المعروض الآن", value: filtered.length },
+                  { label: "البحث الحالي", value: query.trim() || "بدون فلترة" },
+                ].map((item) => (
+                  <div
+                    key={item.label}
+                    style={{
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      background: "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
+                      borderRadius: 18,
+                      padding: "12px 14px",
+                      minWidth: 190,
+                      boxShadow: "0 14px 28px rgba(0,0,0,0.22)",
+                    }}
+                  >
+                    <div style={{ fontSize: 12, color: "rgba(255,241,196,0.64)", fontWeight: 800 }}>{item.label}</div>
+                    <div style={{ marginTop: 6, fontSize: 16, color: "#fff8dc", fontWeight: 900 }}>{item.value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div
+              style={{
+                minWidth: 300,
+                maxWidth: 390,
+                width: "100%",
+                border: "1px solid rgba(255,255,255,0.08)",
+                borderRadius: 28,
+                padding: 22,
+                background: "linear-gradient(180deg, rgba(212,175,55,0.08), rgba(255,255,255,0.02))",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
+                display: "grid",
+                gap: 16,
+              }}
+            >
+              <div
+                style={{
+                  display: "inline-flex",
+                  width: "fit-content",
+                  padding: "8px 12px",
+                  borderRadius: 999,
+                  background: teachers.length ? "rgba(16,185,129,0.14)" : "rgba(245,158,11,0.14)",
+                  border: teachers.length ? "1px solid rgba(16,185,129,0.24)" : "1px solid rgba(245,158,11,0.24)",
+                  color: teachers.length ? "#a7f3d0" : "#fde68a",
+                  fontWeight: 900,
+                  fontSize: 12,
+                }}
+              >
+                {teachers.length ? "البيانات جاهزة للإدارة" : "لا توجد بيانات بعد"}
+              </div>
+
+              <div style={{ fontSize: 28, lineHeight: 1.5, fontWeight: 950, color: "#fff1c4" }}>
+               يمكنك من هنا إدارة المعلمين والمواد والصفوف وتصدير البيانات أو استيرادها، مع جدول فاخر وتجربة إدخال
+                مريحة ومنظمة من أول لحظة.
+              </div>
+
+              <div style={{ fontSize: 14, lineHeight: 1.95, color: "rgba(255,241,196,0.78)" }}>
+                
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* ✅ أزرار الصفحة فقط (بدون هيدر قديم) */}
       <div style={{ ...card, padding: 12 }}>
