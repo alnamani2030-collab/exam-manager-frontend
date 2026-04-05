@@ -16,6 +16,11 @@ const GOLD = "#ffd700";
 const BG = "#000";
 const LINE = "rgba(255,215,0,0.18)";
 const CARD_BG = "linear-gradient(180deg, rgba(255,215,0,0.05), rgba(255,215,0,0.02))";
+const PANEL_BG = "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))";
+const GREEN = "#34d399";
+const BLUE = "#60a5fa";
+const RED = "#f87171";
+const SLATE = "#e5e7eb";
 
 const roleOrder: TenantMemberRole[] = ["tenant_admin", "manager", "staff", "viewer"];
 
@@ -55,6 +60,52 @@ function translateAuthRole(label: string, lang: "ar" | "en") {
   return map[label]?.[lang] || label;
 }
 
+function glowSurface(border = LINE, background = PANEL_BG): React.CSSProperties {
+  return {
+    background,
+    border: `1px solid ${border}`,
+    borderRadius: 24,
+    boxShadow: "0 20px 50px rgba(0,0,0,0.30)",
+    backdropFilter: "blur(14px)",
+  };
+}
+
+function TopPill({ label, color, bg }: { label: string; color: string; bg: string }) {
+  return <span style={badgeStyle(color, bg)}>{label}</span>;
+}
+
+function StatCard({ title, value, note, accent = GOLD }: { title: string; value: React.ReactNode; note: string; accent?: string }) {
+  return (
+    <div style={{ ...glowSurface("rgba(255,255,255,0.08)"), padding: 20, position: "relative", overflow: "hidden" }}>
+      <div style={{ position: "absolute", insetInlineEnd: -24, top: -28, width: 110, height: 110, borderRadius: "50%", background: `${accent}14` }} />
+      <div style={{ position: "relative", display: "grid", gap: 8 }}>
+        <div style={{ fontSize: 13, color: "rgba(255,215,0,0.78)", fontWeight: 800 }}>{title}</div>
+        <div style={{ fontSize: 34, fontWeight: 900, color: accent, lineHeight: 1.1 }}>{value}</div>
+        <div style={{ fontSize: 12, color: "rgba(255,244,191,0.70)", lineHeight: 1.8 }}>{note}</div>
+      </div>
+    </div>
+  );
+}
+
+function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
+  return (
+    <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
+      <div style={{ fontSize: 24, fontWeight: 900, color: "#fff3bf" }}>{title}</div>
+      {subtitle ? <div style={{ fontSize: 13, color: "rgba(255,244,191,0.70)", lineHeight: 1.9 }}>{subtitle}</div> : null}
+      <div style={{ height: 1, background: "linear-gradient(90deg, rgba(255,215,0,0.35), rgba(255,255,255,0.06), rgba(255,255,255,0))" }} />
+    </div>
+  );
+}
+
+function CapabilityPanel({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div style={{ ...glowSurface("rgba(255,255,255,0.08)"), padding: 16 }}>
+      <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 12, color: "#fff3bf" }}>{title}</div>
+      {children}
+    </div>
+  );
+}
+
 export default function MultiRolePage() {
   const auth = useAuth() as any;
   const { tenantId: tenantFromContext } = useTenant() as any;
@@ -63,10 +114,10 @@ export default function MultiRolePage() {
   const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
 
   const roleMeta: Record<TenantMemberRole, { label: string; tone: string; bg: string }> = {
-    tenant_admin: { label: tr("مدير الجهة", "Tenant Admin"), tone: "#ffd700", bg: "rgba(255,215,0,0.12)" },
-    manager: { label: tr("مدير", "Manager"), tone: "#60a5fa", bg: "rgba(96,165,250,0.14)" },
-    staff: { label: tr("تشغيل", "Operations"), tone: "#34d399", bg: "rgba(52,211,153,0.14)" },
-    viewer: { label: tr("مشاهد", "Viewer"), tone: "#e5e7eb", bg: "rgba(229,231,235,0.12)" },
+    tenant_admin: { label: tr("مدير الجهة", "Tenant Admin"), tone: GOLD, bg: "rgba(255,215,0,0.12)" },
+    manager: { label: tr("مدير", "Manager"), tone: BLUE, bg: "rgba(96,165,250,0.14)" },
+    staff: { label: tr("تشغيل", "Operations"), tone: GREEN, bg: "rgba(52,211,153,0.14)" },
+    viewer: { label: tr("مشاهد", "Viewer"), tone: SLATE, bg: "rgba(229,231,235,0.12)" },
   };
 
   const capabilityLabels: Record<Capability, string> = {
@@ -108,7 +159,7 @@ export default function MultiRolePage() {
 
   const pageStyle: React.CSSProperties = {
     padding: "24px",
-    background: BG,
+    background: "radial-gradient(circle at top, rgba(255,215,0,0.16), transparent 24%), radial-gradient(circle at 80% 20%, rgba(96,165,250,0.10), transparent 24%), linear-gradient(180deg, #050505 0%, #000 100%)",
     color: GOLD,
     minHeight: "100vh",
     direction: isRTL ? "rtl" : "ltr",
@@ -136,7 +187,7 @@ export default function MultiRolePage() {
   const buttonStyle = (variant: "brand" | "ghost" | "danger" = "brand"): React.CSSProperties => ({
     background:
       variant === "brand"
-        ? "rgba(255,215,0,0.16)"
+        ? "linear-gradient(135deg, rgba(255,215,0,0.24), rgba(255,215,0,0.10))"
         : variant === "danger"
         ? "rgba(239,68,68,0.16)"
         : "rgba(255,255,255,0.05)",
@@ -146,6 +197,7 @@ export default function MultiRolePage() {
     padding: "10px 14px",
     cursor: "pointer",
     fontWeight: 800,
+    boxShadow: variant === "brand" ? "0 10px 24px rgba(255,215,0,0.10)" : undefined,
   });
 
   const roleLabel = (role: TenantMemberRole) => roleMeta[role]?.label || role;
@@ -215,6 +267,23 @@ export default function MultiRolePage() {
       disabledUsers: items.filter((item) => (drafts[item.email]?.enabled ?? item.enabled) !== true).length,
       totalAssignedRoles: memberRoles.length,
     };
+  }, [items, drafts]);
+
+  const distribution = useMemo(() => {
+    const countByRole: Record<TenantMemberRole, number> = {
+      tenant_admin: 0,
+      manager: 0,
+      staff: 0,
+      viewer: 0,
+    };
+
+    items.forEach((item) => {
+      uniqueRoles(drafts[item.email]?.roles || item.roles).forEach((role) => {
+        countByRole[role] += 1;
+      });
+    });
+
+    return roleOrder.map((role) => ({ role, count: countByRole[role] }));
   }, [items, drafts]);
 
   const updateDraft = (email: string, patch: Partial<{ displayName: string; roles: TenantMemberRole[]; enabled: boolean }>) => {
@@ -360,50 +429,90 @@ export default function MultiRolePage() {
     );
   };
 
+  const systemHealth = canManageUsers ? tr("مركز إدارة متقدم", "Advanced control center") : tr("وضع العرض الآمن", "Safe view mode");
+
   return (
     <div style={pageStyle}>
-      <div style={{ maxWidth: 1480, margin: "0 auto", display: "grid", gap: 18 }}>
-        <div style={{ ...cardStyle, display: "grid", gap: 12 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 12, flexWrap: "wrap" }}>
-            <div>
-              <h1 style={{ margin: 0, fontSize: 30, fontWeight: 900 }}>{tr("صلاحيات Multi-Role", "Multi-Role Permissions")}</h1>
-              <div style={{ marginTop: 8, color: "rgba(255,215,0,0.82)", fontWeight: 700 }}>
-                {tr(
-                  "الصفحة مرتبطة بالمستخدمين الفعليين داخل الجهة وتسحب الأدوار الحقيقية من بيانات الأعضاء وربطها مع allowlist.",
-                  "This page is connected to real tenant members and reads effective roles from member records linked with the allowlist."
-                )}
+      <div style={{ maxWidth: 1500, margin: "0 auto", display: "grid", gap: 20, position: "relative" }}>
+        <div style={{ ...glowSurface("rgba(255,215,0,0.22)", "linear-gradient(115deg, rgba(35,25,0,0.95), rgba(8,10,18,0.96) 40%, rgba(8,14,28,0.98) 100%)"), padding: 26, overflow: "hidden", position: "relative" }}>
+          <div style={{ position: "absolute", insetInlineEnd: -90, top: -100, width: 280, height: 280, borderRadius: "50%", background: "rgba(255,215,0,0.12)", filter: "blur(8px)" }} />
+          <div style={{ position: "absolute", insetInlineStart: -40, bottom: -70, width: 220, height: 220, borderRadius: "50%", background: "rgba(96,165,250,0.10)", filter: "blur(12px)" }} />
+          <div style={{ position: "relative", display: "grid", gap: 18 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <TopPill label={tr("صلاحيات فعلية مرتبطة بالنظام", "Live permissions linked to system")} color={GOLD} bg="rgba(255,215,0,0.14)" />
+                <TopPill label={systemHealth} color={canManageUsers ? GREEN : BLUE} bg={canManageUsers ? "rgba(52,211,153,0.16)" : "rgba(96,165,250,0.16)"} />
+                <TopPill label={tr("ثنائي اللغة", "Bilingual interface")} color="#bfdbfe" bg="rgba(96,165,250,0.16)" />
+              </div>
+              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <span style={badgeStyle("#111", GOLD)}>{tr("الجهة الحالية", "Current tenant")}: {tenantId || "—"}</span>
+                <button style={buttonStyle("ghost")} onClick={refresh}>{tr("تحديث", "Refresh")}</button>
               </div>
             </div>
-            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-              <span style={badgeStyle("#111", GOLD)}>{tr("الجهة الحالية", "Current tenant")}: {tenantId || "—"}</span>
-              <button style={buttonStyle("ghost")} onClick={refresh}>{tr("تحديث", "Refresh")}</button>
-            </div>
-          </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
-            <div style={{ ...cardStyle, textAlign: "center" }}>
-              <div style={{ fontSize: 30, fontWeight: 900 }}>{totals.totalUsers}</div>
-              <div>{tr("إجمالي المستخدمين", "Total users")}</div>
-            </div>
-            <div style={{ ...cardStyle, textAlign: "center" }}>
-              <div style={{ fontSize: 30, fontWeight: 900 }}>{totals.activeUsers}</div>
-              <div>{tr("الحسابات المفعلة", "Active accounts")}</div>
-            </div>
-            <div style={{ ...cardStyle, textAlign: "center" }}>
-              <div style={{ fontSize: 30, fontWeight: 900 }}>{totals.disabledUsers}</div>
-              <div>{tr("الحسابات الموقوفة", "Disabled accounts")}</div>
-            </div>
-            <div style={{ ...cardStyle, textAlign: "center" }}>
-              <div style={{ fontSize: 30, fontWeight: 900 }}>{totals.totalAssignedRoles}</div>
-              <div>{tr("إجمالي الأدوار المسندة", "Total assigned roles")}</div>
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.3fr) minmax(320px, 0.9fr)", gap: 18, alignItems: "stretch" }}>
+              <div style={{ display: "grid", gap: 12 }}>
+                <div style={{ color: "#fff1b8", fontWeight: 900, letterSpacing: 0.4, fontSize: 14 }}>{tr("MULTI ROLE CONTROL CENTER", "MULTI ROLE CONTROL CENTER")}</div>
+                <div style={{ fontSize: "clamp(30px, 4.8vw, 58px)", fontWeight: 900, lineHeight: 1.04, color: "#fff3bf" }}>
+                  {tr("منصة أنيقة لإدارة المستخدمين والأدوار والصلاحيات الفعلية", "An elegant command surface for users, roles, and effective permissions")}
+                </div>
+                <div style={{ color: "rgba(255,244,191,0.82)", lineHeight: 1.95, fontSize: 15, maxWidth: 900 }}>
+                  {tr(
+                    "واجهة تنفيذية فائقة التنظيم تربط أعضاء الجهة الحقيقيين بالأدوار الفعلية والقدرات التشغيلية الناتجة عنها، مع تجربة مرئية فاخرة تمنح المسؤول وضوحًا فوريًا وثقة عالية في إدارة الوصول داخل النظام.",
+                    "A premium executive interface that connects real tenant members to effective roles and derived operational capabilities, giving administrators instant visibility and high-confidence access control management."
+                  )}
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 14, marginTop: 8 }}>
+                  <StatCard title={tr("إجمالي المستخدمين", "Total users")} value={totals.totalUsers} note={tr("كل الحسابات داخل الجهة الحالية", "All accounts inside the current tenant")} />
+                  <StatCard title={tr("الحسابات المفعلة", "Active accounts")} value={totals.activeUsers} note={tr("قابلة للوصول حسب التكوين الحالي", "Accounts enabled under current configuration")} accent={GREEN} />
+                  <StatCard title={tr("إجمالي الأدوار", "Assigned roles")} value={totals.totalAssignedRoles} note={tr("إجمالي الأدوار الموزعة على المستخدمين", "Total roles distributed across users")} accent={BLUE} />
+                </div>
+              </div>
+
+              <div style={{ ...glowSurface("rgba(255,255,255,0.08)", "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))"), padding: 20, display: "grid", gap: 16, alignContent: "start" }}>
+                <div style={{ fontSize: 18, fontWeight: 900, color: "#fff3bf" }}>{tr("لوحة الحالة التنفيذية", "Executive status board")}</div>
+                <div style={{ color: "rgba(255,244,191,0.72)", lineHeight: 1.85, fontSize: 13 }}>
+                  {tr(
+                    "تلخص هذه اللوحة حالة الصلاحيات الحالية، ووضع الإدارة، ونسبة الحسابات المفعلة، وتمنح المسؤول قراءة فورية قبل البدء بالتعديل أو الإضافة.",
+                    "This board summarizes the current permission state, management mode, enabled-account ratio, and gives administrators a quick operational read before they edit or add members."
+                  )}
+                </div>
+                <CapabilityPanel title={tr("ملخص سريع", "Quick summary")}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
+                    <div style={{ ...cardStyle, padding: 14, textAlign: "center" }}>
+                      <div style={{ fontSize: 12, opacity: 0.8 }}>{tr("المستخدمون الموقوفون", "Disabled accounts")}</div>
+                      <div style={{ fontSize: 28, fontWeight: 900, color: RED }}>{totals.disabledUsers}</div>
+                    </div>
+                    <div style={{ ...cardStyle, padding: 14, textAlign: "center" }}>
+                      <div style={{ fontSize: 12, opacity: 0.8 }}>{tr("وضع الإدارة", "Management mode")}</div>
+                      <div style={{ fontSize: 18, fontWeight: 900, color: canManageUsers ? GREEN : BLUE }}>{canManageUsers ? tr("تحكم كامل", "Full control") : tr("عرض فقط", "View only")}</div>
+                    </div>
+                  </div>
+                </CapabilityPanel>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {distribution.map(({ role, count }) => (
+                    <TopPill key={role} label={`${roleMeta[role].label}: ${count}`} color={roleMeta[role].tone} bg={roleMeta[role].bg} />
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </div>
 
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14 }}>
+          <StatCard title={tr("إجمالي المستخدمين", "Total users")} value={totals.totalUsers} note={tr("عدد أعضاء الجهة الفعليين", "Real tenant members count")} />
+          <StatCard title={tr("الحسابات المفعلة", "Enabled accounts")} value={totals.activeUsers} note={tr("التي تعمل حاليًا بالصلاحيات الحالية", "Currently active with effective access")} accent={GREEN} />
+          <StatCard title={tr("الحسابات الموقوفة", "Disabled accounts")} value={totals.disabledUsers} note={tr("المتوقفة عن الوصول حتى إعادة التفعيل", "Blocked from access until re-enabled")} accent={RED} />
+          <StatCard title={tr("إجمالي الأدوار المسندة", "Total assigned roles")} value={totals.totalAssignedRoles} note={tr("يشمل كل الأدوار الموزعة على الأعضاء", "Includes every role assigned to members")} accent={BLUE} />
+        </div>
+
         <div style={{ display: "grid", gridTemplateColumns: "minmax(320px, 430px) 1fr", gap: 18, alignItems: "start" }}>
-          <div style={{ ...cardStyle, display: "grid", gap: 14 }}>
-            <div style={{ fontSize: 22, fontWeight: 900 }}>{tr("صلاحياتك الفعلية الآن", "Your effective permissions now")}</div>
-            <div style={{ display: "grid", gap: 10 }}>
+          <div style={{ ...glowSurface(), padding: 20, display: "grid", gap: 16 }}>
+            <SectionHeader
+              title={tr("صلاحياتك الفعلية الآن", "Your effective permissions now")}
+              subtitle={tr("قراءة مباشرة لما يراه النظام عن حسابك الحالي من أدوار وقدرات تشغيلية.", "A direct system-level view of your current roles and effective operational capabilities.")}
+            />
+            <div style={{ display: "grid", gap: 12 }}>
               <div><strong>{tr("الدور الأساسي", "Primary role")}:</strong> {translateAuthRole(auth?.primaryRoleLabel || resolvePrimaryRoleLabel(snapshot), lang)}</div>
               <div><strong>{tr("الأدوار النشطة", "Active roles")}:</strong> {roles.length ? roles.join(" , ") : "—"}</div>
               <div><strong>{tr("إدارة المستخدمين", "User management")}:</strong> {canManageUsers ? tr("مسموح", "Allowed") : tr("عرض فقط", "View only")}</div>
@@ -413,19 +522,20 @@ export default function MultiRolePage() {
                 <span key={cap} style={badgeStyle("#111", GOLD)}>{capabilityLabels[cap] || cap}</span>
               )) : <span style={{ opacity: 0.75 }}>{tr("لا توجد صلاحيات ظاهرة", "No visible permissions")}</span>}
             </div>
-            <div style={{ fontSize: 13, lineHeight: 1.8, color: "rgba(255,215,0,0.82)" }}>
+            <div style={{ fontSize: 13, lineHeight: 1.9, color: "rgba(255,215,0,0.82)" }}>
               {tr(
                 "أي تعديل تحفظه هنا يتم تخزينه في أعضاء الجهة ثم مزامنته مع allowlist حتى تصبح الصلاحيات الفعلية للمستخدم مرتبطة بما تراه في هذه الصفحة.",
-                "Any change you save here is stored in tenant members and synchronized with the allowlist so the user's effective access matches what you see on this page."
+                "Any change saved here is stored in tenant members and synchronized with the allowlist so the user's effective access matches what you see on this page."
               )}
             </div>
           </div>
 
-          <div style={{ ...cardStyle, display: "grid", gap: 12 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-              <div style={{ fontSize: 22, fontWeight: 900 }}>{tr("إضافة مستخدم بصلاحيات فعلية", "Add a user with effective permissions")}</div>
-              {!canManageUsers ? <span style={{ color: "#fecaca", fontWeight: 800 }}>{tr("ليس لديك صلاحية تعديل المستخدمين", "You do not have permission to modify users")}</span> : null}
-            </div>
+          <div style={{ ...glowSurface(), padding: 20, display: "grid", gap: 16 }}>
+            <SectionHeader
+              title={tr("إضافة مستخدم بصلاحيات فعلية", "Add a user with effective permissions")}
+              subtitle={tr("أنشئ حسابًا جديدًا وحدد أدواره الفعلية بطريقة واضحة ومنظمة قبل حفظه داخل الجهة.", "Create a new account and define its effective roles clearly before saving it into the tenant.")}
+            />
+            {!canManageUsers ? <span style={{ color: "#fecaca", fontWeight: 800 }}>{tr("ليس لديك صلاحية تعديل المستخدمين", "You do not have permission to modify users")}</span> : null}
             <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 12 }}>
               <input style={inputStyle} placeholder={tr("البريد الإلكتروني", "Email address")} value={newMember.email} onChange={(e) => setNewMember((s) => ({ ...s, email: e.target.value }))} disabled={!canManageUsers} />
               <input style={inputStyle} placeholder={tr("الاسم الظاهر", "Display name")} value={newMember.displayName} onChange={(e) => setNewMember((s) => ({ ...s, displayName: e.target.value }))} disabled={!canManageUsers} />
@@ -462,10 +572,18 @@ export default function MultiRolePage() {
           </div>
         </div>
 
-        <div style={{ ...cardStyle, display: "grid", gap: 14 }}>
+        <div style={{ ...glowSurface(), padding: 20, display: "grid", gap: 16 }}>
+          <SectionHeader
+            title={tr("المستخدمون وصلاحياتهم الفعلية", "Users and their effective permissions")}
+            subtitle={tr("إدارة مباشرة للأعضاء داخل الجهة مع ربط فوري بين الأدوار والقدرات الناتجة عنها.", "Direct management of tenant members with immediate visibility into the capabilities derived from their roles.")}
+          />
+
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-            <div style={{ fontSize: 22, fontWeight: 900 }}>{tr("المستخدمون وصلاحياتهم الفعلية", "Users and their effective permissions")}</div>
-            <input style={{ ...inputStyle, width: 320 }} placeholder={tr("بحث بالبريد أو الاسم أو الدور", "Search by email, name, or role")} value={search} onChange={(e) => setSearch(e.target.value)} />
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <TopPill label={tr("المستخدمون الحقيقيون فقط", "Real tenant users only")} color={GOLD} bg="rgba(255,215,0,0.12)" />
+              <TopPill label={tr(canManageUsers ? "تعديل مباشر متاح" : "وضع القراءة فقط", canManageUsers ? "Direct editing enabled" : "Read-only mode")} color={canManageUsers ? GREEN : BLUE} bg={canManageUsers ? "rgba(52,211,153,0.14)" : "rgba(96,165,250,0.14)"} />
+            </div>
+            <input style={{ ...inputStyle, width: 340 }} placeholder={tr("بحث بالبريد أو الاسم أو الدور", "Search by email, name, or role")} value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
 
           {message ? <div style={{ ...badgeStyle("#111", GOLD), justifyContent: "flex-start" }}>{message}</div> : null}
@@ -475,69 +593,57 @@ export default function MultiRolePage() {
           ) : !filteredItems.length ? (
             <div style={{ opacity: 0.82, fontWeight: 800 }}>{tr("لا يوجد مستخدمون بعد داخل هذه الجهة.", "There are no users in this tenant yet.")}</div>
           ) : (
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 12px" }}>
-                <thead>
-                  <tr style={{ textAlign: isRTL ? "right" : "left", opacity: 0.88 }}>
-                    <th style={{ padding: "0 12px" }}>{tr("المستخدم", "User")}</th>
-                    <th style={{ padding: "0 12px" }}>{tr("الحالة", "Status")}</th>
-                    <th style={{ padding: "0 12px" }}>{tr("الأدوار الفعلية", "Effective roles")}</th>
-                    <th style={{ padding: "0 12px" }}>{tr("القدرات الناتجة", "Derived capabilities")}</th>
-                    <th style={{ padding: "0 12px" }}>{tr("المصدر", "Source")}</th>
-                    <th style={{ padding: "0 12px" }}>{tr("إجراء", "Action")}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredItems.map((item) => {
-                    const draft = drafts[item.email] || { displayName: item.displayName || "", roles: uniqueRoles(item.roles), enabled: !!item.enabled };
-                    const memberRoles = uniqueRoles(draft.roles);
-                    return (
-                      <tr key={item.email} style={{ background: "rgba(255,255,255,0.03)" }}>
-                        <td style={{ padding: 14, borderTopRightRadius: isRTL ? 16 : 0, borderBottomRightRadius: isRTL ? 16 : 0, borderTopLeftRadius: !isRTL ? 16 : 0, borderBottomLeftRadius: !isRTL ? 16 : 0, verticalAlign: "top" }}>
-                          <div style={{ display: "grid", gap: 8 }}>
-                            <input style={inputStyle} value={draft.displayName} disabled={!canManageUsers} onChange={(e) => updateDraft(item.email, { displayName: e.target.value })} />
-                            <div style={{ color: "rgba(255,215,0,0.85)", fontWeight: 700 }}>{item.email}</div>
-                          </div>
-                        </td>
-                        <td style={{ padding: 14, verticalAlign: "top" }}>
-                          <label style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 800 }}>
-                            <input type="checkbox" checked={!!draft.enabled} disabled={!canManageUsers} onChange={(e) => updateDraft(item.email, { enabled: e.target.checked })} />
-                            <span>{draft.enabled ? tr("مفعل", "Enabled") : tr("موقوف", "Disabled")}</span>
-                          </label>
-                        </td>
-                        <td style={{ padding: 14, verticalAlign: "top", minWidth: 260 }}>
-                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                            {roleOrder.map((role) => {
-                              const active = memberRoles.includes(role);
-                              const meta = roleMeta[role];
-                              return (
-                                <label key={role} style={{ ...badgeStyle(meta.tone, active ? meta.bg : "rgba(255,255,255,0.06)"), cursor: canManageUsers ? "pointer" : "default" }}>
-                                  <input type="checkbox" checked={active} disabled={!canManageUsers} onChange={() => toggleDraftRole(item.email, role)} />
-                                  <span>{meta.label}</span>
-                                </label>
-                              );
-                            })}
-                          </div>
-                        </td>
-                        <td style={{ padding: 14, verticalAlign: "top", minWidth: 320 }}>{renderCapabilityBadges(memberRoles)}</td>
-                        <td style={{ padding: 14, verticalAlign: "top" }}>
-                          <span style={badgeStyle("#f5e7b2", "rgba(255,255,255,0.08)")}>{toSourceLabel(item.source)}</span>
-                        </td>
-                        <td style={{ padding: 14, borderTopLeftRadius: isRTL ? 0 : 16, borderBottomLeftRadius: isRTL ? 0 : 16, borderTopRightRadius: !isRTL ? 0 : 16, borderBottomRightRadius: !isRTL ? 0 : 16, verticalAlign: "top" }}>
-                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                            <button style={buttonStyle("brand")} disabled={!canManageUsers || !!savingEmail || !!deletingEmail} onClick={() => saveMember(item)}>
-                              {savingEmail === item.email ? tr("جارٍ الحفظ...", "Saving...") : tr("حفظ", "Save")}
-                            </button>
-                            <button style={buttonStyle("danger")} disabled={!canManageUsers || !!savingEmail || !!deletingEmail} onClick={() => deleteMember(item)}>
-                              {deletingEmail === item.email ? tr("جارٍ الحذف...", "Deleting...") : tr("حذف المستخدم", "Delete user")}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+            <div style={{ display: "grid", gap: 14 }}>
+              {filteredItems.map((item) => {
+                const draft = drafts[item.email] || { displayName: item.displayName || "", roles: uniqueRoles(item.roles), enabled: !!item.enabled };
+                const memberRoles = uniqueRoles(draft.roles);
+                return (
+                  <div key={item.email} style={{ ...glowSurface("rgba(255,255,255,0.08)"), padding: 18 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "minmax(260px, 0.95fr) minmax(150px, 0.5fr) minmax(280px, 1fr) minmax(300px, 1.2fr) minmax(110px, 0.35fr) minmax(190px, 0.6fr)", gap: 14, alignItems: "start" }}>
+                      <div style={{ display: "grid", gap: 8 }}>
+                        <input style={inputStyle} value={draft.displayName} disabled={!canManageUsers} onChange={(e) => updateDraft(item.email, { displayName: e.target.value })} />
+                        <div style={{ color: "rgba(255,215,0,0.85)", fontWeight: 700, lineHeight: 1.8 }}>{item.email}</div>
+                      </div>
+
+                      <div style={{ display: "grid", gap: 10 }}>
+                        <label style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 800 }}>
+                          <input type="checkbox" checked={!!draft.enabled} disabled={!canManageUsers} onChange={(e) => updateDraft(item.email, { enabled: e.target.checked })} />
+                          <span>{draft.enabled ? tr("مفعل", "Enabled") : tr("موقوف", "Disabled")}</span>
+                        </label>
+                        <span style={badgeStyle(draft.enabled ? GREEN : RED, draft.enabled ? "rgba(52,211,153,0.14)" : "rgba(248,113,113,0.14)")}>{draft.enabled ? tr("نشط", "Active") : tr("متوقف", "Disabled")}</span>
+                      </div>
+
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        {roleOrder.map((role) => {
+                          const active = memberRoles.includes(role);
+                          const meta = roleMeta[role];
+                          return (
+                            <label key={role} style={{ ...badgeStyle(meta.tone, active ? meta.bg : "rgba(255,255,255,0.06)"), cursor: canManageUsers ? "pointer" : "default" }}>
+                              <input type="checkbox" checked={active} disabled={!canManageUsers} onChange={() => toggleDraftRole(item.email, role)} />
+                              <span>{meta.label}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+
+                      <div>{renderCapabilityBadges(memberRoles)}</div>
+
+                      <div>
+                        <span style={badgeStyle("#f5e7b2", "rgba(255,255,255,0.08)")}>{toSourceLabel(item.source)}</span>
+                      </div>
+
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <button style={buttonStyle("brand")} disabled={!canManageUsers || !!savingEmail || !!deletingEmail} onClick={() => saveMember(item)}>
+                          {savingEmail === item.email ? tr("جارٍ الحفظ...", "Saving...") : tr("حفظ", "Save")}
+                        </button>
+                        <button style={buttonStyle("danger")} disabled={!canManageUsers || !!savingEmail || !!deletingEmail} onClick={() => deleteMember(item)}>
+                          {deletingEmail === item.email ? tr("جارٍ الحذف...", "Deleting...") : tr("حذف المستخدم", "Delete user")}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
