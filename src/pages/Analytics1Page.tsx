@@ -41,6 +41,16 @@ const RUN_STORAGE_KEYS = [
   "exam-manager:task-distribution:run:v1",
   "exam-manager:dist-stats:last-run:v1",
 ];
+const LANGUAGE_STORAGE_CANDIDATES = [
+  "exam-manager:lang",
+  "exam-manager:language",
+  "app:lang",
+  "app:language",
+  "lang",
+  "language",
+  "i18nextLng",
+  "locale",
+];
 
 const COLORS: Record<TaskType, string> = {
   INVIGILATION: "#facc15",
@@ -51,6 +61,56 @@ const COLORS: Record<TaskType, string> = {
 
 function tr(lang: Lang, ar: string, en: string) {
   return lang === "ar" ? ar : en;
+}
+
+function normalizeLang(input: unknown): Lang | null {
+  const value = String(input || "").trim().toLowerCase();
+  if (!value) return null;
+  if (value === "ar" || value.startsWith("ar-") || value.includes("arab")) return "ar";
+  if (value === "en" || value.startsWith("en-") || value.includes("english")) return "en";
+  return null;
+}
+
+function readStoredLanguage(): Lang | null {
+  if (typeof window === "undefined") return null;
+
+  for (const key of LANGUAGE_STORAGE_CANDIDATES) {
+    const direct = normalizeLang(window.localStorage.getItem(key));
+    if (direct) return direct;
+
+    const raw = window.localStorage.getItem(key);
+    if (!raw) continue;
+
+    try {
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      const nested =
+        normalizeLang(parsed.lang) ||
+        normalizeLang(parsed.language) ||
+        normalizeLang(parsed.locale) ||
+        normalizeLang(parsed.currentLanguage) ||
+        normalizeLang(parsed.selectedLanguage);
+      if (nested) return nested;
+    } catch {
+      // ignore invalid json
+    }
+  }
+
+  return null;
+}
+
+function detectSystemLang(): Lang {
+  if (typeof window === "undefined") return "ar";
+
+  const fromDocument =
+    normalizeLang(document.documentElement.lang) ||
+    normalizeLang(document.documentElement.dir === "rtl" ? "ar" : document.documentElement.dir === "ltr" ? "en" : "");
+  if (fromDocument) return fromDocument;
+
+  const fromStorage = readStoredLanguage();
+  if (fromStorage) return fromStorage;
+
+  const fromNavigator = normalizeLang(window.navigator.language) || normalizeLang(window.navigator.languages?.[0]);
+  return fromNavigator || "ar";
 }
 
 function safeParseJson<T>(value: string | null): T | null {
@@ -354,7 +414,6 @@ function TeacherBars({ rows, lang }: { rows: TeacherAnalyticsRow[]; lang: Lang }
   );
 }
 
-
 function StatusBadge({ label, tone = "gold" }: { label: string; tone?: "gold" | "green" | "blue" }) {
   const palette = {
     gold: { bg: "rgba(250,204,21,0.12)", border: "rgba(250,204,21,0.22)", color: "#fde68a" },
@@ -380,18 +439,6 @@ function SummaryTile({ label, value, hint }: { label: string; value: string | nu
   );
 }
 
-
-function StatusChip({ label, tone = "gold" }: { label: string; tone?: "gold" | "green" | "blue" | "slate" }) {
-  const toneStyles: Record<string, React.CSSProperties> = {
-    gold: { background: "rgba(245, 158, 11, 0.12)", color: "#fde68a", border: "1px solid rgba(245, 158, 11, 0.22)" },
-    green: { background: "rgba(16, 185, 129, 0.12)", color: "#a7f3d0", border: "1px solid rgba(16, 185, 129, 0.22)" },
-    blue: { background: "rgba(59, 130, 246, 0.12)", color: "#bfdbfe", border: "1px solid rgba(59, 130, 246, 0.22)" },
-    slate: { background: "rgba(148, 163, 184, 0.12)", color: "#e2e8f0", border: "1px solid rgba(148, 163, 184, 0.2)" },
-  };
-
-  return <span style={{ ...styles.statusChip, ...toneStyles[tone] }}>{label}</span>;
-}
-
 function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
     <div style={styles.sectionHeaderWrap}>
@@ -405,28 +452,51 @@ function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }
 }
 
 export default function AnalyticsDashboardProductionGrade() {
-  const [lang, setLang] = useState<Lang>("ar");
+  const [lang, setLang] = useState<Lang>(() => detectSystemLang());
   const [assignments, setAssignments] = useState<Assignment[]>(() => readAssignmentsFromStorage());
   const [showSuggestions, setShowSuggestions] = useState(true);
 
   useEffect(() => {
     runSelfTests();
 
-    const refresh = () => setAssignments(readAssignmentsFromStorage());
+    const refreshAssignments = () => setAssignments(readAssignmentsFromStorage());
+    const refreshLanguage = () => setLang(detectSystemLang());
+
     const onStorage = (event: StorageEvent) => {
       if (!event.key || event.key === MASTER_TABLE_KEY || RUN_STORAGE_KEYS.includes(event.key)) {
-        refresh();
+        refreshAssignments();
+      }
+      if (!event.key || LANGUAGE_STORAGE_CANDIDATES.includes(event.key)) {
+        refreshLanguage();
       }
     };
 
-    window.addEventListener("focus", refresh);
+    const observer = new MutationObserver(() => {
+      refreshLanguage();
+    });
+
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["lang", "dir"],
+    });
+
+    window.addEventListener("focus", refreshAssignments);
+    window.addEventListener("focus", refreshLanguage);
     window.addEventListener("storage", onStorage);
 
     return () => {
-      window.removeEventListener("focus", refresh);
+      observer.disconnect();
+      window.removeEventListener("focus", refreshAssignments);
+      window.removeEventListener("focus", refreshLanguage);
       window.removeEventListener("storage", onStorage);
     };
   }, []);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.documentElement.lang = lang;
+    document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+  }, [lang]);
 
   const isRTL = lang === "ar";
   const rows = useMemo(() => buildTeacherAnalytics(assignments), [assignments]);
@@ -445,8 +515,24 @@ export default function AnalyticsDashboardProductionGrade() {
   const maxReview = Math.max(1, ...rows.map((row) => row.review));
   const maxCorrection = Math.max(1, ...rows.map((row) => row.correction));
 
+  const onToggleLanguage = () => {
+    const nextLang: Lang = lang === "ar" ? "en" : "ar";
+    setLang(nextLang);
+
+    if (typeof window !== "undefined") {
+      for (const key of LANGUAGE_STORAGE_CANDIDATES) {
+        try {
+          window.localStorage.setItem(key, nextLang);
+        } catch {
+          // ignore quota/access issues
+        }
+      }
+      window.dispatchEvent(new Event("storage"));
+    }
+  };
+
   return (
-    <div dir={isRTL ? "rtl" : "ltr"} style={styles.page}>
+    <div lang={lang} dir={isRTL ? "rtl" : "ltr"} style={styles.page}>
       <div style={styles.pageGlowTop} />
       <div style={styles.pageGlowSide} />
       <div style={styles.pageGlowBottom} />
@@ -519,7 +605,7 @@ export default function AnalyticsDashboardProductionGrade() {
                 <button style={styles.secondaryButton} onClick={() => setShowSuggestions((value) => !value)}>
                   {showSuggestions ? tr(lang, "إخفاء اقتراحات AI", "Hide AI suggestions") : tr(lang, "إظهار اقتراحات AI", "Show AI suggestions")}
                 </button>
-                <button style={styles.secondaryButton} onClick={() => setLang((value) => (value === "ar" ? "en" : "ar"))}>
+                <button style={styles.secondaryButton} onClick={onToggleLanguage}>
                   {lang === "ar" ? "English" : "العربية"}
                 </button>
               </div>
@@ -528,7 +614,7 @@ export default function AnalyticsDashboardProductionGrade() {
         </div>
 
         <div style={styles.executiveStrip}>
-          <SummaryTile label={tr(lang, "ملخص تنفيذي", "Executive summary")} value={rows.length ? fairnessLabel : tr(lang, "بانتظار البيانات", "Awaiting data")} hint={tr(lang, "قراءة سريعة لحالة التشغيل الحالية", "A quick reading of the current run") } />
+          <SummaryTile label={tr(lang, "ملخص تنفيذي", "Executive summary")} value={rows.length ? fairnessLabel : tr(lang, "بانتظار البيانات", "Awaiting data")} hint={tr(lang, "قراءة سريعة لحالة التشغيل الحالية", "A quick reading of the current run")} />
           <SummaryTile label={tr(lang, "أنواع المهام النشطة", "Active task types")} value={activeTaskTypes} hint={tr(lang, "عدد الأنواع التي ظهرت فعلياً في هذا التشغيل", "Task categories that actually appeared in this run")} />
           <SummaryTile label={tr(lang, "أعلى حمل", "Highest load")} value={highest ? highest.total : 0} hint={highest ? highest.teacher : tr(lang, "لا يوجد", "None")} />
           <SummaryTile label={tr(lang, "فجوة التوزيع", "Distribution gap")} value={gapValue} hint={tr(lang, "الفارق بين أعلى وأقل معلم حملاً", "Difference between highest and lowest load")} />
@@ -659,47 +745,6 @@ export default function AnalyticsDashboardProductionGrade() {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  bgOrbOne: {
-    position: "fixed",
-    top: -140,
-    left: -120,
-    width: 360,
-    height: 360,
-    borderRadius: "50%",
-    background: "radial-gradient(circle, rgba(245,158,11,0.18), rgba(245,158,11,0) 70%)",
-    pointerEvents: "none",
-    filter: "blur(10px)",
-  },
-  bgOrbTwo: {
-    position: "fixed",
-    bottom: -120,
-    right: -80,
-    width: 420,
-    height: 420,
-    borderRadius: "50%",
-    background: "radial-gradient(circle, rgba(59,130,246,0.14), rgba(59,130,246,0) 72%)",
-    pointerEvents: "none",
-    filter: "blur(14px)",
-  },
-  bgGrid: {
-    position: "fixed",
-    inset: 0,
-    backgroundImage: "linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px)",
-    backgroundSize: "34px 34px",
-    maskImage: "radial-gradient(circle at center, black 46%, transparent 100%)",
-    pointerEvents: "none",
-    opacity: 0.28,
-  },
-  statusChip: {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 999,
-    padding: "8px 12px",
-    fontSize: 12,
-    fontWeight: 900,
-    backdropFilter: "blur(10px)",
-  },
   executiveStrip: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
@@ -760,7 +805,6 @@ const styles: Record<string, React.CSSProperties> = {
     pointerEvents: "none",
     filter: "blur(8px)",
   },
-
   pageGlowBottom: {
     position: "absolute",
     bottom: -220,
