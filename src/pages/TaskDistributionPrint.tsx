@@ -1,193 +1,503 @@
+// ✅ src/pages/TaskDistributionPrint.tsx  (الملف كامل بعد التعديل)
+// ✅ FIX 1: الطباعة الآن تطبع "التقرير فقط" (بدون القوائم/الواجهة) عبر نافذة طباعة مستقلة
+// ✅ FIX 2: تقرير المعلم (فردي) يتم Auto-Fit ليصبح "صفحة واحدة" A4 قدر الإمكان
+// ✅ FIX 3: حل مشكلة "صفحة بيضاء" في بعض المتصفحات (لم نعد نعتمد على visibility/fixed داخل نفس الصفحة)
+// ✅ FIX 4: زر واتساب: فتح مباشر + Fallbacks متعددة (wa.me / api.whatsapp.com / web.whatsapp.com / whatsapp://)
+// ✅ FIX 5: عمود "المادة" في تقرير المعلم أصبح بنفس عرض عمود "الفترة" لتجنب تكسير النص
+// ✅ NEW: إظهار الرقم الوظيفي للمعلم في تقرير المعلم (فردي) عبر صفحة الكادر التعليمي employeeNo
+// ✅ تحديث تلقائي لصفحة التقرير عند تغيّر: Run + master/all/results + الشعار + بيانات المدرسة + الامتحانات + الكادر التعليمي
+// عبر: RUN_UPDATED_EVENT + focus + storage + interval (لنفس التبويب)
+
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import GoldDropdown from "../components/GoldDropdown";
-import { type Exam } from "../services/exams.service";
-import type { Room } from "../services/rooms.service";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
-import { useExamsData } from "../hooks/useExamsData";
-import { useRoomsData } from "../hooks/useRoomsData";
-import { useRoomBlocksData } from "../hooks/useRoomBlocksData";
-import { useExamRoomAssignmentsData } from "../hooks/useExamRoomAssignmentsData";
-import { createId, isRoomBlockedForExam } from "../lib/roomScheduling";
+import { loadTenantArray, writeTenantAudit } from "../services/tenantData";
+import { loadRun, RUN_UPDATED_EVENT, taskDistributionKey } from "../utils/taskDistributionStorage";
+import type { TaskType } from "../contracts/taskDistributionContract";
 
-const APP_NAME = "نظام إدارة الامتحانات المطوّر";
-const SUBCOLLECTION = "exams";
-const ASSIGNMENTS_STORAGE_PREFIX = "exam_room_assignments";
+/** -------------------------------------------
+ * ✅ Keys
+ * ------------------------------------------ */
+const SCHOOL_DATA_KEY = "exam-manager:school-data:v1";
+const LOGO_KEY = "exam-manager:app-logo";
+const DEFAULT_LOGO_URL = "https://i.imgur.com/vdDhSMh.png";
+const EXAMS_SUB = "exams";
+const TEACHERS_SUB = "teachers";
 
-const SUBJECT_OPTIONS_RAW = [
-  "",
-  "التربية الإسلامية 5",
-  "التربية الإسلامية 6",
-  "التربية الإسلامية 7",
-  "التربية الإسلامية 8",
-  "التربية الإسلامية 9",
-  "التربية الإسلامية 10",
-  "التربية الإسلامية 11",
-  "التربية الإسلامية 12",
-  "اللغة العربية 6",
-  "اللغة العربية 7",
-  "اللغة العربية 8",
-  "اللغة العربية 9",
-  "اللغة العربية 10",
-  "اللغة العربية 11",
-  "اللغة العربية 12",
-  "اللغة الإنجليزية 6",
-  "اللغة الإنجليزية 7",
-  "اللغة الإنجليزية 8",
-  "اللغة الإنجليزية 9",
-  "اللغة الإنجليزية 10",
-  "اللغة الإنجليزية 11",
-  "اللغة الإنجليزية 12",
-  "الرياضيات 5",
-  "الرياضيات 6",
-  "الرياضيات 7",
-  "الرياضيات 8",
-  "الرياضيات 9",
-  "الرياضيات 10",
-  "الرياضيات 11",
-  "الرياضيات 12",
-  "الرياضيات الأساسية 11",
-  "الرياضيات المتقدمة 11",
-  "الرياضيات الأساسية 12",
-  "الرياضيات المتقدمة 12",
-  "الدراسات الاجتماعية 5",
-  "الدراسات الاجتماعية 6",
-  "الدراسات الاجتماعية 7",
-  "الدراسات الاجتماعية 8",
-  "الدراسات الاجتماعية 9",
-  "الدراسات الاجتماعية 10",
-  "التاريخ والحضارة الإسلامية 11",
-  "الجغرافيا البشرية 11",
-  "هذا وطني 11",
-  "التاريخ والحضارة الإسلامية 12",
-  "الجغرافيا البشرية 12",
-  "هذا وطني 12",
-  "العلوم 5",
-  "العلوم 6",
-  "العلوم 7",
-  "العلوم 8",
-  "الفيزياء 9",
-  "الفيزياء 10",
-  "الفيزياء 11",
-  "الفيزياء 12",
-  "الكيمياء 9",
-  "الكيمياء 10",
-  "الكيمياء 11",
-  "الكيمياء 12",
-  "الأحياء 9",
-  "الأحياء 10",
-  "الأحياء 11",
-  "الأحياء 12",
-  "الرياضة المدرسية 11",
-  "الفنون التشكيلية 11",
-  "المهارات الموسيقية 11",
-  "الرياضة المدرسية 12",
-  "الفنون التشكيلية 12",
-  "المهارات الموسيقية 12",
-  "مواد التخصصات الهندسية والصناعية 12",
-  "مهارات اللغة الإنجليزية 11",
-  "مهارات اللغة الإنجليزية 12",
-  "تقنية المعلومات 11",
-  "تقنية المعلومات 12",
-  "السفر و السياحة و إدارة الأعمال و تقنية المعلومات 12",
-  "اللغة الفرنسية 10",
-  "اللغة الألمانية 10",
-  "اللغة الصينية 10",
-  "اللغة الفرنسية 11",
-  "اللغة الألمانية 11",
-  "اللغة الصينية 11",
-  "اللغة الفرنسية 12",
-  "اللغة الألمانية 12",
-  "اللغة الصينية 12",
-  "العلوم البيئية 11",
-  "العلوم البيئية 12",
-];
-
-const SUBJECT_OPTIONS = SUBJECT_OPTIONS_RAW.map((s) => ({
-  value: s,
-  label: s || "— اختر المادة —",
-}));
-
-const PERIOD_OPTIONS = [
-  { value: "الفترة الأولى", label: "الفترة الأولى" },
-  { value: "الفترة الثانية", label: "الفترة الثانية" },
-];
-
-function genId() {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const c: any = globalThis as any;
-  if (c?.crypto?.randomUUID) return c.crypto.randomUUID();
-  return `e_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+/** -------------------------------------------
+ * Helpers: safe localStorage JSON read
+ * ------------------------------------------ */
+function readJson<T = any>(key: string): T | null {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
 }
 
-const emptyExam: Exam = {
-  id: "",
-  subject: "",
-  dateISO: "",
-  dayLabel: "",
-  time: "08:00",
-  durationMinutes: 120,
-  period: "الفترة الأولى",
-  roomsCount: 1,
+function normalizeText(s: string) {
+  return (s || "").toString().trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function normalizeISODate(d: string) {
+  if (!d) return "";
+  const m = String(d).match(/^(\d{4}-\d{2}-\d{2})/);
+  return m ? m[1] : String(d);
+}
+
+/** ✅ convert AM/BM/PM to Arabic periods */
+function formatPeriod(p: string) {
+  const raw = (p || "").toString().trim();
+  if (!raw) return "—";
+
+  if (raw.includes("الأولى")) return "الفترة الأولى";
+  if (raw.includes("الثانية")) return "الفترة الثانية";
+
+  const n = raw.toLowerCase().replace(/\./g, "").replace(/\s+/g, " ").trim();
+
+  if (n === "am" || n.startsWith("am") || n.includes(" am") || n === "a m" || n === "a") return "الفترة الأولى";
+
+  if (
+    n === "pm" ||
+    n.startsWith("pm") ||
+    n.includes(" pm") ||
+    n === "p m" ||
+    n === "p" ||
+    n === "bm" ||
+    n.startsWith("bm") ||
+    n.includes(" bm") ||
+    n === "b m" ||
+    n === "b"
+  )
+    return "الفترة الثانية";
+
+  return raw;
+}
+
+/** ✅ period key for exam matching */
+function normalizePeriodKey(p: string) {
+  const fp = formatPeriod(p || "");
+  if (fp.includes("الأولى")) return "p1";
+  if (fp.includes("الثانية")) return "p2";
+  return normalizeText(fp);
+}
+
+function taskLabel(t: TaskType | string) {
+  switch (t) {
+    case "INVIGILATION":
+      return "مراقبة";
+    case "RESERVE":
+      return "احتياط";
+    case "REVIEW_FREE":
+      return "فاضي للمراجعة";
+    case "CORRECTION_FREE":
+      return "فاضي للتصحيح";
+    default:
+      return typeof t === "string" && t.trim() ? t : "فارغ";
+  }
+}
+
+/** -------------------------------------------
+ * Shapes
+ * ------------------------------------------ */
+type SchoolData = {
+  name: string;
+  governorate: string;
+  semester: string;
+  phone: string;
+  address: string;
 };
 
-type PersistedExamRoomAssignment = {
+type Exam = {
+  subject: string;
+  dateISO: string; // YYYY-MM-DD
+  dayLabel: string; // الأحد..الخ
+  time: string; // 08:00
+  durationMinutes?: number;
+  period: string; // الفترة الأولى/الثانية أو AM/PM/BM...
+  roomsCount?: number;
+};
+
+type Teacher = {
   id: string;
-  examId: string;
-  roomId: string;
-  roomName: string;
-  dateISO: string;
-  time: string;
-  period: string;
-  createdBy?: string;
+  employeeNo: string; // ✅ الرقم الوظيفي
+  fullName: string;
+  phone: string;
 };
 
-function safeParseExams(v: string | null): Exam[] {
-  if (!v) return [];
-  try {
-    const arr = JSON.parse(v);
-    if (!Array.isArray(arr)) return [];
-    return arr.map((x) => {
-      const rooms = Number(x.roomsCount ?? 0) || 1;
-      return {
-        id: String(x.id ?? "").trim() || genId(),
-        subject: String(x.subject ?? "").trim(),
-        dateISO: String(x.dateISO ?? "").trim(),
-        dayLabel: String(x.dayLabel ?? "").trim(),
-        time: String(x.time ?? "").trim(),
-        durationMinutes: Number(x.durationMinutes ?? 0) || 0,
-        period: String(x.period ?? "").trim(),
-        roomsCount: rooms < 1 ? 1 : rooms,
+type AnyAssignment = any;
+
+function getTeacherName(a: AnyAssignment): string {
+  return a?.teacherName || a?.teacher?.name || a?.teacher || a?.name || a?.teacherLabel || "";
+}
+
+function getTaskType(a: AnyAssignment): TaskType | string {
+  return (a?.taskType || a?.type || a?.assignmentType || a?.dutyType || "INVIGILATION") as any;
+}
+
+/** ✅ FIX: Strong committee/room number extraction */
+function getRoomNumber(a: AnyAssignment): string {
+  const direct =
+    a?.committeeNumber ??
+    a?.committeeNo ??
+    a?.committee ??
+    a?.committeeId ??
+    a?.roomNumber ??
+    a?.roomNo ??
+    a?.room ??
+    a?.roomId ??
+    a?.roomLabel ??
+    a?.roomName ??
+    a?.hallNumber ??
+    a?.hallNo ??
+    a?.committeeLabel ??
+    "";
+
+  if (direct !== null && direct !== undefined && String(direct).trim() !== "") {
+    return String(direct).trim();
+  }
+
+  const nested =
+    a?.assignment?.committeeNumber ??
+    a?.assignment?.committeeNo ??
+    a?.assignment?.roomNumber ??
+    a?.assignment?.roomNo ??
+    a?.duty?.committeeNumber ??
+    a?.duty?.committeeNo ??
+    a?.duty?.roomNumber ??
+    a?.duty?.roomNo ??
+    "";
+
+  if (nested !== null && nested !== undefined && String(nested).trim() !== "") {
+    return String(nested).trim();
+  }
+
+  const examNested =
+    a?.exam?.committeeNumber ??
+    a?.exam?.committeeNo ??
+    a?.exam?.roomNumber ??
+    a?.exam?.roomNo ??
+    a?.slot?.committeeNumber ??
+    a?.slot?.committeeNo ??
+    a?.slot?.roomNumber ??
+    a?.slot?.roomNo ??
+    a?.room?.number ??
+    a?.room?.no ??
+    a?.room?.name ??
+    "";
+
+  if (examNested !== null && examNested !== undefined && String(examNested).trim() !== "") {
+    return String(examNested).trim();
+  }
+
+  const roomIndex = a?.roomIndex ?? a?.committeeIndex ?? a?.roomIdx ?? a?.committeeIdx ?? null;
+  const rooms = a?.exam?.rooms || a?.rooms || a?.examRooms || null;
+
+  if (roomIndex !== null && Array.isArray(rooms) && rooms[roomIndex]) {
+    const rr = rooms[roomIndex];
+    const v =
+      rr?.committeeNumber ??
+      rr?.committeeNo ??
+      rr?.roomNumber ??
+      rr?.roomNo ??
+      rr?.name ??
+      rr?.label ??
+      rr?.roomName ??
+      "";
+    if (String(v).trim()) return String(v).trim();
+  }
+
+  return "";
+}
+
+/** ✅ NEW: تحويل رقم اللجنة لرقم للمقارنة والترتيب */
+function parseCommitteeNumber(v: any): { num: number; raw: string } {
+  const raw = (v ?? "").toString().trim();
+  if (!raw) return { num: Number.POSITIVE_INFINITY, raw: "" };
+  const m = raw.match(/\d+/);
+  const num = m ? Number(m[0]) : Number.POSITIVE_INFINITY;
+  return { num: Number.isFinite(num) ? num : Number.POSITIVE_INFINITY, raw };
+}
+
+function getExamSubject(a: AnyAssignment): string {
+  return a?.subject || a?.examSubject || a?.exam?.subject || "";
+}
+function getExamDateISO(a: AnyAssignment): string {
+  return a?.dateISO || a?.examDateISO || a?.exam?.dateISO || a?.date || "";
+}
+function getExamDayLabel(a: AnyAssignment): string {
+  return a?.dayLabel || a?.examDayLabel || a?.exam?.dayLabel || "";
+}
+function getExamPeriod(a: AnyAssignment): string {
+  return a?.period || a?.examPeriod || a?.exam?.period || "";
+}
+function getExamTime(a: AnyAssignment): string {
+  return a?.time || a?.examTime || a?.exam?.time || "";
+}
+
+/** -------------------------------------------
+ * ✅ Print helpers (تقرير فقط + صفحة واحدة للمعلم الفردي)
+ * ------------------------------------------ */
+
+const printWindowCss = `
+@page {
+  size: A4 portrait;
+  margin: 6mm;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #fff;
+  direction: rtl;
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
+  font-family: system-ui, -apple-system, "Segoe UI", Tahoma, Arial, sans-serif;
+  box-sizing: border-box;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+.no-print { display: none !important; }
+
+#print-page.single-page {
+  width: 180mm;
+  min-height: 268mm;
+  margin: 0 auto;
+  overflow: hidden;
+  position: relative;
+  box-sizing: border-box;
+}
+
+#print-page.single-page #fit-target {
+  transform-origin: top center;
+}
+
+#print-page.multi-page {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  margin: 0;
+  position: static;
+  box-sizing: border-box;
+}
+
+#print-page.multi-page #fit-target {
+  transform: none !important;
+  width: 100%;
+}
+
+.print-root .print-sheet {
+  width: 180mm !important;
+  min-height: 268mm !important;
+  margin: 0 auto 0 auto !important;
+  background: #fff !important;
+  padding: 1.5mm 1.5mm 2mm 1.5mm !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  page-break-after: always;
+  break-after: page;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+}
+
+.print-root .print-sheet:last-child {
+  page-break-after: auto;
+  break-after: auto;
+}
+
+.print-root table {
+  width: 100% !important;
+  max-width: 100% !important;
+  table-layout: fixed !important;
+  border-collapse: collapse !important;
+}
+
+.print-root th,
+.print-root td {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  vertical-align: middle !important;
+  font-size: 9.5px !important;
+  padding: 3px 3px !important;
+  line-height: 1.05 !important;
+  height: 18px !important;
+}
+
+.print-root img,
+.print-root svg,
+.print-root canvas,
+.print-root div,
+.print-root section,
+.print-root article {
+  max-width: 100% !important;
+}
+
+.print-root * {
+  box-shadow: none !important;
+}
+
+@media print {
+  html, body {
+    width: 210mm;
+    min-height: 297mm;
+    overflow: visible !important;
+  }
+}
+`;
+
+/** ✅ اطبع عنصر فقط (بدون القوائم/الواجهة) + اجعله صفحة واحدة إذا كانت صفحة واحدة فقط */
+async function printOnlyElement(el: HTMLElement, title = "report") {
+  const clone = el.cloneNode(true) as HTMLElement;
+  clone.querySelectorAll(".no-print").forEach((n) => n.remove());
+  const isMultiPage = clone.querySelectorAll(".print-sheet").length > 1;
+
+  const html = `<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${String(title).replace(/</g, "&lt;")}</title>
+  <style>${printWindowCss}</style>
+</head>
+<body>
+  <div id="print-page" class="${isMultiPage ? "multi-page" : "single-page"}">
+    <div id="fit-target" class="print-root">${clone.outerHTML}</div>
+  </div>
+
+  <script>
+    (function () {
+      var pxPerMm = 96 / 25.4;
+      var maxW = 180 * pxPerMm;
+      var maxH = 268 * pxPerMm;
+
+      function fitToOnePage() {
+        var target = document.getElementById('fit-target');
+        if (!target) return;
+
+        var sheets = target.querySelectorAll('.print-sheet');
+        if (sheets && sheets.length > 1) return;
+
+        var rect = target.getBoundingClientRect();
+        var contentW = Math.max(rect.width, target.scrollWidth || 0);
+        var contentH = Math.max(rect.height, target.scrollHeight || 0);
+        if (!contentW || !contentH) return;
+
+        var scaleW = maxW / contentW;
+        var scaleH = maxH / contentH;
+        var scale = Math.min(scaleW, scaleH, 0.88, 1);
+
+        target.style.transform = 'scale(' + scale + ')';
+      }
+
+      function whenImagesReady(cb) {
+        var imgs = Array.prototype.slice.call(document.images || []);
+        if (!imgs.length) return cb();
+
+        var left = imgs.length;
+        function done() { left--; if (left <= 0) cb(); }
+
+        imgs.forEach(function (img) {
+          if (img.complete) return done();
+          img.onload = done;
+          img.onerror = done;
+        });
+      }
+
+      window.addEventListener('load', function () {
+        whenImagesReady(function () {
+          fitToOnePage();
+          setTimeout(function () {
+            window.focus();
+            window.print();
+          }, 120);
+        });
+      });
+
+      window.onafterprint = function () {
+        setTimeout(function () {
+          try { window.close(); } catch (e) {}
+        }, 10000);
       };
-    });
-  } catch {
-    return [];
+    })();
+  </script>
+</body>
+</html>`;
+
+  const w = window.open("", "_blank", "width=950,height=720,top=80,left=120,resizable=yes,scrollbars=yes");
+  if (!w) {
+    window.print();
+    return;
   }
+
+  w.opener = null;
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
 }
 
-function safeParseExamRoomAssignments(v: string | null): PersistedExamRoomAssignment[] {
-  if (!v) return [];
-  try {
-    const arr = JSON.parse(v);
-    if (!Array.isArray(arr)) return [];
-    return arr
-      .map((x) => ({
-        id: String(x?.id ?? "").trim() || createId("exam_room"),
-        examId: String(x?.examId ?? "").trim(),
-        roomId: String(x?.roomId ?? "").trim(),
-        roomName: String(x?.roomName ?? "").trim(),
-        dateISO: String(x?.dateISO ?? "").trim(),
-        time: String(x?.time ?? "").trim(),
-        period: String(x?.period ?? "").trim(),
-        createdBy: String(x?.createdBy ?? "").trim() || undefined,
-      }))
-      .filter((x) => x.examId && x.roomId);
-  } catch {
-    return [];
-  }
+/** -------------------------------------------
+ * WhatsApp helpers (FIX: فتح مباشر + فوالباك)
+ * ------------------------------------------ */
+function sanitizePhoneToWhatsApp(phoneRaw: string): string {
+  let p = String(phoneRaw || "").trim();
+  if (!p) return "";
+  p = p.replace(/[^\d]/g, "");
+
+  // ✅ عمان غالباً 8 أرقام → نضيف 968
+  if (p.length === 8) p = `968${p}`;
+  if (p.startsWith("0") && p.length >= 9) p = `968${p.slice(1)}`;
+
+  return p;
 }
 
-function downloadText(filename: string, content: string) {
-  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+function openWhatsAppWindow({ text, phone }: { text: string; phone?: string }) {
+  const cleanPhone = (phone || "").replace(/[^\d]/g, "");
+  const encoded = encodeURIComponent(text || "");
+
+  const urls = [
+    // 1) محاولة فتح التطبيق مباشرة (قد يعمل على بعض الأنظمة)
+    `whatsapp://send?${cleanPhone ? `phone=${cleanPhone}&` : ""}text=${encoded}`,
+
+    // 2) wa.me
+    cleanPhone ? `https://wa.me/${cleanPhone}?text=${encoded}` : `https://wa.me/?text=${encoded}`,
+
+    // 3) api.whatsapp.com
+    cleanPhone
+      ? `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encoded}`
+      : `https://api.whatsapp.com/send?text=${encoded}`,
+
+    // 4) web.whatsapp.com (مفيد على الكمبيوتر)
+    cleanPhone
+      ? `https://web.whatsapp.com/send?phone=${cleanPhone}&text=${encoded}`
+      : `https://web.whatsapp.com/send?text=${encoded}`,
+  ];
+
+  const features = "noopener,noreferrer,width=980,height=760,top=70,left=120,resizable=yes,scrollbars=yes";
+
+  // ✅ نفتح الرابط مباشرة (بدون about:blank ثم location) لتفادي مشاكل/حظر/ERR_CONNECTION_RESET أحيانًا
+  for (const url of urls) {
+    try {
+      const w = window.open(url, "_blank", features);
+      if (w) return true;
+    } catch {
+      // نكمل للفallback التالي
+    }
+  }
+
+  // ✅ آخر حل: افتح في نفس الصفحة (إذا المتصفح منع الـpopup)
+  window.location.href = urls[1];
+  return false;
+}
+
+/** -------------------------------------------
+ * PNG export (بدون مكتبات)
+ * ------------------------------------------ */
+function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -198,1257 +508,800 @@ function downloadText(filename: string, content: string) {
   URL.revokeObjectURL(url);
 }
 
-function toCSV(rows: Exam[]) {
-  const header = ["المادة", "التاريخ", "اليوم", "الوقت", "المدة", "الفترة", "القاعات"];
-  const escape = (s: string) => {
-    const v = (s ?? "").replace(/\r?\n/g, " ").trim();
-    if (/[",]/.test(v)) return `"${v.replace(/"/g, '""')}"`;
-    return v;
-  };
-  const lines = [
-    header.join(","),
-    ...rows.map((e) =>
-      [
-        e.subject,
-        e.dateISO,
-        e.dayLabel,
-        e.time,
-        String(e.durationMinutes),
-        e.period,
-        String(e.roomsCount),
-      ]
-        .map(escape)
-        .join(",")
-    ),
-  ];
-  return lines.join("\n");
+async function exportElementToPng(el: HTMLElement, filename: string) {
+  const rect = el.getBoundingClientRect();
+  const w = Math.max(1, Math.floor(rect.width));
+  const h = Math.max(1, Math.floor(rect.height));
+
+  const clone = el.cloneNode(true) as HTMLElement;
+  clone.querySelectorAll(".no-print").forEach((n) => n.remove());
+
+  const serializer = new XMLSerializer();
+  const xhtml = serializer.serializeToString(clone);
+
+  const svg = `
+  <svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
+    <foreignObject width="100%" height="100%">
+      <div xmlns="http://www.w3.org/1999/xhtml">${xhtml}</div>
+    </foreignObject>
+  </svg>`.trim();
+
+  const svgBlob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+  const svgUrl = URL.createObjectURL(svgBlob);
+
+  const img = new Image();
+  img.decoding = "async";
+
+  await new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve();
+    img.onerror = () => reject(new Error("PNG_EXPORT_FAILED"));
+    img.src = svgUrl;
+  });
+
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("NO_CTX");
+
+  ctx.drawImage(img, 0, 0);
+  URL.revokeObjectURL(svgUrl);
+
+  const blob: Blob | null = await new Promise((resolve) => canvas.toBlob(resolve, "image/png", 1));
+  if (!blob) throw new Error("NO_BLOB");
+
+  downloadBlob(blob, filename);
 }
 
-function normalizeHeader(h: string) {
-  return String(h ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, "")
-    .replace(/[^\u0600-\u06FFa-z0-9]/g, "");
+async function elementToPngBlob(el: HTMLElement): Promise<Blob> {
+  const rect = el.getBoundingClientRect();
+  const w = Math.max(1, Math.floor(rect.width));
+  const h = Math.max(1, Math.floor(rect.height));
+
+  const clone = el.cloneNode(true) as HTMLElement;
+  clone.querySelectorAll(".no-print").forEach((n) => n.remove());
+
+  const serializer = new XMLSerializer();
+  const xhtml = serializer.serializeToString(clone);
+
+  const svg = `
+  <svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
+    <foreignObject width="100%" height="100%">
+      <div xmlns="http://www.w3.org/1999/xhtml">${xhtml}</div>
+    </foreignObject>
+  </svg>`.trim();
+
+  const svgBlob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+  const svgUrl = URL.createObjectURL(svgBlob);
+  const img = new Image();
+  img.decoding = "async";
+
+  await new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve();
+    img.onerror = () => reject(new Error("PNG_EXPORT_FAILED"));
+    img.src = svgUrl;
+  });
+
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("NO_CTX");
+
+  ctx.drawImage(img, 0, 0);
+  URL.revokeObjectURL(svgUrl);
+
+  const blob: Blob | null = await new Promise((resolve) => canvas.toBlob(resolve, "image/png", 1));
+  if (!blob) throw new Error("NO_BLOB");
+  return blob;
 }
 
-function getCell(row: any, keys: string[]) {
-  for (const k of keys) {
-    if (row[k] != null && String(row[k]).trim() !== "") return String(row[k]).trim();
+async function elementToPdfBlob(el: HTMLElement): Promise<Blob> {
+  const html2canvas = (await import("html2canvas")).default;
+  const { jsPDF } = await import("jspdf");
+
+  const canvas = await html2canvas(el, {
+    backgroundColor: "#ffffff",
+    scale: 2,
+    useCORS: true,
+    logging: false,
+  });
+
+  const imgData = canvas.toDataURL("image/png");
+  const pdf = new jsPDF("p", "mm", "a4");
+
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const imgWidth = pageWidth;
+  const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+  let heightLeft = imgHeight;
+  let position = 0;
+
+  pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+  heightLeft -= pageHeight;
+
+  while (heightLeft > 0) {
+    position = heightLeft - imgHeight;
+    pdf.addPage();
+    pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
+    heightLeft -= pageHeight;
   }
-  const map: Record<string, any> = {};
-  Object.keys(row || {}).forEach((kk) => (map[normalizeHeader(kk)] = row[kk]));
-  for (const nk of keys.map(normalizeHeader)) {
-    if (map[nk] != null && String(map[nk]).trim() !== "") return String(map[nk]).trim();
-  }
-  return "";
+
+  return pdf.output("blob");
 }
 
-async function tryReadExcel(file: File): Promise<any[] | null> {
-  try {
-    const XLSX = await import("xlsx");
-    const data = await file.arrayBuffer();
-    const wb = XLSX.read(data, { type: "array" });
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    const json = XLSX.utils.sheet_to_json(ws, { defval: "" });
-    return json as any[];
-  } catch {
-    return null;
-  }
-}
+/** -------------------------------------------
+ * Main
+ * ------------------------------------------ */
+export default function TaskDistributionPrint() {
+  const nav = useNavigate();
+  const loc = useLocation();
+  const { user, effectiveTenantId } = useAuth() as any;
+  const tenantId = String(effectiveTenantId || user?.tenantId || "").trim() || "default";
 
-function parseCSV(text: string): any[] {
-  const lines: string[] = [];
-  const s = text.replace(/\r/g, "");
-  let cur = "";
-  let inQ = false;
-  for (let i = 0; i < s.length; i++) {
-    const ch = s[i];
-    if (ch === '"') {
-      if (inQ && s[i + 1] === '"') {
-        cur += '"';
-        i++;
-      } else inQ = !inQ;
-      continue;
-    }
-    if (ch === "\n" && !inQ) {
-      lines.push(cur);
-      cur = "";
-      continue;
-    }
-    cur += ch;
-  }
-  if (cur.trim() !== "") lines.push(cur);
+  const printAreaRef = useRef<HTMLDivElement | null>(null);
 
-  if (!lines.length) return [];
-
-  const split = (line: string) => {
-    const out: string[] = [];
-    let c = "";
-    let q = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (ch === '"') {
-        if (q && line[i + 1] === '"') {
-          c += '"';
-          i++;
-        } else q = !q;
-        continue;
+  const [run, setRun] = useState(() => loadRun(tenantId));
+  const [schoolData, setSchoolData] = useState<SchoolData>(() => {
+    const saved = readJson<SchoolData>(SCHOOL_DATA_KEY);
+    return (
+      saved || {
+        name: "",
+        governorate: "",
+        semester: "",
+        phone: "",
+        address: "",
       }
-      if (ch === "," && !q) {
-        out.push(c);
-        c = "";
-        continue;
+    );
+  });
+  const [logoUrl, setLogoUrl] = useState(() => {
+    const savedLogo = (localStorage.getItem(LOGO_KEY) || "").trim();
+    return savedLogo || DEFAULT_LOGO_URL;
+  });
+  const [examsList, setExamsList] = useState<Exam[]>([]);
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
+
+  async function refreshRosterFromFirestore() {
+    const [exRows, tRows] = await Promise.all([
+      loadTenantArray<any>(tenantId, EXAMS_SUB).catch(() => []),
+      loadTenantArray<any>(tenantId, TEACHERS_SUB).catch(() => []),
+    ]);
+    setExamsList(Array.isArray(exRows) ? (exRows as Exam[]) : []);
+    setTeachers(
+      (Array.isArray(tRows) ? tRows : [])
+        .map((t: any) => ({
+          id: String(t.id ?? "").trim(),
+          employeeNo: String(t.employeeNo ?? t.employeeNumber ?? t.jobNo ?? t.jobNumber ?? "").trim(),
+          fullName: String(t.fullName ?? t.name ?? t.teacherName ?? "").trim(),
+          phone: String(t.phone ?? t.mobile ?? "").trim(),
+        }))
+        .filter((t: Teacher) => t.fullName || t.employeeNo || t.phone)
+    );
+  }
+
+  const [storageTick, setStorageTick] = useState(0);
+  const lastRawRef = useRef<{ [k: string]: string }>({});
+
+  function getRaw(key: string) {
+    return localStorage.getItem(key) || "";
+  }
+
+  function refreshFromStorage() {
+    let changed = false;
+
+    const keysToWatch = [
+      taskDistributionKey(tenantId),
+      SCHOOL_DATA_KEY,
+      LOGO_KEY,
+      "exam-manager:task-distribution:master-table:v1",
+      "exam-manager:task-distribution:all-table:v1",
+      "exam-manager:task-distribution:results-table:v1",
+    ];
+
+    for (const k of keysToWatch) {
+      const raw = getRaw(k);
+      if (lastRawRef.current[k] !== raw) {
+        lastRawRef.current[k] = raw;
+        changed = true;
       }
-      c += ch;
     }
-    out.push(c);
-    return out.map((x) => x.trim());
-  };
 
-  const headers = split(lines[0]);
-  const rows = lines.slice(1).map(split);
+    if (changed) {
+      setRun(loadRun(tenantId));
 
-  return rows.map((cells) => {
-    const obj: any = {};
-    headers.forEach((h, idx) => (obj[h] = cells[idx] ?? ""));
-    return obj;
-  });
-}
+      const sd = readJson<SchoolData>(SCHOOL_DATA_KEY);
+      setSchoolData(
+        sd || {
+          name: "",
+          governorate: "",
+          semester: "",
+          phone: "",
+          address: "",
+        }
+      );
 
-function parseExamsFromObjects(rows: any[]): Exam[] {
-  return rows
-    .map((r) => {
-      const subject = getCell(r, ["المادة", "subject"]);
-      const dateISO = getCell(r, ["التاريخ", "dateISO", "date"]);
-      const dayLabel = getCell(r, ["اليوم", "dayLabel", "day"]);
-      const time = getCell(r, ["الوقت", "time"]);
-      const durationMinutes = Number(getCell(r, ["المدة", "duration", "durationMinutes"])) || 0;
-      const period = getCell(r, ["الفترة", "period"]) || "الفترة الأولى";
+      const nextLogo = (localStorage.getItem(LOGO_KEY) || "").trim() || DEFAULT_LOGO_URL;
+      setLogoUrl(nextLogo);
 
-      const roomsRaw = getCell(r, [
-        "القاعات",
-        "عدد القاعات",
-        "عدد اللجان",
-        "عدداللجان",
-        "roomsCount",
-        "rooms",
-        "rooms_count",
-      ]);
-      const roomsCount = Math.max(1, Number(roomsRaw) || 1);
+      // teachers/exams أصبحت من Firestore
+      refreshRosterFromFirestore();
 
-      return {
-        id: genId(),
-        subject: String(subject || "").trim(),
-        dateISO: String(dateISO || "").trim(),
-        dayLabel: String(dayLabel || "").trim(),
-        time: String(time || "").trim(),
-        durationMinutes,
-        period: String(period || "").trim(),
-        roomsCount,
-      } as Exam;
-    })
-    .filter((e) => e.subject || e.dateISO);
-}
-
-function dayFromISO(iso: string) {
-  try {
-    const d = new Date(iso + "T00:00:00");
-    const w = d.getDay();
-    const ar = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
-    return ar[w] || "";
-  } catch {
-    return "";
+      setStorageTick((x) => x + 1);
+    }
   }
-}
 
-function sortExams(a: Exam, b: Exam) {
-  return a.dateISO.localeCompare(b.dateISO);
-}
+  useEffect(() => {
+    refreshFromStorage();
+    refreshRosterFromFirestore();
 
-function sortExamsByDate(a: Exam, b: Exam, order: "asc" | "desc") {
-  const result = a.dateISO.localeCompare(b.dateISO);
-  return order === "asc" ? result : -result;
-}
+    const onRunUpdated = (e: any) => {
+      const tid = String(e?.detail?.tenantId || "").trim();
+      if (!tid || tid === String(tenantId)) refreshFromStorage();
+    };
 
-function sortRoomsByCode(a: Room, b: Room) {
-  const codeA = String(a.code || "").trim();
-  const codeB = String(b.code || "").trim();
+    const onStorage = (e: StorageEvent) => {
+      if (!e?.key) return;
+      if (
+        e.key === taskDistributionKey(tenantId) ||
+        e.key === SCHOOL_DATA_KEY ||
+        e.key === LOGO_KEY ||
+        e.key === "exam-manager:task-distribution:master-table:v1" ||
+        e.key === "exam-manager:task-distribution:all-table:v1" ||
+        e.key === "exam-manager:task-distribution:results-table:v1"
+      ) {
+        refreshFromStorage();
+      }
+    };
 
-  if (!codeA && !codeB) {
-    return String(a.roomName || "").localeCompare(String(b.roomName || ""), "ar", {
-      sensitivity: "base",
-    });
-  }
-  if (!codeA) return 1;
-  if (!codeB) return -1;
+    window.addEventListener(RUN_UPDATED_EVENT, onRunUpdated as any);
+    window.addEventListener("storage", onStorage);
+    window.addEventListener("focus", refreshFromStorage);
 
-  const byCode = codeA.localeCompare(codeB, "ar", {
-    numeric: true,
-    sensitivity: "base",
-  });
+    const iv = window.setInterval(() => {
+      refreshFromStorage();
+      // تحديث دوري خفيف لضمان تزامن الطباعة
+      refreshRosterFromFirestore();
+    }, 2500);
 
-  if (byCode !== 0) return byCode;
-
-  return String(a.roomName || "").localeCompare(String(b.roomName || ""), "ar", {
-    sensitivity: "base",
-  });
-}
-
-function fixExam(e: Exam): Exam {
-  const rooms = Number(e.roomsCount) || 1;
-  return {
-    ...e,
-    id: e.id || genId(),
-    subject: String(e.subject || "").trim(),
-    dateISO: String(e.dateISO || "").trim(),
-    dayLabel: String(e.dayLabel || "").trim() || dayFromISO(e.dateISO),
-    period: String(e.period || "").trim() || "الفترة الأولى",
-    time: String(e.time || "").trim() || "08:00",
-    durationMinutes: Number(e.durationMinutes) || 120,
-    roomsCount: rooms < 1 ? 1 : rooms,
-  };
-}
-
-type DupModalState = {
-  open: boolean;
-  subject: string;
-  candidates: Exam[];
-  pending: Exam;
-  context: "add" | "edit";
-};
-
-type RoomManagerState = {
-  open: boolean;
-  examId: string;
-  selectedRoomIds: string[];
-};
-
-type AvailableRoomRow = Room & {
-  blocked: boolean;
-  inactive: boolean;
-  sameDateConflict: boolean;
-  sameDateConflictLabel: string;
-};
-
-export default function Exams() {
-  const { tenantId, exams, setExams } = useExamsData();
-  const [query, setQuery] = useState("");
-  const [adding, setAdding] = useState(false);
-  const [row, setRow] = useState<Exam>({ ...emptyExam, id: genId() });
-
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [edit, setEdit] = useState<Exam>({ ...emptyExam, id: "" });
-
-  const [dateSortOrder, setDateSortOrder] = useState<"asc" | "desc">("asc");
-
-  const [dupModal, setDupModal] = useState<DupModalState>({
-    open: false,
-    subject: "",
-    candidates: [],
-    pending: { ...emptyExam, id: "" },
-    context: "add",
-  });
-
-  const topRef = useRef<HTMLDivElement>(null);
-  const [tableFullScreen, setTableFullScreen] = useState(false);
-  const { user } = useAuth() as any;
-  const { rooms } = useRoomsData();
-  const { roomBlocks } = useRoomBlocksData();
-  const { examRoomAssignments, setExamRoomAssignments } = useExamRoomAssignmentsData();
-  const [roomManager, setRoomManager] = useState<RoomManagerState>({ open: false, examId: "", selectedRoomIds: [] });
-  const assignmentsHydratedRef = useRef(false);
-  const assignmentsHydrationKeyRef = useRef("");
-
-  const assignmentsStorageKey = useMemo(() => {
-    const suffix = String(tenantId || "default").trim() || "default";
-    return `${ASSIGNMENTS_STORAGE_PREFIX}_${suffix}`;
+    return () => {
+      window.removeEventListener(RUN_UPDATED_EVENT, onRunUpdated as any);
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("focus", refreshFromStorage);
+      window.clearInterval(iv);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId]);
 
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    if (tableFullScreen) document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [tableFullScreen]);
+  const qs = useMemo(() => new URLSearchParams(loc.search), [loc.search]);
 
-  useEffect(() => {
-    if (assignmentsHydrationKeyRef.current !== assignmentsStorageKey) {
-      assignmentsHydrationKeyRef.current = assignmentsStorageKey;
-      assignmentsHydratedRef.current = false;
-    }
-  }, [assignmentsStorageKey]);
+  const reportType = (qs.get("reportType") || (qs.get("teacher") ? "teacher" : "daily")) as "daily" | "teacher";
+  const dateISO = normalizeISODate(qs.get("dateISO") || "");
+  const teacherNameFilter = (qs.get("teacher") || "").trim();
+  const subjectFilter = (qs.get("subject") || "").trim();
 
-  useEffect(() => {
-    if (assignmentsHydratedRef.current) return;
+  const schoolHeader = useMemo(() => {
+    const countryName = "سلطنة عمان";
+    const ministryName = "وزارة التعليم";
+    const directorateName = schoolData.governorate?.trim() || "المديرية العامة للتعليم";
+    const schoolName = schoolData.name?.trim() || "المدرسة";
+    const semesterLabel = schoolData.semester?.trim() || "الفصل الدراسي الأول";
+    const yearLabel = "2026/2025";
+    return { countryName, ministryName, directorateName, schoolName, semesterLabel, yearLabel };
+  }, [schoolData]);
 
-    try {
-      const savedAssignments = safeParseExamRoomAssignments(
-        localStorage.getItem(assignmentsStorageKey)
-      );
-
-      if (!examRoomAssignments.length && savedAssignments.length) {
-        setExamRoomAssignments(savedAssignments as any);
-      }
-    } catch {
-      // ignore localStorage read errors
-    } finally {
-      assignmentsHydratedRef.current = true;
-    }
-  }, [assignmentsStorageKey, examRoomAssignments.length, setExamRoomAssignments]);
-
-  useEffect(() => {
-    if (!assignmentsHydratedRef.current) return;
-    try {
-      localStorage.setItem(assignmentsStorageKey, JSON.stringify(examRoomAssignments));
-    } catch {
-      // ignore localStorage write errors
-    }
-  }, [assignmentsStorageKey, examRoomAssignments]);
-
-  useEffect(() => {
-    const style = document.createElement("style");
-    style.innerHTML = `
-      .examTable3D {
-        position: relative;
-        background: linear-gradient(145deg, #111, #1a1a1a);
-        border-radius: 16px;
-        padding: 12px;
-        box-shadow: 0 18px 35px rgba(0,0,0,0.6), inset 0 2px 0 rgba(255,255,255,0.05);
-        overflow: hidden;
-      }
-
-      .examTable3D table {
-        width: 100%;
-        border-collapse: separate;
-        border-spacing: 8px;
-      }
-
-      .examTable3D th,
-      .examTable3D td {
-        border-right: 2px solid rgba(184,134,11,0.95) !important;
-      }
-      .examTable3D th:last-child,
-      .examTable3D td:last-child {
-        border-right: none !important;
-      }
-
-      .examTable3D thead th {
-        background: linear-gradient(180deg,#6e5200,#4a3600) !important;
-        color: #fff1c4 !important;
-        border-bottom: 1px solid rgba(212,175,55,0.35) !important;
-        border-radius: 12px;
-        box-shadow: inset 0 2px 0 rgba(255,255,255,0.18), 0 6px 14px rgba(0,0,0,0.55);
-      }
-
-      .examTable3D tbody td {
-        background: linear-gradient(145deg,#181818,#101010) !important;
-        color: #d4af37 !important;
-        border-bottom: none !important;
-        border-radius: 14px;
-        box-shadow: 0 10px 22px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,255,255,0.06);
-        transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
-      }
-
-      .examTable3D tbody tr:hover td {
-        transform: translateY(-3px);
-        box-shadow: 0 14px 30px rgba(0,0,0,0.75), inset 0 1px 0 rgba(255,255,255,0.10);
-        filter: brightness(1.03);
-      }
-
-      .examTable3D .col-date {
-        min-width: 210px;
-        font-weight: 1000;
-        background: linear-gradient(180deg,#7a5c00,#4a3600) !important;
-        color: #fff1c4 !important;
-        box-shadow: inset 0 2px 0 rgba(255,255,255,0.18), 0 12px 24px rgba(0,0,0,0.70) !important;
-      }
-
-      .examTable3D::before {
-        content: "";
-        position: absolute;
-        top: 0;
-        left: -120%;
-        width: 60%;
-        height: 100%;
-        background: linear-gradient(120deg, transparent 0%, rgba(255,255,255,0.12) 50%, transparent 100%);
-        transform: skewX(-12deg);
-        animation: examShine 10s infinite;
-        pointer-events: none;
-      }
-
-      @keyframes examShine {
-        0%, 88% { transform: translateX(-120%) skewX(-12deg); opacity: 0; }
-        90% { opacity: 1; }
-        100% { transform: translateX(240%) skewX(-12deg); opacity: 0.9; }
-      }
-
-      .examTable3D tbody tr.row-today td {
-        outline: 2px solid rgba(255,215,0,0.85);
-        outline-offset: -2px;
-        box-shadow: 0 16px 34px rgba(255,215,0,0.10), 0 12px 26px rgba(0,0,0,0.75), inset 0 1px 0 rgba(255,255,255,0.08);
-        animation: todayPulse 2.4s ease-in-out infinite;
-      }
-      @keyframes todayPulse {
-        0% { filter: brightness(1.00); }
-        50% { filter: brightness(1.08); }
-        100% { filter: brightness(1.00); }
-      }
-    `;
-    document.head.appendChild(style);
-    return () => {
-      document.head.removeChild(style);
-    };
-  }, []);
-
-  const todayISO = useMemo(() => new Date().toISOString().slice(0, 10), []);
-  const roomsById = useMemo(() => new Map(rooms.map((room) => [room.id, room])), [rooms]);
-  const examsById = useMemo(() => new Map(exams.map((exam) => [exam.id, exam])), [exams]);
-
-  const assignmentsByExamId = useMemo(() => {
-    const map = new Map<string, typeof examRoomAssignments>();
-    for (const row of examRoomAssignments) {
-      const list = map.get(row.examId) || [];
-      list.push(row);
-      map.set(row.examId, list);
+  /** -------------------------------------------
+   * Exams index
+   * ------------------------------------------ */
+  const examsIndex = useMemo(() => {
+    const map = new Map<string, { dayLabel: string; time: string }>();
+    for (const ex of examsList || []) {
+      const s = normalizeText(ex?.subject || "");
+      const d = normalizeISODate(ex?.dateISO || "");
+      const p = normalizePeriodKey(ex?.period || "");
+      if (!s || !d || !p) continue;
+      const key = `${s}|${d}|${p}`;
+      if (!map.has(key)) map.set(key, { dayLabel: (ex?.dayLabel || "").trim(), time: (ex?.time || "").trim() });
     }
     return map;
-  }, [examRoomAssignments]);
+  }, [examsList]);
 
-  const activeBlocks = useMemo(() => roomBlocks.filter((block) => block.status === "active"), [roomBlocks]);
+  function lookupExamMeta(subject: string, dISO: string, period: string) {
+    const key = `${normalizeText(subject)}|${normalizeISODate(dISO)}|${normalizePeriodKey(period)}`;
+    return examsIndex.get(key) || null;
+  }
 
-  const selectedExam = useMemo(
-    () => exams.find((exam) => exam.id === roomManager.examId) || null,
-    [exams, roomManager.examId]
-  );
+  /** -------------------------------------------
+   * Teachers index (name -> phone / employeeNo)
+   * ------------------------------------------ */
+  const teacherPhoneIndex = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const t of teachers || []) {
+      const nameKey = normalizeText(t.fullName || "");
+      if (!nameKey) continue;
+      const phone = sanitizePhoneToWhatsApp(t.phone || "");
+      if (phone) map.set(nameKey, phone);
+    }
+    return map;
+  }, [teachers]);
 
-  const selectedExamAssignments = useMemo(
-    () => (selectedExam ? assignmentsByExamId.get(selectedExam.id) || [] : []),
-    [assignmentsByExamId, selectedExam]
-  );
+  const teacherEmployeeIndex = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const t of teachers || []) {
+      const nameKey = normalizeText(t.fullName || "");
+      if (!nameKey) continue;
+      const emp = String(t.employeeNo || "").trim();
+      if (emp) map.set(nameKey, emp);
+    }
+    return map;
+  }, [teachers]);
 
-  const selectedExamAvailableRooms = useMemo(() => {
-    if (!selectedExam) return [] as AvailableRoomRow[];
+  function getTeacherWhatsAppPhoneByName(name: string) {
+    const key = normalizeText(name || "");
+    if (!key) return "";
+    return teacherPhoneIndex.get(key) || "";
+  }
 
-    return [...rooms]
-      .sort(sortRoomsByCode)
-      .map((room) => {
-        const sameDateAssignments = examRoomAssignments.filter((assignment) => {
-          if (assignment.roomId !== room.id) return false;
-          if (assignment.examId === selectedExam.id) return false;
-          const otherExam = examsById.get(assignment.examId);
-          const otherDateISO = String(otherExam?.dateISO || assignment.dateISO || "").trim();
-          return otherDateISO === selectedExam.dateISO;
+  function getTeacherEmployeeNoByName(name: string) {
+    const key = normalizeText(name || "");
+    if (!key) return "";
+    return teacherEmployeeIndex.get(key) || "";
+  }
+
+  /** -------------------------------------------
+   * Load master table
+   * ------------------------------------------ */
+  const masterTableRows = useMemo<AnyAssignment[]>(() => {
+    const m1 = readJson<any>("exam-manager:task-distribution:master-table:v1");
+    const m2 = readJson<any>("exam-manager:task-distribution:all-table:v1");
+    const m3 = readJson<any>("exam-manager:task-distribution:results-table:v1");
+
+    const payload = m1 || m2 || m3 || null;
+    const rows = payload?.rows || payload?.data || null;
+
+    // ✅ مهم: إذا كان "الجدول الشامل" من Run قديم، لا نسمح له أن يطغى على Run الحالي
+    const meta = payload?.meta || {};
+    const matchesCurrentRun = !run || meta?.runId === run.runId || meta?.runCreatedAtISO === run.createdAtISO;
+
+    if (Array.isArray(rows) && rows.length && matchesCurrentRun) return rows;
+    return Array.isArray(run?.assignments) ? (run!.assignments as any[]) : [];
+  }, [run, storageTick]);
+
+  /** -------------------------------------------
+   * Options
+   * ------------------------------------------ */
+  const teacherOptions = useMemo(() => {
+    const set = new Map<string, string>();
+    for (const r of masterTableRows || []) {
+      const n = (getTeacherName(r) || "").trim();
+      if (!n) continue;
+      const k = normalizeText(n);
+      if (!set.has(k)) set.set(k, n);
+    }
+    return Array.from(set.values()).sort((a, b) => a.localeCompare(b, "ar"));
+  }, [masterTableRows]);
+
+  const subjectOptions = useMemo(() => {
+    const set = new Map<string, string>();
+    for (const r of masterTableRows || []) {
+      const s = (getExamSubject(r) || "").trim();
+      if (!s) continue;
+      const n = normalizeText(s);
+      if (!set.has(n)) set.set(n, s);
+    }
+    return Array.from(set.values()).sort((a, b) => a.localeCompare(b, "ar"));
+  }, [masterTableRows]);
+
+  /** -------------------------------------------
+   * Apply filters
+   * ------------------------------------------ */
+  const filteredRows = useMemo(() => {
+    let rows = [...(masterTableRows || [])];
+
+    if (reportType === "daily" && dateISO) {
+      rows = rows.filter((r) => normalizeISODate(getExamDateISO(r)) === dateISO);
+    }
+
+    if (reportType === "teacher" && teacherNameFilter) {
+      rows = rows.filter((r) => getTeacherName(r).trim() === teacherNameFilter);
+    }
+
+    if (subjectFilter) {
+      const nSub = normalizeText(subjectFilter);
+      rows = rows.filter((r) => normalizeText(getExamSubject(r)) === nSub);
+    }
+
+    return rows;
+  }, [masterTableRows, reportType, dateISO, teacherNameFilter, subjectFilter]);
+
+  /** -------------------------------------------
+   * Header exam info
+   * ------------------------------------------ */
+  const headerExamInfo = useMemo(() => {
+    const r = filteredRows[0] || masterTableRows[0] || null;
+
+    const subject = subjectFilter || (r ? getExamSubject(r) : "");
+    const dISO = r ? normalizeISODate(getExamDateISO(r)) : dateISO;
+    const period = r ? getExamPeriod(r) : "";
+
+    let dayLabel = r ? getExamDayLabel(r) : "";
+    let time = r ? getExamTime(r) : "";
+
+    const meta = lookupExamMeta(subject, dISO, period);
+    if (meta) {
+      dayLabel = meta.dayLabel || dayLabel;
+      time = meta.time || time;
+    }
+
+    return { subject, dISO, dayLabel, period, time };
+  }, [filteredRows, masterTableRows, dateISO, subjectFilter, examsIndex]);
+
+  /** -------------------------------------------
+   * Query helper
+   * ------------------------------------------ */
+  function setQueryParam(key: string, value: string) {
+    const sp = new URLSearchParams(loc.search);
+    if (!value) sp.delete(key);
+    else sp.set(key, value);
+    nav(`${loc.pathname}?${sp.toString()}`, { replace: true });
+  }
+
+  function setTeacherSelection(v: string) {
+    setQueryParam("reportType", "teacher");
+    setQueryParam("teacher", v || "");
+  }
+  function setReportDaily() {
+    setQueryParam("reportType", "daily");
+    setQueryParam("teacher", "");
+  }
+  function setReportTeacher() {
+    setQueryParam("reportType", "teacher");
+  }
+
+  // ✅ طباعة "التقرير فقط" عبر نافذة مستقلة
+  async function openPrintDialog() {
+    const el = printAreaRef.current;
+    if (!el) return;
+
+    void writeTenantAudit(tenantId, {
+      action: "distribution_print_report",
+      entity: "task_distribution",
+      by: user?.uid || undefined,
+      meta: {
+        reportType,
+        teacherNameFilter: teacherNameFilter || null,
+        subjectFilter: subjectFilter || null,
+        atISO: new Date().toISOString(),
+      },
+    }).catch(() => {});
+
+    const isDailyAll = reportType === "daily" && !subjectFilter && dailyPages.length > 1;
+    const isTeacherAll = reportType === "teacher" && !teacherNameFilter && allTeachersPages.length > 1;
+
+    if (isDailyAll || isTeacherAll) {
+      document.body.classList.add("print-report-mode");
+      setTimeout(() => {
+        window.print();
+        setTimeout(() => {
+          document.body.classList.remove("print-report-mode");
+        }, 1000);
+      }, 120);
+      return;
+    }
+
+    const safeTitle = (teacherNameFilter || (reportType === "daily" ? "daily" : "report")).trim() || "report";
+    await printOnlyElement(el, safeTitle);
+  }
+
+  if (!run) {
+    return (
+      <div style={styles.pageWrapDark}>
+        <div style={styles.darkCard}>
+          <div style={styles.darkRow}>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: "white" }}>طباعة التقرير</div>
+              <div style={{ color: "rgba(255,255,255,.75)", marginTop: 4 }}>لا يوجد تشغيل محفوظ بعد</div>
+            </div>
+            <button style={styles.btnSoft} onClick={() => nav("/task-distribution")}>
+              رجوع
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const safeRun = run;
+
+  const title =
+    reportType === "teacher"
+      ? teacherNameFilter
+        ? "تقرير معلم (فردي)"
+        : "تقرير الكادر التعليمي (الكل)"
+      : "كشف يومي (امتحانات)";
+
+  /** -------------------------------------------
+   * DAILY groups
+   * ------------------------------------------ */
+  const dailyInvigilators = useMemo(() => {
+    if (reportType !== "daily") return [];
+    const rows = filteredRows.filter((r) => getTaskType(r) === "INVIGILATION");
+    rows.sort((a, b) => {
+      const ra = parseCommitteeNumber(getRoomNumber(a));
+      const rb = parseCommitteeNumber(getRoomNumber(b));
+      if (ra.num !== rb.num) return ra.num - rb.num;
+      if (ra.raw !== rb.raw) return ra.raw.localeCompare(rb.raw, "ar");
+      return (getTeacherName(a) || "").localeCompare(getTeacherName(b) || "", "ar");
+    });
+    return rows;
+  }, [filteredRows, reportType]);
+
+  const dailyReserves = useMemo(() => {
+    if (reportType !== "daily") return [];
+    return filteredRows.filter((r) => getTaskType(r) === "RESERVE");
+  }, [filteredRows, reportType]);
+
+  const dailyReviewFree = useMemo(() => {
+    if (reportType !== "daily") return [];
+    return filteredRows.filter((r) => getTaskType(r) === "REVIEW_FREE");
+  }, [filteredRows, reportType]);
+
+
+  const dailyPages = useMemo(() => {
+    if (reportType !== "daily") return [] as any[];
+
+    const rows = [...filteredRows];
+    if (!rows.length) return [] as any[];
+
+    const groups = new Map<string, { subject: string; dISO: string; period: string; dayLabel: string; time: string; rows: AnyAssignment[] }>();
+
+    for (const r of rows) {
+      const subject = (getExamSubject(r) || "").trim();
+      const dISO = normalizeISODate(getExamDateISO(r));
+      const period = getExamPeriod(r) || "";
+      if (!subject || !dISO) continue;
+
+      const key = `${dISO}__${normalizePeriodKey(period)}__${normalizeText(subject)}`;
+      if (!groups.has(key)) {
+        const meta = lookupExamMeta(subject, dISO, period);
+        groups.set(key, {
+          subject,
+          dISO,
+          period,
+          dayLabel: meta?.dayLabel || getExamDayLabel(r) || "—",
+          time: meta?.time || getExamTime(r) || "—",
+          rows: [],
         });
+      }
+      groups.get(key)!.rows.push(r);
+    }
 
-        const sameDateConflictLabel = sameDateAssignments
-          .map((assignment) => {
-            const otherExam = examsById.get(assignment.examId);
-            const subject = String(otherExam?.subject || "مادة أخرى").trim();
-            const period = String(otherExam?.period || assignment.period || "").trim();
-            return period ? `${subject} — ${period}` : subject;
-          })
-          .join("، ");
-
-        return {
-          ...room,
-          blocked: isRoomBlockedForExam(room.id, selectedExam, activeBlocks),
-          inactive: (room.status || "active") !== "active",
-          sameDateConflict: sameDateAssignments.length > 0,
-          sameDateConflictLabel,
-        };
+    const sortInvigilators = (items: AnyAssignment[]) => {
+      return [...items].sort((a, b) => {
+        const ra = parseCommitteeNumber(getRoomNumber(a));
+        const rb = parseCommitteeNumber(getRoomNumber(b));
+        if (ra.num !== rb.num) return ra.num - rb.num;
+        if (ra.raw !== rb.raw) return ra.raw.localeCompare(rb.raw, "ar");
+        return (getTeacherName(a) || "").localeCompare(getTeacherName(b) || "", "ar");
       });
-  }, [rooms, selectedExam, activeBlocks, examRoomAssignments, examsById]);
+    };
 
-  const filtered = useMemo(() => {
-    const q = query.trim();
+    return Array.from(groups.values())
+      .map((g) => ({
+        ...g,
+        invigilators: sortInvigilators(g.rows.filter((r) => getTaskType(r) === "INVIGILATION")),
+        reserves: g.rows.filter((r) => getTaskType(r) === "RESERVE"),
+        reviewFree: g.rows.filter((r) => getTaskType(r) === "REVIEW_FREE"),
+      }))
+      .sort((a, b) => {
+        if (a.dISO !== b.dISO) return a.dISO.localeCompare(b.dISO);
+        const pa = normalizePeriodKey(a.period);
+        const pb = normalizePeriodKey(b.period);
+        if (pa !== pb) return pa.localeCompare(pb, "ar");
+        return a.subject.localeCompare(b.subject, "ar");
+      });
+  }, [reportType, filteredRows, examsIndex]);
 
-    const base = !q
-      ? exams
-      : exams.filter((e) =>
-          [e.subject, e.dateISO, e.dayLabel, e.time, e.period, String(e.roomsCount)].some((x) =>
-            String(x).includes(q)
-          )
-        );
+  /** -------------------------------------------
+   * WhatsApp text
+   * ------------------------------------------ */
+  const shareText = useMemo(() => {
+    const base = `تقرير توزيع المهام - ${schoolHeader.schoolName}\n`;
+    const typeLine = `نوع التقرير: ${title}\n`;
+    const teacherLine = teacherNameFilter ? `المعلم: ${teacherNameFilter}\n` : "";
+    const empLine = teacherNameFilter ? `الرقم الوظيفي: ${getTeacherEmployeeNoByName(teacherNameFilter) || "—"}\n` : "";
+    const subjectLine = subjectFilter ? `المادة: ${subjectFilter}\n` : "";
+    const dateLine = dateISO ? `التاريخ: ${dateISO}\n` : "";
+    return `${base}${typeLine}${teacherLine}${empLine}${subjectLine}${dateLine}تم الإنشاء من النظام.`;
+  }, [schoolHeader.schoolName, title, teacherNameFilter, subjectFilter, dateISO, teacherEmployeeIndex]);
 
-    return [...base].sort((a, b) => sortExamsByDate(a, b, dateSortOrder));
-  }, [exams, query, dateSortOrder]);
+  /** -------------------------------------------
+   * Teacher pages (all teachers)
+   * ------------------------------------------ */
+  const allTeachersPages = useMemo(() => {
+    if (reportType !== "teacher" || teacherNameFilter) return [];
+    const pages = teacherOptions.map((tName) => {
+      let rows = masterTableRows.filter((r) => getTeacherName(r).trim() === tName);
 
-  function validateExam(e: Exam) {
-    if (!e.subject.trim()) return "المادة مطلوبة.";
-    if (!e.dateISO.trim()) return "التاريخ مطلوب.";
-    if (!e.time.trim()) return "الوقت مطلوب.";
-    if (!e.durationMinutes || e.durationMinutes <= 0) return "المدة مطلوبة.";
-    if (!e.period.trim()) return "الفترة مطلوبة.";
-    if (!e.roomsCount || e.roomsCount <= 0) return "عدد القاعات مطلوب.";
-    return "";
-  }
-
-  function findSubjectDuplicates(subject: string, ignoreId?: string | null) {
-    const key = subject.trim();
-    if (!key) return [];
-    return exams.filter((x) => x.subject.trim() === key && x.id !== ignoreId);
-  }
-
-  function openDupModal(subject: string, ignoreId: string | null, pending: Exam, context: "add" | "edit") {
-    setDupModal({
-      open: true,
-      subject: subject.trim(),
-      candidates: findSubjectDuplicates(subject, ignoreId),
-      pending,
-      context,
-    });
-  }
-
-  function startAdd() {
-    setAdding(true);
-    setEditingId(null);
-    setRow({ ...emptyExam, id: genId() });
-    setTimeout(() => topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
-  }
-
-  function saveAdd() {
-    const msg = validateExam(row);
-    if (msg) return alert(msg);
-
-    const fixed = fixExam({ ...row, dayLabel: row.dayLabel.trim() || dayFromISO(row.dateISO) });
-
-    const dups = findSubjectDuplicates(fixed.subject, null);
-    if (dups.length) {
-      return openDupModal(fixed.subject, null, fixed, "add");
-    }
-
-    setExams((prev) => [fixed, ...prev].sort(sortExams));
-    setAdding(false);
-    setRow({ ...emptyExam, id: genId() });
-  }
-
-  function startEditById(id: string) {
-    const found = exams.find((x) => x.id === id);
-    if (!found) return;
-    setAdding(false);
-    setEditingId(id);
-    setEdit({ ...found });
-    setTimeout(() => topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
-  }
-
-  function saveEdit() {
-    if (!editingId) return;
-    const msg = validateExam(edit);
-    if (msg) return alert(msg);
-
-    const fixed = fixExam({ ...edit, id: editingId, dayLabel: edit.dayLabel.trim() || dayFromISO(edit.dateISO) });
-
-    const dups = findSubjectDuplicates(fixed.subject, editingId);
-    if (dups.length) {
-      return openDupModal(fixed.subject, editingId, fixed, "edit");
-    }
-
-    setExams((prev) => prev.map((x) => (x.id === editingId ? fixed : x)).sort(sortExams));
-    setEditingId(null);
-    setEdit({ ...emptyExam, id: "" });
-  }
-
-  function removeExamById(id: string) {
-    if (!confirm("هل تريد حذف هذا الامتحان؟")) return;
-    setExams((prev) => prev.filter((x) => x.id !== id));
-    setExamRoomAssignments((prev) => prev.filter((row) => row.examId !== id));
-  }
-
-  function deleteAll() {
-    if (!exams.length) return;
-    const ok = confirm("⚠️ هل أنت متأكد من حذف جدول الامتحانات كاملًا؟ لا يمكن التراجع.");
-    if (!ok) return;
-    setExams([]);
-    setExamRoomAssignments([]);
-  }
-
-  function exportCSV() {
-    downloadText("exams.csv", toCSV(exams));
-  }
-
-  async function exportExcel() {
-    try {
-      const XLSX = await import("xlsx");
-      const rows = exams.map((e) => ({
-        المادة: e.subject,
-        التاريخ: e.dateISO,
-        اليوم: e.dayLabel,
-        الوقت: e.time,
-        المدة: e.durationMinutes,
-        الفترة: e.period,
-        القاعات: e.roomsCount,
-      }));
-      const ws = XLSX.utils.json_to_sheet(rows);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Exams");
-      XLSX.writeFile(wb, "exams.xlsx");
-    } catch {
-      alert("مكتبة xlsx غير متوفرة. استخدم تصدير CSV أو ثبّت xlsx.");
-    }
-  }
-
-  async function importExcel(file: File) {
-    const json = await tryReadExcel(file);
-    if (!json) {
-      alert("تعذر قراءة Excel. تأكد من وجود مكتبة xlsx أو استخدم CSV.");
-      return;
-    }
-    const incoming = parseExamsFromObjects(json).map(fixExam);
-
-    for (const inc of incoming) {
-      const dups = findSubjectDuplicates(inc.subject, null);
-      if (dups.length) {
-        openDupModal(inc.subject, null, inc, "add");
-        return;
+      if (subjectFilter) {
+        const nSub = normalizeText(subjectFilter);
+        rows = rows.filter((r) => normalizeText(getExamSubject(r)) === nSub);
       }
-    }
 
-    setExams((prev) => [...incoming, ...prev].sort(sortExams));
-    alert("✅ تم استيراد البيانات.");
-  }
+      rows.sort((a, b) => {
+        const da = normalizeISODate(getExamDateISO(a));
+        const db = normalizeISODate(getExamDateISO(b));
+        if (da !== db) return da.localeCompare(db);
 
-  async function importCSV(file: File) {
-    const text = await file.text();
-    const objs = parseCSV(text);
-    const incoming = parseExamsFromObjects(objs).map(fixExam);
+        const pa = formatPeriod(getExamPeriod(a));
+        const pb = formatPeriod(getExamPeriod(b));
+        if (pa !== pb) return pa.localeCompare(pb, "ar");
 
-    for (const inc of incoming) {
-      const dups = findSubjectDuplicates(inc.subject, null);
-      if (dups.length) {
-        openDupModal(inc.subject, null, inc, "add");
-        return;
-      }
-    }
+        return (getExamSubject(a) || "").toString().localeCompare((getExamSubject(b) || "").toString(), "ar");
+      });
 
-    setExams((prev) => [...incoming, ...prev].sort(sortExams));
-    alert("✅ تم استيراد البيانات.");
-  }
-
-  function resolveDuplicate(action: "change" | "overwrite", selectedId?: string) {
-    if (action === "change") {
-      setDupModal((s) => ({ ...s, open: false }));
-      return;
-    }
-    if (!selectedId) return;
-
-    const pending = dupModal.pending;
-
-    setExams((prev) => prev.map((x) => (x.id === selectedId ? { ...pending, id: selectedId } : x)).sort(sortExams));
-    setDupModal((s) => ({ ...s, open: false }));
-
-    if (dupModal.context === "add") {
-      setAdding(false);
-      setRow({ ...emptyExam, id: genId() });
-    } else {
-      setEditingId(null);
-      setEdit({ ...emptyExam, id: "" });
-    }
-  }
-
-  function openRoomManager(exam: Exam) {
-    const selected = (assignmentsByExamId.get(exam.id) || []).map((row) => row.roomId);
-    setRoomManager({ open: true, examId: exam.id, selectedRoomIds: selected });
-  }
-
-  function toggleRoomSelection(roomId: string) {
-    setRoomManager((prev) => {
-      const exists = prev.selectedRoomIds.includes(roomId);
-      const next = exists
-        ? prev.selectedRoomIds.filter((id) => id !== roomId)
-        : [...prev.selectedRoomIds, roomId];
-      return { ...prev, selectedRoomIds: next };
+      return { teacherName: tName, rows };
     });
-  }
 
-  function closeRoomManager() {
-    setRoomManager({ open: false, examId: "", selectedRoomIds: [] });
-  }
+    return pages.filter((p) => p.rows.length > 0);
+  }, [reportType, teacherNameFilter, teacherOptions, masterTableRows, subjectFilter]);
 
-  function saveRoomAssignments() {
-    if (!selectedExam) return;
-    const required = Math.max(1, Number(selectedExam.roomsCount) || 1);
-    const selectedSet = new Set(roomManager.selectedRoomIds);
+  function DailySheet(props: {
+    subject: string;
+    dISO: string;
+    dayLabel: string;
+    period: string;
+    time: string;
+    invigilators: AnyAssignment[];
+    reserves: AnyAssignment[];
+    reviewFree: AnyAssignment[];
+    pageBreak?: boolean;
+    createdAtISO: string;
+  }) {
+    return (
+      <div className="print-sheet print-daily" style={{ ...styles.sheet, ...(props.pageBreak ? styles.pageBreak : {}) }}>
+        <div style={styles.headerGrid}>
+          <div style={styles.headerRight}>
+            <div style={styles.headerRightLine}>{schoolHeader.countryName}</div>
+            <div style={styles.headerRightLine}>{schoolHeader.ministryName}</div>
+            <div style={styles.headerRightLine}>{schoolHeader.directorateName}</div>
+            <div style={styles.headerRightLine}>{schoolHeader.schoolName}</div>
+          </div>
 
-    if (selectedSet.size > required) {
-      alert(`لا يمكن ربط أكثر من ${required} قاعات لهذا الامتحان.`);
-      return;
-    }
+          <div style={styles.headerCenter}>
+            <img src={logoUrl} alt="شعار" style={{ width: 66, height: 66, objectFit: "contain" }} />
+          </div>
 
-    const invalidBlockedOrInactive = selectedExamAvailableRooms.find(
-      (room) => selectedSet.has(room.id) && (room.blocked || room.inactive)
-    );
-    if (invalidBlockedOrInactive) {
-      alert(`القاعات المحظورة أو الموقوفة لا يمكن ربطها: ${invalidBlockedOrInactive.roomName}`);
-      return;
-    }
+          <div style={styles.headerLeft}>
+            <div style={styles.headerLeftTitle}>كشف مراقبة امتحان</div>
+            <div style={styles.headerLeftSub}>{schoolHeader.semesterLabel}</div>
+            <div style={styles.headerLeftSub}>العام الدراسي {schoolHeader.yearLabel}</div>
+          </div>
+        </div>
 
-    const sameDateConflictRoom = selectedExamAvailableRooms.find(
-      (room) => selectedSet.has(room.id) && room.sameDateConflict
-    );
-    if (sameDateConflictRoom) {
-      alert(
-        `لا يمكن اختيار القاعة ${sameDateConflictRoom.roomName} في نفس التاريخ لأنها مرتبطة بالفعل بـ ${sameDateConflictRoom.sameDateConflictLabel}.`
-      );
-      return;
-    }
+        <div style={styles.hr} />
 
-    const remaining = examRoomAssignments.filter((row) => row.examId !== selectedExam.id);
-    const next = [
-      ...remaining,
-      ...selectedExamAvailableRooms
-        .filter((room) => selectedSet.has(room.id))
-        .map((room) => ({
-          id: createId("exam_room"),
-          examId: selectedExam.id,
-          roomId: room.id,
-          roomName: room.roomName,
-          dateISO: selectedExam.dateISO,
-          time: selectedExam.time,
-          period: selectedExam.period,
-          createdBy: String(user?.email || "").trim() || undefined,
-        })),
-    ];
-    setExamRoomAssignments(next);
-    closeRoomManager();
-  }
+        <div style={styles.examBarWide}>
+          <div style={styles.examBarWideInner}>
+            <div style={styles.examBarWideItem}>
+              <span style={styles.examLabel}>الفترة:</span> <span style={styles.examValue}>{formatPeriod(props.period)}</span>
+            </div>
+            <div style={styles.examBarWideSep}>|</div>
 
-  const pageStyle: React.CSSProperties = { padding: 16, color: "#e6c76a" };
+            <div style={styles.examBarWideItem}>
+              <span style={styles.examLabel}>اليوم:</span> <span style={styles.examValue}>{props.dayLabel || "—"}</span>
+            </div>
+            <div style={styles.examBarWideSep}>|</div>
 
-  const header: React.CSSProperties = {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-    background: "linear-gradient(135deg, #f1d27a, #d4af37, #b8962e)",
-    color: "#0b1220",
-    borderRadius: 18,
-    padding: 14,
-    boxShadow: "0 14px 60px rgba(212,175,55,0.25)",
-    marginBottom: 14,
-  };
-
-  const card: React.CSSProperties = {
-    background: "linear-gradient(180deg, #0b1220, #09101d)",
-    border: "1px solid rgba(212,175,55,0.15)",
-    borderRadius: 18,
-    padding: 16,
-    boxShadow: "0 18px 60px rgba(0,0,0,0.35)",
-    marginBottom: 14,
-  };
-
-  const fullScreenOverlay: React.CSSProperties = {
-    position: "fixed",
-    inset: 0,
-    zIndex: 10000,
-    padding: 14,
-    background: "linear-gradient(180deg, #050a14, #070d1a)",
-  };
-
-  const btn = (bg: string, fg = "#0b1220"): React.CSSProperties => ({
-    background: bg,
-    color: fg,
-    border: "1px solid rgba(255,255,255,0.08)",
-    borderRadius: 14,
-    padding: "10px 14px",
-    cursor: "pointer",
-    fontWeight: 800,
-    boxShadow: "0 10px 24px rgba(0,0,0,0.25)",
-  });
-
-  const inputStyle: React.CSSProperties = {
-    background: "#0b1220",
-    color: "#e6c76a",
-    border: "1px solid rgba(212,175,55,0.25)",
-    borderRadius: 12,
-    padding: "10px 12px",
-    outline: "none",
-    width: "100%",
-  };
-
-  const tableWrap: React.CSSProperties = {
-    maxHeight: "55vh",
-    overflow: "auto",
-    borderRadius: 16,
-    border: "1px solid rgba(212,175,55,0.12)",
-  };
-
-  const thStyle: React.CSSProperties = {
-    position: "sticky",
-    top: 0,
-    background: "#0b1220",
-    color: "#d4af37",
-    zIndex: 2,
-    padding: 10,
-    textAlign: "right",
-    fontWeight: 900,
-    borderBottom: "1px solid rgba(212,175,55,0.2)",
-    whiteSpace: "nowrap",
-  };
-
-  const tdStyle: React.CSSProperties = {
-    padding: 10,
-    borderBottom: "1px solid rgba(255,255,255,0.06)",
-    whiteSpace: "nowrap",
-    color: "#e6c76a",
-  };
-
-  const current = editingId ? edit : row;
-  const setCurrent = (patch: Partial<Exam>) => {
-    if (editingId) setEdit({ ...edit, ...patch });
-    else setRow({ ...row, ...patch });
-  };
-
-  const modalOverlay: React.CSSProperties = {
-    position: "fixed",
-    inset: 0,
-    background: "rgba(0,0,0,0.6)",
-    zIndex: 9999,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 16,
-  };
-
-  const modalCard: React.CSSProperties = {
-    width: "min(860px, 96vw)",
-    background: "linear-gradient(180deg, #0b1220, #09101d)",
-    border: "1px solid rgba(212,175,55,0.25)",
-    borderRadius: 18,
-    padding: 16,
-    boxShadow: "0 22px 80px rgba(0,0,0,0.55)",
-    color: "#e6c76a",
-  };
-
-  return (
-    <div style={pageStyle} ref={topRef}>
-      {dupModal.open && (
-        <div style={modalOverlay} onClick={() => resolveDuplicate("change")}>
-          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
-            <div style={{ fontWeight: 1000, fontSize: 18, marginBottom: 8, color: "#d4af37" }}>⚠️ المادة مكررة</div>
-            <div style={{ opacity: 0.95, marginBottom: 12, lineHeight: 1.8 }}>
-              المادة <b>{dupModal.subject}</b> موجودة بالفعل.
-              <br />
-              إمّا تغيّر المادة، أو تختار واحدة من المواد المكررة لاستبدالها بالبيانات الحالية.
+            <div style={styles.examBarWideItem}>
+              <span style={styles.examLabel}>الوقت:</span> <span style={styles.examValue}>{props.time || "—"}</span>
             </div>
 
-            <div style={{ border: "1px solid rgba(212,175,55,0.18)", borderRadius: 14, overflow: "hidden" }}>
-              <table style={{ width: "100%" }}>
-                <thead>
-                  <tr>
-                    <th style={{ ...thStyle, position: "static" }}>المادة</th>
-                    <th style={{ ...thStyle, position: "static" }}>التاريخ</th>
-                    <th style={{ ...thStyle, position: "static" }}>إجراء</th>
+            <div style={styles.examBarWideItem}>
+              <span style={styles.examLabel}>المادة:</span> <span style={styles.examValue}>{props.subject || "—"}</span>
+            </div>
+
+            <div style={styles.examBarWideItem}>
+              <span style={styles.examLabel}>التاريخ:</span> <span style={styles.examValue}>{props.dISO || "—"}</span>
+            </div>
+          </div>
+        </div>
+
+        <div style={styles.chipRow}>
+          <div style={styles.chip}>كشف بأسماء المراقبين</div>
+        </div>
+
+        <table style={styles.table}>
+          <thead>
+            <tr>
+              <th style={{ ...styles.th, width: 56, textAlign: "center" }}>م</th>
+              <th style={{ ...styles.th }}>اسم المراقب</th>
+              <th style={{ ...styles.th, width: 120 }}>رقم اللجنة</th>
+              <th style={{ ...styles.th, width: 120 }}>التوقيع</th>
+            </tr>
+          </thead>
+          <tbody>
+            {props.invigilators.length ? (
+              props.invigilators.map((r, idx) => (
+                <tr key={idx}>
+                  <td style={styles.tdNum}>{idx + 1}</td>
+                  <td style={styles.td}>{getTeacherName(r) || "—"}</td>
+                  <td style={styles.td}>{getRoomNumber(r) || "—"}</td>
+                  <td style={styles.td}></td>
+                </tr>
+              ))
+            ) : (
+              Array.from({ length: 12 }).map((_, i) => (
+                <tr key={i}>
+                  <td style={styles.tdNum}>{i + 1}</td>
+                  <td style={styles.td}></td>
+                  <td style={styles.td}></td>
+                  <td style={styles.td}></td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+
+        <div style={styles.reserveBlock}>
+          <div style={styles.reserveTitle}>المراقبون الاحتياط</div>
+          <table style={styles.reserveTable}>
+            <thead>
+              <tr>
+                <th style={{ ...styles.th, width: 56, textAlign: "center" }}>م</th>
+                <th style={{ ...styles.th }}>اسم المراقب الاحتياط</th>
+                <th style={{ ...styles.th, width: 150 }}>التوقيع</th>
+              </tr>
+            </thead>
+            <tbody>
+              {props.reserves.length ? (
+                props.reserves.map((r, idx) => (
+                  <tr key={idx}>
+                    <td style={styles.tdNum}>{idx + 1}</td>
+                    <td style={{ ...styles.td, fontWeight: 900 }}>{getTeacherName(r) || "—"}</td>
+                    <td style={styles.td}></td>
                   </tr>
-                </thead>
-                <tbody>
-                  {dupModal.candidates.map((c) => (
-                    <tr key={c.id}>
-                      <td style={tdStyle}>{c.subject}</td>
-                      <td style={tdStyle}>{c.dateISO}</td>
-                      <td style={tdStyle}>
-                        <button style={btn("#f59e0b", "#07101f")} onClick={() => resolveDuplicate("overwrite", c.id)}>
-                          استبدال هذا السجل
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                ))
+              ) : (
+                Array.from({ length: 2 }).map((_, i) => (
+                  <tr key={i}>
+                    <td style={styles.tdNum}>{i + 1}</td>
+                    <td style={styles.td}></td>
+                    <td style={styles.td}></td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
 
-            <div style={{ display: "flex", gap: 10, marginTop: 12, justifyContent: "flex-end" }}>
-              <button style={btn("#1f2937", "#d4af37")} onClick={() => resolveDuplicate("change")}>
-                تغيير المادة
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {roomManager.open && selectedExam && (
-        <div style={modalOverlay} onClick={closeRoomManager}>
-          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", marginBottom: 12 }}>
-              <div>
-                <div style={{ fontWeight: 1000, fontSize: 18, color: "#d4af37" }}>إدارة قاعات الامتحان</div>
-                <div style={{ opacity: 0.85 }}>
-                  {selectedExam.subject} — {selectedExam.dateISO} — {selectedExam.period}
-                </div>
-              </div>
-              <div
-                style={{
-                  fontWeight: 900,
-                  color: roomManager.selectedRoomIds.length === selectedExam.roomsCount ? "#22c55e" : "#f59e0b",
-                }}
-              >
-                {roomManager.selectedRoomIds.length} / {selectedExam.roomsCount}
-              </div>
-            </div>
-            {!rooms.length ? (
-              <div style={{ ...card, marginBottom: 12 }}>لا توجد قاعات مسجلة في النظام. أدخل القاعات أولًا ثم ارجع لتخصيصها.</div>
-            ) : (
-              <>
-                <div style={{ ...card, marginBottom: 12 }}>
-                  <div style={{ fontWeight: 900, marginBottom: 8 }}>الحالة الحالية</div>
-                  <div>القاعات المطلوبة: {selectedExam.roomsCount}</div>
-                  <div>القاعات المربوطة فعليًا: {selectedExamAssignments.length}</div>
-                  <div>
-                    القاعات المتاحة للاختيار:{" "}
-                    {
-                      selectedExamAvailableRooms.filter(
-                        (room) => !room.blocked && !room.inactive && !room.sameDateConflict
-                      ).length
-                    }
-                  </div>
-                </div>
-                <div style={tableWrap}>
-                  <table style={{ width: "100%", minWidth: 980 }}>
-                    <thead>
-                      <tr>
-                        <th style={thStyle}>اختيار</th>
-                        <th style={thStyle}>القاعة</th>
-                        <th style={thStyle}>الكود</th>
-                        <th style={thStyle}>المبنى</th>
-                        <th style={thStyle}>السعة</th>
-                        <th style={thStyle}>الحالة</th>
-                        <th style={thStyle}>الملاحظة</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {selectedExamAvailableRooms.map((room) => {
-                        const checked = roomManager.selectedRoomIds.includes(room.id);
-                        const disabled =
-                          !checked &&
-                          (
-                            room.blocked ||
-                            room.inactive ||
-                            room.sameDateConflict ||
-                            roomManager.selectedRoomIds.length >= selectedExam.roomsCount
-                          );
-
-                        return (
-                          <tr key={room.id}>
-                            <td style={tdStyle}>
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                disabled={disabled}
-                                onChange={() => toggleRoomSelection(room.id)}
-                              />
-                            </td>
-                            <td style={tdStyle}>{room.roomName}</td>
-                            <td style={tdStyle}>{room.code || "—"}</td>
-                            <td style={tdStyle}>{room.building}</td>
-                            <td style={tdStyle}>{room.capacity}</td>
-                            <td style={tdStyle}>
-                              {room.sameDateConflict
-                                ? "مرتبطة بمادة أخرى"
-                                : room.blocked
-                                ? "محظورة"
-                                : room.inactive
-                                ? "موقوفة"
-                                : "متاحة"}
-                            </td>
-                            <td style={tdStyle}>
-                              {room.sameDateConflict
-                                ? `مرتبطة في نفس التاريخ مع: ${room.sameDateConflictLabel}`
-                                : room.blocked
-                                ? "يوجد حظر في نفس التاريخ/الفترة"
-                                : room.inactive
-                                ? "القاعة غير نشطة"
-                                : "يمكن ربطها"}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </>
-            )}
-            <div style={{ display: "flex", gap: 10, marginTop: 14, justifyContent: "flex-end" }}>
-              <button style={btn("#10b981", "#07101f")} onClick={saveRoomAssignments}>حفظ الربط</button>
-              <button style={btn("#1f2937", "#d4af37")} onClick={closeRoomManager}>إغلاق</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div style={header}>
-        <div style={{ flex: 1, textAlign: "center" }}>
-          <div style={{ fontWeight: 1000, fontSize: 18, lineHeight: 1.2 }}>{APP_NAME}</div>
-          <div style={{ fontWeight: 900, opacity: 0.75, marginTop: 4 }}>جدول الامتحانات</div>
-        </div>
-
-        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          <button style={btn("#1f2937", "#d4af37")} onClick={() => history.back()}>
-            ← رجوع
-          </button>
-          <button style={btn("#f59e0b", "#07101f")} onClick={startAdd}>
-            + إضافة
-          </button>
-          <button style={btn("#ef4444", "#07101f")} onClick={deleteAll}>
-            🗑 حذف الجدول كاملًا
-          </button>
-        </div>
-      </div>
-
-      <div style={card}>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <input
-            style={{ ...inputStyle, maxWidth: 420 }}
-            placeholder="بحث..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-
-          <button style={btn("#10b981", "#07101f")} onClick={exportExcel}>
-            تصدير Excel
-          </button>
-          <button style={btn("#22c55e", "#07101f")} onClick={exportCSV}>
-            تصدير CSV
-          </button>
-
-          <label style={btn("#60a5fa", "#07101f")}>
-            استيراد CSV ⬆️
-            <input
-              type="file"
-              accept=".csv,text/csv"
-              style={{ display: "none" }}
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) importCSV(f);
-                e.currentTarget.value = "";
-              }}
-            />
-          </label>
-
-          <label style={btn("#93c5fd", "#07101f")}>
-            استيراد Excel ⬆️
-            <input
-              type="file"
-              accept=".xlsx,.xls"
-              style={{ display: "none" }}
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) importExcel(f);
-                e.currentTarget.value = "";
-              }}
-            />
-          </label>
-
-          <div style={{ marginInlineStart: "auto", fontWeight: 900, color: "#d4af37" }}>
-            إجمالي: {exams.length} — المعروض: {filtered.length}
-          </div>
-        </div>
-      </div>
-
-      {(adding || editingId != null) && (
-        <div style={card}>
-          <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(4, minmax(220px, 1fr))" }}>
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>المادة</div>
-              <GoldDropdown
-                value={current.subject}
-                options={SUBJECT_OPTIONS}
-                placeholder="— اختر المادة —"
-                onChange={(v) => setCurrent({ subject: v })}
-              />
-            </div>
-
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>التاريخ</div>
-              <input
-                style={inputStyle}
-                type="date"
-                value={current.dateISO}
-                onChange={(e) => setCurrent({ dateISO: e.target.value })}
-              />
-            </div>
-
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>اليوم</div>
-              <input
-                style={inputStyle}
-                placeholder="يُحسب تلقائيًا إن تركت فارغًا"
-                value={current.dayLabel}
-                onChange={(e) => setCurrent({ dayLabel: e.target.value })}
-              />
-            </div>
-
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>الوقت</div>
-              <input style={inputStyle} value={current.time} onChange={(e) => setCurrent({ time: e.target.value })} />
-            </div>
-
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>الفترة</div>
-              <GoldDropdown
-                value={current.period}
-                options={PERIOD_OPTIONS}
-                placeholder="— اختر الفترة —"
-                onChange={(v) => setCurrent({ period: v })}
-              />
-            </div>
-
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>المدة (دقيقة)</div>
-              <input
-                style={inputStyle}
-                type="number"
-                value={String(current.durationMinutes)}
-                onChange={(e) => setCurrent({ durationMinutes: Number(e.target.value) || 0 })}
-              />
-            </div>
-
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>القاعات</div>
-              <input
-                style={inputStyle}
-                type="number"
-                min={1}
-                value={String(current.roomsCount)}
-                onChange={(e) => setCurrent({ roomsCount: Math.max(1, Number(e.target.value) || 1) })}
-              />
-            </div>
-          </div>
-
-          <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-            {editingId != null ? (
-              <>
-                <button style={btn("#10b981", "#07101f")} onClick={saveEdit}>
-                  حفظ التعديل
-                </button>
-                <button style={btn("#1f2937", "#d4af37")} onClick={() => setEditingId(null)}>
-                  إلغاء
-                </button>
-              </>
-            ) : (
-              <>
-                <button style={btn("#10b981", "#07101f")} onClick={saveAdd}>
-                  حفظ
-                </button>
-                <button style={btn("#1f2937", "#d4af37")} onClick={() => setAdding(false)}>
-                  إلغاء
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      <div style={tableFullScreen ? fullScreenOverlay : undefined}>
-        <div
-          style={{
-            ...card,
-            height: tableFullScreen ? "100%" : undefined,
-            marginBottom: tableFullScreen ? 0 : (card.marginBottom as any),
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 10,
-              marginBottom: 10,
-              flexWrap: "wrap",
-            }}
-          >
-            <div style={{ fontWeight: 1000, color: "#d4af37" }}>📅 جدول الامتحانات</div>
-
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button
-                style={btn("#eab308", "#07101f")}
-                onClick={() => setDateSortOrder((prev) => (prev === "asc" ? "desc" : "asc"))}
-              >
-                {dateSortOrder === "asc" ? "ترتيب التاريخ: تصاعدي ↑" : "ترتيب التاريخ: تنازلي ↓"}
-              </button>
-
-              <button
-                style={btn(tableFullScreen ? "#334155" : "#f59e0b", tableFullScreen ? "#e6c76a" : "#0b1220")}
-                onClick={() => setTableFullScreen((v) => !v)}
-              >
-                {tableFullScreen ? "⤢ إغلاق ملء الشاشة" : "⤢ ملء الشاشة"}
-              </button>
-            </div>
-          </div>
-
-          <div
-            className="examTable3D"
-            style={{
-              ...tableWrap,
-              maxHeight: tableFullScreen ? "calc(100vh - 140px)" : (tableWrap.maxHeight as any),
-            }}
-          >
-            <table style={{ width: "100%", minWidth: 1100 }}>
+          <div style={{ marginTop: 8 }}>
+            <div style={styles.reserveTitle}>المعلمون الفارغون للمراجعة</div>
+            <table style={styles.reserveTable}>
               <thead>
                 <tr>
-                  <th style={thStyle}>المادة</th>
-                  <th style={thStyle} className="col-date">
-                    التاريخ
-                  </th>
-                  <th style={thStyle}>اليوم</th>
-                  <th style={thStyle}>الوقت</th>
-                  <th style={thStyle}>الفترة</th>
-                  <th style={thStyle}>القاعات</th>
-                  <th style={thStyle}>إجراءات</th>
+                  <th style={{ ...styles.th, width: 56, textAlign: "center" }}>م</th>
+                  <th style={{ ...styles.th }}>اسم المعلم</th>
+                  <th style={{ ...styles.th, width: 150 }}>التوقيع</th>
+                  <th style={{ ...styles.th, width: 170 }}>ملاحظات</th>
                 </tr>
               </thead>
-
               <tbody>
-                {filtered.length === 0 ? (
-                  <tr>
-                    <td style={tdStyle} colSpan={7}>
-                      لا توجد بيانات.
-                    </td>
-                  </tr>
+                {props.reviewFree.length ? (
+                  props.reviewFree.map((r, idx) => (
+                    <tr key={idx}>
+                      <td style={styles.tdNum}>{idx + 1}</td>
+                      <td style={{ ...styles.td, fontWeight: 900 }}>{getTeacherName(r) || "—"}</td>
+                      <td style={styles.td}></td>
+                      <td style={styles.td}>فارغ للمراجعة</td>
+                    </tr>
+                  ))
                 ) : (
-                  filtered.map((e) => (
-                    <tr key={e.id} className={e.dateISO === todayISO ? "row-today" : undefined}>
-                      <td style={tdStyle}>{e.subject}</td>
-                      <td style={tdStyle} className="col-date">
-                        {e.dateISO}
-                      </td>
-                      <td style={tdStyle}>{e.dayLabel}</td>
-                      <td style={tdStyle}>{e.time}</td>
-                      <td style={tdStyle}>{e.period}</td>
-                      <td style={tdStyle}>
-                        {(() => {
-                          const assigned = assignmentsByExamId.get(e.id) || [];
-                          const blockedAssigned = assigned.filter((row) =>
-                            isRoomBlockedForExam(row.roomId, e, activeBlocks)
-                          ).length;
-                          const complete = assigned.length === e.roomsCount && blockedAssigned === 0;
-                          return (
-                            <button
-                              style={{
-                                ...btn(
-                                  complete ? "#10b981" : assigned.length === 0 ? "#ef4444" : "#f59e0b",
-                                  "#07101f"
-                                ),
-                                padding: "8px 12px",
-                              }}
-                              onClick={() => openRoomManager(e)}
-                              title={blockedAssigned > 0 ? `يوجد ${blockedAssigned} قاعات محظورة ضمن الربط الحالي` : "إدارة ربط القاعات"}
-                            >
-                              {assigned.length} / {e.roomsCount}
-                            </button>
-                          );
-                        })()}
-                      </td>
-                      <td style={tdStyle}>
-                        <div style={{ display: "flex", gap: 8 }}>
-                          <button style={btn("#60a5fa", "#07101f")} onClick={() => startEditById(e.id)}>
-                            ✏️ تعديل
-                          </button>
-                          <button style={btn("#ef4444", "#07101f")} onClick={() => removeExamById(e.id)}>
-                            🗑 حذف
-                          </button>
-                        </div>
-                      </td>
+                  Array.from({ length: 1 }).map((_, i) => (
+                    <tr key={i}>
+                      <td style={styles.tdNum}>{i + 1}</td>
+                      <td style={styles.td}></td>
+                      <td style={styles.td}></td>
+                      <td style={styles.td}>فارغ للمراجعة</td>
                     </tr>
                   ))
                 )}
@@ -1456,7 +1309,741 @@ export default function Exams() {
             </table>
           </div>
         </div>
+
+        <div style={styles.bottomSigRow}>
+          <div style={styles.bottomSigCell}>رئيس الكنترول</div>
+          <div style={styles.bottomSigCell}>مدير المدرسة</div>
+        </div>
+
+        <div style={styles.footerNote}>تم إنشاء التقرير من نظام توزيع مهام المراقبة — {props.createdAtISO}</div>
+      </div>
+    );
+  }
+
+  /** -------------------------------------------
+   * Teacher sheet
+   * ------------------------------------------ */
+  function TeacherSheet(props: { teacherName: string; rows: AnyAssignment[]; pageBreak?: boolean; createdAtISO: string }) {
+    const employeeNo = getTeacherEmployeeNoByName(props.teacherName);
+
+    return (
+      <div className="print-sheet" style={{ ...styles.sheet, ...(props.pageBreak ? styles.pageBreak : {}) }}>
+        <div style={styles.headerGrid}>
+          <div style={styles.headerRight}>
+            <div style={styles.headerRightLine}>{schoolHeader.countryName}</div>
+            <div style={styles.headerRightLine}>{schoolHeader.ministryName}</div>
+            <div style={styles.headerRightLine}>{schoolHeader.directorateName}</div>
+            <div style={styles.headerRightLine}>{schoolHeader.schoolName}</div>
+          </div>
+
+          <div style={styles.headerCenter}>
+            <img src={logoUrl} alt="شعار" style={{ width: 66, height: 66, objectFit: "contain" }} />
+          </div>
+
+          <div style={styles.headerLeft}>
+            <div style={styles.headerLeftTitle}>تقرير معلم (فردي)</div>
+            <div style={styles.headerLeftSub}>{schoolHeader.semesterLabel}</div>
+            <div style={styles.headerLeftSub}>العام الدراسي {schoolHeader.yearLabel}</div>
+          </div>
+        </div>
+
+        <div style={styles.hr} />
+
+        <div style={styles.teacherInfoBox}>
+          <div style={styles.teacherInfoRow}>
+            <span style={styles.teacherInfoLabel}>اسم المعلم:</span>
+            <span style={styles.teacherInfoValue}>{props.teacherName || "—"}</span>
+          </div>
+
+          <div style={styles.teacherInfoRow}>
+            <span style={styles.teacherInfoLabel}>الرقم الوظيفي:</span>
+            <span style={styles.teacherInfoValue}>{employeeNo || "—"}</span>
+          </div>
+        </div>
+
+        <div style={styles.tableTitleWrap}>
+          <div style={styles.tableTitle}>جدول مهام المراقبة والمراجعة والتصحيح</div>
+        </div>
+
+        <table style={styles.table}>
+          <thead>
+            <tr>
+              <th style={{ ...styles.th, width: 56 }}>م</th>
+              <th style={{ ...styles.th, width: 170 }}>اليوم والتاريخ</th>
+              <th style={{ ...styles.th, width: 120 }}>الفترة</th>
+
+              {/* ✅ تركنا طبيعة العمل ثابتة */}
+              <th style={{ ...styles.th, width: 120 }}>طبيعة العمل</th>
+
+              {/* ✅ FIX: عمود المادة بنفس عرض الفترة */}
+              <th style={{ ...styles.th, width: 120 }}>المادة</th>
+
+              <th style={{ ...styles.th, width: 120 }}>رقم اللجنة</th>
+            </tr>
+          </thead>
+          <tbody>
+            {props.rows.length ? (
+              props.rows.map((r, idx) => {
+                const sub = getExamSubject(r) || "";
+                const dISO = normalizeISODate(getExamDateISO(r)) || "";
+                const per = getExamPeriod(r) || "";
+                const meta = lookupExamMeta(sub, dISO, per);
+                const day = meta?.dayLabel || getExamDayLabel(r) || "—";
+
+                return (
+                  <tr key={idx}>
+                    <td style={styles.tdNum}>{idx + 1}</td>
+                    <td style={styles.td}>
+                      <div style={{ fontWeight: 900 }}>{day}</div>
+                      <div style={{ fontWeight: 800, color: "#cbd5e1" }}>{dISO || "—"}</div>
+                    </td>
+                    <td style={styles.td}>{formatPeriod(per)}</td>
+                    <td style={styles.td}>{taskLabel(getTaskType(r))}</td>
+
+                    {/* ✅ المادة بعرض ثابت + لفّ واضح */}
+                    <td style={{ ...styles.td, wordBreak: "break-word", overflowWrap: "anywhere" }}>{sub || "—"}</td>
+
+                    <td style={styles.td}>{getRoomNumber(r) || "—"}</td>
+                  </tr>
+                );
+              })
+            ) : (
+              Array.from({ length: 10 }).map((_, idx) => (
+                <tr key={idx}>
+                  <td style={styles.tdNum}>{idx + 1}</td>
+                  <td style={styles.td}></td>
+                  <td style={styles.td}></td>
+                  <td style={styles.td}></td>
+                  <td style={styles.td}></td>
+                  <td style={styles.td}></td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+
+        <div style={styles.importantSection}>
+          <div style={styles.importantTitle}>تنبيهات هامة:</div>
+          <ul style={styles.importantList}>
+            <li style={styles.importantLi}>يجب الحضور إلى مقر اللجنة قبل بدء الامتحان بـ 20 دقيقة على الأقل.</li>
+            <li style={styles.importantLi}>يرجى الالتزام التام بالتعليمات الواردة في لائحة إدارة الامتحانات.</li>
+            <li style={styles.importantLi}>يمنع استخدام الهاتف النقال داخل قاعات الامتحان.</li>
+            <li style={styles.importantLi}>في حال وجود عذر طارئ يمنعك من الحضور، يرجى إبلاغ إدارة المدرسة فوراً لتوفير البديل.</li>
+          </ul>
+
+          <div style={styles.importantSigRow}>
+            <div style={styles.importantSigCol}>
+              <div style={styles.importantSigLabel}>توقيع المعلم بالعلم</div>
+              <div style={styles.importantSigLine} />
+            </div>
+
+            <div style={styles.importantSigCol}>
+              <div style={styles.importantSigLabel}>مدير المدرسة</div>
+              <div style={styles.importantSigLine} />
+            </div>
+          </div>
+        </div>
+
+        <div style={styles.footerNote}>تم إنشاء التقرير من نظام توزيع مهام المراقبة — {props.createdAtISO}</div>
+      </div>
+    );
+  }
+
+  async function handleWhatsAppClick() {
+    const phone = teacherNameFilter ? getTeacherWhatsAppPhoneByName(teacherNameFilter) : "";
+    openWhatsAppWindow({ text: shareText, phone: phone || undefined });
+
+    // محاولة تنزيل PNG للتقرير
+    window.setTimeout(async () => {
+      try {
+        const el = printAreaRef.current;
+        if (!el) return;
+        const safeName = (teacherNameFilter || title || "report").replace(/[\\/:*?"<>|]/g, "_");
+        await exportElementToPng(el, `report_${safeName}_${dateISO || "all"}.png`);
+      } catch {
+        alert("تعذر إنشاء صورة للتقرير (قد يكون بسبب الشعار الخارجي). يمكنك استخدام حفظ PDF من زر الطباعة.");
+      }
+    }, 250);
+
+    // فتح نافذة الطباعة (تقرير فقط + صفحة واحدة قدر الإمكان)
+    window.setTimeout(() => {
+      openPrintDialog();
+    }, 650);
+  }
+
+  const previewCount = reportType === "daily" ? dailyPages.length : teacherNameFilter ? 1 : allTeachersPages.length;
+  const reportModeLabel = reportType === "daily" ? "الكشف اليومي" : teacherNameFilter ? "تقرير معلم فردي" : "تقرير جميع المعلمين";
+  const activeFilterSummary = [
+    teacherNameFilter ? `المعلم: ${teacherNameFilter}` : "",
+    subjectFilter ? `المادة: ${subjectFilter}` : "",
+    dateISO ? `التاريخ: ${dateISO}` : "",
+  ].filter(Boolean);
+
+  return (
+    <div style={styles.outer}>
+      <style>{printCss}</style>
+
+      <div className="no-print" style={styles.heroShell}>
+        <div style={styles.heroGlowA} />
+        <div style={styles.heroGlowB} />
+        <div style={styles.heroGrid}>
+          <div style={styles.heroContent}>
+            <div style={styles.heroEyebrow}>مركز التقارير والطباعة الذكية</div>
+            <h1 style={styles.heroTitle}>بوابة التقارير الرسمية لتوزيع المهام</h1>
+            <p style={styles.heroText}>
+              واجهة تنفيذية فاخرة لإعداد وطباعة ومشاركة تقارير توزيع المهام من البيانات الحقيقية للنظام، مع تجربة عرض منظمة وانطباع بصري قوي من أول لحظة.
+            </p>
+            <div style={styles.heroBadgeRow}>
+              <span style={{ ...styles.heroBadge, ...styles.heroBadgeGold }}>المصدر: النظام فقط</span>
+              <span style={{ ...styles.heroBadge, ...styles.heroBadgeBlue }}>{reportModeLabel}</span>
+              <span style={{ ...styles.heroBadge, ...styles.heroBadgeGreen }}>جاهز للطباعة والمشاركة</span>
+            </div>
+            {!!activeFilterSummary.length && (
+              <div style={styles.heroFilterRow}>
+                {activeFilterSummary.map((item) => (
+                  <span key={item} style={styles.heroFilterChip}>{item}</span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div style={styles.heroStatsPanel}>
+            <div style={styles.heroStatsTitle}>ملخص سريع</div>
+            <div style={styles.heroStatsGrid}>
+              <div style={styles.heroStatCard}>
+                <div style={styles.heroStatValue}>{previewCount}</div>
+                <div style={styles.heroStatLabel}>عدد الصفحات/التقارير</div>
+              </div>
+              <div style={styles.heroStatCard}>
+                <div style={styles.heroStatValue}>{filteredRows.length}</div>
+                <div style={styles.heroStatLabel}>إجمالي السجلات المعروضة</div>
+              </div>
+              <div style={styles.heroStatCard}>
+                <div style={styles.heroStatValue}>{teacherOptions.length}</div>
+                <div style={styles.heroStatLabel}>المعلمون المتاحون</div>
+              </div>
+              <div style={styles.heroStatCard}>
+                <div style={styles.heroStatValue}>{subjectOptions.length}</div>
+                <div style={styles.heroStatLabel}>المواد المتاحة</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* TOP ACTION BAR */}
+      <div className="no-print" style={styles.topActionBar}>
+        <div style={styles.topActionTitle}>
+          <div style={{ fontSize: 16, fontWeight: 900, color: "#fef3c7" }}>خيارات العرض والطباعة</div>
+        </div>
+
+        <div style={styles.topActionBtns}>
+          <button
+            style={{ ...styles.pillBtn, ...styles.pillAll }}
+            onClick={() => {
+              setReportTeacher();
+              setTeacherSelection("");
+            }}
+            title="طباعة الكل (كل معلم صفحة)"
+          >
+            طباعة الكل
+          </button>
+
+          <button style={{ ...styles.pillBtn, ...styles.pillPrint }} onClick={openPrintDialog} title="طباعة (تقرير فقط)">
+            طباعة
+          </button>
+
+          <button style={{ ...styles.pillBtn, ...styles.pillPdf }} onClick={openPrintDialog} title="PDF (Save as PDF) تقرير فقط">
+            PDF
+          </button>
+
+          <button style={{ ...styles.pillBtn, ...styles.pillWa }} onClick={handleWhatsAppClick} title="واتساب + مرفق التقرير">
+            واتساب
+          </button>
+        </div>
+
+        <div style={styles.topActionRight}>
+          <select className="td-print-select" value={reportType} onChange={(e) => setQueryParam("reportType", e.target.value)} style={styles.topSelect}>
+            <option value="teacher" style={blackGoldDropdownOptionStyle}>تقرير معلم (فردي)</option>
+            <option value="daily" style={blackGoldDropdownOptionStyle}>كشف يومي (امتحانات)</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Filters row */}
+      <div className="no-print" style={styles.filtersRow1to1}>
+        <div style={styles.filtersGrid}>
+          <div style={styles.filterBox}>
+            <div style={styles.filterBoxLabel}>المعلم</div>
+            <select className="td-print-select" value={teacherNameFilter} onChange={(e) => setTeacherSelection(e.target.value)} style={styles.filterSelect}>
+              <option value="" style={blackGoldDropdownOptionStyle}>— اختر المعلم — (فارغ = طباعة الكل)</option>
+              {teacherOptions.map((t) => (
+                <option key={t} value={t} style={blackGoldDropdownOptionStyle}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div style={styles.filterBox}>
+            <div style={styles.filterBoxLabel}>المادة</div>
+            <select className="td-print-select" value={subjectFilter} onChange={(e) => setQueryParam("subject", e.target.value)} style={styles.filterSelect}>
+              <option value="" style={blackGoldDropdownOptionStyle}>— كل المواد —</option>
+              {subjectOptions.map((s) => (
+                <option key={s} value={s} style={blackGoldDropdownOptionStyle}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div style={styles.filterBox}>
+            <div style={styles.filterBoxLabel}>سريع</div>
+            <button style={styles.quickBtn} onClick={setReportDaily}>
+              عرض الكشف اليومي
+            </button>
+          </div>
+
+          <div style={styles.filterBox}>
+            <div style={styles.filterBoxLabel}>تنقل</div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
+              <button style={styles.quickBtnSoft} onClick={() => nav("/task-distribution/results")}>
+                النتائج
+              </button>
+              <button style={styles.quickBtnSoft} onClick={() => nav("/task-distribution")}>
+                الرئيسية
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="no-print" style={styles.previewFrame}>
+        <div style={styles.previewFrameHeader}>
+          <div>
+            <div style={styles.previewFrameTitle}>معاينة التقرير</div>
+            <div style={styles.previewFrameSub}>المعاينة التالية تعكس شكل التقرير الرسمي قبل الطباعة أو التصدير.</div>
+          </div>
+          <div style={styles.previewFramePill}>A4 • Print Ready</div>
+        </div>
+
+        {/* ✅ PRINT AREA: هذا هو التقرير */}
+        <div id="print-root" ref={printAreaRef}>
+        {/* DAILY REPORT */}
+        {reportType === "daily" && (
+          <>
+            {dailyPages.length ? (
+              dailyPages.map((p, i) => (
+                <DailySheet
+                  key={`${p.dISO}-${normalizePeriodKey(p.period)}-${p.subject}`}
+                  subject={p.subject}
+                  dISO={p.dISO}
+                  dayLabel={p.dayLabel}
+                  period={p.period}
+                  time={p.time}
+                  invigilators={p.invigilators}
+                  reserves={p.reserves}
+                  reviewFree={p.reviewFree}
+                  pageBreak={i < dailyPages.length - 1}
+                  createdAtISO={safeRun.createdAtISO || ""}
+                />
+              ))
+            ) : (
+              <div className="print-sheet" style={styles.sheet}>
+                <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 10 }}>لا توجد بيانات للكشف اليومي.</div>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* TEACHER REPORT */}
+        {reportType === "teacher" && (
+          <>
+            {!teacherNameFilter &&
+              (allTeachersPages.length ? (
+                allTeachersPages.map((p, i) => (
+                  <TeacherSheet
+                    key={p.teacherName}
+                    teacherName={p.teacherName}
+                    rows={p.rows}
+                    pageBreak={i < allTeachersPages.length - 1}
+                    createdAtISO={safeRun.createdAtISO || ""}
+                  />
+                ))
+              ) : (
+                <div className="print-sheet" style={styles.sheet}>
+                  <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 10 }}>لا توجد بيانات لتقرير الكادر التعليمي.</div>
+                </div>
+              ))}
+
+            {teacherNameFilter && (
+              <TeacherSheet
+                teacherName={teacherNameFilter}
+                rows={[...filteredRows].sort((a, b) =>
+                  normalizeISODate(getExamDateISO(a)).localeCompare(normalizeISODate(getExamDateISO(b)))
+                )}
+                createdAtISO={safeRun.createdAtISO || ""}
+              />
+            )}
+          </>
+        )}
+        </div>
       </div>
     </div>
   );
 }
+
+/** -------------------------------------------
+ * Styles
+ * ------------------------------------------ */
+const styles: Record<string, React.CSSProperties> = {
+  outer: {
+    minHeight: "100vh",
+    background: "radial-gradient(circle at top, rgba(250,204,21,0.18), transparent 18%), radial-gradient(circle at 85% 18%, rgba(37,99,235,0.16), transparent 22%), linear-gradient(180deg, #060912 0%, #0b1220 100%)",
+    padding: 18,
+    direction: "rtl",
+    fontFamily: 'system-ui, -apple-system, "Segoe UI", Tahoma, Arial, sans-serif',
+  },
+  heroShell: {
+    maxWidth: 1180,
+    margin: "0 auto 14px auto",
+    position: "relative",
+    overflow: "hidden",
+    borderRadius: 28,
+    border: "1px solid rgba(250,204,21,0.18)",
+    background: "linear-gradient(135deg, rgba(64,48,8,0.96), rgba(10,15,30,0.97) 45%, rgba(21,34,58,0.98) 100%)",
+    boxShadow: "0 30px 80px rgba(0,0,0,0.38)",
+    padding: 24,
+  },
+  heroGlowA: {
+    position: "absolute", top: -80, right: -60, width: 240, height: 240, borderRadius: "50%",
+    background: "radial-gradient(circle, rgba(250,204,21,0.20), transparent 70%)", pointerEvents: "none",
+  },
+  heroGlowB: {
+    position: "absolute", bottom: -120, left: -40, width: 260, height: 260, borderRadius: "50%",
+    background: "radial-gradient(circle, rgba(59,130,246,0.16), transparent 72%)", pointerEvents: "none",
+  },
+  heroGrid: { display: "grid", gridTemplateColumns: "minmax(0, 1.45fr) minmax(320px, 0.95fr)", gap: 20, position: "relative", zIndex: 1, alignItems: "stretch" },
+  heroContent: { display: "grid", gap: 14, alignContent: "start" },
+  heroEyebrow: { display: "inline-flex", width: "fit-content", padding: "8px 12px", borderRadius: 999, background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.22)", color: "#bbf7d0", fontWeight: 900, fontSize: 12 },
+  heroTitle: { margin: 0, fontSize: "clamp(30px, 4.4vw, 52px)", lineHeight: 1.05, fontWeight: 950, color: "#fef3c7", letterSpacing: "-0.02em" },
+  heroText: { margin: 0, maxWidth: 760, lineHeight: 1.95, fontSize: 15, color: "rgba(254,243,199,0.82)" },
+  heroBadgeRow: { display: "flex", gap: 10, flexWrap: "wrap" },
+  heroBadge: { display: "inline-flex", alignItems: "center", justifyContent: "center", borderRadius: 999, padding: "8px 12px", fontSize: 12, fontWeight: 900, border: "1px solid transparent" },
+  heroBadgeGold: { background: "rgba(250,204,21,0.12)", color: "#fde68a", borderColor: "rgba(250,204,21,0.25)" },
+  heroBadgeBlue: { background: "rgba(59,130,246,0.12)", color: "#bfdbfe", borderColor: "rgba(59,130,246,0.25)" },
+  heroBadgeGreen: { background: "rgba(16,185,129,0.12)", color: "#a7f3d0", borderColor: "rgba(16,185,129,0.25)" },
+  heroFilterRow: { display: "flex", gap: 8, flexWrap: "wrap" },
+  heroFilterChip: { display: "inline-flex", alignItems: "center", borderRadius: 999, padding: "7px 11px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.10)", color: "#e5e7eb", fontSize: 12, fontWeight: 800 },
+  heroStatsPanel: { border: "1px solid rgba(255,255,255,0.08)", borderRadius: 24, padding: 18, background: "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))", backdropFilter: "blur(10px)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)", display: "grid", gap: 14, alignContent: "start" },
+  heroStatsTitle: { fontSize: 16, fontWeight: 900, color: "#fff1a6" },
+  heroStatsGrid: { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 },
+  heroStatCard: { borderRadius: 18, padding: 16, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 12px 24px rgba(0,0,0,0.14)" },
+  heroStatValue: { fontSize: 28, fontWeight: 950, color: "#fff7cc", lineHeight: 1.1, marginBottom: 6 },
+  heroStatLabel: { fontSize: 12, color: "rgba(254,243,199,0.70)", fontWeight: 800, lineHeight: 1.7 },
+  previewFrame: { maxWidth: 1180, margin: "0 auto", borderRadius: 24, padding: 16, background: "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.025))", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 20px 50px rgba(0,0,0,0.30)" },
+  previewFrameHeader: { display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 14 },
+  previewFrameTitle: { fontSize: 18, fontWeight: 950, color: "#fef3c7" },
+  previewFrameSub: { marginTop: 4, fontSize: 13, color: "rgba(245,231,178,0.72)", fontWeight: 800 },
+  previewFramePill: { display: "inline-flex", alignItems: "center", justifyContent: "center", borderRadius: 999, padding: "8px 12px", background: "rgba(250,204,21,0.12)", border: "1px solid rgba(250,204,21,0.25)", color: "#fde68a", fontWeight: 900, fontSize: 12 },
+
+  topActionBar: {
+    maxWidth: 1180,
+    margin: "0 auto 12px auto",
+    background: "linear-gradient(180deg, rgba(17,24,39,0.96), rgba(10,15,28,0.98))",
+    border: "1px solid rgba(250,204,21,0.16)",
+    borderRadius: 20,
+    boxShadow: "0 12px 30px rgba(0,0,0,.22)",
+    padding: "12px 14px",
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    justifyContent: "space-between",
+    flexWrap: "wrap",
+  },
+  topActionTitle: { display: "flex", alignItems: "center", gap: 10 },
+  topActionBtns: { display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", justifyContent: "center" },
+  topActionRight: { display: "flex", alignItems: "center", gap: 10 },
+  topSelect: {
+    borderRadius: 14,
+    border: "1px solid rgba(255,215,0,0.58)",
+    padding: "8px 10px",
+    fontWeight: 900,
+    background: "#000000",
+    backgroundColor: "#000000",
+    color: "#FFD700",
+    WebkitTextFillColor: "#FFD700",
+    caretColor: "#FFD700",
+    colorScheme: "dark",
+    outline: "none",
+    minWidth: 190,
+    boxShadow: "0 0 0 1px rgba(255,215,0,0.08) inset",
+    appearance: "none",
+    WebkitAppearance: "none",
+    MozAppearance: "none",
+  },
+
+  pillBtn: {
+    padding: "10px 14px",
+    borderRadius: 14,
+    border: "1px solid rgba(15, 23, 42, .10)",
+    fontWeight: 900,
+    cursor: "pointer",
+    boxShadow: "0 8px 18px rgba(0,0,0,.10)",
+  },
+  pillAll: { background: "#f3e8ff", color: "#6b21a8" },
+  pillPrint: { background: "#2563eb", color: "#fff" },
+  pillPdf: { background: "#ef4444", color: "#fff" },
+  pillWa: { background: "#22c55e", color: "#fff" },
+
+  filtersRow1to1: { maxWidth: 1180, margin: "0 auto 14px auto" },
+  filtersGrid: {
+    background: "linear-gradient(180deg, rgba(17,24,39,0.96), rgba(10,15,28,0.98))",
+    border: "1px solid rgba(250,204,21,0.16)",
+    borderRadius: 20,
+    boxShadow: "0 12px 30px rgba(0,0,0,.22)",
+    padding: 12,
+    display: "grid",
+    gridTemplateColumns: "1.2fr 1fr .8fr 1fr",
+    gap: 12,
+    alignItems: "end",
+  },
+  filterBox: { border: "1px solid #e5e7eb", borderRadius: 16, padding: "10px 10px", background: "rgba(255,255,255,0.04)" },
+  filterBoxLabel: { fontSize: 12, fontWeight: 900, color: "#cbd5e1", marginBottom: 6 },
+  filterSelect: {
+    width: "100%",
+    padding: "8px 10px",
+    borderRadius: 14,
+    border: "1px solid rgba(255,215,0,0.58)",
+    background: "#000000",
+    backgroundColor: "#000000",
+    color: "#FFD700",
+    WebkitTextFillColor: "#FFD700",
+    caretColor: "#FFD700",
+    colorScheme: "dark",
+    fontWeight: 900,
+    outline: "none",
+    boxShadow: "0 0 0 1px rgba(255,215,0,0.08) inset",
+    appearance: "none",
+    WebkitAppearance: "none",
+    MozAppearance: "none",
+  },
+  quickBtn: {
+    width: "100%",
+    padding: "8px 10px",
+    borderRadius: 14,
+    border: "1px solid #e5e7eb",
+    background: "#0f172a",
+    color: "#fff",
+    fontWeight: 900,
+    cursor: "pointer",
+  },
+  quickBtnSoft: {
+    padding: "8px 10px",
+    borderRadius: 14,
+    border: "1px solid #e5e7eb",
+    background: "#ffffff",
+    color: "#fef3c7",
+    fontWeight: 900,
+    cursor: "pointer",
+  },
+
+  // شاشة البرنامج (عادي)
+  sheet: {
+    width: "210mm",
+    minHeight: "297mm",
+    background: "white",
+    margin: "0 auto",
+    borderRadius: 16,
+    boxShadow: "0 20px 50px rgba(0,0,0,.35)",
+    padding: "10mm 9mm",
+    color: "#111",
+    position: "relative",
+  },
+  pageBreak: { pageBreakAfter: "always", breakAfter: "page" },
+
+  headerGrid: { display: "grid", gridTemplateColumns: "1fr 92px 1fr", gap: 10, alignItems: "center" },
+  headerLeft: { textAlign: "left", lineHeight: 1.25 },
+  headerLeftTitle: {
+    fontSize: 16,
+    fontWeight: 900,
+    borderBottom: "2px solid #111",
+    display: "inline-block",
+    paddingBottom: 4,
+    marginBottom: 6,
+  },
+  headerLeftSub: { fontSize: 12.5, fontWeight: 800, marginTop: 2 },
+  headerCenter: { display: "flex", justifyContent: "center", alignItems: "center" },
+  headerRight: { textAlign: "right", lineHeight: 1.3 },
+  headerRightLine: { fontSize: 12.5, fontWeight: 800 },
+
+  hr: { height: 2, background: "#111", opacity: 0.85, margin: "10px 0 12px 0" },
+
+  // شريط بيانات الامتحان (نموذج 1)
+  examBarWide: { border: "3px solid #111", borderRadius: 12, padding: "8px 10px", marginBottom: 10 },
+  examBarWideInner: {
+    display: "flex",
+    gap: 10,
+    alignItems: "center",
+    justifyContent: "space-between",
+    flexWrap: "wrap",
+    fontSize: 12.5,
+    fontWeight: 900,
+  },
+  examBarWideItem: { whiteSpace: "nowrap" },
+  examBarWideSep: { color: "#111", opacity: 0.9, fontWeight: 900 },
+
+  examLabel: { fontWeight: 900 },
+  examValue: { fontWeight: 900 },
+
+  chipRow: { display: "flex", justifyContent: "flex-end", marginBottom: 6 },
+  chip: {
+    border: "2px solid #111",
+    borderBottom: "0",
+    padding: "6px 10px",
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
+    background: "#f3f4f6",
+    fontWeight: 900,
+    fontSize: 16,
+  },
+
+  teacherInfoBox: { border: "2px solid #111", borderRadius: 10, padding: "8px 10px", marginBottom: 12 },
+  teacherInfoRow: { display: "flex", gap: 10, justifyContent: "flex-start", alignItems: "center", padding: "4px 0" },
+  teacherInfoLabel: { fontWeight: 900 },
+  teacherInfoValue: { fontWeight: 800 },
+
+  tableTitleWrap: { marginTop: 8, display: "flex", justifyContent: "flex-end" },
+  tableTitle: {
+    border: "2px solid #111",
+    borderBottom: "0",
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
+    padding: "6px 10px",
+    fontWeight: 900,
+    background: "#f3f4f6",
+  },
+
+  table: { width: "100%", borderCollapse: "collapse", tableLayout: "fixed", border: "2px solid #111" },
+  th: { background: "#f3f4f6", border: "1px solid #111", padding: "10px 8px", fontSize: 12.5, fontWeight: 900, textAlign: "right" },
+  td: { border: "1px solid #111", padding: "10px 8px", fontSize: 12.5, verticalAlign: "middle", height: 38 },
+  tdNum: {
+    border: "1px solid #111",
+    padding: "10px 8px",
+    fontSize: 12.5,
+    verticalAlign: "middle",
+    textAlign: "center",
+    height: 38,
+    color: "#475569",
+    fontWeight: 900,
+  },
+
+  reserveBlock: { marginTop: 8 },
+  reserveTitle: { display: "inline-block", border: "1px solid #111", background: "#f3f4f6", padding: "6px 10px", fontWeight: 900, marginBottom: 0 },
+  reserveTable: { width: "100%", borderCollapse: "collapse", tableLayout: "fixed", border: "2px solid #111" },
+
+  bottomSigRow: { marginTop: 14, display: "flex", justifyContent: "space-between", fontWeight: 900, fontSize: 15 },
+  bottomSigCell: { width: "45%", textAlign: "center" },
+
+  importantSection: { marginTop: 12, paddingTop: 6 },
+  importantTitle: { fontSize: 12.5, fontWeight: 900, marginBottom: 8, textAlign: "right" },
+  importantList: { margin: 0, paddingRight: 18, paddingLeft: 0, fontSize: 12.5, lineHeight: 1.85 },
+  importantLi: { marginBottom: 4 },
+  importantSigRow: { marginTop: 24, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 18 },
+  importantSigCol: { width: "45%", textAlign: "center" },
+  importantSigLabel: { fontSize: 13, fontWeight: 900, marginBottom: 10 },
+  importantSigLine: { height: 0, borderBottom: "2px dotted #111", width: "100%" },
+
+  footerNote: { marginTop: 6, fontSize: 9.5, color: "#64748b", fontWeight: 700, textAlign: "center" },
+
+  pageWrapDark: { minHeight: "100vh", background: "#0b1220", padding: 18, direction: "rtl", fontFamily: 'system-ui, -apple-system, "Segoe UI", Tahoma, Arial, sans-serif' },
+  darkCard: { maxWidth: 900, margin: "0 auto", background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.10)", borderRadius: 16, padding: 16 },
+  darkRow: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" },
+  btnSoft: { background: "rgba(255,255,255,.10)", color: "white", border: "1px solid rgba(255,255,255,.18)", padding: "10px 14px", borderRadius: 12, cursor: "pointer", fontWeight: 800 },
+};
+
+/** ✅ إبقاء CSS داخل الصفحة فقط — الطباعة الفعلية تتم عبر نافذة جديدة */
+const blackGoldDropdownOptionStyle = { background: "#000000", color: "#FFD700" } as const;
+
+const printCss = `
+.td-print-select,
+.td-print-select:focus,
+.td-print-select:active,
+.td-print-select:hover {
+  background: #000000 !important;
+  background-color: #000000 !important;
+  color: #FFD700 !important;
+  -webkit-text-fill-color: #FFD700 !important;
+  border: 1px solid rgba(255,215,0,0.58) !important;
+  caret-color: #FFD700 !important;
+  color-scheme: dark;
+  opacity: 1 !important;
+}
+
+.td-print-select option,
+.td-print-select optgroup {
+  background: #000000 !important;
+  background-color: #000000 !important;
+  color: #FFD700 !important;
+  -webkit-text-fill-color: #FFD700 !important;
+}
+
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+
+  body.print-report-mode #print-root,
+  body.print-report-mode #print-root * {
+    visibility: visible !important;
+  }
+
+  body.print-report-mode #print-root {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    background: #fff;
+  }
+
+  body.print-report-mode .print-sheet {
+    width: 180mm !important;
+    min-height: 268mm !important;
+    margin: 0 auto !important;
+    padding: 1.5mm 1.5mm 2mm 1.5mm !important;
+    page-break-after: always;
+    break-after: page;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+  }
+
+  body.print-report-mode .print-sheet:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+
+  body.print-report-mode .print-sheet table {
+    width: 100% !important;
+    max-width: 100% !important;
+    table-layout: fixed !important;
+    border-collapse: collapse !important;
+  }
+
+  body.print-report-mode .print-sheet th,
+  body.print-report-mode .print-sheet td {
+    font-size: 9.5px !important;
+    padding: 3px 3px !important;
+    line-height: 1.05 !important;
+    height: 18px !important;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+
+  body.print-report-mode .no-print {
+    display: none !important;
+  }
+}
+`;
