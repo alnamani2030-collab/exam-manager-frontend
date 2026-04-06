@@ -2,20 +2,21 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 
 const glass: React.CSSProperties = {
-  background: "rgba(15, 23, 42, 0.62)",
+  background: "rgba(15, 23, 42, 0.68)",
   backdropFilter: "blur(18px)",
   WebkitBackdropFilter: "blur(18px)",
   border: "1px solid rgba(255,255,255,0.07)",
-  boxShadow: "0 18px 55px rgba(0,0,0,0.45)",
-  borderRadius: 26,
+  boxShadow: "0 22px 60px rgba(0,0,0,0.48)",
+  borderRadius: 22,
 };
 
 const gold = "#fbbf24";
 const goldSoft = "rgba(251,191,36,0.16)";
-const glowGold = "0 0 24px rgba(251,191,36,0.22), 0 0 60px rgba(251,191,36,0.10)";
+const glowGold = "0 0 28px rgba(251,191,36,0.24), 0 0 64px rgba(251,191,36,0.12)";
 const textMain = "#f8fafc";
 const textMuted = "rgba(248,250,252,0.78)";
 const textSoft = "rgba(248,250,252,0.58)";
+const DESIGNER_IMAGE = "https://i.imgur.com/hxc8yi9.jpeg";
 
 const sectionTitleStyle: React.CSSProperties = {
   fontSize: 24,
@@ -69,10 +70,12 @@ export default function About() {
         color: textMain,
         fontFamily: "'Segoe UI', system-ui, sans-serif",
         background: `
-          radial-gradient(circle at 10% 10%, rgba(251,191,36,0.08), transparent 24%),
-          radial-gradient(circle at 85% 20%, rgba(96,165,250,0.09), transparent 22%),
+          radial-gradient(circle at 10% 10%, rgba(251,191,36,0.10), transparent 24%),
+          radial-gradient(circle at 85% 20%, rgba(96,165,250,0.10), transparent 22%),
           linear-gradient(180deg, #08111f 0%, #060d18 45%, #040910 100%)
         `,
+        position: "relative",
+        overflowX: "hidden",
       }}
     >
       <style>{`
@@ -81,16 +84,39 @@ export default function About() {
           to { opacity: 1; transform: translateY(0); }
         }
         @keyframes aboutPulse {
-          0%, 100% { box-shadow: 0 0 0 rgba(251,191,36,0.0), 0 0 28px rgba(251,191,36,0.16); }
-          50% { box-shadow: 0 0 0 rgba(251,191,36,0.0), 0 0 38px rgba(251,191,36,0.28); }
+          0%, 100% {
+            box-shadow:
+              0 0 0 rgba(251,191,36,0.0),
+              0 0 28px rgba(251,191,36,0.16),
+              0 18px 34px rgba(0,0,0,0.26);
+          }
+          50% {
+            box-shadow:
+              0 0 0 4px rgba(251,191,36,0.10),
+              0 0 40px rgba(251,191,36,0.30),
+              0 22px 40px rgba(0,0,0,0.32);
+          }
+        }
+        @keyframes borderPulse {
+          0%, 100% {
+            box-shadow:
+              0 0 0 0 rgba(251,191,36,0.0),
+              0 22px 60px rgba(0,0,0,0.48);
+          }
+          50% {
+            box-shadow:
+              0 0 0 4px rgba(251,191,36,0.10),
+              0 0 34px rgba(251,191,36,0.16),
+              0 26px 70px rgba(0,0,0,0.54);
+          }
         }
         .about-card-hover {
           transition: transform 0.28s ease, box-shadow 0.28s ease, border-color 0.28s ease;
         }
         .about-card-hover:hover {
-          transform: translateY(-6px);
-          box-shadow: 0 18px 55px rgba(0,0,0,0.42), 0 0 24px rgba(251,191,36,0.14);
-          border-color: rgba(251,191,36,0.28) !important;
+          transform: translateY(-7px) scale(1.01);
+          box-shadow: 0 24px 64px rgba(0,0,0,0.48), 0 0 28px rgba(251,191,36,0.16);
+          border-color: rgba(251,191,36,0.30) !important;
         }
         .about-chip {
           transition: all 0.25s ease;
@@ -102,7 +128,34 @@ export default function About() {
         }
       `}</style>
 
-      <div style={{ width: "92%", maxWidth: 1500, margin: "0 auto", padding: "28px 0 42px" }}>
+      <div
+        style={{
+          position: "absolute",
+          top: -120,
+          left: -80,
+          width: 320,
+          height: 320,
+          borderRadius: "50%",
+          background: "radial-gradient(circle, rgba(251,191,36,0.16), transparent 70%)",
+          filter: "blur(12px)",
+          pointerEvents: "none",
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          right: -90,
+          top: 160,
+          width: 300,
+          height: 300,
+          borderRadius: "50%",
+          background: "radial-gradient(circle, rgba(96,165,250,0.14), transparent 70%)",
+          filter: "blur(12px)",
+          pointerEvents: "none",
+        }}
+      />
+
+      <div style={{ width: "92%", maxWidth: 1500, margin: "0 auto", padding: "28px 0 42px", position: "relative", zIndex: 1 }}>
         <header
           style={{
             ...glass,
@@ -112,19 +165,19 @@ export default function About() {
             alignItems: "center",
             gap: 20,
             flexWrap: "wrap",
-            animation: "aboutFadeUp 0.7s ease",
+            animation: "aboutFadeUp 0.7s ease, borderPulse 3.2s ease-in-out infinite",
             background:
               "linear-gradient(135deg, rgba(15,23,42,0.88), rgba(88,28,135,0.55), rgba(30,41,59,0.92))",
-            border: "1px solid rgba(251,191,36,0.18)",
+            border: "4px solid rgba(251,191,36,0.75)",
             boxShadow: glowGold,
           }}
         >
           <div style={{ display: "flex", gap: 18, alignItems: "center", flexWrap: "wrap" }}>
             <div
               style={{
-                width: 72,
+                width: 86,
                 height: 72,
-                borderRadius: 22,
+                borderRadius: 18,
                 display: "grid",
                 placeItems: "center",
                 fontSize: 30,
@@ -147,9 +200,9 @@ export default function About() {
 
           <div
             style={{
-              padding: "10px 18px",
-              borderRadius: 999,
-              background: "rgba(255,255,255,0.10)",
+              padding: "12px 20px",
+              borderRadius: 14,
+              background: "linear-gradient(135deg, rgba(255,255,255,0.12), rgba(255,255,255,0.06))",
               color: "#fff",
               fontWeight: 800,
               border: "1px solid rgba(251,191,36,0.25)",
@@ -173,35 +226,41 @@ export default function About() {
           <div
             style={{
               ...glass,
-              padding: "30px 24px",
+              padding: "32px 26px",
               textAlign: "center",
-              border: "1px solid rgba(251,191,36,0.16)",
+              border: "4px solid rgba(251,191,36,0.78)",
+              boxShadow: glowGold,
+              animation: "borderPulse 3.4s ease-in-out infinite",
             }}
             className="about-card-hover"
           >
             <div
               style={{
-                width: 164,
-                height: 164,
+                width: 188,
+                height: 220,
                 margin: "0 auto",
-                borderRadius: "50%",
+                borderRadius: 22,
                 padding: 6,
-                background: "linear-gradient(135deg, #fbbf24, #f59e0b)",
+                background: "linear-gradient(135deg, #fff1a8, #fbbf24, #f59e0b)",
                 boxShadow: glowGold,
+                animation: "aboutPulse 3s ease-in-out infinite",
+                transform: "perspective(1200px) rotateX(4deg)",
               }}
             >
               <div
                 style={{
                   width: "100%",
                   height: "100%",
-                  borderRadius: "50%",
+                  borderRadius: 18,
+                  overflow: "hidden",
                   background: "linear-gradient(180deg, #0f172a, #111827)",
-                  display: "grid",
-                  placeItems: "center",
-                  fontSize: 72,
                 }}
               >
-                👨‍💻
+                <img
+                  src={DESIGNER_IMAGE}
+                  alt="مصمم البرنامج"
+                  style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                />
               </div>
             </div>
 
@@ -214,7 +273,7 @@ export default function About() {
                 marginTop: 12,
                 display: "inline-block",
                 padding: "8px 18px",
-                borderRadius: 999,
+                borderRadius: 12,
                 background: "linear-gradient(135deg, #fbbf24, #f59e0b)",
                 color: "#111827",
                 fontWeight: 900,
@@ -235,14 +294,14 @@ export default function About() {
                 style={{
                   width: "100%",
                   padding: "14px 16px",
-                  borderRadius: 16,
+                  borderRadius: 12,
                   border: "none",
                   cursor: "pointer",
                   fontWeight: 900,
                   fontSize: 15,
-                  background: "linear-gradient(135deg,#fbbf24,#f59e0b)",
-                  color: "#111827",
-                  boxShadow: glowGold,
+                  background: "linear-gradient(135deg,#10b981,#059669)",
+                  color: "#ffffff",
+                  boxShadow: "0 16px 28px rgba(16,185,129,0.24)",
                 }}
               >
                 العودة للصفحة السابقة
@@ -253,13 +312,14 @@ export default function About() {
                 style={{
                   width: "100%",
                   padding: "14px 16px",
-                  borderRadius: 16,
+                  borderRadius: 12,
                   border: "1px solid rgba(255,255,255,0.12)",
                   cursor: "pointer",
                   fontWeight: 800,
                   fontSize: 15,
-                  background: "rgba(255,255,255,0.05)",
+                  background: "linear-gradient(135deg, #2563eb, #1d4ed8)",
                   color: "#fff",
+                  boxShadow: "0 16px 28px rgba(37,99,235,0.24)",
                 }}
               >
                 الذهاب إلى لوحة التحكم
@@ -337,9 +397,9 @@ export default function About() {
               >
                 <div
                   style={{
-                    width: 52,
+                    width: 58,
                     height: 52,
-                    borderRadius: 16,
+                    borderRadius: 14,
                     display: "grid",
                     placeItems: "center",
                     background: "linear-gradient(135deg,#fbbf24,#f59e0b)",
@@ -397,16 +457,17 @@ export default function About() {
                     gap: 12,
                     alignItems: "flex-start",
                     padding: "12px 14px",
-                    borderRadius: 16,
+                    borderRadius: 14,
                     background: "rgba(255,255,255,0.035)",
                     border: "1px solid rgba(255,255,255,0.05)",
+                    boxShadow: "0 12px 24px rgba(0,0,0,0.16)",
                   }}
                 >
                   <div
                     style={{
                       width: 28,
                       height: 28,
-                      borderRadius: 999,
+                      borderRadius: 12,
                       display: "grid",
                       placeItems: "center",
                       background: goldSoft,
@@ -445,7 +506,7 @@ export default function About() {
                   className="about-chip"
                   style={{
                     padding: "8px 14px",
-                    borderRadius: 999,
+                    borderRadius: 12,
                     background: "rgba(251,191,36,0.10)",
                     border: "1px solid rgba(251,191,36,0.28)",
                     color: "#fff",
@@ -503,8 +564,8 @@ export default function About() {
 
           <div
             style={{
-              padding: "8px 14px",
-              borderRadius: 999,
+              padding: "10px 16px",
+              borderRadius: 12,
               background: "rgba(251,191,36,0.10)",
               border: "1px solid rgba(251,191,36,0.24)",
               color: gold,
