@@ -74,28 +74,28 @@ export default function Layout() {
 
     const items = [
       { to: tp(""), label: tr("لوحة التحكم", "Dashboard"), icon: "📊" },
-      { to: tp("settings1"), label: tr("بيانات المدرسة", "School Profile"), icon: "🏷️" },
+      { to: tp("settings1"), label: tr("مركز بيانات المدرسة", "School Profile"), icon: "🏷️" },
       
-      { to: tp("teachers"), label: tr("الكادر التعليمي", "Teachers"), icon: "👥" },
+      { to: tp("teachers"), label: tr("مركز غدارة الكادر التعليمي", "Teachers"), icon: "👥" },
 
-      { to: tp("rooms"), label: tr("القاعات", "Rooms"), icon: "🏫" },
-      { to: tp("room-blocks"), label: tr("حظر القاعات", "Room Blocks"), icon: "⛔" },
+      { to: tp("rooms"), label: tr("مركز إدارة القاعات", "Rooms"), icon: "🏫" },
+      { to: tp("room-blocks"), label: tr("مركز حظر القاعات", "Room Blocks"), icon: "⛔" },
 
-      { to: tp("exams"), label: tr("جدول الامتحانات", "Exam Schedule"), icon: "📅" },
+      { to: tp("exams"), label: tr("مركز إدارة  الامتحانات", "Exam Schedule"), icon: "📅" },
       
       
-      { to: tp("unavailability"), label: tr("الغياب", "Unavailability"), icon: "🕒" },
-      { to: tp("task-distribution/run"), label: tr("توزيع المهام", "Task Distribution"), icon: "🔀" },
+      { to: tp("unavailability"), label: tr("غياب الكادر التعليمي", "Unavailability"), icon: "🕒" },
+      { to: tp("task-distribution/run"), label: tr("منصة تشغيل توزيع المهام", "Task Distribution"), icon: "🔀" },
       { to: tp("task-distribution/results"), label: tr("الجدول الشامل", "Master Table"), icon: "🧾" },
       { to: tp("settings"), label: tr("مركز رقابة التوزيع", "Distribution Statistics"), icon: "⚙️" },
-      { to: tp("task-distribution/print"), label: tr("التقارير والكشوفات", "Reports & Sheets"), icon: "📑" },
+      { to: tp("task-distribution/print"), label: tr("بوابة التقارير الرسمية  لتوزيع المهام", "Reports & Sheets"), icon: "📑" },
 
-      { to: tp("archive"), label: tr("الإرشيف الذكي", "Archive"), icon: "📦", adminOnly: true },
+      { to: tp("archive"), label: tr("الإرشيف الذكي لنسخ التوزيع", "Archive"), icon: "📦", adminOnly: true },
 
       
 
       { to: tp("sync"), label: tr("قاعدة البيانات و النسخ الإحتياطي و السحابي", "Database"), icon: "💾", adminOnly: true },
-      { to: tp("analytics1"), label: tr("لوحة التحكم الذكي", "Analytics1 & Charts"), icon: "📈" },
+      { to: tp("analytics1"), label: tr("لوحة التحليل الذكي", "Analytics1 & Charts"), icon: "📈" },
       { to: tp("analytics"), label: tr("مركز التحكم التحليلي لمنظومة الامتحانات", "Analytics & Charts"), icon: "📈" },
       { to: tp("versioning"), label: tr("مركز إدارة النسخ والتوثيق التشغيلي", "Versioning"), icon: "🗂️", adminOnly: true },
       { to: tp("multi-role"), label: tr("منصة إدارة المستخدمين ", "Multi-Role Permissions"), icon: "🔐", adminOnly: true },
