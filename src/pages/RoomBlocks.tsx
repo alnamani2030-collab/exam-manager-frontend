@@ -83,6 +83,90 @@ export default function RoomBlocks() {
   const topRef = useRef<HTMLDivElement>(null);
   const todayISO = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
+  React.useEffect(() => {
+    const styleEl = document.createElement("style");
+    styleEl.textContent = `
+      .roomBlocksLuxury table {
+        width: 100%;
+        min-width: 1180px;
+        border-collapse: separate;
+        border-spacing: 0 12px;
+      }
+      .roomBlocksLuxury thead th {
+        position: sticky;
+        top: 0;
+        z-index: 6;
+        background: linear-gradient(180deg, #9a7200 0%, #6f5100 100%) !important;
+        color: #fff3cf !important;
+        text-align: right;
+        font-weight: 1000;
+        font-size: 16px;
+        padding: 16px 16px;
+        border-top: 1px solid rgba(255,214,102,0.35) !important;
+        border-bottom: 1px solid rgba(255,214,102,0.20) !important;
+        white-space: nowrap;
+        box-shadow: inset 0 2px 0 rgba(255,255,255,0.08), 0 12px 24px rgba(0,0,0,0.30);
+      }
+      .roomBlocksLuxury thead th:first-child {
+        border-right: 1px solid rgba(255,214,102,0.35) !important;
+        border-top-right-radius: 20px;
+        border-bottom-right-radius: 20px;
+      }
+      .roomBlocksLuxury thead th:last-child {
+        border-left: 1px solid rgba(255,214,102,0.35) !important;
+        border-top-left-radius: 20px;
+        border-bottom-left-radius: 20px;
+      }
+      .roomBlocksLuxury tbody td {
+        background: linear-gradient(90deg, rgba(9,12,18,0.98) 0%, rgba(13,16,23,0.96) 60%, rgba(10,13,19,0.98) 100%) !important;
+        color: #f0c94d !important;
+        padding: 14px 16px;
+        border-top: 1px solid rgba(212,175,55,0.12);
+        border-bottom: 1px solid rgba(212,175,55,0.12);
+        white-space: nowrap;
+        vertical-align: middle;
+        box-shadow: 0 10px 24px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.03);
+        transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
+      }
+      .roomBlocksLuxury tbody td:first-child {
+        border-right: 1px solid rgba(212,175,55,0.12);
+        border-top-right-radius: 20px;
+        border-bottom-right-radius: 20px;
+      }
+      .roomBlocksLuxury tbody td:last-child {
+        border-left: 1px solid rgba(212,175,55,0.12);
+        border-top-left-radius: 20px;
+        border-bottom-left-radius: 20px;
+      }
+      .roomBlocksLuxury tbody tr:hover td {
+        transform: translateY(-2px);
+        box-shadow: 0 18px 34px rgba(0,0,0,0.46), inset 0 1px 0 rgba(255,255,255,0.04);
+        filter: brightness(1.04);
+      }
+      .rbBadge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 94px;
+        padding: 9px 14px;
+        border-radius: 999px;
+        font-weight: 1000;
+        font-size: 14px;
+        border: 1px solid rgba(255,255,255,0.08);
+        box-shadow: 0 8px 18px rgba(0,0,0,0.28);
+      }
+      .rbActive { background: linear-gradient(180deg, #102415, #0b1a10); color: #bbf7d0; border-color: rgba(34,197,94,0.24); }
+      .rbExpired { background: linear-gradient(180deg, #334155, #1f2937); color: #e5e7eb; }
+      .rbCancelled { background: linear-gradient(180deg, #ef4444, #dc2626); color: #fff; }
+    `;
+    document.head.appendChild(styleEl);
+    return () => {
+      try {
+        document.head.removeChild(styleEl);
+      } catch {}
+    };
+  }, []);
+
   const roomsMap = useMemo(() => {
     const map = new Map<string, Room>();
     for (const room of rooms) map.set(room.id, room);
@@ -140,14 +224,23 @@ export default function RoomBlocks() {
     [normalizedBlocks]
   );
 
-  const pageStyle: React.CSSProperties = { padding: 16, color: "#e6c76a" };
+  const pageStyle: React.CSSProperties = {
+    padding: 18,
+    color: "#e6c76a",
+    minHeight: "100vh",
+    background:
+      "radial-gradient(circle at top, rgba(212,175,55,0.14), transparent 24%), radial-gradient(circle at 88% 18%, rgba(59,130,246,0.10), transparent 24%), linear-gradient(180deg, #070b12 0%, #0b1220 42%, #060a12 100%)",
+    position: "relative",
+    overflowX: "hidden",
+  };
   const card: React.CSSProperties = {
-    background: "linear-gradient(180deg, #0b1220, #09101d)",
+    background: "linear-gradient(180deg, rgba(11,18,32,0.94), rgba(9,16,29,0.96))",
     border: "1px solid rgba(212,175,55,0.15)",
-    borderRadius: 18,
-    padding: 16,
-    boxShadow: "0 18px 60px rgba(0,0,0,0.35)",
+    borderRadius: 24,
+    padding: 18,
+    boxShadow: "0 22px 60px rgba(0,0,0,0.36)",
     marginBottom: 14,
+    backdropFilter: "blur(6px)",
   };
   const header: React.CSSProperties = {
     display: "flex",
@@ -156,9 +249,9 @@ export default function RoomBlocks() {
     gap: 12,
     background: "linear-gradient(135deg, #f1d27a, #d4af37, #b8962e)",
     color: "#0b1220",
-    borderRadius: 18,
-    padding: 14,
-    boxShadow: "0 14px 60px rgba(212,175,55,0.25)",
+    borderRadius: 22,
+    padding: 16,
+    boxShadow: "0 18px 60px rgba(212,175,55,0.25)",
     marginBottom: 14,
   };
   const btn = (bg: string, fg = "#0b1220"): React.CSSProperties => ({
@@ -183,8 +276,12 @@ export default function RoomBlocks() {
   const tableWrap: React.CSSProperties = {
     maxHeight: "55vh",
     overflow: "auto",
-    borderRadius: 16,
+    borderRadius: 24,
     border: "1px solid rgba(212,175,55,0.12)",
+    background: "linear-gradient(180deg, rgba(8,12,19,0.98) 0%, rgba(7,10,16,0.98) 100%)",
+    boxShadow:
+      "0 28px 70px rgba(0,0,0,0.48), inset 0 1px 0 rgba(255,255,255,0.03)",
+    padding: 10,
   };
   const thStyle: React.CSSProperties = {
     position: "sticky",
@@ -359,6 +456,167 @@ export default function RoomBlocks() {
 
   return (
     <div style={pageStyle} ref={topRef}>
+      <div
+        style={{
+          position: "absolute",
+          top: -180,
+          left: "50%",
+          transform: "translateX(-50%)",
+          width: 620,
+          height: 620,
+          borderRadius: "50%",
+          background: "radial-gradient(circle, rgba(212,175,55,0.18) 0%, rgba(212,175,55,0.05) 38%, transparent 72%)",
+          filter: "blur(12px)",
+          pointerEvents: "none",
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          right: -120,
+          top: 260,
+          width: 340,
+          height: 340,
+          borderRadius: "50%",
+          background: "radial-gradient(circle, rgba(16,185,129,0.10), transparent 72%)",
+          filter: "blur(12px)",
+          pointerEvents: "none",
+        }}
+      />
+
+      <div style={{ maxWidth: 1500, margin: "0 auto", position: "relative", zIndex: 1 }}>
+        <div
+          style={{
+            display: "grid",
+            gap: 18,
+            border: "1px solid rgba(212,175,55,0.18)",
+            borderRadius: 34,
+            padding: 28,
+            background:
+              "linear-gradient(135deg, rgba(30,22,2,0.95), rgba(8,8,8,0.98), rgba(27,21,3,0.94))",
+            boxShadow:
+              "0 32px 100px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.05), inset 0 -1px 0 rgba(255,255,255,0.03)",
+            marginBottom: 18,
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 18, flexWrap: "wrap", alignItems: "start" }}>
+            <div style={{ display: "grid", gap: 14, maxWidth: 900 }}>
+              <div
+                style={{
+                  display: "inline-flex",
+                  width: "fit-content",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "8px 14px",
+                  borderRadius: 999,
+                  background: "rgba(16,185,129,0.12)",
+                  border: "1px solid rgba(16,185,129,0.22)",
+                  color: "#a7f3d0",
+                  fontWeight: 900,
+                  fontSize: 12,
+                }}
+              >
+                إدارة الحظر التشغيلي للقاعات
+              </div>
+
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 900, color: "rgba(255,241,196,0.88)", marginBottom: 10 }}>
+                  {APP_NAME}
+                </div>
+                <h1
+                  style={{
+                    margin: 0,
+                    fontSize: "clamp(34px, 5vw, 64px)",
+                    lineHeight: 1.05,
+                    fontWeight: 950,
+                    color: "#fff1c4",
+                    letterSpacing: "-0.03em",
+                    textShadow: "0 8px 28px rgba(212,175,55,0.16)",
+                  }}
+                >
+                  مركز حظر القاعات
+                </h1>
+              </div>
+
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 16,
+                  lineHeight: 2,
+                  color: "rgba(255,241,196,0.82)",
+                  maxWidth: 940,
+                }}
+              >
+                تمنح هذه الصفحة الإدارة تحكمًا دقيقًا وفوريًا في حالات حظر القاعات، مع واجهة فاخرة لإضافة السجلات
+                وتعديلها ومراجعتها، وجدول تنفيذي أنيق يوضح الفترات والأسباب والحالة التشغيلية بوضوح.
+              </p>
+
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                {[
+                  { label: "إجمالي السجلات", value: stats.total },
+                  { label: "الحظر النشط", value: stats.active },
+                  { label: "المعروض الآن", value: filtered.length },
+                ].map((item) => (
+                  <div
+                    key={item.label}
+                    style={{
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      background: "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
+                      borderRadius: 18,
+                      padding: "12px 14px",
+                      minWidth: 190,
+                      boxShadow: "0 14px 28px rgba(0,0,0,0.22)",
+                    }}
+                  >
+                    <div style={{ fontSize: 12, color: "rgba(255,241,196,0.64)", fontWeight: 800 }}>{item.label}</div>
+                    <div style={{ marginTop: 6, fontSize: 16, color: "#fff8dc", fontWeight: 900 }}>{item.value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div
+              style={{
+                minWidth: 300,
+                maxWidth: 390,
+                width: "100%",
+                border: "1px solid rgba(255,255,255,0.08)",
+                borderRadius: 28,
+                padding: 22,
+                background: "linear-gradient(180deg, rgba(212,175,55,0.08), rgba(255,255,255,0.02))",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
+                display: "grid",
+                gap: 16,
+              }}
+            >
+              <div
+                style={{
+                  display: "inline-flex",
+                  width: "fit-content",
+                  padding: "8px 12px",
+                  borderRadius: 999,
+                  background: stats.active ? "rgba(239,68,68,0.14)" : "rgba(16,185,129,0.14)",
+                  border: stats.active ? "1px solid rgba(239,68,68,0.24)" : "1px solid rgba(16,185,129,0.24)",
+                  color: stats.active ? "#fecaca" : "#a7f3d0",
+                  fontWeight: 900,
+                  fontSize: 12,
+                }}
+              >
+                {stats.active ? "توجد قيود نشطة تحت المتابعة" : "لا توجد قيود نشطة الآن"}
+              </div>
+
+              <div style={{ fontSize: 28, lineHeight: 1.5, fontWeight: 950, color: "#fff1c4" }}>
+                واجهة أكثر فخامة ووضوحًا لإدارة الحظر والتداخلات التشغيلية للقاعات.
+              </div>
+
+              <div style={{ fontSize: 14, lineHeight: 1.95, color: "rgba(255,241,196,0.78)" }}>
+                يمكنك من هنا إضافة الحظر أو تعديله أو إلغاؤه ومراجعة السجلات في تدفق بصري أنيق يعطي انطباعًا
+                قويًا من أول لحظة.
+              </div>
+            </div>
+          </div>
+        </div>
+
       <div style={header}>
         <div>
           <div style={{ fontWeight: 1000, fontSize: 18 }}>{APP_NAME}</div>
@@ -578,7 +836,29 @@ export default function RoomBlocks() {
       )}
 
       <div style={card}>
-        <div style={tableWrap}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            marginBottom: 14,
+            padding: "6px 8px 2px 8px",
+            flexWrap: "wrap",
+          }}
+        >
+          <div>
+            <div style={{ fontWeight: 1000, fontSize: 22, color: "#f2cf63" }}>جدول حظر القاعات التنفيذي</div>
+            <div style={{ fontWeight: 800, color: "rgba(230,199,106,0.74)", marginTop: 4 }}>
+              عرض احترافي يوضح السبب والفترة والحالة والإجراءات في بنية مؤسسية واضحة
+            </div>
+          </div>
+          <div style={{ fontWeight: 900, color: "#d4af37", opacity: 0.9 }}>
+            عدد الصفوف المعروضة: {filtered.length}
+          </div>
+        </div>
+
+        <div style={tableWrap} className="roomBlocksLuxury">
           <table style={{ width: "100%", minWidth: 1120 }}>
             <thead>
               <tr>
@@ -611,11 +891,22 @@ export default function RoomBlocks() {
                     <td style={tdStyle}>{block.endDate}</td>
                     <td style={tdStyle}>{block.session}</td>
                     <td style={tdStyle}>
-                      {block.status === "active"
-                        ? "نشط"
-                        : block.status === "expired"
-                        ? "منتهي"
-                        : "ملغي"}
+                      <span
+                        className={
+                          "rbBadge " +
+                          (block.status === "active"
+                            ? "rbActive"
+                            : block.status === "expired"
+                            ? "rbExpired"
+                            : "rbCancelled")
+                        }
+                      >
+                        {block.status === "active"
+                          ? "نشط"
+                          : block.status === "expired"
+                          ? "منتهي"
+                          : "ملغي"}
+                      </span>
                     </td>
                     <td style={tdStyle}>{block.createdBy || "—"}</td>
                     <td style={tdStyle}>
@@ -647,6 +938,7 @@ export default function RoomBlocks() {
             </tbody>
           </table>
         </div>
+      </div>
       </div>
     </div>
   );
