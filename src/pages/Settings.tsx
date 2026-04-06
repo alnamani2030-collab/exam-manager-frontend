@@ -637,6 +637,9 @@ export default function Settings() {
   };
 
   const lastWhatsAppAlertRef = useRef<string>("");
+  const topScrollRef = useRef<HTMLDivElement>(null);
+  const topScrollInnerRef = useRef<HTMLDivElement>(null);
+  const contentScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const adminPhone = normalizePhone(localStorage.getItem(WHATSAPP_ADMIN_KEY) || "");
@@ -677,6 +680,56 @@ export default function Settings() {
     window.open(url, "_blank", "noopener,noreferrer");
   }, [reportRows, totalDeficit, run]);
 
+  useEffect(() => {
+    const top = topScrollRef.current;
+    const topInner = topScrollInnerRef.current;
+    const content = contentScrollRef.current;
+    if (!top || !topInner || !content) return;
+
+    let syncingTop = false;
+    let syncingContent = false;
+
+    const syncWidths = () => {
+      topInner.style.width = `${content.scrollWidth}px`;
+    };
+
+    const onTopScroll = () => {
+      if (syncingContent) {
+        syncingContent = false;
+        return;
+      }
+      syncingTop = true;
+      content.scrollLeft = top.scrollLeft;
+    };
+
+    const onContentScroll = () => {
+      if (syncingTop) {
+        syncingTop = false;
+        return;
+      }
+      syncingContent = true;
+      top.scrollLeft = content.scrollLeft;
+    };
+
+    syncWidths();
+    top.addEventListener("scroll", onTopScroll, { passive: true });
+    content.addEventListener("scroll", onContentScroll, { passive: true });
+    window.addEventListener("resize", syncWidths);
+
+    const resizeObserver =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(() => syncWidths())
+        : null;
+    resizeObserver?.observe(content);
+
+    return () => {
+      top.removeEventListener("scroll", onTopScroll);
+      content.removeEventListener("scroll", onContentScroll);
+      window.removeEventListener("resize", syncWidths);
+      resizeObserver?.disconnect();
+    };
+  }, [tick, isStatsFull, reportRows.length, totals.committees, totals.requiredTotal]);
+
   return (
     <div
       style={{
@@ -686,7 +739,8 @@ export default function Settings() {
         background:
           "radial-gradient(circle at top, rgba(212,175,55,0.16), transparent 24%), radial-gradient(circle at 85% 18%, rgba(59,130,246,0.10), transparent 22%), linear-gradient(180deg, #070707 0%, #0b0b0b 100%)",
         position: "relative",
-        overflow: "hidden",
+        overflowX: "hidden",
+        overflowY: "visible",
       }}
     >
       <div
@@ -717,7 +771,40 @@ export default function Settings() {
         }}
       />
 
-      <div style={{ maxWidth: 1460, margin: "0 auto", display: "grid", gap: 20, position: "relative", zIndex: 1 }}>
+      <div style={{ maxWidth: 1460, margin: "0 auto", position: "relative", zIndex: 1 }}>
+        <div
+          ref={topScrollRef}
+          style={{
+            overflowX: "auto",
+            overflowY: "hidden",
+            height: 14,
+            marginBottom: 10,
+            borderRadius: 999,
+            background: "rgba(255,255,255,0.04)",
+            border: "1px solid rgba(255,255,255,0.06)",
+          }}
+          title="شريط تمرير أفقي"
+        >
+          <div ref={topScrollInnerRef} style={{ height: 1 }} />
+        </div>
+
+        <div
+          ref={contentScrollRef}
+          style={{
+            overflowX: "auto",
+            overflowY: "visible",
+            paddingBottom: 4,
+          }}
+        >
+          <div
+            style={{
+              minWidth: 1200,
+              width: "max-content",
+              maxWidth: "none",
+              display: "grid",
+              gap: 20,
+            }}
+          >
         <div
           style={{
             display: "grid",
@@ -1077,7 +1164,9 @@ export default function Settings() {
             onCloseFullscreen={() => setIsStatsFull(false)}
           />
         </div>
+        </div>
       </div>
+    </div>
     </div>
   );
 }
