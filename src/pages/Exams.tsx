@@ -410,6 +410,40 @@ function fixExam(e: Exam): Exam {
   };
 }
 
+
+function normalizeExamPeriod(period: string) {
+  const raw = String(period || "").trim();
+  if (!raw) return "";
+
+  const n = raw.toLowerCase().replace(/\s+/g, " ").trim();
+
+  if (
+    n.includes("الفترة الأولى") ||
+    n === "الأولى" ||
+    n === "اولى" ||
+    n === "p1" ||
+    n === "am" ||
+    n === "a"
+  ) {
+    return "p1";
+  }
+
+  if (
+    n.includes("الفترة الثانية") ||
+    n === "الثانية" ||
+    n === "ثانية" ||
+    n === "p2" ||
+    n === "pm" ||
+    n === "bm" ||
+    n === "b" ||
+    n === "p"
+  ) {
+    return "p2";
+  }
+
+  return raw;
+}
+
 type DupModalState = {
   open: boolean;
   subject: string;
@@ -635,18 +669,25 @@ export default function Exams() {
   const selectedExamAvailableRooms = useMemo(() => {
     if (!selectedExam) return [] as AvailableRoomRow[];
 
+    const selectedPeriodKey = normalizeExamPeriod(selectedExam.period);
+
     return [...rooms]
       .sort(sortRoomsByCode)
       .map((room) => {
-        const sameDateAssignments = examRoomAssignments.filter((assignment) => {
+        const sameDateSamePeriodAssignments = examRoomAssignments.filter((assignment) => {
           if (assignment.roomId !== room.id) return false;
           if (assignment.examId === selectedExam.id) return false;
+
           const otherExam = examsById.get(assignment.examId);
           const otherDateISO = String(otherExam?.dateISO || assignment.dateISO || "").trim();
-          return otherDateISO === selectedExam.dateISO;
+          const otherPeriodKey = normalizeExamPeriod(
+            String(otherExam?.period || assignment.period || "").trim()
+          );
+
+          return otherDateISO === selectedExam.dateISO && otherPeriodKey === selectedPeriodKey;
         });
 
-        const sameDateConflictLabel = sameDateAssignments
+        const sameDateConflictLabel = sameDateSamePeriodAssignments
           .map((assignment) => {
             const otherExam = examsById.get(assignment.examId);
             const subject = String(otherExam?.subject || "مادة أخرى").trim();
@@ -659,7 +700,7 @@ export default function Exams() {
           ...room,
           blocked: isRoomBlockedForExam(room.id, selectedExam, activeBlocks),
           inactive: (room.status || "active") !== "active",
-          sameDateConflict: sameDateAssignments.length > 0,
+          sameDateConflict: sameDateSamePeriodAssignments.length > 0,
           sameDateConflictLabel,
         };
       });
@@ -872,7 +913,6 @@ export default function Exams() {
 
   async function saveRoomAssignments() {
     if (!selectedExam) return;
-
     const required = Math.max(1, Number(selectedExam.roomsCount) || 1);
     const selectedSet = new Set(roomManager.selectedRoomIds);
 
@@ -894,13 +934,12 @@ export default function Exams() {
     );
     if (sameDateConflictRoom) {
       alert(
-        `لا يمكن اختيار القاعة ${sameDateConflictRoom.roomName} في نفس التاريخ لأنها مرتبطة بالفعل بـ ${sameDateConflictRoom.sameDateConflictLabel}.`
+        `لا يمكن اختيار القاعة ${sameDateConflictRoom.roomName} لأنها مرتبطة بالفعل في نفس التاريخ ونفس الفترة بـ ${sameDateConflictRoom.sameDateConflictLabel}.`
       );
       return;
     }
 
     const remaining = examRoomAssignments.filter((row) => row.examId !== selectedExam.id);
-
     const next = [
       ...remaining,
       ...selectedExamAvailableRooms
@@ -917,10 +956,8 @@ export default function Exams() {
         })),
     ];
 
-    // ✅ تحديث فوري للواجهة
     setExamRoomAssignments(next as any);
 
-    // ✅ حفظ فوري مؤكد حتى لا تضيع البيانات عند الخروج من الصفحة
     try {
       await persistExamRoomAssignmentsNow(next as any);
     } catch (error) {
@@ -932,7 +969,15 @@ export default function Exams() {
     closeRoomManager();
   }
 
-  const pageStyle: React.CSSProperties = { padding: 16, color: "#e6c76a" };
+  const pageStyle: React.CSSProperties = {
+    padding: 18,
+    color: "#e6c76a",
+    minHeight: "100vh",
+    background:
+      "radial-gradient(circle at top, rgba(212,175,55,0.14), transparent 24%), radial-gradient(circle at 88% 18%, rgba(59,130,246,0.10), transparent 24%), linear-gradient(180deg, #070b12 0%, #0b1220 42%, #060a12 100%)",
+    position: "relative",
+    overflowX: "hidden",
+  };
 
   const header: React.CSSProperties = {
     display: "flex",
@@ -941,19 +986,20 @@ export default function Exams() {
     gap: 12,
     background: "linear-gradient(135deg, #f1d27a, #d4af37, #b8962e)",
     color: "#0b1220",
-    borderRadius: 18,
-    padding: 14,
-    boxShadow: "0 14px 60px rgba(212,175,55,0.25)",
+    borderRadius: 22,
+    padding: 16,
+    boxShadow: "0 18px 60px rgba(212,175,55,0.25)",
     marginBottom: 14,
   };
 
   const card: React.CSSProperties = {
-    background: "linear-gradient(180deg, #0b1220, #09101d)",
+    background: "linear-gradient(180deg, rgba(11,18,32,0.94), rgba(9,16,29,0.96))",
     border: "1px solid rgba(212,175,55,0.15)",
-    borderRadius: 18,
-    padding: 16,
-    boxShadow: "0 18px 60px rgba(0,0,0,0.35)",
+    borderRadius: 24,
+    padding: 18,
+    boxShadow: "0 22px 60px rgba(0,0,0,0.36)",
     marginBottom: 14,
+    backdropFilter: "blur(6px)",
   };
 
   const fullScreenOverlay: React.CSSProperties = {
@@ -988,8 +1034,11 @@ export default function Exams() {
   const tableWrap: React.CSSProperties = {
     maxHeight: "55vh",
     overflow: "auto",
-    borderRadius: 16,
+    borderRadius: 20,
     border: "1px solid rgba(212,175,55,0.12)",
+    background: "linear-gradient(180deg, rgba(8,12,19,0.98) 0%, rgba(7,10,16,0.98) 100%)",
+    boxShadow:
+      "0 28px 70px rgba(0,0,0,0.48), inset 0 1px 0 rgba(255,255,255,0.03)",
   };
 
   const thStyle: React.CSSProperties = {
@@ -1041,6 +1090,167 @@ export default function Exams() {
 
   return (
     <div style={pageStyle} ref={topRef}>
+      <div
+        style={{
+          position: "absolute",
+          top: -180,
+          left: "50%",
+          transform: "translateX(-50%)",
+          width: 620,
+          height: 620,
+          borderRadius: "50%",
+          background: "radial-gradient(circle, rgba(212,175,55,0.18) 0%, rgba(212,175,55,0.05) 38%, transparent 72%)",
+          filter: "blur(12px)",
+          pointerEvents: "none",
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          right: -120,
+          top: 260,
+          width: 340,
+          height: 340,
+          borderRadius: "50%",
+          background: "radial-gradient(circle, rgba(16,185,129,0.10), transparent 72%)",
+          filter: "blur(12px)",
+          pointerEvents: "none",
+        }}
+      />
+
+      <div style={{ maxWidth: 1500, margin: "0 auto", position: "relative", zIndex: 1 }}>
+        <div
+          style={{
+            display: "grid",
+            gap: 18,
+            border: "1px solid rgba(212,175,55,0.18)",
+            borderRadius: 34,
+            padding: 28,
+            background:
+              "linear-gradient(135deg, rgba(30,22,2,0.95), rgba(8,8,8,0.98), rgba(27,21,3,0.94))",
+            boxShadow:
+              "0 32px 100px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.05), inset 0 -1px 0 rgba(255,255,255,0.03)",
+            marginBottom: 18,
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 18, flexWrap: "wrap", alignItems: "start" }}>
+            <div style={{ display: "grid", gap: 14, maxWidth: 900 }}>
+              <div
+                style={{
+                  display: "inline-flex",
+                  width: "fit-content",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "8px 14px",
+                  borderRadius: 999,
+                  background: "rgba(16,185,129,0.12)",
+                  border: "1px solid rgba(16,185,129,0.22)",
+                  color: "#a7f3d0",
+                  fontWeight: 900,
+                  fontSize: 12,
+                }}
+              >
+                إدارة مركزية لجدول الامتحانات والقاعات
+              </div>
+
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 900, color: "rgba(255,241,196,0.88)", marginBottom: 10 }}>
+                  {APP_NAME}
+                </div>
+                <h1
+                  style={{
+                    margin: 0,
+                    fontSize: "clamp(34px, 5vw, 64px)",
+                    lineHeight: 1.05,
+                    fontWeight: 950,
+                    color: "#fff1c4",
+                    letterSpacing: "-0.03em",
+                    textShadow: "0 8px 28px rgba(212,175,55,0.16)",
+                  }}
+                >
+                  مركز إدارة الامتحانات
+                </h1>
+              </div>
+
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 16,
+                  lineHeight: 2,
+                  color: "rgba(255,241,196,0.82)",
+                  maxWidth: 940,
+                }}
+              >
+                تمنح هذه الصفحة الإدارة واجهة تنفيذية فاخرة لإدارة المواد والمواعيد والفترات وعدد القاعات، مع
+                ربط ذكي بالقاعات المتاحة والمحظورة، وتجربة إدخال واستعراض منظمة تعكس جودة منتج مؤسسي متقن.
+              </p>
+
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                {[
+                  { label: "إجمالي الامتحانات", value: exams.length },
+                  { label: "المعروض الآن", value: filtered.length },
+                  { label: "قاعات الربط", value: examRoomAssignments.length },
+                ].map((item) => (
+                  <div
+                    key={item.label}
+                    style={{
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      background: "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
+                      borderRadius: 18,
+                      padding: "12px 14px",
+                      minWidth: 190,
+                      boxShadow: "0 14px 28px rgba(0,0,0,0.22)",
+                    }}
+                  >
+                    <div style={{ fontSize: 12, color: "rgba(255,241,196,0.64)", fontWeight: 800 }}>{item.label}</div>
+                    <div style={{ marginTop: 6, fontSize: 16, color: "#fff8dc", fontWeight: 900 }}>{item.value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div
+              style={{
+                minWidth: 300,
+                maxWidth: 390,
+                width: "100%",
+                border: "1px solid rgba(255,255,255,0.08)",
+                borderRadius: 28,
+                padding: 22,
+                background: "linear-gradient(180deg, rgba(212,175,55,0.08), rgba(255,255,255,0.02))",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
+                display: "grid",
+                gap: 16,
+              }}
+            >
+              <div
+                style={{
+                  display: "inline-flex",
+                  width: "fit-content",
+                  padding: "8px 12px",
+                  borderRadius: 999,
+                  background: filtered.length ? "rgba(16,185,129,0.14)" : "rgba(245,158,11,0.14)",
+                  border: filtered.length ? "1px solid rgba(16,185,129,0.24)" : "1px solid rgba(245,158,11,0.24)",
+                  color: filtered.length ? "#a7f3d0" : "#fde68a",
+                  fontWeight: 900,
+                  fontSize: 12,
+                }}
+              >
+                {filtered.length ? "الجدول جاهز للإدارة والاستعراض" : "لا توجد بيانات معروضة حاليًا"}
+              </div>
+
+              <div style={{ fontSize: 28, lineHeight: 1.5, fontWeight: 950, color: "#fff1c4" }}>
+                واجهة أكثر فخامة ووضوحًا لإدارة جدول الامتحانات وربط القاعات.
+              </div>
+
+              <div style={{ fontSize: 14, lineHeight: 1.95, color: "rgba(255,241,196,0.78)" }}>
+                تم تطوير الصفحة لتمنح المستخدم انطباعًا قويًا من أول لحظة، مع تسلسل بصري أنيق بين الإدخال
+                والاستيراد والبحث والجدول وعمليات الربط.
+              </div>
+            </div>
+          </div>
+        </div>
+
       {dupModal.open && (
         <div style={modalOverlay} onClick={() => resolveDuplicate("change")}>
           <div style={modalCard} onClick={(e) => e.stopPropagation()}>
@@ -1370,6 +1580,27 @@ export default function Exams() {
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
+              gap: 12,
+              marginBottom: 14,
+              padding: "6px 8px 2px 8px",
+              flexWrap: "wrap",
+            }}
+          >
+            <div>
+              <div style={{ fontWeight: 1000, fontSize: 22, color: "#f2cf63" }}>الجدول التنفيذي للامتحانات</div>
+              <div style={{ fontWeight: 800, color: "rgba(230,199,106,0.74)", marginTop: 4 }}>
+                عرض احترافي يوضح المادة والتاريخ والفترة وربط القاعات والإجراءات بصورة مؤسسية أنيقة
+              </div>
+            </div>
+            <div style={{ fontWeight: 900, color: "#d4af37", opacity: 0.9 }}>
+              عدد الصفوف المعروضة: {filtered.length}
+            </div>
+          </div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
               gap: 10,
               marginBottom: 10,
               flexWrap: "wrap",
@@ -1474,6 +1705,7 @@ export default function Exams() {
             </table>
           </div>
         </div>
+      </div>
       </div>
     </div>
   );
