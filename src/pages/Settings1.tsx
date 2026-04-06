@@ -74,134 +74,322 @@ export default function Settings1() {
 
   return (
     <div style={pageWrap}>
-      <div style={gridWrap}>
-        <div style={formCard}>
-          <h1 style={formTitle}>بيانات المدرسة</h1>
+      <div
+        style={{
+          position: "absolute",
+          top: -180,
+          left: "50%",
+          transform: "translateX(-50%)",
+          width: 620,
+          height: 620,
+          borderRadius: "50%",
+          background: "radial-gradient(circle, rgba(212,175,55,0.18) 0%, rgba(212,175,55,0.05) 38%, transparent 72%)",
+          filter: "blur(12px)",
+          pointerEvents: "none",
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          right: -120,
+          top: 260,
+          width: 340,
+          height: 340,
+          borderRadius: "50%",
+          background: "radial-gradient(circle, rgba(16,185,129,0.10), transparent 72%)",
+          filter: "blur(12px)",
+          pointerEvents: "none",
+        }}
+      />
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <div>
-              <label style={labelStyle}>اسم المدرسة</label>
-              <input
-                type="text"
-                value={data.name}
-                onChange={(e) => handleChange("name", e.target.value)}
-                style={inputStyle}
-              />
-            </div>
-
-            <div>
-              <label style={labelStyle}>المحافظة / المديرية</label>
-              <select
-                value={data.governorate}
-                onChange={(e) => handleChange("governorate", e.target.value)}
-                style={selectStyle}
+      <div style={{ width: "100%", maxWidth: 1380, position: "relative", zIndex: 1, display: "grid", gap: 22 }}>
+        <div
+          style={{
+            display: "grid",
+            gap: 18,
+            border: "1px solid rgba(212,175,55,0.18)",
+            borderRadius: 34,
+            padding: 28,
+            background:
+              "linear-gradient(135deg, rgba(30,22,2,0.95), rgba(8,8,8,0.98), rgba(27,21,3,0.94))",
+            boxShadow:
+              "0 32px 100px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.05), inset 0 -1px 0 rgba(255,255,255,0.03)",
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 18, flexWrap: "wrap", alignItems: "start" }}>
+            <div style={{ display: "grid", gap: 14, maxWidth: 900 }}>
+              <div
+                style={{
+                  display: "inline-flex",
+                  width: "fit-content",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "8px 14px",
+                  borderRadius: 999,
+                  background: "rgba(16,185,129,0.12)",
+                  border: "1px solid rgba(16,185,129,0.22)",
+                  color: "#a7f3d0",
+                  fontWeight: 900,
+                  fontSize: 12,
+                }}
               >
-                <option value="" style={optionStyle}>
-                  اختر...
-                </option>
-                {GOVERNORATES.map((gov) => (
-                  <option key={gov} value={gov} style={optionStyle}>
-                    {gov}
-                  </option>
-                ))}
-              </select>
-            </div>
+                إعداد الهوية الرسمية للمدرسة والتقارير
+              </div>
 
-            <div>
-              <label style={labelStyle}>الفصل الدراسي</label>
-              <select
-                value={data.semester}
-                onChange={(e) => handleChange("semester", e.target.value)}
-                style={selectStyle}
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 900, color: "rgba(255,241,196,0.88)", marginBottom: 10 }}>
+                  نظام إدارة الامتحانات الذكي
+                </div>
+                <h1
+                  style={{
+                    margin: 0,
+                    fontSize: "clamp(34px, 5vw, 60px)",
+                    lineHeight: 1.05,
+                    fontWeight: 950,
+                    color: "#fff1c4",
+                    letterSpacing: "-0.03em",
+                    textShadow: "0 8px 28px rgba(212,175,55,0.16)",
+                  }}
+                >
+                  مركز بيانات المدرسة
+                </h1>
+              </div>
+
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 16,
+                  lineHeight: 2,
+                  color: "rgba(255,241,196,0.82)",
+                  maxWidth: 940,
+                }}
               >
-                <option value="" style={optionStyle}>
-                  اختر...
-                </option>
-                {SEMESTERS.map((sem) => (
-                  <option key={sem} value={sem} style={optionStyle}>
-                    {sem}
-                  </option>
+                تمنح هذه الصفحة الإدارة واجهة أنيقة لإدخال بيانات المدرسة الرسمية وربطها فورًا بمعاينة واقعية
+                للتقارير والمطبوعات، بما يعزز الهوية البصرية ويجعل إعداد البيانات أكثر وضوحًا وفخامة.
+              </p>
+
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                {[
+                  { label: "اسم المدرسة", value: previewSchool },
+                  { label: "الفصل", value: previewSemester },
+                  { label: "العام الدراسي", value: academicYear },
+                ].map((item) => (
+                  <div
+                    key={item.label}
+                    style={{
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      background: "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
+                      borderRadius: 18,
+                      padding: "12px 14px",
+                      minWidth: 190,
+                      boxShadow: "0 14px 28px rgba(0,0,0,0.22)",
+                    }}
+                  >
+                    <div style={{ fontSize: 12, color: "rgba(255,241,196,0.64)", fontWeight: 800 }}>{item.label}</div>
+                    <div style={{ marginTop: 6, fontSize: 16, color: "#fff8dc", fontWeight: 900 }}>{item.value}</div>
+                  </div>
                 ))}
-              </select>
+              </div>
             </div>
 
-            <div>
-              <label style={labelStyle}>رقم الهاتف</label>
-              <input
-                type="tel"
-                value={data.phone}
-                onChange={(e) => handleChange("phone", e.target.value)}
-                style={inputStyle}
-              />
-            </div>
+            <div
+              style={{
+                minWidth: 300,
+                maxWidth: 390,
+                width: "100%",
+                border: "1px solid rgba(255,255,255,0.08)",
+                borderRadius: 28,
+                padding: 22,
+                background: "linear-gradient(180deg, rgba(212,175,55,0.08), rgba(255,255,255,0.02))",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
+                display: "grid",
+                gap: 16,
+              }}
+            >
+              <div
+                style={{
+                  display: "inline-flex",
+                  width: "fit-content",
+                  padding: "8px 12px",
+                  borderRadius: 999,
+                  background: "rgba(16,185,129,0.14)",
+                  border: "1px solid rgba(16,185,129,0.24)",
+                  color: "#a7f3d0",
+                  fontWeight: 900,
+                  fontSize: 12,
+                }}
+              >
+                معاينة مباشرة وهوية مؤسسية
+              </div>
 
-            <div>
-              <label style={labelStyle}>العنوان</label>
-              <textarea
-                value={data.address}
-                onChange={(e) => handleChange("address", e.target.value)}
-                style={{ ...inputStyle, height: 110, resize: "vertical" }}
-              />
-            </div>
+              <div style={{ fontSize: 28, lineHeight: 1.5, fontWeight: 950, color: "#fff1c4" }}>
+                اكتب البيانات مرة واحدة وشاهد شكلها النهائي داخل نموذج التقرير فورًا.
+              </div>
 
-            <button onClick={saveData} style={saveBtn}>
-              حفظ التغييرات
-            </button>
+              <div style={{ fontSize: 14, lineHeight: 1.95, color: "rgba(255,241,196,0.78)" }}>
+                تم تطوير الصفحة لتجمع بين سهولة إدخال البيانات وجمال المعاينة الرسمية، بحيث يشعر المستخدم بأنه
+                يتعامل مع منتج شركة عالمية من أول لحظة.
+              </div>
+            </div>
           </div>
         </div>
 
-        <div style={{ display: "flex", justifyContent: "center" }}>
-          <div style={previewOuter}>
-            <div style={previewPaper}>
-              <div style={mastheadGrid}>
-                <div style={{ textAlign: "right" }}>
-                  <div style={rightGold}>سلطنة عمان</div>
-                  <div style={{ ...rightGold, marginTop: 6 }}>وزارة التعليم</div>
-                  <div style={rightGoldSoft}>{previewGov}</div>
-                  <div style={{ ...rightGoldSoft, marginTop: 6 }}>{previewSchool}</div>
+        <div style={gridWrap}>
+          <div style={formCard}>
+            <h1 style={formTitle}>بيانات المدرسة</h1>
+            <div
+              style={{
+                marginTop: -4,
+                marginBottom: 18,
+                color: "rgba(255,255,255,0.78)",
+                fontSize: 14,
+                lineHeight: 1.9,
+              }}
+            >
+              أدخل البيانات الرسمية التي ستظهر في الترويسة والمطبوعات والتقارير داخل النظام.
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <div>
+                <label style={labelStyle}>اسم المدرسة</label>
+                <input
+                  type="text"
+                  value={data.name}
+                  onChange={(e) => handleChange("name", e.target.value)}
+                  style={inputStyle}
+                />
+              </div>
+
+              <div>
+                <label style={labelStyle}>المحافظة / المديرية</label>
+                <select
+                  value={data.governorate}
+                  onChange={(e) => handleChange("governorate", e.target.value)}
+                  style={selectStyle}
+                >
+                  <option value="" style={optionStyle}>
+                    اختر...
+                  </option>
+                  {GOVERNORATES.map((gov) => (
+                    <option key={gov} value={gov} style={optionStyle}>
+                      {gov}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={labelStyle}>الفصل الدراسي</label>
+                <select
+                  value={data.semester}
+                  onChange={(e) => handleChange("semester", e.target.value)}
+                  style={selectStyle}
+                >
+                  <option value="" style={optionStyle}>
+                    اختر...
+                  </option>
+                  {SEMESTERS.map((sem) => (
+                    <option key={sem} value={sem} style={optionStyle}>
+                      {sem}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={labelStyle}>رقم الهاتف</label>
+                <input
+                  type="tel"
+                  value={data.phone}
+                  onChange={(e) => handleChange("phone", e.target.value)}
+                  style={inputStyle}
+                />
+              </div>
+
+              <div>
+                <label style={labelStyle}>العنوان</label>
+                <textarea
+                  value={data.address}
+                  onChange={(e) => handleChange("address", e.target.value)}
+                  style={{ ...inputStyle, height: 110, resize: "vertical" }}
+                />
+              </div>
+
+              <button onClick={saveData} style={saveBtn}>
+                حفظ التغييرات
+              </button>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "center", alignItems: "start" }}>
+            <div style={previewOuter}>
+              <div style={previewPaper}>
+                <div
+                  style={{
+                    display: "inline-flex",
+                    marginBottom: 16,
+                    padding: "8px 14px",
+                    borderRadius: 999,
+                    background: "rgba(212,175,55,0.10)",
+                    border: "1px solid rgba(212,175,55,0.22)",
+                    color: "#fff1c4",
+                    fontWeight: 900,
+                    fontSize: 12,
+                  }}
+                >
+                  المعاينة الرسمية المباشرة
                 </div>
 
-                <div style={{ textAlign: "center" }}>
-                  <img src={logo} alt="شعار" style={logoStyle} />
+                <div style={mastheadGrid}>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={rightGold}>سلطنة عمان</div>
+                    <div style={{ ...rightGold, marginTop: 6 }}>وزارة التعليم</div>
+                    <div style={rightGoldSoft}>{previewGov}</div>
+                    <div style={{ ...rightGoldSoft, marginTop: 6 }}>{previewSchool}</div>
+                  </div>
+
+                  <div style={{ textAlign: "center" }}>
+                    <img src={logo} alt="شعار" style={logoStyle} />
+                  </div>
+
+                  <div style={{ textAlign: "left" }}>
+                    <div style={leftGold}>{previewSemester}</div>
+                    <div style={{ ...leftGold, marginTop: 8 }}>
+                      العام الدراسي {academicYear}
+                    </div>
+                  </div>
                 </div>
 
-                <div style={{ textAlign: "left" }}>
-                  <div style={leftGold}>{previewSemester}</div>
-                  <div style={{ ...leftGold, marginTop: 8 }}>
-                    العام الدراسي {academicYear}
+                <div style={mastheadRuleThin} />
+
+                <div style={belowRuleRow}>
+                  <div style={belowTitle}>كشف توزيع مهام المراقبة</div>
+
+                  <div style={belowMeta}>
+                    <span style={belowMetaItem}>{previewSemester}</span>
+                    <span style={belowMetaSep}>|</span>
+                    <span style={belowMetaItem}>العام الدراسي {academicYear}</span>
                   </div>
                 </div>
               </div>
-
-              <div style={mastheadRuleThin} />
-
-              <div style={belowRuleRow}>
-                <div style={belowTitle}>كشف توزيع مهام المراقبة</div>
-
-                <div style={belowMeta}>
-                  <span style={belowMetaItem}>{previewSemester}</span>
-                  <span style={belowMetaSep}>|</span>
-                  <span style={belowMetaItem}>العام الدراسي {academicYear}</span>
-                </div>
-              </div>
             </div>
           </div>
         </div>
+
+        <style>
+          {`
+            select option {
+              background: #000000;
+              color: #ffffff;
+            }
+
+            input::placeholder,
+            textarea::placeholder {
+              color: rgba(255,255,255,0.65);
+            }
+          `}
+        </style>
       </div>
-
-      <style>
-        {`
-          select option {
-            background: #000000;
-            color: #ffffff;
-          }
-
-          input::placeholder,
-          textarea::placeholder {
-            color: rgba(255,255,255,0.65);
-          }
-        `}
-      </style>
     </div>
   );
 }
