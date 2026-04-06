@@ -70,6 +70,32 @@ function getTenantIdFromAuth(auth: any) {
   );
 }
 
+const luxuryShell: React.CSSProperties = {
+  position: "relative",
+  overflowX: "hidden",
+  background:
+    "radial-gradient(circle at 10% 8%, rgba(212,175,55,0.10), transparent 22%), radial-gradient(circle at 88% 16%, rgba(59,130,246,0.08), transparent 22%)",
+};
+
+const luxuryHeroCard: React.CSSProperties = {
+  border: "1px solid rgba(212,175,55,0.16)",
+  borderRadius: 30,
+  padding: 28,
+  background:
+    "linear-gradient(135deg, rgba(30,22,2,0.95), rgba(8,8,8,0.98), rgba(27,21,3,0.94))",
+  boxShadow:
+    "0 32px 100px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.05), inset 0 -1px 0 rgba(255,255,255,0.03)",
+};
+
+const luxuryMiniStat: React.CSSProperties = {
+  border: "1px solid rgba(255,255,255,0.08)",
+  background: "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
+  borderRadius: 18,
+  padding: "12px 14px",
+  minWidth: 190,
+  boxShadow: "0 14px 28px rgba(0,0,0,0.22)",
+};
+
 export default function TaskDistributionResults() {
   const nav = useNavigate();
   const auth = useAuth();
@@ -165,6 +191,10 @@ export default function TaskDistributionResults() {
   }), []);
 
   const hasRun = Boolean(run && Array.isArray(run.assignments) && run.assignments.length);
+  const assignmentsCount = dataModel.assignments.length;
+  const warningsCount = dataModel.warnings.length;
+  const teachersCount = dataModel.allTeachers.length;
+  const columnsCount = dataModel.allSubCols.length;
 
   const content = !hasRun ? (
     <ResultsEmptyRunState
@@ -177,8 +207,126 @@ export default function TaskDistributionResults() {
   ) : (
     <>
       {!interaction.tableFullScreen ? (
-        <div style={cardDark}>
-          <ResultsPageHeader
+        <>
+          <div style={luxuryHeroCard}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "minmax(0, 1.35fr) minmax(300px, 380px)",
+                gap: 18,
+                alignItems: "start",
+              }}
+            >
+              <div style={{ display: "grid", gap: 14, minWidth: 0 }}>
+                <div
+                  style={{
+                    display: "inline-flex",
+                    width: "fit-content",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "8px 14px",
+                    borderRadius: 999,
+                    background: "rgba(16,185,129,0.12)",
+                    border: "1px solid rgba(16,185,129,0.22)",
+                    color: "#a7f3d0",
+                    fontWeight: 900,
+                    fontSize: 12,
+                  }}
+                >
+                  نتائج توزيع جاهزة للمراجعة والتنفيذ
+                </div>
+
+                <div>
+                  <div style={{ fontSize: 18, fontWeight: 900, color: "rgba(255,241,196,0.88)", marginBottom: 10 }}>
+                    نظام إدارة الامتحانات المطور
+                  </div>
+                  <h1
+                    style={{
+                      margin: 0,
+                      fontSize: "clamp(34px, 5vw, 62px)",
+                      lineHeight: 1.05,
+                      fontWeight: 950,
+                      color: "#fff1c4",
+                      letterSpacing: "-0.03em",
+                      textShadow: "0 8px 28px rgba(212,175,55,0.16)",
+                    }}
+                  >
+                    مركز نتائج توزيع المهام
+                  </h1>
+                </div>
+
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: 16,
+                    lineHeight: 2,
+                    color: "rgba(255,241,196,0.82)",
+                    maxWidth: 940,
+                  }}
+                >
+                  تمنح هذه الصفحة الإدارة عرضًا تنفيذيًا فاخرًا لنتائج التوزيع، مع جدول احترافي قابل للمراجعة،
+                  التعديل، الطباعة، التصدير، والأرشفة، دون المساس بمنطق التوزيع أو البيانات التشغيلية الفعلية.
+                </p>
+
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  {[
+                    { label: "عدد المعلمين", value: teachersCount },
+                    { label: "عدد الأعمدة", value: columnsCount },
+                    { label: "عدد الإسنادات", value: assignmentsCount },
+                    { label: "عدد التنبيهات", value: warningsCount },
+                  ].map((item) => (
+                    <div key={item.label} style={luxuryMiniStat}>
+                      <div style={{ fontSize: 12, color: "rgba(255,241,196,0.64)", fontWeight: 800 }}>{item.label}</div>
+                      <div style={{ marginTop: 6, fontSize: 16, color: "#fff8dc", fontWeight: 900 }}>{item.value}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  minWidth: 0,
+                  maxWidth: 380,
+                  width: "100%",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  borderRadius: 28,
+                  padding: 22,
+                  background: "linear-gradient(180deg, rgba(212,175,55,0.08), rgba(255,255,255,0.02))",
+                  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
+                  display: "grid",
+                  gap: 16,
+                }}
+              >
+                <div
+                  style={{
+                    display: "inline-flex",
+                    width: "fit-content",
+                    padding: "8px 12px",
+                    borderRadius: 999,
+                    background: warningsCount ? "rgba(239,68,68,0.14)" : "rgba(16,185,129,0.14)",
+                    border: warningsCount ? "1px solid rgba(239,68,68,0.24)" : "1px solid rgba(16,185,129,0.24)",
+                    color: warningsCount ? "#fecaca" : "#a7f3d0",
+                    fontWeight: 900,
+                    fontSize: 12,
+                  }}
+                >
+                  {warningsCount ? "توجد ملاحظات تحتاج مراجعة" : "النتائج جاهزة للمراجعة"}
+                </div>
+
+                <div style={{ fontSize: 28, lineHeight: 1.5, fontWeight: 950, color: "#fff1c4" }}>
+                  واجهة أكثر فخامة ووضوحًا لعرض نتائج التوزيع واتخاذ القرار بسرعة وثقة.
+                </div>
+
+                <div style={{ fontSize: 14, lineHeight: 1.95, color: "rgba(255,241,196,0.78)" }}>
+                  يمكنك من هنا مراجعة النتيجة، التراجع، التبديل، النقل، الطباعة، التصدير، والأرشفة، مع الحفاظ الكامل
+                  على البنية التشغيلية الأصلية للصفحة.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ ...cardDark, marginTop: 16 }}>
+            <ResultsPageHeader
             runId={String(run?.runId || "—")}
             createdAtISO={run?.createdAtISO}
             importError={interaction.importError || undefined}
@@ -196,6 +344,7 @@ export default function TaskDistributionResults() {
             onToggleTeacherSidebar={() => setShowTeacherSidebar((v) => !v)}
           />
         </div>
+        </>
       ) : null}
 
       <div ref={printAreaRef}>
@@ -290,8 +439,35 @@ export default function TaskDistributionResults() {
   }
 
   return (
-    <div style={pageDark}>
-      <div style={{ ...container, width: "min(1880px, 100%)", maxWidth: "100%" }}>
+    <div style={{ ...pageDark, ...luxuryShell }}>
+      <div
+        style={{
+          position: "absolute",
+          top: -180,
+          left: "50%",
+          transform: "translateX(-50%)",
+          width: 620,
+          height: 620,
+          borderRadius: "50%",
+          background: "radial-gradient(circle, rgba(212,175,55,0.18) 0%, rgba(212,175,55,0.05) 38%, transparent 72%)",
+          filter: "blur(12px)",
+          pointerEvents: "none",
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          right: -120,
+          top: 260,
+          width: 340,
+          height: 340,
+          borderRadius: "50%",
+          background: "radial-gradient(circle, rgba(16,185,129,0.10), transparent 72%)",
+          filter: "blur(12px)",
+          pointerEvents: "none",
+        }}
+      />
+      <div style={{ ...container, width: "min(1880px, 100%)", maxWidth: "100%", position: "relative", zIndex: 1 }}>
         {sharedImportControls}
         {content}
       </div>
