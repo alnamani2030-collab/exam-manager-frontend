@@ -111,6 +111,29 @@ export default function Unavailability() {
         to { opacity: 1; transform: translateY(0); }
       }
 
+      @keyframes softPulse {
+        0% { transform: scale(1); opacity: .55; }
+        50% { transform: scale(1.04); opacity: .8; }
+        100% { transform: scale(1); opacity: .55; }
+      }
+
+      @keyframes cardFloat {
+        0% { transform: translateY(0px); }
+        50% { transform: translateY(-3px); }
+        100% { transform: translateY(0px); }
+      }
+
+      @keyframes glowBorder {
+        0% { box-shadow: 0 0 0 rgba(212,175,55,0.0); }
+        50% { box-shadow: 0 0 0 1px rgba(212,175,55,0.12), 0 0 24px rgba(212,175,55,0.10); }
+        100% { box-shadow: 0 0 0 rgba(212,175,55,0.0); }
+      }
+
+      @keyframes shimmerText {
+        0% { background-position: 0% 50%; }
+        100% { background-position: 100% 50%; }
+      }
+
       @keyframes shineSweep {
         0% { transform: translateX(-120%) skewX(-12deg); }
         100% { transform: translateX(220%) skewX(-12deg); }
@@ -120,7 +143,7 @@ export default function Unavailability() {
         position: relative;
         overflow: hidden;
         border-radius: 28px;
-        animation: goldGlow 4s infinite;
+        animation: goldGlow 4s infinite, glowBorder 5s ease-in-out infinite;
       }
 
       .shineOverlay {
@@ -141,46 +164,54 @@ export default function Unavailability() {
       }
 
       .goldBtn {
-        background: linear-gradient(135deg,#6b5200,#b8860b);
+        background: linear-gradient(135deg,#7a5a00,#c69410);
         border: 1px solid rgba(255,255,255,0.14);
         color: #fff;
         cursor: pointer;
-        border-radius: 10px;
-        padding: 10px 14px;
-        transition: transform .12s ease, filter .12s ease;
+        border-radius: 14px;
+        padding: 11px 16px;
+        transition: transform .12s ease, filter .12s ease, box-shadow .12s ease;
+        box-shadow: 0 12px 24px rgba(212,175,55,0.16);
       }
-      .goldBtn:hover { transform: translateY(-1px); filter: brightness(1.05); }
+      .goldBtn:hover { transform: translateY(-1px); filter: brightness(1.05); box-shadow: 0 16px 28px rgba(212,175,55,0.22); }
       .goldBtn:active { transform: translateY(0px); filter: brightness(0.98); }
 
       .chip {
         border: 1px solid rgba(255,255,255,0.14);
         border-radius: 999px;
-        padding: 8px 14px;
+        padding: 9px 16px;
         display: inline-flex;
         gap: 8px;
         align-items: center;
-        background: rgba(0,0,0,0.18);
-        transition: transform .16s ease, border-color .16s ease, background .16s ease;
+        background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015));
+        transition: transform .16s ease, border-color .16s ease, background .16s ease, box-shadow .16s ease;
       }
       .chip:hover {
         transform: translateY(-1px);
         border-color: rgba(212,175,55,0.34);
         background: rgba(212,175,55,0.08);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.16);
       }
 
       .statCard {
         border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 22px;
-        padding: 15px 16px;
+        border-radius: 24px;
+        padding: 16px 18px;
         background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
-        box-shadow: 0 16px 32px rgba(0,0,0,0.20), inset 0 1px 0 rgba(255,255,255,0.04);
+        box-shadow: 0 18px 34px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.04);
+        transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+      }
+      .statCard:hover {
+        transform: translateY(-4px) scale(1.01);
+        box-shadow: 0 24px 42px rgba(0,0,0,0.26), 0 0 24px rgba(212,175,55,0.10);
+        border-color: rgba(212,175,55,0.24);
       }
 
       .card {
         border: 1px solid rgba(255,255,255,0.12);
         border-radius: 22px;
         background: linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.02));
-        transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+        transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease, background .18s ease;
       }
       .card:hover {
         transform: translateY(-3px);
@@ -190,9 +221,39 @@ export default function Unavailability() {
 
       .softBorder {
         border: 1px solid rgba(255,255,255,0.12);
-        border-radius: 22px;
+        border-radius: 26px;
         background: linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.015));
-        box-shadow: 0 18px 40px rgba(0,0,0,0.18);
+        box-shadow: 0 22px 46px rgba(0,0,0,0.20);
+        transition: box-shadow .18s ease, border-color .18s ease;
+      }
+      .softBorder:hover {
+        border-color: rgba(212,175,55,0.18);
+        box-shadow: 0 26px 50px rgba(0,0,0,0.24), 0 0 26px rgba(212,175,55,0.06);
+      }
+
+      .heroTitleFx {
+        background: linear-gradient(90deg, #fff1c4, #fde68a, #fff7d6, #fff1c4);
+        background-size: 200% auto;
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent !important;
+        animation: shimmerText 7s linear infinite;
+      }
+
+      .pulsePill {
+        animation: cardFloat 4s ease-in-out infinite;
+      }
+
+      .interactiveHint {
+        border: 1px solid rgba(255,255,255,0.08);
+        background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+        border-radius: 18px;
+        padding: 12px 14px;
+        transition: transform .18s ease, border-color .18s ease;
+      }
+      .interactiveHint:hover {
+        transform: translateY(-2px);
+        border-color: rgba(212,175,55,0.24);
       }
 
       .luxFade {
@@ -204,6 +265,9 @@ export default function Unavailability() {
           grid-template-columns: 1fr !important;
         }
         .unavail-row-grid {
+          grid-template-columns: 1fr !important;
+        }
+        .heroActionGrid {
           grid-template-columns: 1fr !important;
         }
       }
@@ -292,8 +356,39 @@ export default function Unavailability() {
         minHeight: "100vh",
         color: "#d4af37",
         fontFamily: "Cairo, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+        position: "relative",
+        overflowX: "hidden",
       }}
     >
+      <div
+        style={{
+          position: "absolute",
+          top: -120,
+          left: -40,
+          width: 280,
+          height: 280,
+          borderRadius: "50%",
+          background: "radial-gradient(circle, rgba(212,175,55,0.18), transparent 72%)",
+          filter: "blur(10px)",
+          pointerEvents: "none",
+          animation: "softPulse 5s ease-in-out infinite",
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          top: 120,
+          right: -60,
+          width: 220,
+          height: 220,
+          borderRadius: "50%",
+          background: "radial-gradient(circle, rgba(59,130,246,0.12), transparent 72%)",
+          filter: "blur(12px)",
+          pointerEvents: "none",
+          animation: "softPulse 6.5s ease-in-out infinite",
+        }}
+      />
+
       <div
         className="header3d luxFade"
         style={{
@@ -306,14 +401,14 @@ export default function Unavailability() {
         }}
       >
         <div className="shineOverlay" />
-        <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-          <div style={{ display: "grid", gap: 4 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", position: "relative", zIndex: 1 }}>
+          <div style={{ display: "grid", gap: 8, maxWidth: 980, width: "100%" }}>
             <div
+              className="heroTitleFx"
               style={{
-                fontSize: 22,
-                fontWeight: 900,
+                fontSize: 26,
+                fontWeight: 950,
                 letterSpacing: 0.2,
-                color: "#fff1c4",
                 textShadow: "0 2px 0 rgba(0,0,0,0.35)",
               }}
             >
@@ -322,7 +417,7 @@ export default function Unavailability() {
 
             <div
               style={{
-                fontSize: 16,
+                fontSize: 17,
                 fontWeight: 900,
                 color: "#ffffff",
                 textShadow: "0 2px 0 rgba(0,0,0,0.35)",
@@ -333,8 +428,9 @@ export default function Unavailability() {
 
             <div
               style={{
-                marginTop: 2,
+                marginTop: 4,
                 fontSize: 13,
+                lineHeight: 1.9,
                 color: "#ffecbd",
                 opacity: 0.96,
                 textShadow: "0 2px 0 rgba(0,0,0,0.35)",
@@ -351,8 +447,8 @@ export default function Unavailability() {
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
-          gap: 12,
-          marginBottom: 16,
+          gap: 14,
+          marginBottom: 18,
         }}
       >
         {[
@@ -362,9 +458,32 @@ export default function Unavailability() {
         ].map((item) => (
           <div key={item.label} className="statCard">
             <div style={{ fontSize: 12, color: "rgba(255,241,196,0.64)", fontWeight: 800 }}>{item.label}</div>
-            <div style={{ marginTop: 8, fontSize: 18, color: "#fff8dc", fontWeight: 900 }}>{item.value}</div>
+            <div style={{ marginTop: 8, fontSize: 20, color: "#fff8dc", fontWeight: 900 }}>{item.value}</div>
           </div>
         ))}
+      </div>
+
+      <div
+        className="heroActionGrid luxFade"
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+          gap: 12,
+          marginBottom: 18,
+        }}
+      >
+        <div className="interactiveHint">
+          <div style={{ fontSize: 12, color: "rgba(255,241,196,0.62)", fontWeight: 800 }}>تفاعل سريع</div>
+          <div style={{ marginTop: 6, color: "#fff1c4", fontWeight: 900 }}>اختر المعلم ثم التاريخ ثم حدّد نوع المنع</div>
+        </div>
+        <div className="interactiveHint">
+          <div style={{ fontSize: 12, color: "rgba(255,241,196,0.62)", fontWeight: 800 }}>إدارة مرنة</div>
+          <div style={{ marginTop: 6, color: "#fff1c4", fontWeight: 900 }}>إضافة وحذف فوري مع مزامنة مباشرة للبيانات</div>
+        </div>
+        <div className="interactiveHint">
+          <div style={{ fontSize: 12, color: "rgba(255,241,196,0.62)", fontWeight: 800 }}>قراءة أوضح</div>
+          <div style={{ marginTop: 6, color: "#fff1c4", fontWeight: 900 }}>واجهة أكثر تفاعلاً وانسيابية عند التمرير والمراجعة</div>
+        </div>
       </div>
 
       <div
@@ -372,10 +491,10 @@ export default function Unavailability() {
         style={{
           display: "grid",
           gridTemplateColumns: "1fr 1fr 1fr",
-          gap: 14,
-          padding: 18,
-          marginBottom: 20,
-          boxShadow: "0 18px 38px rgba(0,0,0,0.20)",
+          gap: 16,
+          padding: 22,
+          marginBottom: 22,
+          boxShadow: "0 22px 42px rgba(0,0,0,0.22)",
         }}
       >
         <div
@@ -398,7 +517,7 @@ export default function Unavailability() {
           <div
             style={{
               display: "inline-flex",
-              padding: "8px 12px",
+              padding: "9px 14px",
               borderRadius: 999,
               background: "rgba(255,255,255,0.04)",
               border: "1px solid rgba(255,255,255,0.08)",
@@ -510,8 +629,8 @@ export default function Unavailability() {
                   gridTemplateColumns: "1.2fr 0.7fr 0.7fr 1fr auto",
                   gap: 14,
                   alignItems: "center",
-                  padding: 16,
-                  boxShadow: "0 14px 28px rgba(0,0,0,0.18)",
+                  padding: 18,
+                  boxShadow: "0 16px 30px rgba(0,0,0,0.20)",
                 }}
               >
                 <div style={{ fontWeight: 900 }}>{r.teacherName}</div>
