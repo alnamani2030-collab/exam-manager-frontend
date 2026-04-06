@@ -76,7 +76,7 @@ export default function Layout() {
       { to: tp(""), label: tr("لوحة التحكم", "Dashboard"), icon: "📊" },
       { to: tp("settings1"), label: tr("مركز بيانات المدرسة", "School Profile"), icon: "🏷️" },
       
-      { to: tp("teachers"), label: tr("مركز غدارة الكادر التعليمي", "Teachers"), icon: "👥" },
+      { to: tp("teachers"), label: tr("مركز إدارة الكادر التعليمي", "Teachers"), icon: "👥" },
 
       { to: tp("rooms"), label: tr("مركز إدارة القاعات", "Rooms"), icon: "🏫" },
       { to: tp("room-blocks"), label: tr("مركز حظر القاعات", "Room Blocks"), icon: "⛔" },
