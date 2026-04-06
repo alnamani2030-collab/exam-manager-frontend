@@ -108,31 +108,78 @@ export default function SuggestionsPage() {
     >
       <div
         style={{
-          maxWidth: 850,
+          maxWidth: 980,
           margin: "0 auto",
           background: "#111827",
-          border: "5px solid #d4af37",
-          borderRadius: 22,
+          border: "1px solid rgba(212,175,55,0.28)",
+          borderRadius: 28,
           overflow: "hidden",
-          boxShadow: "0 0 22px rgba(212,175,55,0.28), 0 18px 40px rgba(0,0,0,0.35)",
+          boxShadow: "0 0 22px rgba(212,175,55,0.18), 0 22px 50px rgba(0,0,0,0.38)",
         }}
       >
         <div
           style={{
-            padding: "22px 24px",
-            background: "linear-gradient(90deg, #0f172a, #1e293b)",
-            borderBottom: "2px solid rgba(212,175,55,0.35)",
+            padding: "28px 28px",
+            background:
+              "linear-gradient(135deg, rgba(20,25,40,0.98), rgba(46,33,10,0.94), rgba(15,23,42,0.98))",
+            borderBottom: "1px solid rgba(212,175,55,0.24)",
           }}
         >
-          <h1 style={{ margin: 0, color: "#fff", fontSize: 28, fontWeight: 900 }}>
-            صفحة الاقتراحات
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "8px 14px",
+              borderRadius: 999,
+              background: "rgba(34,197,94,0.10)",
+              border: "1px solid rgba(34,197,94,0.24)",
+              color: "#bbf7d0",
+              fontWeight: 900,
+              fontSize: 12,
+            }}
+          >
+            قناة مباشرة إلى السوبر أدمن
+          </div>
+
+          <h1 style={{ margin: "16px 0 0", color: "#fff", fontSize: 34, fontWeight: 900 }}>
+            صفحة الاقتراحات الذكية
           </h1>
-          <p style={{ marginTop: 10, color: "rgba(255,255,255,0.75)", lineHeight: 1.8 }}>
-            اكتب المقترحات والملاحظات، وسيتم إرسالها مباشرة إلى صفحة السوبر أدمن.
+          <p style={{ marginTop: 12, color: "rgba(255,255,255,0.78)", lineHeight: 1.9, fontSize: 15 }}>
+            اكتب المقترحات والملاحظات بصورة واضحة ومنظمة، وسيتم إرسالها مباشرة إلى صفحة السوبر أدمن مع ربطها
+            ببيانات الجهة الحالية والمستخدم عند التوفر.
           </p>
+
+          <div
+            style={{
+              marginTop: 18,
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              gap: 12,
+            }}
+          >
+            {[
+              { label: "الجهة الحالية", value: tenantId || "غير مرتبطة" },
+              { label: "المستخدم", value: user?.email || "غير معروف" },
+              { label: "نوع الرسالة", value: "اقتراح / ملاحظة" },
+            ].map((item) => (
+              <div
+                key={item.label}
+                style={{
+                  borderRadius: 18,
+                  padding: "14px 16px",
+                  background: "rgba(255,255,255,0.035)",
+                  border: "1px solid rgba(255,255,255,0.06)",
+                }}
+              >
+                <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 12, fontWeight: 800 }}>{item.label}</div>
+                <div style={{ color: "#fff8dc", marginTop: 8, fontWeight: 900, fontSize: 15 }}>{item.value}</div>
+              </div>
+            ))}
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} style={{ padding: 24 }}>
+        <form onSubmit={handleSubmit} style={{ padding: 28 }}>
           <div style={{ display: "grid", gap: 18 }}>
             <div>
               <label style={labelStyle}>عنوان المقترح</label>
@@ -218,21 +265,22 @@ export default function SuggestionsPage() {
 const labelStyle: React.CSSProperties = {
   display: "block",
   marginBottom: 8,
-  color: "#fff",
+  color: "#fff8dc",
   fontWeight: 800,
+  fontSize: 14,
 };
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
   boxSizing: "border-box",
-  padding: "14px 16px",
-  borderRadius: 14,
-  border: "1px solid rgba(212,175,55,0.35)",
+  padding: "15px 16px",
+  borderRadius: 16,
+  border: "1px solid rgba(212,175,55,0.30)",
   background: "#0f172a",
   color: "#fff",
   fontSize: 15,
   outline: "none",
-  boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.03)",
+  boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.03), 0 10px 24px rgba(0,0,0,0.12)",
 };
 
 const errorStyle: React.CSSProperties = {
@@ -243,15 +291,16 @@ const errorStyle: React.CSSProperties = {
 };
 
 const sendButtonStyle: React.CSSProperties = {
-  minWidth: 140,
-  padding: "13px 20px",
-  borderRadius: 14,
+  minWidth: 160,
+  padding: "14px 22px",
+  borderRadius: 16,
   border: "none",
   cursor: "pointer",
   background: "linear-gradient(180deg,#d4af37,#a67c00)",
   color: "#111827",
   fontWeight: 900,
   fontSize: 15,
+  boxShadow: "0 12px 24px rgba(212,175,55,0.22)",
 };
 
 const cancelButtonStyle: React.CSSProperties = {
