@@ -102,7 +102,9 @@ export default function Dashboard() {
     `;
     document.head.appendChild(styleEl);
     return () => {
-      document.head.removeChild(styleEl);
+      try {
+        document.head.removeChild(styleEl);
+      } catch {}
     };
   }, []);
 
@@ -167,12 +169,191 @@ export default function Dashboard() {
       style={{
         direction: isRTL ? "rtl" : "ltr",
         minHeight: "100vh",
-        background: "linear-gradient(135deg, #0f172a 0%, #020617 100%)",
+        background:
+          "radial-gradient(circle at top, rgba(212,175,55,0.14), transparent 24%), radial-gradient(circle at 88% 18%, rgba(59,130,246,0.10), transparent 24%), linear-gradient(135deg, #0f172a 0%, #020617 100%)",
         color: GOLD_DARK,
         padding: window.innerWidth < 768 ? "16px" : "32px",
         boxSizing: "border-box",
+        position: "relative",
+        overflowX: "hidden",
       }}
     >
+      <div
+        style={{
+          position: "absolute",
+          top: -180,
+          left: "50%",
+          transform: "translateX(-50%)",
+          width: 620,
+          height: 620,
+          borderRadius: "50%",
+          background: "radial-gradient(circle, rgba(212,175,55,0.18) 0%, rgba(212,175,55,0.05) 38%, transparent 72%)",
+          filter: "blur(12px)",
+          pointerEvents: "none",
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          right: -120,
+          top: 260,
+          width: 340,
+          height: 340,
+          borderRadius: "50%",
+          background: "radial-gradient(circle, rgba(16,185,129,0.10), transparent 72%)",
+          filter: "blur(12px)",
+          pointerEvents: "none",
+        }}
+      />
+
+      <div
+        style={{
+          maxWidth: 1520,
+          margin: "0 auto 22px auto",
+          display: "grid",
+          gap: 18,
+          position: "relative",
+          zIndex: 1,
+        }}
+      >
+        <div
+          style={{
+            display: "grid",
+            gap: 18,
+            border: "1px solid rgba(212,175,55,0.18)",
+            borderRadius: 34,
+            padding: 28,
+            background:
+              "linear-gradient(135deg, rgba(30,22,2,0.95), rgba(8,8,8,0.98), rgba(27,21,3,0.94))",
+            boxShadow:
+              "0 32px 100px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.05), inset 0 -1px 0 rgba(255,255,255,0.03)",
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 18, flexWrap: "wrap", alignItems: "start" }}>
+            <div style={{ display: "grid", gap: 14, maxWidth: 900 }}>
+              <div
+                style={{
+                  display: "inline-flex",
+                  width: "fit-content",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "8px 14px",
+                  borderRadius: 999,
+                  background: "rgba(16,185,129,0.12)",
+                  border: "1px solid rgba(16,185,129,0.22)",
+                  color: "#a7f3d0",
+                  fontWeight: 900,
+                  fontSize: 12,
+                }}
+              >
+                {tr("لوحة قيادة تشغيلية مباشرة", "Live executive control center")}
+              </div>
+
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 900, color: "rgba(255,241,196,0.88)", marginBottom: 10 }}>
+                  {tr("منظومة إدارة الامتحانات", "Exam Management Suite")}
+                </div>
+                <h1
+                  style={{
+                    margin: 0,
+                    fontSize: "clamp(34px, 5vw, 68px)",
+                    lineHeight: 1.04,
+                    fontWeight: 950,
+                    color: "#fff1c4",
+                    letterSpacing: "-0.03em",
+                    textShadow: "0 8px 28px rgba(212,175,55,0.16)",
+                  }}
+                >
+                  {tr("لوحة التحكم الذكية", "Smart Dashboard")}
+                </h1>
+              </div>
+
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 16,
+                  lineHeight: 2,
+                  color: "rgba(255,241,196,0.82)",
+                  maxWidth: 960,
+                }}
+              >
+                {tr(
+                  "هذه الصفحة تمنح الإدارة رؤية تنفيذية شاملة لحالة الكادر والامتحانات والقاعات والتنبيهات الذكية، ضمن واجهة مؤسسية فاخرة تساعد على الوصول السريع واتخاذ القرار بثقة من اللحظة الأولى.",
+                  "This page gives leadership an executive overview of teachers, exams, rooms, and live smart alerts in a premium interface built for clarity, speed, and confident decision-making from the first moment."
+                )}
+              </p>
+
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                {[
+                  { label: tr("المستخدم الحالي", "Current user"), value: displayName },
+                  { label: tr("اللغة", "Language"), value: lang === "ar" ? "العربية" : "English" },
+                  { label: tr("حالة الجهة", "Tenant status"), value: tenantId ? tr("مرتبطة", "Connected") : tr("غير مرتبطة", "Not connected") },
+                ].map((item) => (
+                  <div
+                    key={item.label}
+                    style={{
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      background: "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
+                      borderRadius: 18,
+                      padding: "12px 14px",
+                      minWidth: 190,
+                      boxShadow: "0 14px 28px rgba(0,0,0,0.22)",
+                    }}
+                  >
+                    <div style={{ fontSize: 12, color: "rgba(255,241,196,0.64)", fontWeight: 800 }}>{item.label}</div>
+                    <div style={{ marginTop: 6, fontSize: 16, color: "#fff8dc", fontWeight: 900 }}>{item.value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div
+              style={{
+                minWidth: 300,
+                maxWidth: 390,
+                width: "100%",
+                border: "1px solid rgba(255,255,255,0.08)",
+                borderRadius: 28,
+                padding: 22,
+                background: "linear-gradient(180deg, rgba(212,175,55,0.08), rgba(255,255,255,0.02))",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
+                display: "grid",
+                gap: 16,
+              }}
+            >
+              <div
+                style={{
+                  display: "inline-flex",
+                  width: "fit-content",
+                  padding: "8px 12px",
+                  borderRadius: 999,
+                  background: smartAlerts.length ? "rgba(16,185,129,0.14)" : "rgba(245,158,11,0.14)",
+                  border: smartAlerts.length ? "1px solid rgba(16,185,129,0.24)" : "1px solid rgba(245,158,11,0.24)",
+                  color: smartAlerts.length ? "#a7f3d0" : "#fde68a",
+                  fontWeight: 900,
+                  fontSize: 12,
+                }}
+              >
+                {smartAlerts.length ? tr("تنبيهات ذكية نشطة", "Smart alerts live") : tr("بانتظار البيانات الحية", "Waiting for live data")}
+              </div>
+
+              <div style={{ fontSize: 30, lineHeight: 1.45, fontWeight: 950, color: "#fff1c4" }}>
+                {tr(
+                  "الوصول إلى أهم أقسام النظام أصبح أسرع وأفخم مع إبراز مباشر للحالة التشغيلية.",
+                  "Access to the system’s core areas is now faster and more premium, with live operational visibility."
+                )}
+              </div>
+
+              <div style={{ fontSize: 14, lineHeight: 1.95, color: "rgba(255,241,196,0.78)" }}>
+                {tr(
+                  "الواجهة المطورة ترفع من جودة الانطباع الأول وتمنح المستخدم تجربة تنقل منظمة بين التوزيع، التقارير، السجلات، والإعدادات.",
+                  "The upgraded interface improves first impression quality and gives users a cleaner journey across distribution, reports, records, and settings."
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
       <div className="dash3DBar" style={{ padding: 16, marginBottom: 28 }}>
         <div
           style={{
@@ -229,6 +410,8 @@ export default function Dashboard() {
             <div className="dashStat">{tr("القاعات", "Rooms")} <strong>{counts.rooms}</strong></div>
             <div className="dashGoldSep" />
             <div className="dashStat">{tr("حظر قاعات", "Room blocks")} <strong>{counts.blocks}</strong></div>
+            <div className="dashGoldSep" />
+            <div className="dashStat">{tr("إجمالي العناصر", "Total items")} <strong>{counts.teachers + counts.exams + counts.rooms + counts.blocks}</strong></div>
           </div>
         </div>
       </div>
@@ -255,7 +438,16 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 28, marginBottom: 56 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 18, position: "relative", zIndex: 1 }}>
+        <h2 style={{ margin: 0, fontSize: 24, fontWeight: 900, color: GOLD_DARK, textShadow: `0 0 14px ${GOLD_GLOW}` }}>
+          {tr("الوصول السريع", "Quick access")}
+        </h2>
+        <div style={{ color: "#e8c670", opacity: 0.92, fontWeight: 800 }}>
+          {tr("أهم العمليات في مسار واحد أنيق", "Core actions in one elegant flow")}
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 28, marginBottom: 56, position: "relative", zIndex: 1 }}>
         {quickCards.map((card) => (
           <button
             key={card.to}
@@ -302,7 +494,7 @@ export default function Dashboard() {
         ))}
       </div>
 
-      <div>
+      <div style={{ position: "relative", zIndex: 1 }}>
         <h2 style={{ fontSize: 24, fontWeight: 900, textAlign: "center", marginBottom: 28, color: GOLD_DARK, textShadow: `0 0 14px ${GOLD_GLOW}` }}>
           {tr("الإعدادات والسجلات", "Settings & Records")}
         </h2>
