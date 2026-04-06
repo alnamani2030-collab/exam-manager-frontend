@@ -7,7 +7,7 @@ import { blockStatusLabel, createId } from "../lib/roomScheduling";
 import type { Room } from "../services/rooms.service";
 import type { RoomBlock } from "../services/roomBlocks.service";
 
-const APP_NAME = "نظام إدارة الامتحانات المطوّر";
+const APP_NAME = "   ";
 
 const REASON_OPTIONS = [
   { value: "maintenance", label: "صيانة" },
@@ -620,7 +620,7 @@ export default function RoomBlocks() {
       <div style={header}>
         <div>
           <div style={{ fontWeight: 1000, fontSize: 18 }}>{APP_NAME}</div>
-          <div style={{ fontWeight: 900, opacity: 0.75 }}>حظر القاعات</div>
+          <div style={{ fontWeight: 900, opacity: 0.75 }}> </div>
         </div>
 
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
