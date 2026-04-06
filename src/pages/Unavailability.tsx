@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react"; 
+import React, { useEffect, useMemo, useState } from "react";
 import { newId } from "../api/db";
 import { useAuth } from "../auth/AuthContext";
 import { loadTenantArray } from "../services/tenantData";
@@ -101,9 +101,14 @@ export default function Unavailability() {
     const style = document.createElement("style");
     style.innerHTML = `
       @keyframes goldGlow {
-        0% { box-shadow: 0 0 14px rgba(184,134,11,0.55), 0 14px 28px rgba(0,0,0,0.55); }
-        50% { box-shadow: 0 0 32px rgba(255,215,0,0.65), 0 16px 34px rgba(0,0,0,0.62); }
-        100% { box-shadow: 0 0 14px rgba(184,134,11,0.55), 0 14px 28px rgba(0,0,0,0.55); }
+        0% { box-shadow: 0 0 14px rgba(184,134,11,0.38), 0 14px 28px rgba(0,0,0,0.55); }
+        50% { box-shadow: 0 0 30px rgba(255,215,0,0.46), 0 16px 34px rgba(0,0,0,0.62); }
+        100% { box-shadow: 0 0 14px rgba(184,134,11,0.38), 0 14px 28px rgba(0,0,0,0.55); }
+      }
+
+      @keyframes floatUp {
+        from { opacity: 0; transform: translateY(14px); }
+        to { opacity: 1; transform: translateY(0); }
       }
 
       @keyframes shineSweep {
@@ -114,7 +119,7 @@ export default function Unavailability() {
       .header3d {
         position: relative;
         overflow: hidden;
-        border-radius: 16px;
+        border-radius: 28px;
         animation: goldGlow 4s infinite;
       }
 
@@ -150,23 +155,57 @@ export default function Unavailability() {
       .chip {
         border: 1px solid rgba(255,255,255,0.14);
         border-radius: 999px;
-        padding: 6px 10px;
+        padding: 8px 14px;
         display: inline-flex;
-        gap: 6px;
+        gap: 8px;
         align-items: center;
         background: rgba(0,0,0,0.18);
+        transition: transform .16s ease, border-color .16s ease, background .16s ease;
+      }
+      .chip:hover {
+        transform: translateY(-1px);
+        border-color: rgba(212,175,55,0.34);
+        background: rgba(212,175,55,0.08);
+      }
+
+      .statCard {
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 22px;
+        padding: 15px 16px;
+        background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
+        box-shadow: 0 16px 32px rgba(0,0,0,0.20), inset 0 1px 0 rgba(255,255,255,0.04);
       }
 
       .card {
         border: 1px solid rgba(255,255,255,0.12);
-        border-radius: 12px;
-        background: rgba(0,0,0,0.18);
+        border-radius: 22px;
+        background: linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.02));
+        transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+      }
+      .card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 18px 34px rgba(0,0,0,0.24);
+        border-color: rgba(212,175,55,0.24);
       }
 
       .softBorder {
         border: 1px solid rgba(255,255,255,0.12);
-        border-radius: 12px;
-        background: rgba(0,0,0,0.14);
+        border-radius: 22px;
+        background: linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.015));
+        box-shadow: 0 18px 40px rgba(0,0,0,0.18);
+      }
+
+      .luxFade {
+        animation: floatUp .5s ease;
+      }
+
+      @media (max-width: 980px) {
+        .unavail-form-grid {
+          grid-template-columns: 1fr !important;
+        }
+        .unavail-row-grid {
+          grid-template-columns: 1fr !important;
+        }
       }
     `;
     document.head.appendChild(style);
@@ -248,23 +287,22 @@ export default function Unavailability() {
       style={{
         padding: 20,
         direction: "rtl",
-        background: "#0f0f0f",
+        background:
+          "radial-gradient(circle at 12% 8%, rgba(212,175,55,0.16), transparent 20%), radial-gradient(circle at 88% 14%, rgba(59,130,246,0.10), transparent 22%), radial-gradient(circle at 50% 0%, rgba(255,255,255,0.04), transparent 24%), linear-gradient(180deg, #070707 0%, #0d0d0d 52%, #111111 100%)",
         minHeight: "100vh",
-        color: "#d4af37", // ✅ gold text across the page
+        color: "#d4af37",
         fontFamily: "Cairo, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
       }}
     >
-      {/* ✅ 3D branded header without logo */}
       <div
-        className="header3d"
+        className="header3d luxFade"
         style={{
-          background: "linear-gradient(180deg, #6e5200 0%, #7a5c00 35%, #4a3600 100%)",
-          border: "1px solid rgba(255, 215, 128, 0.35)",
-          borderBottom: "3px solid rgba(0,0,0,0.35)",
-          padding: "18px 18px",
-          marginBottom: 16,
+          background: "linear-gradient(135deg, rgba(112,81,8,0.98), rgba(52,37,4,0.98), rgba(12,14,18,0.98))",
+          border: "1px solid rgba(255, 215, 128, 0.22)",
+          padding: "28px 28px",
+          marginBottom: 20,
           boxShadow:
-            "0 10px 18px rgba(0,0,0,0.55), inset 0 2px 0 rgba(255,255,255,0.18), inset 0 -6px 10px rgba(0,0,0,0.35)",
+            "0 20px 40px rgba(0,0,0,0.50), inset 0 1px 0 rgba(255,255,255,0.10), inset 0 -6px 16px rgba(0,0,0,0.30), 0 0 30px rgba(212,175,55,0.10)",
         }}
       >
         <div className="shineOverlay" />
@@ -279,7 +317,7 @@ export default function Unavailability() {
                 textShadow: "0 2px 0 rgba(0,0,0,0.35)",
               }}
             >
-             غياب الكادر التعليمي 
+              غياب الكادر التعليمي
             </div>
 
             <div
@@ -302,23 +340,79 @@ export default function Unavailability() {
                 textShadow: "0 2px 0 rgba(0,0,0,0.35)",
               }}
             >
-              .
+              منصة تشغيلية فاخرة لضبط عدم التوفر قبل اعتماد التوزيع النهائي بدقة ووضوح.
             </div>
           </div>
         </div>
       </div>
 
-      {/* Form card */}
       <div
-        className="softBorder"
+        className="luxFade"
         style={{
           display: "grid",
-          gridTemplateColumns: "1fr 1fr 1fr",
+          gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
           gap: 12,
-          padding: 12,
           marginBottom: 16,
         }}
       >
+        {[
+          { label: "عدد المعلمين", value: teachers.length || 0 },
+          { label: "السجلات الحالية", value: rules.length || 0 },
+          { label: "المعلم المحدد", value: teacherName || "—" },
+        ].map((item) => (
+          <div key={item.label} className="statCard">
+            <div style={{ fontSize: 12, color: "rgba(255,241,196,0.64)", fontWeight: 800 }}>{item.label}</div>
+            <div style={{ marginTop: 8, fontSize: 18, color: "#fff8dc", fontWeight: 900 }}>{item.value}</div>
+          </div>
+        ))}
+      </div>
+
+      <div
+        className="softBorder luxFade"
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr 1fr",
+          gap: 14,
+          padding: 18,
+          marginBottom: 20,
+          boxShadow: "0 18px 38px rgba(0,0,0,0.20)",
+        }}
+      >
+        <div
+          style={{
+            gridColumn: "1 / -1",
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 12,
+            alignItems: "center",
+            flexWrap: "wrap",
+            marginBottom: 2,
+          }}
+        >
+          <div>
+            <div style={{ fontSize: 28, fontWeight: 900, color: "#fff1c4", letterSpacing: "-0.02em" }}>إضافة سجل عدم توفر</div>
+            <div style={{ marginTop: 6, fontSize: 13, color: "rgba(255,241,196,0.70)", lineHeight: 1.8 }}>
+              سجّل الغياب أو عدم التوفر مع تحديد الفترة ونوع المنع قبل تشغيل محرك التوزيع ضمن واجهة أوضح وأكثر فخامة.
+            </div>
+          </div>
+          <div
+            style={{
+              display: "inline-flex",
+              padding: "8px 12px",
+              borderRadius: 999,
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.08)",
+              color: "#fff1c4",
+              fontWeight: 800,
+              fontSize: 12,
+            }}
+          >
+            حفظ مباشر وربط فوري
+          </div>
+        </div>
+
+        <div className="unavail-form-grid" style={{ display: "contents" }} />
+
         <label style={{ display: "grid", gap: 6 }}>
           <span>المعلم</span>
           <select value={teacherId} onChange={(e) => setTeacherId(e.target.value)} style={dropdownStyle}>
@@ -375,26 +469,49 @@ export default function Unavailability() {
         </div>
       </div>
 
-      {/* Current rules */}
-      <h2 style={{ margin: "0 0 10px", color: "#d4af37" }}>السجلات الحالية</h2>
+      <h2
+        className="luxFade"
+        style={{
+          margin: "4px 0 14px",
+          color: "#fff1c4",
+          fontSize: 28,
+          fontWeight: 900,
+          textShadow: "0 4px 18px rgba(212,175,55,0.16)",
+          letterSpacing: "-0.02em",
+        }}
+      >
+        السجلات الحالية
+      </h2>
 
       {rules.length === 0 ? (
-        <div style={{ opacity: 0.85 }}>لا توجد سجلات.</div>
+        <div
+          className="luxFade"
+          style={{
+            opacity: 0.9,
+            border: "1px dashed rgba(212,175,55,0.26)",
+            borderRadius: 18,
+            padding: 24,
+            background: "rgba(255,255,255,0.02)",
+          }}
+        >
+          لا توجد سجلات.
+        </div>
       ) : (
-        <div style={{ display: "grid", gap: 10 }}>
+        <div className="luxFade" style={{ display: "grid", gap: 12 }}>
           {rules
             .slice()
             .sort((a, b) => (a.dateISO + a.period).localeCompare(b.dateISO + b.period))
             .map((r) => (
               <div
                 key={r.id}
-                className="card"
+                className="card unavail-row-grid"
                 style={{
                   display: "grid",
                   gridTemplateColumns: "1.2fr 0.7fr 0.7fr 1fr auto",
-                  gap: 10,
+                  gap: 14,
                   alignItems: "center",
-                  padding: 12,
+                  padding: 16,
+                  boxShadow: "0 14px 28px rgba(0,0,0,0.18)",
                 }}
               >
                 <div style={{ fontWeight: 900 }}>{r.teacherName}</div>
@@ -428,7 +545,7 @@ export default function Unavailability() {
                   className="goldBtn"
                   style={{
                     padding: "8px 10px",
-                    background: "linear-gradient(135deg,#5c0b0b,#b8860b)", // subtle danger/gold blend
+                    background: "linear-gradient(135deg,#5c0b0b,#b8860b)",
                   }}
                 >
                   حذف
