@@ -100,6 +100,22 @@ export default function SuperSystem() {
 
   const excelInputRef = useRef<HTMLInputElement | null>(null);
 
+  const isEmailAlreadyLinkedToAnotherSchool = async (emailValue: string, tenantIdValue: string) => {
+    const email = String(emailValue || "").trim().toLowerCase();
+    const tenantId = String(tenantIdValue || "").trim();
+    if (!email || !tenantId) return false;
+
+    const existingSnap = await getDoc(doc(db, "allowlist", email));
+    if (!existingSnap.exists()) return false;
+
+    const existingData = existingSnap.data() as any;
+    const existingTenantId = String(existingData?.tenantId || "").trim();
+
+    if (!existingTenantId) return false;
+    return existingTenantId !== tenantId;
+  };
+
+
   const exportTenantAdminLinksToExcel = () => {
     const rows = [...tenantAdminRows];
 
@@ -206,6 +222,11 @@ export default function SuperSystem() {
 
         const tenantGovernorate = String(tenantDocData?.governorate || "");
         if (!canSeeAllGovs && tenantGovernorate !== String(myGov || "")) {
+          continue;
+        }
+
+        const alreadyLinked = await isEmailAlreadyLinkedToAnotherSchool(email, tenantId);
+        if (alreadyLinked) {
           continue;
         }
 
@@ -454,6 +475,12 @@ export default function SuperSystem() {
 
     setSaveBusy(true);
     try {
+      const alreadyLinked = await isEmailAlreadyLinkedToAnotherSchool(userEmail, tenantId);
+      if (alreadyLinked) {
+        alert("لا يمكن ربط نفس البريد الإلكتروني بأكثر من مدرسة. البريد الإلكتروني يربط بمدرسة واحدة فقط.");
+        return;
+      }
+
       await saveTenantAdminAssignment({
         email: userEmail,
         enabled: userEnabled,
@@ -809,6 +836,9 @@ export default function SuperSystem() {
           <div style={{ marginTop: 10, opacity: 0.8, lineHeight: 1.9 }}>
             <div>
               ملاحظة: هذه الصفحة تسمح للسوبر بإضافة <b>Admin</b> فقط.
+            </div>
+            <div>
+              لا يمكن ربط نفس البريد الإلكتروني بأكثر من مدرسة، والبريد الإلكتروني يربط بمدرسة واحدة فقط.
             </div>
           </div>
 
