@@ -22,7 +22,6 @@ import { useI18n } from "../i18n/I18nProvider";
 
 // ضع صورة الخلفية في هذا المسار:
 // src/assets/login-bg.png
-import bgImage from "../assets/login-bg.png";
 
 // Default to disabling Cloud Functions unless explicitly enabled.
 const DISABLE_FUNCTIONS =
@@ -391,10 +390,10 @@ export default function Login() {
   const styles: Record<string, React.CSSProperties> = {
     page: {
       minHeight: "100vh",
-      backgroundImage: `url(${bgImage})`,
-      backgroundSize: "cover",
-      backgroundPosition: "center center",
-      backgroundRepeat: "no-repeat",
+      backgroundImage: 'url("https://i.imgur.com/kt5xtnx.jpeg")',
+      backgroundSize: "520px auto",
+      backgroundPosition: "center top",
+      backgroundRepeat: "repeat",
       backgroundAttachment: "scroll",
       backgroundColor: "#05070b",
       display: "flex",
