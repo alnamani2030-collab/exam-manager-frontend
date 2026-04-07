@@ -3,7 +3,7 @@ import { useResultsDragDropActions } from "./useResultsDragDropActions";
 import { addTaskToResultsEmptyCell, deleteAssignmentFromResultsRun, deleteAssignmentsForSubColFromResultsRun } from "../services/resultsCellMutations";
 import { getAssignmentsInCell, isDraggableTaskType } from "../services/resultsDragDropRules";
 import { createResultsCellUnavailabilityResolver } from "../services/resultsTableActionResolvers";
-import { buildResultsBlockedCellMessage, buildResultsExcelExportPayload } from "../services/resultsTableActionPayloads";
+import { buildResultsExcelExportPayload } from "../services/resultsTableActionPayloads";
 
 type Args = {
   run: any;
@@ -88,7 +88,6 @@ export function useResultsTableActions({
     });
   };
 
-
   const deleteAssignmentsBySubCol = (subColKey: string) => {
     deleteAssignmentsForSubColFromResultsRun({
       run,
@@ -99,17 +98,19 @@ export function useResultsTableActions({
   };
 
   const exportExcel = () => {
-    exportExcelStyledLikeTable(buildResultsExcelExportPayload({
-      run,
-      displayDates,
-      dateToSubCols,
-      allSubCols,
-      allTeachers,
-      matrix2,
-      committeesCountBySubCol,
-      totalsDetailBySubCol,
-      teacherTotals,
-    }));
+    exportExcelStyledLikeTable(
+      buildResultsExcelExportPayload({
+        run,
+        displayDates,
+        dateToSubCols,
+        allSubCols,
+        allTeachers,
+        matrix2,
+        committeesCountBySubCol,
+        totalsDetailBySubCol,
+        teacherTotals,
+      })
+    );
   };
 
   return {
