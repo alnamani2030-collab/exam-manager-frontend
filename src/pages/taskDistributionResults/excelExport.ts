@@ -1,13 +1,12 @@
-// src/pages/taskDistributionResults/excelExport.ts
 import type { Assignment } from "../../contracts/taskDistributionContract";
 import { downloadBlob } from "./basicUtils";
 import { getCommitteeNo, taskLabel, formatPeriod, formatDateWithDayAr } from "./taskUtils";
 
 export type SubCol = {
-  key: string; // `${dateISO}__${period}__${subject}`
+  key: string;
   dateISO: string;
   subject: string;
-  period: string; // AM/PM/...
+  period: string;
 };
 
 export async function exportExcelStyledLikeTable(params: {
@@ -37,19 +36,19 @@ export async function exportExcelStyledLikeTable(params: {
     });
 
     const WHITE = "FFFFFFFF";
-    const DARK = "FF0B1224";
-    const DARK2 = "FF020617";
-    const GOLD = "FFB8860B";
-    const GOLD_SOFT = "FF8A6B20";
-
+    const BLACK = "FF000000";
+    const RED_TEXT = "FFC00000";
+    const RED_BG = "FFFFDDDD";
+    const HEADER_BG = "FFF3F4F6";
+    const BORDER = "FF000000";
     const GREEN = "FF22C55E";
     const RED = "FFEF4444";
 
-    const BORDER_GOLD = {
-      top: { style: "thin" as const, color: { argb: GOLD_SOFT } },
-      left: { style: "thin" as const, color: { argb: GOLD_SOFT } },
-      bottom: { style: "thin" as const, color: { argb: GOLD_SOFT } },
-      right: { style: "thin" as const, color: { argb: GOLD_SOFT } },
+    const BORDER_BLACK = {
+      top: { style: "thin" as const, color: { argb: BORDER } },
+      left: { style: "thin" as const, color: { argb: BORDER } },
+      bottom: { style: "thin" as const, color: { argb: BORDER } },
+      right: { style: "thin" as const, color: { argb: BORDER } },
     } as const;
 
     ws.columns = [
@@ -60,14 +59,21 @@ export async function exportExcelStyledLikeTable(params: {
 
     const totalColIndex = 2 + params.allSubCols.length;
 
-    // Header Row 1
+    const shortageSubjects = new Set<string>();
+    params.allSubCols.forEach((sc) => {
+      const d = params.totalsDetailBySubCol[sc.key];
+      if (d && Number(d.deficit || 0) > 0) {
+        shortageSubjects.add(String(sc.subject || "").trim());
+      }
+    });
+
     const row1 = ws.getRow(1);
     row1.height = 26;
     row1.getCell(1).value = "المعلم";
     row1.getCell(1).alignment = { vertical: "middle", horizontal: "center", wrapText: true };
-    row1.getCell(1).font = { bold: true, color: { argb: WHITE } };
-    row1.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: DARK } };
-    row1.getCell(1).border = BORDER_GOLD;
+    row1.getCell(1).font = { bold: true, color: { argb: BLACK } };
+    row1.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: HEADER_BG } };
+    row1.getCell(1).border = BORDER_BLACK;
 
     let colPtr = 2;
     params.displayDates.forEach((dateISO) => {
@@ -80,47 +86,49 @@ export async function exportExcelStyledLikeTable(params: {
 
       ws.mergeCells(1, startCol, 1, endCol);
 
-      const master = row1.getCell(startCol);
-      master.value = f.line;
+      row1.getCell(startCol).value = f.line;
 
       for (let c = startCol; c <= endCol; c++) {
         const cc = row1.getCell(c);
         cc.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
-        cc.font = { bold: true, color: { argb: WHITE } };
-        cc.fill = { type: "pattern", pattern: "solid", fgColor: { argb: DARK2 } };
-        cc.border = BORDER_GOLD;
+        cc.font = { bold: true, color: { argb: BLACK } };
+        cc.fill = { type: "pattern", pattern: "solid", fgColor: { argb: HEADER_BG } };
+        cc.border = BORDER_BLACK;
       }
 
       colPtr = endCol + 1;
     });
 
-    // إجمالي المعلم
     ws.mergeCells(1, totalColIndex, 2, totalColIndex);
     const totalHeadCell = row1.getCell(totalColIndex);
     totalHeadCell.value = "إجمالي المعلم\n(مراقبة+احتياط+مراجعة)";
     totalHeadCell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
-    totalHeadCell.font = { bold: true, color: { argb: WHITE } };
-    totalHeadCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: DARK } };
-    totalHeadCell.border = BORDER_GOLD;
+    totalHeadCell.font = { bold: true, color: { argb: BLACK } };
+    totalHeadCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: HEADER_BG } };
+    totalHeadCell.border = BORDER_BLACK;
 
-    // Header Row 2
     const row2 = ws.getRow(2);
     row2.height = 52;
     row2.getCell(1).value = "";
-    row2.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: DARK } };
-    row2.getCell(1).border = BORDER_GOLD;
+    row2.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: HEADER_BG } };
+    row2.getCell(1).border = BORDER_BLACK;
 
     params.allSubCols.forEach((sc, i) => {
       const col = 2 + i;
       const committees = params.committeesCountBySubCol[sc.key] ?? 0;
+      const hasDeficit = shortageSubjects.has(String(sc.subject || "").trim());
+
       row2.getCell(col).value = `${sc.subject || "—"}\n${formatPeriod(sc.period) || ""}\nمجموع اللجان: ${committees}`;
       row2.getCell(col).alignment = { vertical: "middle", horizontal: "center", wrapText: true };
-      row2.getCell(col).font = { bold: true, color: { argb: WHITE } };
-      row2.getCell(col).fill = { type: "pattern", pattern: "solid", fgColor: { argb: DARK } };
-      row2.getCell(col).border = BORDER_GOLD;
+      row2.getCell(col).font = { bold: true, color: { argb: hasDeficit ? RED_TEXT : BLACK } };
+      row2.getCell(col).fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: hasDeficit ? RED_BG : HEADER_BG },
+      };
+      row2.getCell(col).border = BORDER_BLACK;
     });
 
-    // Data
     let rIdx = 3;
     params.allTeachers.forEach((teacher) => {
       const row = ws.getRow(rIdx);
@@ -128,13 +136,15 @@ export async function exportExcelStyledLikeTable(params: {
 
       row.getCell(1).value = teacher;
       row.getCell(1).alignment = { vertical: "middle", horizontal: "right", wrapText: true };
-      row.getCell(1).font = { bold: true, color: { argb: WHITE } };
-      row.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: DARK } };
-      row.getCell(1).border = BORDER_GOLD;
+      row.getCell(1).font = { bold: true, color: { argb: BLACK } };
+      row.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: WHITE } };
+      row.getCell(1).border = BORDER_BLACK;
 
       params.allSubCols.forEach((sc, i) => {
         const col = 2 + i;
         const list = params.matrix2[teacher]?.[sc.key] || [];
+        const hasDeficit = shortageSubjects.has(String(sc.subject || "").trim());
+
         const text = list
           .map((a: any) => {
             const committeeNo = getCommitteeNo(a);
@@ -149,36 +159,45 @@ export async function exportExcelStyledLikeTable(params: {
 
         row.getCell(col).value = text || "—";
         row.getCell(col).alignment = { vertical: "middle", horizontal: "center", wrapText: true };
-        row.getCell(col).font = { bold: true, color: { argb: WHITE } };
-        row.getCell(col).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF111827" } };
-        row.getCell(col).border = BORDER_GOLD;
+        row.getCell(col).font = { bold: true, color: { argb: hasDeficit ? RED_TEXT : BLACK } };
+        row.getCell(col).fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: hasDeficit ? RED_BG : WHITE },
+        };
+        row.getCell(col).border = BORDER_BLACK;
       });
 
-      // إجمالي المعلم + تلوين
       const tTotal = params.teacherTotals[teacher] ?? 0;
       const tc = row.getCell(totalColIndex);
       tc.value = tTotal;
 
-      let fillArgb = "FF111827";
-      if (tTotal < 5) fillArgb = GREEN;
-      else if (tTotal > 7) fillArgb = RED;
+      let fillArgb = WHITE;
+      let fontArgb = BLACK;
+
+      if (tTotal < 5) {
+        fillArgb = GREEN;
+        fontArgb = BLACK;
+      } else if (tTotal > 7) {
+        fillArgb = RED;
+        fontArgb = WHITE;
+      }
 
       tc.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
-      tc.font = { bold: true, color: { argb: WHITE } };
+      tc.font = { bold: true, color: { argb: fontArgb } };
       tc.fill = { type: "pattern", pattern: "solid", fgColor: { argb: fillArgb } };
-      tc.border = BORDER_GOLD;
+      tc.border = BORDER_BLACK;
 
       rIdx++;
     });
 
-    // Footer Totals Detail
     const footer = ws.getRow(rIdx);
-    footer.height = 32;
+    footer.height = 40;
     footer.getCell(1).value = "الإجمالي (تفصيل)";
     footer.getCell(1).alignment = { vertical: "middle", horizontal: "right", wrapText: true };
-    footer.getCell(1).font = { bold: true, color: { argb: "FF111827" } };
-    footer.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: GOLD } };
-    footer.getCell(1).border = BORDER_GOLD;
+    footer.getCell(1).font = { bold: true, color: { argb: BLACK } };
+    footer.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: HEADER_BG } };
+    footer.getCell(1).border = BORDER_BLACK;
 
     params.allSubCols.forEach((sc, i) => {
       const col = 2 + i;
@@ -191,25 +210,28 @@ export async function exportExcelStyledLikeTable(params: {
         committees: params.committeesCountBySubCol[sc.key] ?? 0,
       };
 
-      footer.getCell(col).value =
-        `مراقبة: ${d.inv}\n` +
-        `احتياط: ${d.res}\n` +
-        `تصحيح: ${d.corr}\n` +
-        `المجموع: ${d.total}\n` +
-        `العجز: ${d.deficit}`;
+      const hasDeficit = Number(d.deficit || 0) > 0;
 
+      row2.getCell(col).value = row2.getCell(col).value;
+
+      footer.getCell(col).value =
+        `مراقبة: ${d.inv}\nاحتياط: ${d.res}\nتصحيح: ${d.corr}\nالمجموع: ${d.total}\nالعجز: ${d.deficit}`;
       footer.getCell(col).alignment = { vertical: "middle", horizontal: "center", wrapText: true };
-      footer.getCell(col).font = { bold: true, color: { argb: "FF111827" } };
-      footer.getCell(col).fill = { type: "pattern", pattern: "solid", fgColor: { argb: GOLD } };
-      footer.getCell(col).border = BORDER_GOLD;
+      footer.getCell(col).font = { bold: true, color: { argb: hasDeficit ? RED_TEXT : BLACK } };
+      footer.getCell(col).fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: hasDeficit ? RED_BG : HEADER_BG },
+      };
+      footer.getCell(col).border = BORDER_BLACK;
     });
 
     const ft = footer.getCell(totalColIndex);
     ft.value = "—";
     ft.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
-    ft.font = { bold: true, color: { argb: "FF111827" } };
-    ft.fill = { type: "pattern", pattern: "solid", fgColor: { argb: GOLD } };
-    ft.border = BORDER_GOLD;
+    ft.font = { bold: true, color: { argb: BLACK } };
+    ft.fill = { type: "pattern", pattern: "solid", fgColor: { argb: HEADER_BG } };
+    ft.border = BORDER_BLACK;
 
     const buffer = await wb.xlsx.writeBuffer();
     downloadBlob(
@@ -217,6 +239,6 @@ export async function exportExcelStyledLikeTable(params: {
       filename
     );
   } catch {
-    alert("لتصدير XLSX ثبّت exceljs:\n\nnpm i exceljs\n\nثم أعد تشغيل المشروع.");
+    alert("لتصدير XLSX ثبّت exceljs:\\n\\nnpm i exceljs\\n\\nثم أعد تشغيل المشروع.");
   }
 }
