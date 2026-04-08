@@ -9,6 +9,8 @@ import SettingsDistributionStatsSection from "../features/settings/components/Se
 const EXAMS_KEY = "exam-manager:exams:v1";
 const LOGO_KEY = "exam-manager:app-logo";
 const MASTER_TABLE_KEY = "exam-manager:task-distribution:master-table:v1";
+const RESULTS_TABLE_KEY = "exam-manager:task-distribution:results-table:v1";
+const ALL_TABLE_KEY = "exam-manager:task-distribution:all-table:v1";
 const WHATSAPP_ADMIN_KEY = "exam-manager:whatsapp-admin:v1";
 const WHATSAPP_LAST_ALERT_KEY = "exam-manager:dist-stats:last-wa-alert:v1";
 
@@ -250,16 +252,8 @@ export default function Settings() {
   useEffect(() => {
     const bump = () => setTick((x) => x + 1);
 
-    const onRunUpdated = (e: any) => {
-      const tid = String(e?.detail?.tenantId || "").trim();
-      if (tid && tid !== tenantId) return;
-      bump();
-    };
-    const onMasterUpdated = (e: any) => {
-      const tid = String(e?.detail?.tenantId || "").trim();
-      if (tid && tid !== tenantId) return;
-      bump();
-    };
+    const onRunUpdated = () => bump();
+    const onMasterUpdated = () => bump();
     const onStorage = (e: StorageEvent) => {
       const k = String(e.key || "");
       if (
@@ -284,7 +278,7 @@ export default function Settings() {
       window.removeEventListener("storage", onStorage);
       window.removeEventListener("focus", bump);
     };
-  }, [tenantId]);
+  }, []);
 
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -303,25 +297,24 @@ export default function Settings() {
     return null;
   }, [tenantId, tick]);
 
-  const masterPayload = useMemo(() => {
-    try {
-      const raw = localStorage.getItem(MASTER_TABLE_KEY);
-      if (!raw) return null;
-      const p = JSON.parse(raw);
-      const rows = Array.isArray(p?.rows) ? p.rows : Array.isArray(p?.data) ? p.data : [];
-      const meta = p?.meta || null;
-      return { rows, meta };
-    } catch {
-      return null;
-    }
+  const distributionPayloads = useMemo(() => {
+    const readPayload = (key: string) => {
+      try {
+        const raw = localStorage.getItem(key);
+        if (!raw) return null;
+        const p = JSON.parse(raw);
+        const rows = Array.isArray(p?.rows) ? p.rows : Array.isArray(p?.data) ? p.data : [];
+        const meta = p?.meta || null;
+        return { rows, meta, key };
+      } catch {
+        return null;
+      }
+    };
+
+    return [readPayload(MASTER_TABLE_KEY), readPayload(RESULTS_TABLE_KEY), readPayload(ALL_TABLE_KEY)].filter(Boolean) as any[];
   }, [tick]);
 
   const assignments = useMemo(() => {
-    const fromMaster = Array.isArray(masterPayload?.rows) ? masterPayload!.rows : [];
-    if (fromMaster.length > 0) {
-      return { rows: fromMaster, source: "master-table", meta: masterPayload?.meta || null };
-    }
-
     const fromRun = Array.isArray((run as any)?.assignments) ? (run as any).assignments : [];
     if (fromRun.length > 0) {
       return {
@@ -331,8 +324,15 @@ export default function Settings() {
       };
     }
 
+    for (const payload of distributionPayloads) {
+      const rows = Array.isArray(payload?.rows) ? payload.rows : [];
+      if (rows.length > 0) {
+        return { rows, source: payload?.key || "table-cache", meta: payload?.meta || null };
+      }
+    }
+
     return { rows: [], source: "none", meta: null };
-  }, [run, masterPayload]);
+  }, [run, distributionPayloads]);
 
   const branding = useMemo(() => {
     const logo = String(localStorage.getItem(LOGO_KEY) || "").trim();
@@ -671,13 +671,7 @@ export default function Settings() {
       <SettingsReportHeader
         logo={branding.logo}
         appName={branding.appName}
-        sourceLabel={
-          assignments.source === "master-table"
-            ? "الجدول الشامل"
-            : assignments.source === "run"
-            ? "آخر تشغيل (Run)"
-            : "-"
-        }
+        sourceLabel={assignments.source === "run" ? "آخر تشغيل (Run)" : assignments.source === "none" ? "-" : "نسخة جدول مساعدة"}
         totalDeficit={totalDeficit}
         sortDir={sortDir}
         isStatsFull={isStatsFull}
