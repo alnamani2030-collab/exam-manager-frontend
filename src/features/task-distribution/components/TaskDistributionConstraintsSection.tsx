@@ -206,8 +206,21 @@ export default function TaskDistributionConstraintsSection({
 
             <div style={row}>
               <div>
+                <div style={label}>تفعيل شرط "بن"</div>
+                <div style={note}>عند التفعيل: يطبّق شرط "بن" داخل نفس اللجنة حسب قواعد التوزيع</div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={statusChip}>{boolText(!!constraints.enforceBenRule)}</span>
+                <div style={{ ...toggle, background: constraints.enforceBenRule ? "rgba(201,162,39,.20)" : "rgba(255,255,255,.10)" }} onClick={() => setField("enforceBenRule", !constraints.enforceBenRule)}>
+                  <div style={{ ...knob, left: constraints.enforceBenRule ? 28 : 3 }} />
+                </div>
+              </div>
+            </div>
+
+            <div style={row}>
+              <div>
                 <div style={label}>تفريغ جميع معلمي المادة للتصحيح</div>
-                <div style={note}>اليوم التالي فقط + صفوف 1-4 (مطابقة نصية) + صفوف 5-12 (مجموعات) — ويمكن تحديد يوم تصحيح بعينه</div>
+                <div style={note}>متوقف افتراضيًا — ويعمل فقط عند التفعيل اليدوي. اليوم التالي فقط + صفوف 1-4 (مطابقة نصية) + صفوف 5-12 (مجموعات)</div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <span style={statusChip}>{boolText(!!constraints.freeAllSubjectTeachersForCorrection)}</span>
@@ -273,7 +286,7 @@ export default function TaskDistributionConstraintsSection({
             <div style={{ ...row, borderBottom: allowTwo ? `1px solid ${line}` : "none" }}>
               <div>
                 <div style={label}>السماح بفترتين في اليوم الواحد</div>
-                <div style={note}>اختر: كل الأيام أو تواريخ محددة فقط</div>
+                <div style={note}>مغلق افتراضيًا — وعند التفعيل يمكنك اختيار كل الأيام أو تواريخ محددة فقط</div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <span style={statusChip}>{boolText(allowTwo)}</span>
