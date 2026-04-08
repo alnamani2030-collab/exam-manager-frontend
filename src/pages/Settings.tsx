@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
-import { loadRun, RUN_UPDATED_EVENT } from "../utils/taskDistributionStorage";
+import { loadRun, RUN_UPDATED_EVENT, MASTER_TABLE_UPDATED_EVENT } from "../utils/taskDistributionStorage";
 import { loadTenantArray } from "../services/tenantData";
 import { exportElementAsPdf } from "../lib/pdfExport";
+import SettingsReportHeader from "../features/settings/components/SettingsReportHeader";
 import SettingsDistributionStatsSection from "../features/settings/components/SettingsDistributionStatsSection";
 
 const EXAMS_KEY = "exam-manager:exams:v1";
@@ -249,7 +250,16 @@ export default function Settings() {
   useEffect(() => {
     const bump = () => setTick((x) => x + 1);
 
-    const onRunUpdated = () => bump();
+    const onRunUpdated = (e: any) => {
+      const tid = String(e?.detail?.tenantId || "").trim();
+      if (tid && tid !== tenantId) return;
+      bump();
+    };
+    const onMasterUpdated = (e: any) => {
+      const tid = String(e?.detail?.tenantId || "").trim();
+      if (tid && tid !== tenantId) return;
+      bump();
+    };
     const onStorage = (e: StorageEvent) => {
       const k = String(e.key || "");
       if (
@@ -264,15 +274,17 @@ export default function Settings() {
     };
 
     window.addEventListener(RUN_UPDATED_EVENT, onRunUpdated as any);
+    window.addEventListener(MASTER_TABLE_UPDATED_EVENT, onMasterUpdated as any);
     window.addEventListener("storage", onStorage);
     window.addEventListener("focus", bump);
 
     return () => {
       window.removeEventListener(RUN_UPDATED_EVENT, onRunUpdated as any);
+      window.removeEventListener(MASTER_TABLE_UPDATED_EVENT, onMasterUpdated as any);
       window.removeEventListener("storage", onStorage);
       window.removeEventListener("focus", bump);
     };
-  }, []);
+  }, [tenantId]);
 
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -552,29 +564,6 @@ export default function Settings() {
   const totalCoveragePct = totals.requiredTotal > 0 ? Math.round((totals.total / totals.requiredTotal) * 100) : 100;
   const BIG_DEFICIT_THRESHOLD = 4;
 
-  const severeRows = useMemo(() => reportRows.filter((r: any) => (Number(r.deficit) || 0) >= BIG_DEFICIT_THRESHOLD), [reportRows]);
-  const mediumRows = useMemo(
-    () => reportRows.filter((r: any) => {
-      const d = Number(r.deficit) || 0;
-      return d > 0 && d < BIG_DEFICIT_THRESHOLD;
-    }),
-    [reportRows]
-  );
-  const lastRunHuman = useMemo(() => {
-    if (!run?.createdAtISO) return "بانتظار تشغيل فعلي";
-    try {
-      return new Date(run.createdAtISO).toLocaleString("ar", { hour12: true });
-    } catch {
-      return String(run.createdAtISO);
-    }
-  }, [run]);
-  const sourceLabelText =
-    assignments.source === "master-table"
-      ? "الجدول الشامل"
-      : assignments.source === "run"
-      ? "آخر تشغيل (Run)"
-      : "لا توجد بيانات";
-
   const exportPDF = async () => {
     const el = document.getElementById("dist-stats-report");
     const title = "تقرير إحصائية التوزيع";
@@ -637,9 +626,6 @@ export default function Settings() {
   };
 
   const lastWhatsAppAlertRef = useRef<string>("");
-  const topScrollRef = useRef<HTMLDivElement>(null);
-  const topScrollInnerRef = useRef<HTMLDivElement>(null);
-  const contentScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const adminPhone = normalizePhone(localStorage.getItem(WHATSAPP_ADMIN_KEY) || "");
@@ -680,493 +666,41 @@ export default function Settings() {
     window.open(url, "_blank", "noopener,noreferrer");
   }, [reportRows, totalDeficit, run]);
 
-  useEffect(() => {
-    const top = topScrollRef.current;
-    const topInner = topScrollInnerRef.current;
-    const content = contentScrollRef.current;
-    if (!top || !topInner || !content) return;
-
-    let syncingTop = false;
-    let syncingContent = false;
-
-    const syncWidths = () => {
-      topInner.style.width = `${content.scrollWidth}px`;
-    };
-
-    const onTopScroll = () => {
-      if (syncingContent) {
-        syncingContent = false;
-        return;
-      }
-      syncingTop = true;
-      content.scrollLeft = top.scrollLeft;
-    };
-
-    const onContentScroll = () => {
-      if (syncingTop) {
-        syncingTop = false;
-        return;
-      }
-      syncingContent = true;
-      top.scrollLeft = content.scrollLeft;
-    };
-
-    syncWidths();
-    top.addEventListener("scroll", onTopScroll, { passive: true });
-    content.addEventListener("scroll", onContentScroll, { passive: true });
-    window.addEventListener("resize", syncWidths);
-
-    const resizeObserver =
-      typeof ResizeObserver !== "undefined"
-        ? new ResizeObserver(() => syncWidths())
-        : null;
-    resizeObserver?.observe(content);
-
-    return () => {
-      top.removeEventListener("scroll", onTopScroll);
-      content.removeEventListener("scroll", onContentScroll);
-      window.removeEventListener("resize", syncWidths);
-      resizeObserver?.disconnect();
-    };
-  }, [tick, isStatsFull, reportRows.length, totals.committees, totals.requiredTotal]);
-
   return (
-    <div
-      style={{
-        padding: 20,
-        direction: "rtl",
-        minHeight: "100vh",
-        background:
-          "radial-gradient(circle at top, rgba(212,175,55,0.16), transparent 24%), radial-gradient(circle at 85% 18%, rgba(59,130,246,0.10), transparent 22%), linear-gradient(180deg, #070707 0%, #0b0b0b 100%)",
-        position: "relative",
-        overflowX: "hidden",
-        overflowY: "visible",
-      }}
-    >
-      <div
-        style={{
-          position: "absolute",
-          top: -180,
-          left: "50%",
-          transform: "translateX(-50%)",
-          width: 620,
-          height: 620,
-          borderRadius: "50%",
-          background: "radial-gradient(circle, rgba(212,175,55,0.20) 0%, rgba(212,175,55,0.05) 34%, transparent 72%)",
-          filter: "blur(10px)",
-          pointerEvents: "none",
-        }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          right: -120,
-          top: 220,
-          width: 360,
-          height: 360,
-          borderRadius: "50%",
-          background: "radial-gradient(circle, rgba(16,185,129,0.10), transparent 70%)",
-          filter: "blur(12px)",
-          pointerEvents: "none",
-        }}
+    <div style={{ padding: 20, direction: "rtl", background: "#0f0f0f", minHeight: "100vh" }}>
+      <SettingsReportHeader
+        logo={branding.logo}
+        appName={branding.appName}
+        sourceLabel={
+          assignments.source === "master-table"
+            ? "الجدول الشامل"
+            : assignments.source === "run"
+            ? "آخر تشغيل (Run)"
+            : "-"
+        }
+        totalDeficit={totalDeficit}
+        sortDir={sortDir}
+        isStatsFull={isStatsFull}
+        lastRunLabel={run?.createdAtISO || null}
+        onSortAsc={() => setSortDir("asc")}
+        onSortDesc={() => setSortDir("desc")}
+        onExportPdf={exportPDF}
+        onToggleFullscreen={() => setIsStatsFull((v) => !v)}
       />
 
-      <div style={{ maxWidth: 1460, margin: "0 auto", position: "relative", zIndex: 1 }}>
-        <div
-          ref={topScrollRef}
-          style={{
-            overflowX: "auto",
-            overflowY: "hidden",
-            height: 14,
-            marginBottom: 10,
-            borderRadius: 999,
-            background: "rgba(255,255,255,0.04)",
-            border: "1px solid rgba(255,255,255,0.06)",
-          }}
-          title="شريط تمرير أفقي"
-        >
-          <div ref={topScrollInnerRef} style={{ height: 1 }} />
-        </div>
-
-        <div
-          ref={contentScrollRef}
-          style={{
-            overflowX: "auto",
-            overflowY: "visible",
-            paddingBottom: 4,
-          }}
-        >
-          <div
-            style={{
-              minWidth: 1200,
-              width: "max-content",
-              maxWidth: "none",
-              display: "grid",
-              gap: 20,
-            }}
-          >
-        <div
-          style={{
-            display: "grid",
-            gap: 18,
-            border: "1px solid rgba(212,175,55,0.18)",
-            borderRadius: 34,
-            padding: 28,
-            background:
-              "linear-gradient(135deg, rgba(30,22,2,0.94), rgba(8,8,8,0.96), rgba(27,21,3,0.94))",
-            boxShadow:
-              "0 32px 100px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.05), inset 0 -1px 0 rgba(255,255,255,0.03)",
-          }}
-        >
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 14, flexWrap: "wrap", alignItems: "start" }}>
-            <div style={{ display: "grid", gap: 14, maxWidth: 880 }}>
-              <div
-                style={{
-                  display: "inline-flex",
-                  width: "fit-content",
-                  alignItems: "center",
-                  gap: 8,
-                  padding: "8px 14px",
-                  borderRadius: 999,
-                  background: "rgba(16,185,129,0.12)",
-                  border: "1px solid rgba(16,185,129,0.22)",
-                  color: "#a7f3d0",
-                  fontWeight: 900,
-                  fontSize: 12,
-                }}
-              >
-                تقرير تنفيذي مباشر من بيانات التوزيع
-              </div>
-
-              <div>
-                <div style={{ fontSize: 18, fontWeight: 900, color: "rgba(255,241,196,0.88)", marginBottom: 10 }}>
-                  {branding.appName}
-                </div>
-                <h1
-                  style={{
-                    margin: 0,
-                    fontSize: "clamp(34px, 5vw, 64px)",
-                    lineHeight: 1.05,
-                    fontWeight: 950,
-                    color: "#fff1c4",
-                    letterSpacing: "-0.03em",
-                    textShadow: "0 8px 28px rgba(212,175,55,0.16)",
-                  }}
-                >
-                  مركز رقابة التوزيع
-                </h1>
-              </div>
-
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: 16,
-                  lineHeight: 2,
-                  color: "rgba(255,241,196,0.82)",
-                  maxWidth: 900,
-                }}
-              >
-                هذه الصفحة تمنح الإدارة رؤية تنفيذية فورية لحالة توزيع المراقبة من خلال مصدر البيانات الفعلي، وتعرض
-                التغطية والعجز واللجان والحالات الحرجة في واجهة فاخرة ومنظمة تساعد على اتخاذ القرار بسرعة وثقة.
-              </p>
-
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                {[
-                  { label: "مصدر التقرير", value: sourceLabelText },
-                  { label: "آخر تشغيل", value: lastRunHuman },
-                  { label: "حالة التغطية", value: `${totalCoveragePct}%` },
-                ].map((item) => (
-                  <div
-                    key={item.label}
-                    style={{
-                      border: "1px solid rgba(255,255,255,0.08)",
-                      background: "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
-                      borderRadius: 18,
-                      padding: "12px 14px",
-                      minWidth: 190,
-                      boxShadow: "0 14px 28px rgba(0,0,0,0.22)",
-                    }}
-                  >
-                    <div style={{ fontSize: 12, color: "rgba(255,241,196,0.64)", fontWeight: 800 }}>{item.label}</div>
-                    <div style={{ marginTop: 6, fontSize: 16, color: "#fff8dc", fontWeight: 900 }}>{item.value}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div
-              style={{
-                minWidth: 300,
-                maxWidth: 380,
-                width: "100%",
-                border: "1px solid rgba(255,255,255,0.08)",
-                borderRadius: 28,
-                padding: 22,
-                background: "linear-gradient(180deg, rgba(212,175,55,0.08), rgba(255,255,255,0.02))",
-                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
-                display: "grid",
-                gap: 16,
-              }}
-            >
-              <div
-                style={{
-                  display: "inline-flex",
-                  width: "fit-content",
-                  padding: "8px 12px",
-                  borderRadius: 999,
-                  background: totalDeficit > 0 ? "rgba(239,68,68,0.14)" : "rgba(16,185,129,0.14)",
-                  border: totalDeficit > 0 ? "1px solid rgba(239,68,68,0.24)" : "1px solid rgba(16,185,129,0.24)",
-                  color: totalDeficit > 0 ? "#fecaca" : "#a7f3d0",
-                  fontWeight: 900,
-                  fontSize: 12,
-                }}
-              >
-                {totalDeficit > 0 ? "يحتاج متابعة إدارية" : "الوضع مستقر"}
-              </div>
-
-              <div style={{ fontSize: 28, lineHeight: 1.5, fontWeight: 950, color: "#fff1c4" }}>
-                {totalDeficit > 0
-                  ? "العجز الحالي ظاهر ويحتاج إعادة توازن أو تدخل فوري."
-                  : "لا يوجد عجز حرج حاليًا والتوزيع يعمل ضمن تغطية جيدة."}
-              </div>
-
-              <div style={{ fontSize: 14, lineHeight: 1.95, color: "rgba(255,241,196,0.78)" }}>
-                يتم هنا عرض الحالات الحرجة، والصفوف ذات النقص الكبير، ونسبة التغطية الكلية، مع إمكانية الفرز،
-                التصدير إلى PDF، والتنبيه الإداري عبر واتساب.
-              </div>
-            </div>
-          </div>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
-              gap: 14,
-            }}
-          >
-            {[
-              {
-                label: "إجمالي اللجان",
-                value: totals.committees,
-                hint: "إجمالي اللجان/القاعات الفعلية",
-                tone: "#fde68a",
-              },
-              {
-                label: "المراقبون المسندون",
-                value: totals.inv,
-                hint: "التكليفات الفعلية للمراقبة",
-                tone: "#93c5fd",
-              },
-              {
-                label: "الاحتياط",
-                value: totals.reserve,
-                hint: "المسندون كاحتياط",
-                tone: "#86efac",
-              },
-              {
-                label: "إجمالي العجز",
-                value: totalDeficit,
-                hint: "العجز الكلي بعد الاحتياط",
-                tone: totalDeficit > 0 ? "#fca5a5" : "#a7f3d0",
-              },
-              {
-                label: "التغطية",
-                value: `${totalCoveragePct}%`,
-                hint: "نسبة التغطية الفعلية",
-                tone: "#fff1c4",
-              },
-              {
-                label: "الحالات الحرجة",
-                value: severeRows.length,
-                hint: `عجز ≥ ${BIG_DEFICIT_THRESHOLD}`,
-                tone: severeRows.length ? "#fda4af" : "#c7f9cc",
-              },
-            ].map((card) => (
-              <div
-                key={card.label}
-                style={{
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  borderRadius: 26,
-                  background: "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.02))",
-                  padding: 20,
-                  boxShadow: "0 18px 44px rgba(0,0,0,0.26)",
-                }}
-              >
-                <div style={{ fontSize: 13, color: "rgba(255,241,196,0.66)", fontWeight: 800 }}>{card.label}</div>
-                <div style={{ marginTop: 10, fontSize: 36, fontWeight: 950, color: card.tone }}>{card.value}</div>
-                <div style={{ marginTop: 8, fontSize: 12, color: "rgba(255,241,196,0.58)", lineHeight: 1.8 }}>{card.hint}</div>
-              </div>
-            ))}
-          </div>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-              gap: 12,
-            }}
-          >
-            <div
-              style={{
-                border: "1px solid rgba(255,255,255,0.08)",
-                borderRadius: 22,
-                padding: 16,
-                background: "rgba(255,255,255,0.03)",
-              }}
-            >
-              <div style={{ fontSize: 12, color: "rgba(255,241,196,0.64)", fontWeight: 800, marginBottom: 6 }}>الحالات المتوسطة</div>
-              <div style={{ fontSize: 22, color: "#fff7cc", fontWeight: 900 }}>{mediumRows.length}</div>
-              <div style={{ fontSize: 12, color: "rgba(255,241,196,0.54)", lineHeight: 1.8, marginTop: 6 }}>
-                حالات بها عجز محدود لكنها تحتاج مراجعة قبل الاعتماد النهائي.
-              </div>
-            </div>
-
-            <div
-              style={{
-                border: "1px solid rgba(255,255,255,0.08)",
-                borderRadius: 22,
-                padding: 16,
-                background: "rgba(255,255,255,0.03)",
-              }}
-            >
-              <div style={{ fontSize: 12, color: "rgba(255,241,196,0.64)", fontWeight: 800, marginBottom: 6 }}>حالة الجدول</div>
-              <div style={{ fontSize: 22, color: assignments.rows.length ? "#a7f3d0" : "#fecaca", fontWeight: 900 }}>
-                {assignments.rows.length ? "مرتبط ببيانات فعلية" : "لا توجد بيانات"}
-              </div>
-              <div style={{ fontSize: 12, color: "rgba(255,241,196,0.54)", lineHeight: 1.8, marginTop: 6 }}>
-                يتم الاعتماد على الجدول الشامل أو آخر تشغيل محفوظ بحسب المتوفر.
-              </div>
-            </div>
-
-            <div
-              style={{
-                border: "1px solid rgba(255,255,255,0.08)",
-                borderRadius: 22,
-                padding: 16,
-                background: "rgba(255,255,255,0.03)",
-              }}
-            >
-              <div style={{ fontSize: 12, color: "rgba(255,241,196,0.64)", fontWeight: 800, marginBottom: 6 }}>جاهزية القرار</div>
-              <div style={{ fontSize: 22, color: totalDeficit > 0 ? "#fda4af" : "#bbf7d0", fontWeight: 900 }}>
-                {totalDeficit > 0 ? "يتطلب تدخلًا" : "جاهز للاعتماد"}
-              </div>
-              <div style={{ fontSize: 12, color: "rgba(255,241,196,0.54)", lineHeight: 1.8, marginTop: 6 }}>
-                القراءة الحالية تساعد الإدارة على اعتماد التوزيع أو إعادة موازنته سريعًا.
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "flex-end",
-            gap: 12,
-            flexWrap: "wrap",
-            padding: "6px 0 2px",
-          }}
-        >
-          <button
-            onClick={() => setSortDir("asc")}
-            style={{
-              border: "1px solid rgba(212,175,55,0.28)",
-              borderRadius: 16,
-              padding: "12px 18px",
-              background: sortDir === "asc"
-                ? "linear-gradient(135deg, rgba(212,175,55,0.28), rgba(212,175,55,0.12))"
-                : "rgba(255,255,255,0.04)",
-              color: "#fff1c4",
-              fontWeight: 900,
-              cursor: "pointer",
-              boxShadow: sortDir === "asc" ? "0 10px 24px rgba(212,175,55,0.16)" : "none",
-            }}
-          >
-            فرز تصاعدي
-          </button>
-
-          <button
-            onClick={() => setSortDir("desc")}
-            style={{
-              border: "1px solid rgba(212,175,55,0.28)",
-              borderRadius: 16,
-              padding: "12px 18px",
-              background: sortDir === "desc"
-                ? "linear-gradient(135deg, rgba(212,175,55,0.28), rgba(212,175,55,0.12))"
-                : "rgba(255,255,255,0.04)",
-              color: "#fff1c4",
-              fontWeight: 900,
-              cursor: "pointer",
-              boxShadow: sortDir === "desc" ? "0 10px 24px rgba(212,175,55,0.16)" : "none",
-            }}
-          >
-            فرز تنازلي
-          </button>
-
-          <button
-            onClick={exportPDF}
-            style={{
-              border: "1px solid rgba(96,165,250,0.30)",
-              borderRadius: 16,
-              padding: "12px 18px",
-              background: "rgba(96,165,250,0.10)",
-              color: "#dbeafe",
-              fontWeight: 900,
-              cursor: "pointer",
-            }}
-          >
-            تصدير PDF
-          </button>
-
-          <button
-            onClick={() => setIsStatsFull((v) => !v)}
-            style={{
-              border: "1px solid rgba(16,185,129,0.30)",
-              borderRadius: 16,
-              padding: "12px 18px",
-              background: "rgba(16,185,129,0.10)",
-              color: "#d1fae5",
-              fontWeight: 900,
-              cursor: "pointer",
-            }}
-          >
-            {isStatsFull ? "إغلاق العرض الكامل" : "عرض كامل"}
-          </button>
-        </div>
-
-        <div
-          style={{
-            border: "1px solid rgba(255,255,255,0.08)",
-            borderRadius: 30,
-            padding: 18,
-            background: "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.02))",
-            boxShadow: "0 18px 50px rgba(0,0,0,0.28)",
-          }}
-        >
-          <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 24, color: "#fff1c4", fontWeight: 950, marginBottom: 6 }}>
-              تقرير التوزيع التنفيذي
-            </div>
-            <div style={{ fontSize: 14, lineHeight: 1.9, color: "rgba(255,241,196,0.74)" }}>
-              يعرض هذا القسم القراءة التفصيلية لحالة التغطية والعجز والاحتياط حسب الامتحان والفترة، مع إبراز
-              الحالات الحرجة لتسهيل المتابعة الإدارية واتخاذ القرار.
-            </div>
-          </div>
-
-          <SettingsDistributionStatsSection
-            hasAssignments={assignments.rows.length > 0}
-            isStatsFull={isStatsFull}
-            totalDeficit={totalDeficit}
-            totalCoveragePct={totalCoveragePct}
-            reportRows={reportRows as any[]}
-            totals={totals}
-            bigDeficitThreshold={BIG_DEFICIT_THRESHOLD}
-            whatsappAdminKey={WHATSAPP_ADMIN_KEY}
-            onCloseFullscreen={() => setIsStatsFull(false)}
-          />
-        </div>
-        </div>
+      <div style={{ marginTop: 18 }}>
+        <SettingsDistributionStatsSection
+          hasAssignments={assignments.rows.length > 0}
+          isStatsFull={isStatsFull}
+          totalDeficit={totalDeficit}
+          totalCoveragePct={totalCoveragePct}
+          reportRows={reportRows as any[]}
+          totals={totals}
+          bigDeficitThreshold={BIG_DEFICIT_THRESHOLD}
+          whatsappAdminKey={WHATSAPP_ADMIN_KEY}
+          onCloseFullscreen={() => setIsStatsFull(false)}
+        />
       </div>
-    </div>
     </div>
   );
 }
