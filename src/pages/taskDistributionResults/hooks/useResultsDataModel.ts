@@ -10,6 +10,36 @@ import { buildResultsConflictUids, buildResultsWarnings } from "../services/resu
 const TEACHERS_SUB = "teachers";
 const EXAMS_SUB = "exams";
 
+
+function periodToAMPM(p: string): "AM" | "PM" {
+  const x = String(p || "").trim().toUpperCase();
+  if (x === "PM" || x === "BM" || String(p || "").includes("الثانية")) return "PM";
+  return "AM";
+}
+
+function normalizeStoredTaskType(rawTaskType: any): string {
+  const raw = String(rawTaskType || "").trim().toUpperCase();
+  if (raw === "INVIGILATION" || raw === "RESERVE" || raw === "REVIEW_FREE" || raw === "CORRECTION_FREE") return raw;
+  if (raw.includes("مراقبة")) return "INVIGILATION";
+  if (raw.includes("احتياط")) return "RESERVE";
+  if (raw.includes("مراجعة")) return "REVIEW_FREE";
+  if (raw.includes("تصحيح")) return "CORRECTION_FREE";
+  return raw;
+}
+
+function getAssignmentPeriods(assignment: any, taskType?: string): ("AM" | "PM")[] {
+  const safeTaskType = normalizeStoredTaskType(taskType || assignment?.taskType || assignment?.role || "");
+  const covers = Array.isArray(assignment?.coversPeriods)
+    ? assignment.coversPeriods.map((p: any) => periodToAMPM(String(p || "")))
+    : [];
+
+  if (covers.length) return Array.from(new Set(covers));
+  if (assignment?.fullDay || safeTaskType === "REVIEW_FREE" || safeTaskType === "CORRECTION_FREE") {
+    return ["AM", "PM"];
+  }
+  return [periodToAMPM(String(assignment?.period || ""))];
+}
+
 export function useResultsDataModel({
   tenantId,
   run,
@@ -40,13 +70,19 @@ export function useResultsDataModel({
 
   const assignments: any[] = useMemo(
     () =>
-      (run?.assignments || []).map((a: any) => ({
-        ...a,
-        __uid: a?.__uid,
-        dateISO: a?.dateISO,
-        subject: normalizeSubject(String(a?.subject || "")),
-        period: String(a?.period || "AM").toUpperCase() || "AM",
-      })),
+      (run?.assignments || []).map((a: any) => {
+        const taskType = normalizeStoredTaskType(a?.taskType || a?.role || "");
+        const periods = getAssignmentPeriods(a, taskType);
+        return {
+          ...a,
+          __uid: a?.__uid,
+          dateISO: a?.dateISO,
+          taskType,
+          subject: normalizeSubject(String(a?.subject || "")),
+          period: periodToAMPM(String(a?.period || "AM")),
+          __periods: periods,
+        };
+      }),
     [run, normalizeSubject],
   );
 
@@ -224,9 +260,9 @@ export function useResultsDataModel({
         if (String(a?.taskType || "") !== "CORRECTION_FREE") continue;
         const d = String(a?.dateISO || "").trim();
         if (!d) continue;
-        const p = String(a?.period || "AM");
         const s = normalizeSubject(String(a?.subject || "").trim()) || "تصحيح";
-        push(d, p, s);
+        const periods = getAssignmentPeriods(a, a?.taskType);
+        for (const p of periods) push(d, p, s);
       }
     } else {
       for (const a of assignments as any[]) push(String(a.dateISO || ""), String(a.period || "AM"), String(a.subject || ""));
@@ -263,11 +299,13 @@ export function useResultsDataModel({
       if (!teacher) continue;
       const dateISO = String(a.dateISO || "").trim();
       const subject = normalizeSubject(String(a.subject || "").trim());
-      const period = String(a.period || "AM").toUpperCase() || "AM";
-      const key = `${dateISO}__${period}__${subject}`;
+      const periods = getAssignmentPeriods(a, a?.taskType);
       if (!m[teacher]) m[teacher] = {};
-      if (!m[teacher][key]) m[teacher][key] = [];
-      m[teacher][key].push(a as Assignment);
+      for (const period of periods) {
+        const key = `${dateISO}__${period}__${subject}`;
+        if (!m[teacher][key]) m[teacher][key] = [];
+        m[teacher][key].push(a as Assignment);
+      }
     }
     for (const t of Object.keys(m)) {
       for (const k of Object.keys(m[t])) {
