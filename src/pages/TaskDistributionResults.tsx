@@ -16,7 +16,6 @@ import { useResultsDataModel } from "./taskDistributionResults/hooks/useResultsD
 import { useResultsPageActions } from "./taskDistributionResults/hooks/useResultsPageActions";
 import { useResultsTableActions } from "./taskDistributionResults/hooks/useResultsTableActions";
 import { useResultsClipboardShortcuts } from "./taskDistributionResults/hooks/useResultsClipboardShortcuts";
-import { loadRun, RUN_UPDATED_EVENT, MASTER_TABLE_UPDATED_EVENT } from "../utils/taskDistributionStorage";
 
 function normalizeSubject(subject: string) {
   return String(subject || "").replace(/\s+/g, " ").trim();
@@ -98,40 +97,6 @@ export default function TaskDistributionResults() {
     setImportError: interaction.setImportError,
     onArchived: () => nav("/archive"),
   });
-
-
-  React.useEffect(() => {
-    const refreshRunFromStorage = () => {
-      try {
-        const latest = loadRun(String(tenantId));
-        if (latest && Array.isArray((latest as any).assignments)) {
-          setRun(latest);
-        }
-      } catch {}
-    };
-
-    const onRunUpdated = (e: any) => {
-      const tid = String(e?.detail?.tenantId || "").trim();
-      if (tid && tid !== tenantId) return;
-      refreshRunFromStorage();
-    };
-
-    const onMasterUpdated = (e: any) => {
-      const tid = String(e?.detail?.tenantId || "").trim();
-      if (tid && tid !== tenantId) return;
-      refreshRunFromStorage();
-    };
-
-    window.addEventListener(RUN_UPDATED_EVENT, onRunUpdated as any);
-    window.addEventListener(MASTER_TABLE_UPDATED_EVENT, onMasterUpdated as any);
-    window.addEventListener("focus", refreshRunFromStorage);
-
-    return () => {
-      window.removeEventListener(RUN_UPDATED_EVENT, onRunUpdated as any);
-      window.removeEventListener(MASTER_TABLE_UPDATED_EVENT, onMasterUpdated as any);
-      window.removeEventListener("focus", refreshRunFromStorage);
-    };
-  }, [tenantId, setRun]);
 
   const tableActions = useResultsTableActions({
     tenantId,
