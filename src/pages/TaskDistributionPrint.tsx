@@ -779,6 +779,7 @@ export default function TaskDistributionPrint() {
   const dateISO = normalizeISODate(qs.get("dateISO") || "");
   const teacherNameFilter = (qs.get("teacher") || "").trim();
   const subjectFilter = (qs.get("subject") || "").trim();
+  const requestedPeriod = (qs.get("period") || "").trim();
 
   const schoolHeader = useMemo(() => {
     const countryName = "سلطنة عمان";
@@ -911,30 +912,18 @@ export default function TaskDistributionPrint() {
       rows = rows.filter((r) => normalizeText(getExamSubject(r)) === nSub);
     }
 
+    if (reportType === "daily" && requestedPeriod) {
+      const wanted = normalizePeriodKey(requestedPeriod);
+      rows = rows.filter((r) => normalizePeriodKey(getExamPeriod(r)) === wanted);
+    }
+
     return rows;
-  }, [masterTableRows, reportType, dateISO, teacherNameFilter, subjectFilter]);
+  }, [masterTableRows, reportType, dateISO, teacherNameFilter, subjectFilter, requestedPeriod]);
 
   /** -------------------------------------------
    * Header exam info
    * ------------------------------------------ */
-  const headerExamInfo = useMemo(() => {
-    const r = filteredRows[0] || masterTableRows[0] || null;
 
-    const subject = subjectFilter || (r ? getExamSubject(r) : "");
-    const dISO = r ? normalizeISODate(getExamDateISO(r)) : dateISO;
-    const period = r ? getExamPeriod(r) : "";
-
-    let dayLabel = r ? getExamDayLabel(r) : "";
-    let time = r ? getExamTime(r) : "";
-
-    const meta = lookupExamMeta(subject, dISO, period);
-    if (meta) {
-      dayLabel = meta.dayLabel || dayLabel;
-      time = meta.time || time;
-    }
-
-    return { subject, dISO, dayLabel, period, time };
-  }, [filteredRows, masterTableRows, dateISO, subjectFilter, examsIndex]);
 
   /** -------------------------------------------
    * Query helper
@@ -1086,7 +1075,7 @@ export default function TaskDistributionPrint() {
       });
     };
 
-    return Array.from(groups.values())
+    const pages = Array.from(groups.values())
       .map((g) => ({
         ...g,
         invigilators: sortInvigilators(g.rows.filter((r) => getTaskType(r) === "INVIGILATION")),
@@ -1100,7 +1089,21 @@ export default function TaskDistributionPrint() {
         if (pa !== pb) return pa.localeCompare(pb, "ar");
         return a.subject.localeCompare(b.subject, "ar");
       });
-  }, [reportType, filteredRows, examsIndex]);
+
+    // ✅ عند اختيار مادة فقط بدون تحديد فترة، وقد توجد نفس المادة في أكثر من فترة
+    // نختار الصفحة الأهم عمليًا: التي تحتوي أكبر عدد من المراقبين
+    if (subjectFilter && !requestedPeriod && pages.length > 1) {
+      const ranked = [...pages].sort((a, b) => {
+        if (b.invigilators.length !== a.invigilators.length) return b.invigilators.length - a.invigilators.length;
+        if (b.reserves.length !== a.reserves.length) return b.reserves.length - a.reserves.length;
+        if (b.reviewFree.length !== a.reviewFree.length) return b.reviewFree.length - a.reviewFree.length;
+        return normalizePeriodKey(a.period).localeCompare(normalizePeriodKey(b.period), "ar");
+      });
+      return ranked.length ? [ranked[0]] : [];
+    }
+
+    return pages;
+  }, [reportType, filteredRows, examsIndex, subjectFilter, requestedPeriod]);
 
   /** -------------------------------------------
    * WhatsApp text
@@ -1114,6 +1117,26 @@ export default function TaskDistributionPrint() {
     const dateLine = dateISO ? `التاريخ: ${dateISO}\n` : "";
     return `${base}${typeLine}${teacherLine}${empLine}${subjectLine}${dateLine}تم الإنشاء من النظام.`;
   }, [schoolHeader.schoolName, title, teacherNameFilter, subjectFilter, dateISO, teacherEmployeeIndex]);
+
+  const headerExamInfo = useMemo(() => {
+    const page = reportType === "daily" && dailyPages.length ? dailyPages[0] : null;
+    const r = page ? null : filteredRows[0] || masterTableRows[0] || null;
+
+    const subject = page?.subject || subjectFilter || (r ? getExamSubject(r) : "");
+    const dISO = page?.dISO || (r ? normalizeISODate(getExamDateISO(r)) : dateISO);
+    const period = page?.period || (r ? getExamPeriod(r) : "");
+
+    let dayLabel = page?.dayLabel || (r ? getExamDayLabel(r) : "");
+    let time = page?.time || (r ? getExamTime(r) : "");
+
+    const meta = lookupExamMeta(subject, dISO, period);
+    if (meta) {
+      dayLabel = meta.dayLabel || dayLabel;
+      time = meta.time || time;
+    }
+
+    return { subject, dISO, dayLabel, period, time };
+  }, [reportType, dailyPages, filteredRows, masterTableRows, dateISO, subjectFilter, examsIndex]);
 
   /** -------------------------------------------
    * Teacher pages (all teachers)
@@ -1395,7 +1418,7 @@ export default function TaskDistributionPrint() {
                     <td style={styles.tdNum}>{idx + 1}</td>
                     <td style={styles.td}>
                       <div style={{ fontWeight: 900 }}>{day}</div>
-                      <div style={{ fontWeight: 800, color: "#cbd5e1" }}>{dISO || "—"}</div>
+                      <div style={{ fontWeight: 800, color: "#334155" }}>{dISO || "—"}</div>
                     </td>
                     <td style={styles.td}>{formatPeriod(per)}</td>
                     <td style={styles.td}>{taskLabel(getTaskType(r))}</td>
@@ -1471,70 +1494,14 @@ export default function TaskDistributionPrint() {
     }, 650);
   }
 
-  const previewCount = reportType === "daily" ? dailyPages.length : teacherNameFilter ? 1 : allTeachersPages.length;
-  const reportModeLabel = reportType === "daily" ? "الكشف اليومي" : teacherNameFilter ? "تقرير معلم فردي" : "تقرير جميع المعلمين";
-  const activeFilterSummary = [
-    teacherNameFilter ? `المعلم: ${teacherNameFilter}` : "",
-    subjectFilter ? `المادة: ${subjectFilter}` : "",
-    dateISO ? `التاريخ: ${dateISO}` : "",
-  ].filter(Boolean);
-
   return (
     <div style={styles.outer}>
       <style>{printCss}</style>
 
-      <div className="no-print" style={styles.heroShell}>
-        <div style={styles.heroGlowA} />
-        <div style={styles.heroGlowB} />
-        <div style={styles.heroGrid}>
-          <div style={styles.heroContent}>
-            <div style={styles.heroEyebrow}>مركز التقارير والطباعة الذكية</div>
-            <h1 style={styles.heroTitle}>بوابة التقارير الرسمية لتوزيع المهام</h1>
-            <p style={styles.heroText}>
-              واجهة تنفيذية فاخرة لإعداد وطباعة ومشاركة تقارير توزيع المهام من البيانات الحقيقية للنظام، مع تجربة عرض منظمة وانطباع بصري قوي من أول لحظة.
-            </p>
-            <div style={styles.heroBadgeRow}>
-              <span style={{ ...styles.heroBadge, ...styles.heroBadgeGold }}>المصدر: النظام فقط</span>
-              <span style={{ ...styles.heroBadge, ...styles.heroBadgeBlue }}>{reportModeLabel}</span>
-              <span style={{ ...styles.heroBadge, ...styles.heroBadgeGreen }}>جاهز للطباعة والمشاركة</span>
-            </div>
-            {!!activeFilterSummary.length && (
-              <div style={styles.heroFilterRow}>
-                {activeFilterSummary.map((item) => (
-                  <span key={item} style={styles.heroFilterChip}>{item}</span>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div style={styles.heroStatsPanel}>
-            <div style={styles.heroStatsTitle}>ملخص سريع</div>
-            <div style={styles.heroStatsGrid}>
-              <div style={styles.heroStatCard}>
-                <div style={styles.heroStatValue}>{previewCount}</div>
-                <div style={styles.heroStatLabel}>عدد الصفحات/التقارير</div>
-              </div>
-              <div style={styles.heroStatCard}>
-                <div style={styles.heroStatValue}>{filteredRows.length}</div>
-                <div style={styles.heroStatLabel}>إجمالي السجلات المعروضة</div>
-              </div>
-              <div style={styles.heroStatCard}>
-                <div style={styles.heroStatValue}>{teacherOptions.length}</div>
-                <div style={styles.heroStatLabel}>المعلمون المتاحون</div>
-              </div>
-              <div style={styles.heroStatCard}>
-                <div style={styles.heroStatValue}>{subjectOptions.length}</div>
-                <div style={styles.heroStatLabel}>المواد المتاحة</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* TOP ACTION BAR */}
       <div className="no-print" style={styles.topActionBar}>
         <div style={styles.topActionTitle}>
-          <div style={{ fontSize: 16, fontWeight: 900, color: "#fef3c7" }}>خيارات العرض والطباعة</div>
+          <div style={{ fontSize: 16, fontWeight: 900, color: "#0f172a" }}>خيارات العرض والطباعة</div>
         </div>
 
         <div style={styles.topActionBtns}>
@@ -1618,17 +1585,8 @@ export default function TaskDistributionPrint() {
         </div>
       </div>
 
-      <div className="no-print" style={styles.previewFrame}>
-        <div style={styles.previewFrameHeader}>
-          <div>
-            <div style={styles.previewFrameTitle}>معاينة التقرير</div>
-            <div style={styles.previewFrameSub}>المعاينة التالية تعكس شكل التقرير الرسمي قبل الطباعة أو التصدير.</div>
-          </div>
-          <div style={styles.previewFramePill}>A4 • Print Ready</div>
-        </div>
-
-        {/* ✅ PRINT AREA: هذا هو التقرير */}
-        <div id="print-root" ref={printAreaRef}>
+      {/* ✅ PRINT AREA: هذا هو التقرير */}
+      <div id="print-root" ref={printAreaRef}>
         {/* DAILY REPORT */}
         {reportType === "daily" && (
           <>
@@ -1687,7 +1645,6 @@ export default function TaskDistributionPrint() {
             )}
           </>
         )}
-        </div>
       </div>
     </div>
   );
@@ -1699,60 +1656,17 @@ export default function TaskDistributionPrint() {
 const styles: Record<string, React.CSSProperties> = {
   outer: {
     minHeight: "100vh",
-    background: "radial-gradient(circle at top, rgba(250,204,21,0.18), transparent 18%), radial-gradient(circle at 85% 18%, rgba(37,99,235,0.16), transparent 22%), linear-gradient(180deg, #060912 0%, #0b1220 100%)",
+    background: "#0b1220",
     padding: 18,
     direction: "rtl",
     fontFamily: 'system-ui, -apple-system, "Segoe UI", Tahoma, Arial, sans-serif',
   },
-  heroShell: {
-    maxWidth: 1180,
-    margin: "0 auto 14px auto",
-    position: "relative",
-    overflow: "hidden",
-    borderRadius: 28,
-    border: "1px solid rgba(250,204,21,0.18)",
-    background: "linear-gradient(135deg, rgba(64,48,8,0.96), rgba(10,15,30,0.97) 45%, rgba(21,34,58,0.98) 100%)",
-    boxShadow: "0 30px 80px rgba(0,0,0,0.38)",
-    padding: 24,
-  },
-  heroGlowA: {
-    position: "absolute", top: -80, right: -60, width: 240, height: 240, borderRadius: "50%",
-    background: "radial-gradient(circle, rgba(250,204,21,0.20), transparent 70%)", pointerEvents: "none",
-  },
-  heroGlowB: {
-    position: "absolute", bottom: -120, left: -40, width: 260, height: 260, borderRadius: "50%",
-    background: "radial-gradient(circle, rgba(59,130,246,0.16), transparent 72%)", pointerEvents: "none",
-  },
-  heroGrid: { display: "grid", gridTemplateColumns: "minmax(0, 1.45fr) minmax(320px, 0.95fr)", gap: 20, position: "relative", zIndex: 1, alignItems: "stretch" },
-  heroContent: { display: "grid", gap: 14, alignContent: "start" },
-  heroEyebrow: { display: "inline-flex", width: "fit-content", padding: "8px 12px", borderRadius: 999, background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.22)", color: "#bbf7d0", fontWeight: 900, fontSize: 12 },
-  heroTitle: { margin: 0, fontSize: "clamp(30px, 4.4vw, 52px)", lineHeight: 1.05, fontWeight: 950, color: "#fef3c7", letterSpacing: "-0.02em" },
-  heroText: { margin: 0, maxWidth: 760, lineHeight: 1.95, fontSize: 15, color: "rgba(254,243,199,0.82)" },
-  heroBadgeRow: { display: "flex", gap: 10, flexWrap: "wrap" },
-  heroBadge: { display: "inline-flex", alignItems: "center", justifyContent: "center", borderRadius: 999, padding: "8px 12px", fontSize: 12, fontWeight: 900, border: "1px solid transparent" },
-  heroBadgeGold: { background: "rgba(250,204,21,0.12)", color: "#fde68a", borderColor: "rgba(250,204,21,0.25)" },
-  heroBadgeBlue: { background: "rgba(59,130,246,0.12)", color: "#bfdbfe", borderColor: "rgba(59,130,246,0.25)" },
-  heroBadgeGreen: { background: "rgba(16,185,129,0.12)", color: "#a7f3d0", borderColor: "rgba(16,185,129,0.25)" },
-  heroFilterRow: { display: "flex", gap: 8, flexWrap: "wrap" },
-  heroFilterChip: { display: "inline-flex", alignItems: "center", borderRadius: 999, padding: "7px 11px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.10)", color: "#e5e7eb", fontSize: 12, fontWeight: 800 },
-  heroStatsPanel: { border: "1px solid rgba(255,255,255,0.08)", borderRadius: 24, padding: 18, background: "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))", backdropFilter: "blur(10px)", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)", display: "grid", gap: 14, alignContent: "start" },
-  heroStatsTitle: { fontSize: 16, fontWeight: 900, color: "#fff1a6" },
-  heroStatsGrid: { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 },
-  heroStatCard: { borderRadius: 18, padding: 16, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 12px 24px rgba(0,0,0,0.14)" },
-  heroStatValue: { fontSize: 28, fontWeight: 950, color: "#fff7cc", lineHeight: 1.1, marginBottom: 6 },
-  heroStatLabel: { fontSize: 12, color: "rgba(254,243,199,0.70)", fontWeight: 800, lineHeight: 1.7 },
-  previewFrame: { maxWidth: 1180, margin: "0 auto", borderRadius: 24, padding: 16, background: "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.025))", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 20px 50px rgba(0,0,0,0.30)" },
-  previewFrameHeader: { display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 14 },
-  previewFrameTitle: { fontSize: 18, fontWeight: 950, color: "#fef3c7" },
-  previewFrameSub: { marginTop: 4, fontSize: 13, color: "rgba(245,231,178,0.72)", fontWeight: 800 },
-  previewFramePill: { display: "inline-flex", alignItems: "center", justifyContent: "center", borderRadius: 999, padding: "8px 12px", background: "rgba(250,204,21,0.12)", border: "1px solid rgba(250,204,21,0.25)", color: "#fde68a", fontWeight: 900, fontSize: 12 },
 
   topActionBar: {
     maxWidth: 1180,
     margin: "0 auto 12px auto",
-    background: "linear-gradient(180deg, rgba(17,24,39,0.96), rgba(10,15,28,0.98))",
-    border: "1px solid rgba(250,204,21,0.16)",
-    borderRadius: 20,
+    background: "#ffffff",
+    borderRadius: 18,
     boxShadow: "0 12px 30px rgba(0,0,0,.22)",
     padding: "12px 14px",
     display: "flex",
@@ -1798,9 +1712,8 @@ const styles: Record<string, React.CSSProperties> = {
 
   filtersRow1to1: { maxWidth: 1180, margin: "0 auto 14px auto" },
   filtersGrid: {
-    background: "linear-gradient(180deg, rgba(17,24,39,0.96), rgba(10,15,28,0.98))",
-    border: "1px solid rgba(250,204,21,0.16)",
-    borderRadius: 20,
+    background: "#ffffff",
+    borderRadius: 18,
     boxShadow: "0 12px 30px rgba(0,0,0,.22)",
     padding: 12,
     display: "grid",
@@ -1808,8 +1721,8 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 12,
     alignItems: "end",
   },
-  filterBox: { border: "1px solid #e5e7eb", borderRadius: 16, padding: "10px 10px", background: "rgba(255,255,255,0.04)" },
-  filterBoxLabel: { fontSize: 12, fontWeight: 900, color: "#cbd5e1", marginBottom: 6 },
+  filterBox: { border: "1px solid #e5e7eb", borderRadius: 16, padding: "10px 10px", background: "#f8fafc" },
+  filterBoxLabel: { fontSize: 12, fontWeight: 900, color: "#334155", marginBottom: 6 },
   filterSelect: {
     width: "100%",
     padding: "8px 10px",
@@ -1843,7 +1756,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 14,
     border: "1px solid #e5e7eb",
     background: "#ffffff",
-    color: "#fef3c7",
+    color: "#0f172a",
     fontWeight: 900,
     cursor: "pointer",
   },
