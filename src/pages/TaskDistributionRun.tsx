@@ -96,6 +96,39 @@ function readJsonSafe<T = any>(key: string): T | null {
   }
 }
 
+
+function persistDistributionState(tenantId: string, out: any) {
+  const safeRun = ensureExplicitTaskTypes(out || {});
+  const assignments = Array.isArray(safeRun?.assignments) ? safeRun.assignments : [];
+  const payload = {
+    rows: assignments,
+    data: assignments,
+    assignments,
+    meta: {
+      runId: String((safeRun as any)?.runId || ""),
+      runCreatedAtISO: String((safeRun as any)?.createdAtISO || ""),
+      updatedAtISO: new Date().toISOString(),
+      source: "run",
+    },
+    warnings: Array.isArray((safeRun as any)?.warnings) ? (safeRun as any).warnings : [],
+    debug: (safeRun as any)?.debug || null,
+  };
+
+  saveRun(tenantId, safeRun);
+  try {
+    localStorage.setItem(MASTER_TABLE_KEY, JSON.stringify(payload));
+    localStorage.setItem(RESULTS_TABLE_KEY, JSON.stringify(payload));
+    localStorage.setItem(ALL_TABLE_KEY, JSON.stringify(payload));
+  } catch {}
+
+  try {
+    window.dispatchEvent(new Event(RUN_UPDATED_EVENT));
+  } catch {}
+  try {
+    window.dispatchEvent(new Event(MASTER_TABLE_UPDATED_EVENT));
+  } catch {}
+}
+
 function loadMasterTableAssignments(): any[] {
   const keys = [MASTER_TABLE_KEY, ALL_TABLE_KEY, RESULTS_TABLE_KEY];
   for (const key of keys) {
@@ -2832,11 +2865,9 @@ export default function TaskDistributionRun() {
 
     if (!out) return;
 
-    saveRun(tenantId, out);
-    try {
-    } catch {}
-
+    persistDistributionState(tenantId, out);
     setRunOut(out);
+    setMasterTableVersion((prev) => prev + 1);
   }
 
   function deleteAllDistributionData() {
@@ -2850,9 +2881,12 @@ export default function TaskDistributionRun() {
       localStorage.removeItem(manualSuggestionHistoryKey(tenantId));
     } catch {}
 
-    // ✅ أبلغ الصفحات الأخرى (Settings) بالتحديث في نفس التبويب
+    // ✅ أبلغ كل الصفحات المرتبطة بالتحديث في نفس التبويب
     try {
       window.dispatchEvent(new Event(RUN_UPDATED_EVENT));
+    } catch {}
+    try {
+      window.dispatchEvent(new Event(MASTER_TABLE_UPDATED_EVENT));
     } catch {}
     // ✅ Audit: حذف بيانات التوزيع
     void writeTenantAudit(tenantId, {
@@ -2993,7 +3027,7 @@ export default function TaskDistributionRun() {
         assignments: nextAssignments,
         warnings: [...(Array.isArray(currentRun?.warnings) ? currentRun.warnings : []), note],
       });
-      saveRun(tenantId, nextRun as any);
+      persistDistributionState(tenantId, nextRun as any);
       setRunOut(nextRun);
       setMasterTableVersion((prev) => prev + 1);
       setIsReadinessCleared(false);
@@ -3055,7 +3089,7 @@ export default function TaskDistributionRun() {
         assignments: nextAssignments,
         warnings: [...(Array.isArray(currentRun?.warnings) ? currentRun.warnings : []), note],
       });
-      saveRun(tenantId, nextRun as any);
+      persistDistributionState(tenantId, nextRun as any);
       setRunOut(nextRun);
       setMasterTableVersion((prev) => prev + 1);
       setIsReadinessCleared(false);
@@ -3120,7 +3154,7 @@ export default function TaskDistributionRun() {
       assignments: [...currentAssignments, newAssignment],
       warnings: [...(Array.isArray(currentRun?.warnings) ? currentRun.warnings : []), note],
     });
-    saveRun(tenantId, nextRun as any);
+    persistDistributionState(tenantId, nextRun as any);
     setRunOut(nextRun);
     setMasterTableVersion((prev) => prev + 1);
     setIsReadinessCleared(false);
@@ -3191,7 +3225,7 @@ export default function TaskDistributionRun() {
       assignments: nextAssignments,
       warnings: [...(Array.isArray(currentRun?.warnings) ? currentRun.warnings : []), note],
     });
-    saveRun(tenantId, nextRun as any);
+    persistDistributionState(tenantId, nextRun as any);
     setRunOut(nextRun);
     setMasterTableVersion((prev) => prev + 1);
     setIsReadinessCleared(false);
