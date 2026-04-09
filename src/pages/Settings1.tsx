@@ -1,25 +1,44 @@
 // src/pages/Settings1.tsx
 import React, { useEffect, useMemo, useState } from "react";
+import { useI18n } from "../i18n/I18nProvider";
 
 const SCHOOL_DATA_KEY = "exam-manager:school-data:v1";
 const LOGO_KEY = "exam-manager:app-logo";
 const DEFAULT_LOGO_URL = "https://i.imgur.com/vdDhSMh.png";
 
-const GOVERNORATES = [
-  "المديرية العامة للتعليم بمحافظة مسقط",
-  "المديرية العامة للتعليم بمحافظة ظفار",
-  "المديرية العامة للتعليم بمحافظة الداخلية",
-  "المديرية العامة للتعليم بمحافظة الظاهرة",
-  "المديرية العامة للتعليم بمحافظة البريمي",
-  "المديرية العامة للتعليم بمحافظة شمال الشرقية",
-  "المديرية العامة للتعليم بمحافظة جنوب الشرقية",
-  "المديرية العامة للتعليم بمحافظة الوسطى",
-  "المديرية العامة للتعليم بمحافظة شمال الباطنة",
-  "المديرية العامة للتعليم بمحافظة جنوب الباطنة",
-  "المديرية العامة للتعليم بمحافظة مسندم",
-];
+const GOVERNORATES = {
+  ar: [
+    "المديرية العامة للتعليم بمحافظة مسقط",
+    "المديرية العامة للتعليم بمحافظة ظفار",
+    "المديرية العامة للتعليم بمحافظة الداخلية",
+    "المديرية العامة للتعليم بمحافظة الظاهرة",
+    "المديرية العامة للتعليم بمحافظة البريمي",
+    "المديرية العامة للتعليم بمحافظة شمال الشرقية",
+    "المديرية العامة للتعليم بمحافظة جنوب الشرقية",
+    "المديرية العامة للتعليم بمحافظة الوسطى",
+    "المديرية العامة للتعليم بمحافظة شمال الباطنة",
+    "المديرية العامة للتعليم بمحافظة جنوب الباطنة",
+    "المديرية العامة للتعليم بمحافظة مسندم",
+  ],
+  en: [
+    "Directorate General of Education in Muscat Governorate",
+    "Directorate General of Education in Dhofar Governorate",
+    "Directorate General of Education in Al Dakhiliyah Governorate",
+    "Directorate General of Education in Al Dhahirah Governorate",
+    "Directorate General of Education in Al Buraimi Governorate",
+    "Directorate General of Education in North Al Sharqiyah Governorate",
+    "Directorate General of Education in South Al Sharqiyah Governorate",
+    "Directorate General of Education in Al Wusta Governorate",
+    "Directorate General of Education in North Al Batinah Governorate",
+    "Directorate General of Education in South Al Batinah Governorate",
+    "Directorate General of Education in Musandam Governorate",
+  ],
+} as const;
 
-const SEMESTERS = ["الفصل الدراسي الأول", "الفصل الدراسي الثاني"];
+const SEMESTERS = {
+  ar: ["الفصل الدراسي الأول", "الفصل الدراسي الثاني"],
+  en: ["First Semester", "Second Semester"],
+} as const;
 
 type SchoolData = {
   name: string;
@@ -38,6 +57,12 @@ function getAcademicYearFromSystemDate(now = new Date()) {
 }
 
 export default function Settings1() {
+  const { lang, isRTL } = useI18n();
+  const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
+
+  const governorates = GOVERNORATES[lang];
+  const semesters = SEMESTERS[lang];
+
   const [data, setData] = useState<SchoolData>({
     name: "",
     governorate: "",
@@ -63,17 +88,17 @@ export default function Settings1() {
   const saveData = () => {
     localStorage.setItem(SCHOOL_DATA_KEY, JSON.stringify(data));
     window.dispatchEvent(new Event("exam-manager:changed"));
-    alert("تم حفظ التغييرات بنجاح!");
+    alert(tr("تم حفظ التغييرات بنجاح!", "Changes saved successfully!"));
   };
 
   const academicYear = useMemo(() => getAcademicYearFromSystemDate(new Date()), []);
 
-  const previewGov = data.governorate?.trim() || "المحافظة / المديرية ...";
-  const previewSchool = data.name?.trim() || "المدرسة ...";
-  const previewSemester = data.semester?.trim() || "الفصل الدراسي الأول";
+  const previewGov = data.governorate?.trim() || tr("المحافظة / المديرية ...", "Governorate / Directorate ...");
+  const previewSchool = data.name?.trim() || tr("المدرسة ...", "School ...");
+  const previewSemester = data.semester?.trim() || tr("الفصل الدراسي الأول", "First Semester");
 
   return (
-    <div style={pageWrap}>
+    <div style={{ ...pageWrap, direction: isRTL ? "rtl" : "ltr" }}>
       <div
         style={{
           position: "absolute",
@@ -91,7 +116,8 @@ export default function Settings1() {
       <div
         style={{
           position: "absolute",
-          right: -120,
+          right: isRTL ? -120 : "auto",
+          left: isRTL ? "auto" : -120,
           top: 260,
           width: 340,
           height: 340,
@@ -116,7 +142,15 @@ export default function Settings1() {
               "0 32px 100px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.05), inset 0 -1px 0 rgba(255,255,255,0.03)",
           }}
         >
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 18, flexWrap: "wrap", alignItems: "start" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 18,
+              flexWrap: "wrap",
+              alignItems: "start",
+            }}
+          >
             <div style={{ display: "grid", gap: 14, maxWidth: 900 }}>
               <div
                 style={{
@@ -133,12 +167,12 @@ export default function Settings1() {
                   fontSize: 12,
                 }}
               >
-                إعداد الهوية الرسمية للمدرسة والتقارير
+                {tr("إعداد الهوية الرسمية للمدرسة والتقارير", "Configure the school's official identity and reports")}
               </div>
 
               <div>
                 <div style={{ fontSize: 18, fontWeight: 900, color: "rgba(255,241,196,0.88)", marginBottom: 10 }}>
-                  نظام إدارة الامتحانات الذكي
+                  {tr("نظام إدارة الامتحانات الذكي", "Smart Exam Management System")}
                 </div>
                 <h1
                   style={{
@@ -151,7 +185,7 @@ export default function Settings1() {
                     textShadow: "0 8px 28px rgba(212,175,55,0.16)",
                   }}
                 >
-                  مركز بيانات المدرسة
+                  {tr("مركز بيانات المدرسة", "School Profile Center")}
                 </h1>
               </div>
 
@@ -164,15 +198,17 @@ export default function Settings1() {
                   maxWidth: 940,
                 }}
               >
-                تمنح هذه الصفحة الإدارة واجهة أنيقة لإدخال بيانات المدرسة الرسمية وربطها فورًا بمعاينة واقعية
-                للتقارير والمطبوعات، بما يعزز الهوية البصرية ويجعل إعداد البيانات أكثر وضوحًا وفخامة.
+                {tr(
+                  "تمنح هذه الصفحة الإدارة واجهة أنيقة لإدخال بيانات المدرسة الرسمية وربطها فورًا بمعاينة واقعية للتقارير والمطبوعات، بما يعزز الهوية البصرية ويجعل إعداد البيانات أكثر وضوحًا وفخامة.",
+                  "This page gives administrators an elegant interface to enter official school data and instantly link it to a realistic preview of reports and printouts, enhancing the visual identity and making data setup clearer and more premium."
+                )}
               </p>
 
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                 {[
-                  { label: "اسم المدرسة", value: previewSchool },
-                  { label: "الفصل", value: previewSemester },
-                  { label: "العام الدراسي", value: academicYear },
+                  { label: tr("اسم المدرسة", "School Name"), value: previewSchool },
+                  { label: tr("الفصل", "Semester"), value: previewSemester },
+                  { label: tr("العام الدراسي", "Academic Year"), value: academicYear },
                 ].map((item) => (
                   <div
                     key={item.label}
@@ -219,16 +255,21 @@ export default function Settings1() {
                   fontSize: 12,
                 }}
               >
-                معاينة مباشرة وهوية مؤسسية
+                {tr("معاينة مباشرة وهوية مؤسسية", "Live preview and institutional identity")}
               </div>
 
               <div style={{ fontSize: 28, lineHeight: 1.5, fontWeight: 950, color: "#fff1c4" }}>
-                اكتب البيانات مرة واحدة وشاهد شكلها النهائي داخل نموذج التقرير فورًا.
+                {tr(
+                  "اكتب البيانات مرة واحدة وشاهد شكلها النهائي داخل نموذج التقرير فورًا.",
+                  "Enter the data once and instantly see its final appearance inside the report template."
+                )}
               </div>
 
               <div style={{ fontSize: 14, lineHeight: 1.95, color: "rgba(255,241,196,0.78)" }}>
-                تم تطوير الصفحة لتجمع بين سهولة إدخال البيانات وجمال المعاينة الرسمية، بحيث يشعر المستخدم بأنه
-                يتعامل مع منتج شركة عالمية من أول لحظة.
+                {tr(
+                  "تم تطوير الصفحة لتجمع بين سهولة إدخال البيانات وجمال المعاينة الرسمية، بحيث يشعر المستخدم بأنه يتعامل مع منتج شركة عالمية من أول لحظة.",
+                  "This page was designed to combine easy data entry with a beautiful official preview, so the user feels they are using a world-class product from the very first moment."
+                )}
               </div>
             </div>
           </div>
@@ -236,7 +277,9 @@ export default function Settings1() {
 
         <div style={gridWrap}>
           <div style={formCard}>
-            <h1 style={formTitle}>بيانات المدرسة</h1>
+            <h1 style={{ ...formTitle, textAlign: isRTL ? "right" : "left" }}>
+              {tr("بيانات المدرسة", "School Data")}
+            </h1>
             <div
               style={{
                 marginTop: -4,
@@ -244,14 +287,18 @@ export default function Settings1() {
                 color: "rgba(255,255,255,0.78)",
                 fontSize: 14,
                 lineHeight: 1.9,
+                textAlign: isRTL ? "right" : "left",
               }}
             >
-              أدخل البيانات الرسمية التي ستظهر في الترويسة والمطبوعات والتقارير داخل النظام.
+              {tr(
+                "أدخل البيانات الرسمية التي ستظهر في الترويسة والمطبوعات والتقارير داخل النظام.",
+                "Enter the official data that will appear in the letterhead, printouts, and reports within the system."
+              )}
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               <div>
-                <label style={labelStyle}>اسم المدرسة</label>
+                <label style={labelStyle}>{tr("اسم المدرسة", "School Name")}</label>
                 <input
                   type="text"
                   value={data.name}
@@ -261,16 +308,16 @@ export default function Settings1() {
               </div>
 
               <div>
-                <label style={labelStyle}>المحافظة / المديرية</label>
+                <label style={labelStyle}>{tr("المحافظة / المديرية", "Governorate / Directorate")}</label>
                 <select
                   value={data.governorate}
                   onChange={(e) => handleChange("governorate", e.target.value)}
                   style={selectStyle}
                 >
                   <option value="" style={optionStyle}>
-                    اختر...
+                    {tr("اختر...", "Select...")}
                   </option>
-                  {GOVERNORATES.map((gov) => (
+                  {governorates.map((gov) => (
                     <option key={gov} value={gov} style={optionStyle}>
                       {gov}
                     </option>
@@ -279,16 +326,16 @@ export default function Settings1() {
               </div>
 
               <div>
-                <label style={labelStyle}>الفصل الدراسي</label>
+                <label style={labelStyle}>{tr("الفصل الدراسي", "Semester")}</label>
                 <select
                   value={data.semester}
                   onChange={(e) => handleChange("semester", e.target.value)}
                   style={selectStyle}
                 >
                   <option value="" style={optionStyle}>
-                    اختر...
+                    {tr("اختر...", "Select...")}
                   </option>
-                  {SEMESTERS.map((sem) => (
+                  {semesters.map((sem) => (
                     <option key={sem} value={sem} style={optionStyle}>
                       {sem}
                     </option>
@@ -297,7 +344,7 @@ export default function Settings1() {
               </div>
 
               <div>
-                <label style={labelStyle}>رقم الهاتف</label>
+                <label style={labelStyle}>{tr("رقم الهاتف", "Phone Number")}</label>
                 <input
                   type="tel"
                   value={data.phone}
@@ -307,7 +354,7 @@ export default function Settings1() {
               </div>
 
               <div>
-                <label style={labelStyle}>العنوان</label>
+                <label style={labelStyle}>{tr("العنوان", "Address")}</label>
                 <textarea
                   value={data.address}
                   onChange={(e) => handleChange("address", e.target.value)}
@@ -316,7 +363,7 @@ export default function Settings1() {
               </div>
 
               <button onClick={saveData} style={saveBtn}>
-                حفظ التغييرات
+                {tr("حفظ التغييرات", "Save Changes")}
               </button>
             </div>
           </div>
@@ -337,38 +384,47 @@ export default function Settings1() {
                     fontSize: 12,
                   }}
                 >
-                  المعاينة الرسمية المباشرة
+                  {tr("المعاينة الرسمية المباشرة", "Live official preview")}
                 </div>
 
                 <div style={mastheadGrid}>
-                  <div style={{ textAlign: "right" }}>
-                    <div style={rightGold}>سلطنة عمان</div>
-                    <div style={{ ...rightGold, marginTop: 6 }}>وزارة التعليم</div>
+                  <div style={{ textAlign: isRTL ? "right" : "left" }}>
+                    <div style={rightGold}>{tr("سلطنة عمان", "Sultanate of Oman")}</div>
+                    <div style={{ ...rightGold, marginTop: 6 }}>{tr("وزارة التعليم", "Ministry of Education")}</div>
                     <div style={rightGoldSoft}>{previewGov}</div>
                     <div style={{ ...rightGoldSoft, marginTop: 6 }}>{previewSchool}</div>
                   </div>
 
                   <div style={{ textAlign: "center" }}>
-                    <img src={logo} alt="شعار" style={logoStyle} />
+                    <img src={logo} alt={tr("شعار", "Logo")} style={logoStyle} />
                   </div>
 
-                  <div style={{ textAlign: "left" }}>
+                  <div style={{ textAlign: isRTL ? "left" : "right" }}>
                     <div style={leftGold}>{previewSemester}</div>
                     <div style={{ ...leftGold, marginTop: 8 }}>
-                      العام الدراسي {academicYear}
+                      {tr("العام الدراسي", "Academic Year")} {academicYear}
                     </div>
                   </div>
                 </div>
 
-                <div style={mastheadRuleThin} />
+                <div
+                  style={{
+                    ...mastheadRuleThin,
+                    background: isRTL
+                      ? `linear-gradient(to left, ${gold}, ${goldDark}, ${goldDeep})`
+                      : `linear-gradient(to right, ${gold}, ${goldDark}, ${goldDeep})`,
+                  }}
+                />
 
                 <div style={belowRuleRow}>
-                  <div style={belowTitle}>كشف توزيع مهام المراقبة</div>
+                  <div style={belowTitle}>{tr("كشف توزيع مهام المراقبة", "Invigilation Duties Distribution Sheet")}</div>
 
                   <div style={belowMeta}>
                     <span style={belowMetaItem}>{previewSemester}</span>
                     <span style={belowMetaSep}>|</span>
-                    <span style={belowMetaItem}>العام الدراسي {academicYear}</span>
+                    <span style={belowMetaItem}>
+                      {tr("العام الدراسي", "Academic Year")} {academicYear}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -386,6 +442,12 @@ export default function Settings1() {
             input::placeholder,
             textarea::placeholder {
               color: rgba(255,255,255,0.65);
+            }
+
+            @media (max-width: 980px) {
+              .settings1-grid-fallback {
+                grid-template-columns: 1fr !important;
+              }
             }
           `}
         </style>
