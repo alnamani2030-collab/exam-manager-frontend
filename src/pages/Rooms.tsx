@@ -3,11 +3,14 @@ import GoldDropdown from "../components/GoldDropdown";
 import { useAuth } from "../auth/AuthContext";
 import { useRoomsData } from "../hooks/useRoomsData";
 import { useRoomBlocksData } from "../hooks/useRoomBlocksData";
+import { useI18n } from "../i18n/I18nProvider";
 import { createId, isRoomBlockedToday } from "../lib/roomScheduling";
 import type { Room } from "../services/rooms.service";
 import type { RoomBlock } from "../services/roomBlocks.service";
+
 const APP_NAME = "";
-const BUILDING_OPTIONS = [
+
+const BUILDING_OPTIONS_AR = [
   { value: "", label: "— اختر المبنى —" },
   { value: "المبنى A", label: "المبنى A" },
   { value: "المبنى B", label: "المبنى B" },
@@ -16,28 +19,69 @@ const BUILDING_OPTIONS = [
   { value: "الدور الأول", label: "الدور الأول" },
   { value: "الدور الثاني", label: "الدور الثاني" },
 ];
-const ROOM_TYPE_OPTIONS = [
+
+const BUILDING_OPTIONS_EN = [
+  { value: "", label: "— Select Building —" },
+  { value: "المبنى A", label: "Building A" },
+  { value: "المبنى B", label: "Building B" },
+  { value: "المبنى C", label: "Building C" },
+  { value: "الدور الأرضي", label: "Ground Floor" },
+  { value: "الدور الأول", label: "First Floor" },
+  { value: "الدور الثاني", label: "Second Floor" },
+];
+
+const ROOM_TYPE_OPTIONS_AR = [
   { value: "", label: "— اختر النوع —" },
   { value: "قاعة دراسية", label: "قاعة دراسية" },
   { value: "مختبر", label: "مختبر" },
   { value: "قاعة حاسب", label: "قاعة حاسب" },
   { value: "قاعة متعددة", label: "قاعة متعددة" },
 ];
-const ROOM_STATUS_OPTIONS = [
+
+const ROOM_TYPE_OPTIONS_EN = [
+  { value: "", label: "— Select Type —" },
+  { value: "قاعة دراسية", label: "Classroom" },
+  { value: "مختبر", label: "Laboratory" },
+  { value: "قاعة حاسب", label: "Computer Lab" },
+  { value: "قاعة متعددة", label: "Multi-purpose Hall" },
+];
+
+const ROOM_STATUS_OPTIONS_AR = [
   { value: "active", label: "نشطة" },
   { value: "inactive", label: "موقوفة" },
 ];
-const BLOCK_REASON_OPTIONS = [
+
+const ROOM_STATUS_OPTIONS_EN = [
+  { value: "active", label: "Active" },
+  { value: "inactive", label: "Inactive" },
+];
+
+const BLOCK_REASON_OPTIONS_AR = [
   { value: "maintenance", label: "صيانة" },
   { value: "reserved", label: "محجوزة" },
   { value: "conflict", label: "تعارض" },
   { value: "admin", label: "قرار إداري" },
 ];
-const BLOCK_SESSION_OPTIONS = [
+
+const BLOCK_REASON_OPTIONS_EN = [
+  { value: "maintenance", label: "Maintenance" },
+  { value: "reserved", label: "Reserved" },
+  { value: "conflict", label: "Conflict" },
+  { value: "admin", label: "Administrative Decision" },
+];
+
+const BLOCK_SESSION_OPTIONS_AR = [
   { value: "full-day", label: "اليوم كامل" },
   { value: "الفترة الأولى", label: "الفترة الأولى" },
   { value: "الفترة الثانية", label: "الفترة الثانية" },
 ];
+
+const BLOCK_SESSION_OPTIONS_EN = [
+  { value: "full-day", label: "Full Day" },
+  { value: "الفترة الأولى", label: "First Period" },
+  { value: "الفترة الثانية", label: "Second Period" },
+];
+
 const emptyRoom: Room = {
   id: "",
   roomName: "",
@@ -48,6 +92,7 @@ const emptyRoom: Room = {
   status: "active",
   notes: "",
 };
+
 type QuickBlockState = {
   open: boolean;
   roomId: string;
@@ -58,6 +103,7 @@ type QuickBlockState = {
   endDate: string;
   session: "الفترة الأولى" | "الفترة الثانية" | "full-day";
 };
+
 function downloadText(filename: string, content: string) {
   const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -69,23 +115,7 @@ function downloadText(filename: string, content: string) {
   a.remove();
   URL.revokeObjectURL(url);
 }
-function toCSV(rows: Room[]) {
-  const header = ["اسم القاعة", "الكود", "المبنى", "النوع", "السعة", "الحالة", "ملاحظات"];
-  const escape = (s: string) => {
-    const v = (s ?? "").replace(/\r?\n/g, " ").trim();
-    if (/[",]/.test(v)) return `"${v.replace(/"/g, '""')}"`;
-    return v;
-  };
-  const lines = [
-    header.join(","),
-    ...rows.map((r) =>
-      [r.roomName, r.code || "", r.building, r.type, String(r.capacity), r.status || "active", r.notes]
-        .map(escape)
-        .join(",")
-    ),
-  ];
-  return lines.join("\n");
-}
+
 function parseCSV(text: string): any[] {
   const lines: string[] = [];
   const s = text.replace(/\r/g, "");
@@ -146,6 +176,7 @@ function parseCSV(text: string): any[] {
     return obj;
   });
 }
+
 function normalizeHeader(h: string) {
   return String(h ?? "")
     .trim()
@@ -153,6 +184,7 @@ function normalizeHeader(h: string) {
     .replace(/\s+/g, "")
     .replace(/[^\u0600-\u06FFa-z0-9]/g, "");
 }
+
 function getCell(row: Record<string, unknown>, keys: string[]) {
   for (const k of keys) {
     if (row[k] != null && String(row[k]).trim() !== "") return String(row[k]).trim();
@@ -166,6 +198,7 @@ function getCell(row: Record<string, unknown>, keys: string[]) {
   }
   return "";
 }
+
 async function tryReadExcel(file: File): Promise<Record<string, unknown>[] | null> {
   try {
     const XLSX = await import("xlsx");
@@ -178,6 +211,7 @@ async function tryReadExcel(file: File): Promise<Record<string, unknown>[] | nul
     return null;
   }
 }
+
 function parseRoomsFromObjects(rows: Record<string, unknown>[]): Room[] {
   return rows
     .map((r) => {
@@ -201,7 +235,17 @@ function parseRoomsFromObjects(rows: Record<string, unknown>[]): Room[] {
     })
     .filter((x) => x.roomName);
 }
+
 export default function Rooms() {
+  const { lang, isRTL } = useI18n();
+  const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
+
+  const BUILDING_OPTIONS = useMemo(() => (lang === "ar" ? BUILDING_OPTIONS_AR : BUILDING_OPTIONS_EN), [lang]);
+  const ROOM_TYPE_OPTIONS = useMemo(() => (lang === "ar" ? ROOM_TYPE_OPTIONS_AR : ROOM_TYPE_OPTIONS_EN), [lang]);
+  const ROOM_STATUS_OPTIONS = useMemo(() => (lang === "ar" ? ROOM_STATUS_OPTIONS_AR : ROOM_STATUS_OPTIONS_EN), [lang]);
+  const BLOCK_REASON_OPTIONS = useMemo(() => (lang === "ar" ? BLOCK_REASON_OPTIONS_AR : BLOCK_REASON_OPTIONS_EN), [lang]);
+  const BLOCK_SESSION_OPTIONS = useMemo(() => (lang === "ar" ? BLOCK_SESSION_OPTIONS_AR : BLOCK_SESSION_OPTIONS_EN), [lang]);
+
   const {
     rooms,
     setRooms,
@@ -215,8 +259,10 @@ export default function Rooms() {
     deleteAllRooms,
     reloadRooms,
   } = useRoomsData();
+
   const { roomBlocks, setRoomBlocks } = useRoomBlocksData();
   const { user } = useAuth() as any;
+
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive" | "blocked">("all");
   const [adding, setAdding] = useState(false);
@@ -236,6 +282,7 @@ export default function Rooms() {
   const [historyRoomId, setHistoryRoomId] = useState<string | null>(null);
   const topRef = useRef<HTMLDivElement>(null);
   const todayISO = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
   useEffect(() => {
     const style = document.createElement("style");
     style.innerHTML = `
@@ -431,7 +478,9 @@ export default function Rooms() {
       document.head.removeChild(style);
     };
   }, []);
+
   const roomsById = useMemo(() => new Map(rooms.map((room) => [room.id, room])), [rooms]);
+
   const normalizedBlocks = useMemo<RoomBlock[]>(
     () =>
       roomBlocks.map((block) => {
@@ -448,6 +497,7 @@ export default function Rooms() {
       }),
     [roomBlocks, todayISO]
   );
+
   const blockedRoomIdsToday = useMemo(
     () =>
       new Set(
@@ -457,6 +507,7 @@ export default function Rooms() {
       ),
     [rooms, todayISO, normalizedBlocks]
   );
+
   const filtered = useMemo(() => {
     const q = query.trim();
     return rooms
@@ -476,18 +527,20 @@ export default function Rooms() {
         return matchesQuery && matchesStatus;
       })
       .sort((a, b) =>
-        String(a.code || "").localeCompare(String(b.code || ""), "ar", {
+        String(a.code || "").localeCompare(String(b.code || ""), lang === "ar" ? "ar" : "en", {
           numeric: true,
           sensitivity: "base",
         })
       );
-  }, [rooms, query, statusFilter, blockedRoomIdsToday]);
+  }, [rooms, query, statusFilter, blockedRoomIdsToday, lang]);
+
   const historyBlocks = useMemo(() => {
     if (!historyRoomId) return [] as RoomBlock[];
     return normalizedBlocks
       .filter((block) => block.roomId === historyRoomId)
       .sort((a, b) => b.startDate.localeCompare(a.startDate));
   }, [normalizedBlocks, historyRoomId]);
+
   const stats = useMemo(() => {
     const total = rooms.length;
     const active = rooms.filter((r) => (r.status || "active") === "active").length;
@@ -495,6 +548,7 @@ export default function Rooms() {
     const capacity = rooms.reduce((sum, room) => sum + (Number(room.capacity) || 0), 0);
     return { total, active, blocked, capacity };
   }, [rooms, blockedRoomIdsToday]);
+
   const pageStyle: React.CSSProperties = {
     padding: 18,
     color: "#e6c76a",
@@ -503,7 +557,9 @@ export default function Rooms() {
       "radial-gradient(circle at top, rgba(212,175,55,0.14), transparent 24%), radial-gradient(circle at 88% 18%, rgba(59,130,246,0.10), transparent 24%), linear-gradient(180deg, #070b12 0%, #0b1220 42%, #060a12 100%)",
     position: "relative",
     overflowX: "hidden",
+    direction: isRTL ? "rtl" : "ltr",
   };
+
   const card: React.CSSProperties = {
     background: "linear-gradient(180deg, rgba(11,18,32,0.94), rgba(9,16,29,0.96))",
     border: "1px solid rgba(212,175,55,0.15)",
@@ -513,6 +569,7 @@ export default function Rooms() {
     marginBottom: 14,
     backdropFilter: "blur(6px)",
   };
+
   const header: React.CSSProperties = {
     display: "flex",
     alignItems: "center",
@@ -525,6 +582,7 @@ export default function Rooms() {
     boxShadow: "0 18px 60px rgba(212,175,55,0.25)",
     marginBottom: 14,
   };
+
   const btn = (bg: string, fg = "#0b1220"): React.CSSProperties => ({
     background: bg,
     color: fg,
@@ -535,6 +593,7 @@ export default function Rooms() {
     fontWeight: 800,
     boxShadow: "0 10px 24px rgba(0,0,0,0.25)",
   });
+
   const inputStyle: React.CSSProperties = {
     background: "#0b1220",
     color: "#e6c76a",
@@ -544,6 +603,7 @@ export default function Rooms() {
     outline: "none",
     width: "100%",
   };
+
   const tableWrap: React.CSSProperties = {
     maxHeight: "70vh",
     overflow: "auto",
@@ -551,13 +611,16 @@ export default function Rooms() {
     border: "1px solid rgba(212,175,55,0.12)",
     background: "transparent",
   };
+
   const thStyle: React.CSSProperties = {
-    textAlign: "right",
+    textAlign: isRTL ? "right" : "left",
     whiteSpace: "nowrap",
   };
+
   const tdStyle: React.CSSProperties = {
     whiteSpace: "nowrap",
   };
+
   const modalOverlay: React.CSSProperties = {
     position: "fixed",
     inset: 0,
@@ -568,6 +631,7 @@ export default function Rooms() {
     justifyContent: "center",
     padding: 16,
   };
+
   const modalCard: React.CSSProperties = {
     width: "min(820px, 96vw)",
     maxHeight: "90vh",
@@ -578,27 +642,62 @@ export default function Rooms() {
     padding: 16,
     boxShadow: "0 22px 80px rgba(0,0,0,0.55)",
     color: "#e6c76a",
+    direction: isRTL ? "rtl" : "ltr",
   };
+
+  function toCSV(rows: Room[]) {
+    const header =
+      lang === "ar"
+        ? ["اسم القاعة", "الكود", "المبنى", "النوع", "السعة", "الحالة", "ملاحظات"]
+        : ["Room Name", "Code", "Building", "Type", "Capacity", "Status", "Notes"];
+
+    const escape = (s: string) => {
+      const v = (s ?? "").replace(/\r?\n/g, " ").trim();
+      if (/[",]/.test(v)) return `"${v.replace(/"/g, '""')}"`;
+      return v;
+    };
+
+    const lines = [
+      header.join(","),
+      ...rows.map((r) =>
+        [
+          r.roomName,
+          r.code || "",
+          r.building,
+          r.type,
+          String(r.capacity),
+          r.status || "active",
+          r.notes,
+        ]
+          .map(escape)
+          .join(",")
+      ),
+    ];
+    return lines.join("\n");
+  }
+
   function startAdd() {
     setAdding(true);
     setEditingId(null);
     setRow({ ...emptyRoom, id: createId("room") });
     setTimeout(() => topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
   }
+
   function validate(r: Room) {
-    if (!r.roomName.trim()) return "اسم القاعة مطلوب.";
-    if (!r.building.trim()) return "المبنى مطلوب.";
-    if (!r.type.trim()) return "نوع القاعة مطلوب.";
-    if (!r.capacity || r.capacity <= 0) return "السعة مطلوبة.";
+    if (!r.roomName.trim()) return tr("اسم القاعة مطلوب.", "Room name is required.");
+    if (!r.building.trim()) return tr("المبنى مطلوب.", "Building is required.");
+    if (!r.type.trim()) return tr("نوع القاعة مطلوب.", "Room type is required.");
+    if (!r.capacity || r.capacity <= 0) return tr("السعة مطلوبة.", "Capacity is required.");
     const duplicateCode = String(r.code || "").trim();
     if (duplicateCode) {
       const exists = rooms.some(
         (room) => String(room.code || "").trim() === duplicateCode && room.id !== r.id
       );
-      if (exists) return "كود القاعة مكرر.";
+      if (exists) return tr("كود القاعة مكرر.", "Room code is duplicated.");
     }
     return "";
   }
+
   async function saveAdd() {
     const msg = validate(row);
     if (msg) {
@@ -612,17 +711,19 @@ export default function Rooms() {
       });
       setAdding(false);
       setRow({ ...emptyRoom, id: createId("room") });
-      alert("✅ تم حفظ القاعة بنجاح");
+      alert(tr("✅ تم حفظ القاعة بنجاح", "✅ Room saved successfully"));
     } catch {
-      alert("❌ فشل حفظ القاعة");
+      alert(tr("❌ فشل حفظ القاعة", "❌ Failed to save room"));
     }
   }
+
   function startEdit(r: Room) {
     setEditingId(r.id);
     setAdding(false);
     setEdit({ ...r, status: r.status || "active" });
     setTimeout(() => topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
   }
+
   async function saveEdit() {
     if (!editingId) return;
     const msg = validate(edit);
@@ -637,63 +738,80 @@ export default function Rooms() {
       });
       setEditingId(null);
       setEdit({ ...emptyRoom });
-      alert("✅ تم تحديث القاعة بنجاح");
+      alert(tr("✅ تم تحديث القاعة بنجاح", "✅ Room updated successfully"));
     } catch {
-      alert("❌ فشل تحديث القاعة");
+      alert(tr("❌ فشل تحديث القاعة", "❌ Failed to update room"));
     }
   }
+
   async function removeRoom(id: string) {
-    if (!confirm("هل تريد حذف هذه القاعة؟ سيتم حذف أي حظر مرتبط بها أيضًا.")) return;
+    if (!confirm(tr("هل تريد حذف هذه القاعة؟ سيتم حذف أي حظر مرتبط بها أيضًا.", "Do you want to delete this room? Any related blocks will also be deleted."))) return;
     try {
       await deleteRoom(id);
       setRoomBlocks((prev) => prev.filter((block) => block.roomId !== id));
-      alert("✅ تم حذف القاعة");
+      alert(tr("✅ تم حذف القاعة", "✅ Room deleted"));
     } catch {
-      alert("❌ فشل حذف القاعة");
+      alert(tr("❌ فشل حذف القاعة", "❌ Failed to delete room"));
     }
   }
+
   async function deleteAll() {
     if (!rooms.length) return;
-    const ok = confirm("⚠️ هل أنت متأكد من حذف جدول القاعات كاملًا؟ لا يمكن التراجع.");
+    const ok = confirm(tr("⚠️ هل أنت متأكد من حذف جدول القاعات كاملًا؟ لا يمكن التراجع.", "⚠️ Are you sure you want to delete the entire rooms table? This cannot be undone."));
     if (!ok) return;
     try {
       const roomIds = new Set(rooms.map((room) => room.id));
       await deleteAllRooms();
       setRoomBlocks((prev) => prev.filter((block) => !roomIds.has(block.roomId)));
-      alert("✅ تم حذف جميع القاعات");
+      alert(tr("✅ تم حذف جميع القاعات", "✅ All rooms deleted"));
     } catch {
-      alert("❌ فشل حذف جميع القاعات");
+      alert(tr("❌ فشل حذف جميع القاعات", "❌ Failed to delete all rooms"));
     }
   }
+
   function exportCSV() {
     downloadText("rooms.csv", toCSV(rooms));
   }
+
   async function exportExcel() {
     try {
       const XLSX = await import("xlsx");
-      const rows = rooms.map((r) => ({
-        "اسم القاعة": r.roomName,
-        "الكود": r.code || "",
-        "المبنى": r.building,
-        "النوع": r.type,
-        "السعة": r.capacity,
-        "الحالة": r.status || "active",
-        "ملاحظات": r.notes,
-      }));
+      const rows = rooms.map((r) =>
+        lang === "ar"
+          ? {
+              "اسم القاعة": r.roomName,
+              "الكود": r.code || "",
+              "المبنى": r.building,
+              "النوع": r.type,
+              "السعة": r.capacity,
+              "الحالة": r.status || "active",
+              "ملاحظات": r.notes,
+            }
+          : {
+              "Room Name": r.roomName,
+              "Code": r.code || "",
+              "Building": r.building,
+              "Type": r.type,
+              "Capacity": r.capacity,
+              "Status": r.status || "active",
+              "Notes": r.notes,
+            }
+      );
       const ws = XLSX.utils.json_to_sheet(rows);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Rooms");
       XLSX.writeFile(wb, "rooms.xlsx");
     } catch {
-      alert("مكتبة xlsx غير متوفرة. استخدم CSV أو ثبّت xlsx.");
+      alert(tr("مكتبة xlsx غير متوفرة. استخدم CSV أو ثبّت xlsx.", "xlsx library is not available. Use CSV or install xlsx."));
     }
   }
+
   async function importCSV(file: File) {
     const text = await file.text();
     const objs = parseCSV(text);
     const incoming = parseRoomsFromObjects(objs);
     if (!incoming.length) {
-      alert("لا توجد بيانات صالحة للاستيراد.");
+      alert(tr("لا توجد بيانات صالحة للاستيراد.", "No valid data found for import."));
       return;
     }
     try {
@@ -701,20 +819,21 @@ export default function Rooms() {
         await createRoom(room);
       }
       await reloadRooms();
-      alert("✅ تم استيراد القاعات.");
+      alert(tr("✅ تم استيراد القاعات.", "✅ Rooms imported."));
     } catch {
-      alert("❌ حدث خطأ أثناء استيراد CSV");
+      alert(tr("❌ حدث خطأ أثناء استيراد CSV", "❌ An error occurred while importing CSV"));
     }
   }
+
   async function importExcel(file: File) {
     const json = await tryReadExcel(file);
     if (!json) {
-      alert("تعذر قراءة Excel. ثبّت xlsx أو استخدم CSV.");
+      alert(tr("تعذر قراءة Excel. ثبّت xlsx أو استخدم CSV.", "Unable to read Excel. Install xlsx or use CSV."));
       return;
     }
     const incoming = parseRoomsFromObjects(json);
     if (!incoming.length) {
-      alert("لا توجد بيانات صالحة للاستيراد.");
+      alert(tr("لا توجد بيانات صالحة للاستيراد.", "No valid data found for import."));
       return;
     }
     try {
@@ -722,11 +841,12 @@ export default function Rooms() {
         await createRoom(room);
       }
       await reloadRooms();
-      alert("✅ تم استيراد القاعات.");
+      alert(tr("✅ تم استيراد القاعات.", "✅ Rooms imported."));
     } catch {
-      alert("❌ حدث خطأ أثناء استيراد Excel");
+      alert(tr("❌ حدث خطأ أثناء استيراد Excel", "❌ An error occurred while importing Excel"));
     }
   }
+
   const current = editingId ? edit : row;
   const setCurrent = (patch: Partial<Room>) => {
     if (editingId) {
@@ -735,6 +855,7 @@ export default function Rooms() {
       setRow((prev) => ({ ...prev, ...patch }));
     }
   };
+
   function openQuickBlock(room: Room) {
     setQuickBlock({
       open: true,
@@ -747,11 +868,12 @@ export default function Rooms() {
       session: "full-day",
     });
   }
+
   function saveQuickBlock() {
     if (!quickBlock.roomId) return;
-    if (!quickBlock.reason.trim()) return alert("سبب الحظر مطلوب.");
-    if (!quickBlock.startDate || !quickBlock.endDate) return alert("تاريخ الحظر مطلوب.");
-    if (quickBlock.endDate < quickBlock.startDate) return alert("تاريخ النهاية يجب أن يكون بعد البداية.");
+    if (!quickBlock.reason.trim()) return alert(tr("سبب الحظر مطلوب.", "Block reason is required."));
+    if (!quickBlock.startDate || !quickBlock.endDate) return alert(tr("تاريخ الحظر مطلوب.", "Block date is required."));
+    if (quickBlock.endDate < quickBlock.startDate) return alert(tr("تاريخ النهاية يجب أن يكون بعد البداية.", "End date must be after start date."));
     const overlap = roomBlocks.some(
       (block) =>
         block.roomId === quickBlock.roomId &&
@@ -761,7 +883,7 @@ export default function Rooms() {
           quickBlock.session === "full-day" ||
           block.session === quickBlock.session)
     );
-    if (overlap) return alert("يوجد حظر متداخل لهذه القاعة في نفس الفترة.");
+    if (overlap) return alert(tr("يوجد حظر متداخل لهذه القاعة في نفس الفترة.", "There is an overlapping block for this room in the same period."));
     const nextBlock: RoomBlock = {
       id: createId("block"),
       roomId: quickBlock.roomId,
@@ -778,6 +900,7 @@ export default function Rooms() {
     setRoomBlocks((prev) => [nextBlock, ...prev]);
     setQuickBlock((prev) => ({ ...prev, open: false }));
   }
+
   return (
     <div style={pageStyle} ref={topRef}>
       <div
@@ -797,7 +920,8 @@ export default function Rooms() {
       <div
         style={{
           position: "absolute",
-          right: -120,
+          right: isRTL ? -120 : "auto",
+          left: !isRTL ? -120 : "auto",
           top: 260,
           width: 340,
           height: 340,
@@ -840,7 +964,7 @@ export default function Rooms() {
                   fontSize: 12,
                 }}
               >
-                إدارة تشغيلية مباشرة للقاعات والحظر
+                {tr("إدارة تشغيلية مباشرة للقاعات والحظر", "Direct operational management for rooms and blocking")}
               </div>
 
               <div>
@@ -858,7 +982,7 @@ export default function Rooms() {
                     textShadow: "0 8px 28px rgba(212,175,55,0.16)",
                   }}
                 >
-                  مركز إدارة القاعات
+                  {tr("مركز إدارة القاعات", "Rooms Management Center")}
                 </h1>
               </div>
 
@@ -871,15 +995,17 @@ export default function Rooms() {
                   maxWidth: 940,
                 }}
               >
-                تمنح هذه الصفحة الإدارة رؤية تنفيذية فاخرة لحالة القاعات، والسعة، والحظر الحالي، مع تجربة منظمة
-                لإضافة القاعات وتعديلها واستيرادها وتصديرها وإدارة سجل الحظر في واجهة مؤسسية أنيقة وسريعة.
+                {tr(
+                  "تمنح هذه الصفحة الإدارة رؤية تنفيذية فاخرة لحالة القاعات، والسعة، والحظر الحالي، مع تجربة منظمة لإضافة القاعات وتعديلها واستيرادها وتصديرها وإدارة سجل الحظر في واجهة مؤسسية أنيقة وسريعة.",
+                  "This page gives the administration a premium executive view of room status, capacity, and current blocks, with an organized experience for adding, editing, importing, and exporting rooms, and managing block history in a fast and elegant institutional interface."
+                )}
               </p>
 
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                 {[
-                  { label: "حالة البيانات", value: loaded ? "مرتبطة ببيانات فعلية" : "جاري التحميل" },
-                  { label: "البحث الحالي", value: query.trim() || "بدون فلترة" },
-                  { label: "الحالة المختارة", value: statusFilter === "all" ? "كل الحالات" : statusFilter === "active" ? "نشطة" : statusFilter === "inactive" ? "موقوفة" : "محظورة اليوم" },
+                  { label: tr("حالة البيانات", "Data Status"), value: loaded ? tr("مرتبطة ببيانات فعلية", "Connected to live data") : tr("جاري التحميل", "Loading") },
+                  { label: tr("البحث الحالي", "Current Search"), value: query.trim() || tr("بدون فلترة", "No Filter") },
+                  { label: tr("الحالة المختارة", "Selected Status"), value: statusFilter === "all" ? tr("كل الحالات", "All Statuses") : statusFilter === "active" ? tr("نشطة", "Active") : statusFilter === "inactive" ? tr("موقوفة", "Inactive") : tr("محظورة اليوم", "Blocked Today") },
                 ].map((item) => (
                   <div
                     key={item.label}
@@ -926,469 +1052,479 @@ export default function Rooms() {
                   fontSize: 12,
                 }}
               >
-                {stats.blocked > 0 ? "يوجد حظر نشط يحتاج متابعة" : "الوضع التشغيلي مستقر"}
+                {stats.blocked > 0 ? tr("يوجد حظر نشط يحتاج متابعة", "There is an active block that needs follow-up") : tr("الوضع التشغيلي مستقر", "Operational status is stable")}
               </div>
 
               <div style={{ fontSize: 28, lineHeight: 1.5, fontWeight: 950, color: "#fff1c4" }}>
-               يمكنك من هنا إدارة القاعات، تنفيذ الحظر السريع، مراجعة سجل الحظر، واستيراد أو تصدير البيانات
-                مع تسلسل بصري فاخر يعكس جودة منتج مؤسسي.
+                {tr(
+                  "يمكنك من هنا إدارة القاعات، تنفيذ الحظر السريع، مراجعة سجل الحظر، واستيراد أو تصدير البيانات مع تسلسل بصري فاخر يعكس جودة منتج مؤسسي.",
+                  "From here you can manage rooms, apply quick blocks, review block history, and import or export data with a premium visual flow that reflects the quality of an institutional product."
+                )}
               </div>
 
-              <div style={{ fontSize: 14, lineHeight: 1.95, color: "rgba(255,241,196,0.78)" }}>
-                ي
-              </div>
+              <div style={{ fontSize: 14, lineHeight: 1.95, color: "rgba(255,241,196,0.78)" }} />
             </div>
           </div>
         </div>
 
-      {quickBlock.open && (
-        <div style={modalOverlay} onClick={() => setQuickBlock((prev) => ({ ...prev, open: false }))}>
-          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
-            <div style={{ fontWeight: 1000, fontSize: 18, marginBottom: 12, color: "#d4af37" }}>
-              حظر سريع للقاعة: {quickBlock.roomName}
-            </div>
-            <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(2, minmax(220px, 1fr))" }}>
-              <div>
-                <div style={{ fontWeight: 900, marginBottom: 6 }}>السبب</div>
-                <textarea
-                  style={{ ...inputStyle, minHeight: 90 }}
-                  value={quickBlock.reason}
-                  onChange={(e) => setQuickBlock((prev) => ({ ...prev, reason: e.target.value }))}
-                />
+        {quickBlock.open && (
+          <div style={modalOverlay} onClick={() => setQuickBlock((prev) => ({ ...prev, open: false }))}>
+            <div style={modalCard} onClick={(e) => e.stopPropagation()}>
+              <div style={{ fontWeight: 1000, fontSize: 18, marginBottom: 12, color: "#d4af37" }}>
+                {tr("حظر سريع للقاعة:", "Quick block for room:")} {quickBlock.roomName}
               </div>
-              <div>
-                <div style={{ fontWeight: 900, marginBottom: 6 }}>نوع السبب</div>
-                <GoldDropdown
-                  value={quickBlock.reasonType}
-                  options={BLOCK_REASON_OPTIONS}
-                  onChange={(v) => setQuickBlock((prev) => ({ ...prev, reasonType: v }))}
-                />
-                <div style={{ fontWeight: 900, marginBottom: 6, marginTop: 10 }}>الفترة</div>
-                <GoldDropdown
-                  value={quickBlock.session}
-                  options={BLOCK_SESSION_OPTIONS}
-                  onChange={(v) =>
-                    setQuickBlock((prev) => ({
-                      ...prev,
-                      session: v as QuickBlockState["session"],
-                    }))
-                  }
-                />
+              <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(2, minmax(220px, 1fr))" }}>
+                <div>
+                  <div style={{ fontWeight: 900, marginBottom: 6 }}>{tr("السبب", "Reason")}</div>
+                  <textarea
+                    style={{ ...inputStyle, minHeight: 90 }}
+                    value={quickBlock.reason}
+                    onChange={(e) => setQuickBlock((prev) => ({ ...prev, reason: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <div style={{ fontWeight: 900, marginBottom: 6 }}>{tr("نوع السبب", "Reason Type")}</div>
+                  <GoldDropdown
+                    value={quickBlock.reasonType}
+                    options={BLOCK_REASON_OPTIONS}
+                    onChange={(v) => setQuickBlock((prev) => ({ ...prev, reasonType: v }))}
+                  />
+                  <div style={{ fontWeight: 900, marginBottom: 6, marginTop: 10 }}>{tr("الفترة", "Session")}</div>
+                  <GoldDropdown
+                    value={quickBlock.session}
+                    options={BLOCK_SESSION_OPTIONS}
+                    onChange={(v) =>
+                      setQuickBlock((prev) => ({
+                        ...prev,
+                        session: v as QuickBlockState["session"],
+                      }))
+                    }
+                  />
+                </div>
+                <div>
+                  <div style={{ fontWeight: 900, marginBottom: 6 }}>{tr("تاريخ البداية", "Start Date")}</div>
+                  <input
+                    style={inputStyle}
+                    type="date"
+                    value={quickBlock.startDate}
+                    onChange={(e) => setQuickBlock((prev) => ({ ...prev, startDate: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <div style={{ fontWeight: 900, marginBottom: 6 }}>{tr("تاريخ النهاية", "End Date")}</div>
+                  <input
+                    style={inputStyle}
+                    type="date"
+                    value={quickBlock.endDate}
+                    onChange={(e) => setQuickBlock((prev) => ({ ...prev, endDate: e.target.value }))}
+                  />
+                </div>
               </div>
-              <div>
-                <div style={{ fontWeight: 900, marginBottom: 6 }}>تاريخ البداية</div>
-                <input
-                  style={inputStyle}
-                  type="date"
-                  value={quickBlock.startDate}
-                  onChange={(e) => setQuickBlock((prev) => ({ ...prev, startDate: e.target.value }))}
-                />
+              <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+                <button style={btn("#10b981", "#07101f")} onClick={saveQuickBlock}>
+                  {tr("حفظ الحظر", "Save Block")}
+                </button>
+                <button style={btn("#1f2937", "#d4af37")} onClick={() => setQuickBlock((prev) => ({ ...prev, open: false }))}>
+                  {tr("إلغاء", "Cancel")}
+                </button>
               </div>
-              <div>
-                <div style={{ fontWeight: 900, marginBottom: 6 }}>تاريخ النهاية</div>
-                <input
-                  style={inputStyle}
-                  type="date"
-                  value={quickBlock.endDate}
-                  onChange={(e) => setQuickBlock((prev) => ({ ...prev, endDate: e.target.value }))}
-                />
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
-              <button style={btn("#10b981", "#07101f")} onClick={saveQuickBlock}>
-                حفظ الحظر
-              </button>
-              <button style={btn("#1f2937", "#d4af37")} onClick={() => setQuickBlock((prev) => ({ ...prev, open: false }))}>
-                إلغاء
-              </button>
             </div>
           </div>
-        </div>
-      )}
-      {historyRoomId && (
-        <div style={modalOverlay} onClick={() => setHistoryRoomId(null)}>
-          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
-            <div style={{ fontWeight: 1000, fontSize: 18, marginBottom: 12, color: "#d4af37" }}>
-              سجل الحظر: {roomsById.get(historyRoomId)?.roomName || "القاعة"}
-            </div>
-            <div style={tableWrap}>
-              <table style={{ width: "100%", minWidth: 720 }}>
-                <thead>
-                  <tr>
-                    <th style={{ ...thStyle, position: "sticky", top: 0, background: "#0b1220", color: "#d4af37", zIndex: 2, padding: 10, borderBottom: "1px solid rgba(212,175,55,0.2)" }}>السبب</th>
-                    <th style={{ ...thStyle, position: "sticky", top: 0, background: "#0b1220", color: "#d4af37", zIndex: 2, padding: 10, borderBottom: "1px solid rgba(212,175,55,0.2)" }}>النوع</th>
-                    <th style={{ ...thStyle, position: "sticky", top: 0, background: "#0b1220", color: "#d4af37", zIndex: 2, padding: 10, borderBottom: "1px solid rgba(212,175,55,0.2)" }}>من</th>
-                    <th style={{ ...thStyle, position: "sticky", top: 0, background: "#0b1220", color: "#d4af37", zIndex: 2, padding: 10, borderBottom: "1px solid rgba(212,175,55,0.2)" }}>إلى</th>
-                    <th style={{ ...thStyle, position: "sticky", top: 0, background: "#0b1220", color: "#d4af37", zIndex: 2, padding: 10, borderBottom: "1px solid rgba(212,175,55,0.2)" }}>الفترة</th>
-                    <th style={{ ...thStyle, position: "sticky", top: 0, background: "#0b1220", color: "#d4af37", zIndex: 2, padding: 10, borderBottom: "1px solid rgba(212,175,55,0.2)" }}>الحالة</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {historyBlocks.length === 0 ? (
+        )}
+
+        {historyRoomId && (
+          <div style={modalOverlay} onClick={() => setHistoryRoomId(null)}>
+            <div style={modalCard} onClick={(e) => e.stopPropagation()}>
+              <div style={{ fontWeight: 1000, fontSize: 18, marginBottom: 12, color: "#d4af37" }}>
+                {tr("سجل الحظر:", "Block History:")} {roomsById.get(historyRoomId)?.roomName || tr("القاعة", "Room")}
+              </div>
+              <div style={tableWrap}>
+                <table style={{ width: "100%", minWidth: 720 }}>
+                  <thead>
                     <tr>
-                      <td style={{ padding: 10, borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#e6c76a" }} colSpan={6}>
-                        لا يوجد سجل حظر لهذه القاعة.
-                      </td>
+                      <th style={{ ...thStyle, position: "sticky", top: 0, background: "#0b1220", color: "#d4af37", zIndex: 2, padding: 10, borderBottom: "1px solid rgba(212,175,55,0.2)" }}>{tr("السبب", "Reason")}</th>
+                      <th style={{ ...thStyle, position: "sticky", top: 0, background: "#0b1220", color: "#d4af37", zIndex: 2, padding: 10, borderBottom: "1px solid rgba(212,175,55,0.2)" }}>{tr("النوع", "Type")}</th>
+                      <th style={{ ...thStyle, position: "sticky", top: 0, background: "#0b1220", color: "#d4af37", zIndex: 2, padding: 10, borderBottom: "1px solid rgba(212,175,55,0.2)" }}>{tr("من", "From")}</th>
+                      <th style={{ ...thStyle, position: "sticky", top: 0, background: "#0b1220", color: "#d4af37", zIndex: 2, padding: 10, borderBottom: "1px solid rgba(212,175,55,0.2)" }}>{tr("إلى", "To")}</th>
+                      <th style={{ ...thStyle, position: "sticky", top: 0, background: "#0b1220", color: "#d4af37", zIndex: 2, padding: 10, borderBottom: "1px solid rgba(212,175,55,0.2)" }}>{tr("الفترة", "Session")}</th>
+                      <th style={{ ...thStyle, position: "sticky", top: 0, background: "#0b1220", color: "#d4af37", zIndex: 2, padding: 10, borderBottom: "1px solid rgba(212,175,55,0.2)" }}>{tr("الحالة", "Status")}</th>
                     </tr>
-                  ) : (
-                    historyBlocks.map((block) => (
-                      <tr key={block.id}>
-                        <td style={{ padding: 10, borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#e6c76a" }}>{block.reason}</td>
-                        <td style={{ padding: 10, borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#e6c76a" }}>{block.reasonType}</td>
-                        <td style={{ padding: 10, borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#e6c76a" }}>{block.startDate}</td>
-                        <td style={{ padding: 10, borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#e6c76a" }}>{block.endDate}</td>
-                        <td style={{ padding: 10, borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#e6c76a" }}>{block.session}</td>
-                        <td style={{ padding: 10, borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#e6c76a" }}>
-                          {block.status === "active" ? "نشط" : block.status === "expired" ? "منتهي" : "ملغي"}
+                  </thead>
+                  <tbody>
+                    {historyBlocks.length === 0 ? (
+                      <tr>
+                        <td style={{ padding: 10, borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#e6c76a" }} colSpan={6}>
+                          {tr("لا يوجد سجل حظر لهذه القاعة.", "There is no block history for this room.")}
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                    ) : (
+                      historyBlocks.map((block) => (
+                        <tr key={block.id}>
+                          <td style={{ padding: 10, borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#e6c76a" }}>{block.reason}</td>
+                          <td style={{ padding: 10, borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#e6c76a" }}>{block.reasonType}</td>
+                          <td style={{ padding: 10, borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#e6c76a" }}>{block.startDate}</td>
+                          <td style={{ padding: 10, borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#e6c76a" }}>{block.endDate}</td>
+                          <td style={{ padding: 10, borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#e6c76a" }}>
+                            {block.session === "full-day" ? tr("اليوم كامل", "Full Day") : block.session === "الفترة الأولى" ? tr("الفترة الأولى", "First Period") : tr("الفترة الثانية", "Second Period")}
+                          </td>
+                          <td style={{ padding: 10, borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#e6c76a" }}>
+                            {block.status === "active" ? tr("نشط", "Active") : block.status === "expired" ? tr("منتهي", "Expired") : tr("ملغي", "Cancelled")}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+                <button style={btn("#1f2937", "#d4af37")} onClick={() => setHistoryRoomId(null)}>
+                  {tr("إغلاق", "Close")}
+                </button>
+              </div>
             </div>
-            <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
-              <button style={btn("#1f2937", "#d4af37")} onClick={() => setHistoryRoomId(null)}>
-                إغلاق
-              </button>
+          </div>
+        )}
+
+        <div style={header}>
+          <div>
+            <div style={{ fontWeight: 1000, fontSize: 18 }}>{APP_NAME}</div>
+            <div style={{ fontWeight: 900, opacity: 0.75 }}>{tr("القاعات", "Rooms")}</div>
+          </div>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <button style={btn("#1f2937", "#d4af37")} onClick={() => history.back()}>
+              {tr("← رجوع", "← Back")}
+            </button>
+            <button
+              style={{ ...btn("#3b82f6", "#07101f"), opacity: saving ? 0.7 : 1 }}
+              onClick={startAdd}
+              disabled={saving}
+            >
+              {tr("+ إضافة قاعة", "+ Add Room")}
+            </button>
+            <button
+              style={{ ...btn("#ef4444", "#07101f"), opacity: saving ? 0.7 : 1 }}
+              onClick={() => void deleteAll()}
+              disabled={saving}
+            >
+              {tr("🗑 حذف الكل", "🗑 Delete All")}
+            </button>
+          </div>
+        </div>
+
+        {loading && !loaded && (
+          <div
+            style={{
+              marginBottom: 12,
+              padding: 12,
+              borderRadius: 12,
+              background: "rgba(59,130,246,0.12)",
+              border: "1px solid rgba(59,130,246,0.35)",
+              color: "#bfdbfe",
+              fontWeight: 800,
+            }}
+          >
+            {tr("جار تحميل بيانات القاعات...", "Loading rooms data...")}
+          </div>
+        )}
+
+        {error && (
+          <div
+            style={{
+              marginBottom: 12,
+              padding: 12,
+              borderRadius: 12,
+              background: "rgba(239,68,68,0.12)",
+              border: "1px solid rgba(239,68,68,0.35)",
+              color: "#fecaca",
+              fontWeight: 800,
+            }}
+          >
+            {error}
+          </div>
+        )}
+
+        <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(4, minmax(180px, 1fr))", marginBottom: 14 }}>
+          {[
+            [tr("إجمالي القاعات", "Total Rooms"), String(stats.total)],
+            [tr("القاعات النشطة", "Active Rooms"), String(stats.active)],
+            [tr("القاعات المحظورة اليوم", "Blocked Rooms Today"), String(stats.blocked)],
+            [tr("السعة الإجمالية", "Total Capacity"), String(stats.capacity)],
+          ].map(([label, value]) => (
+            <div key={label} style={{ ...card, marginBottom: 0 }}>
+              <div style={{ fontSize: 13, opacity: 0.8, marginBottom: 6 }}>{label}</div>
+              <div style={{ fontSize: 28, fontWeight: 1000, color: "#f1d27a" }}>{value}</div>
             </div>
-          </div>
+          ))}
         </div>
-      )}
-      <div style={header}>
-        <div>
-          <div style={{ fontWeight: 1000, fontSize: 18 }}>{APP_NAME}</div>
-          <div style={{ fontWeight: 900, opacity: 0.75 }}>القاعات</div>
-        </div>
-        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          <button style={btn("#1f2937", "#d4af37")} onClick={() => history.back()}>
-            ← رجوع
-          </button>
-          <button
-            style={{ ...btn("#3b82f6", "#07101f"), opacity: saving ? 0.7 : 1 }}
-            onClick={startAdd}
-            disabled={saving}
-          >
-            + إضافة قاعة
-          </button>
-          <button
-            style={{ ...btn("#ef4444", "#07101f"), opacity: saving ? 0.7 : 1 }}
-            onClick={() => void deleteAll()}
-            disabled={saving}
-          >
-            🗑 حذف الكل
-          </button>
-        </div>
-      </div>
-      {loading && !loaded && (
-        <div
-          style={{
-            marginBottom: 12,
-            padding: 12,
-            borderRadius: 12,
-            background: "rgba(59,130,246,0.12)",
-            border: "1px solid rgba(59,130,246,0.35)",
-            color: "#bfdbfe",
-            fontWeight: 800,
-          }}
-        >
-          جار تحميل بيانات القاعات...
-        </div>
-      )}
-      {error && (
-        <div
-          style={{
-            marginBottom: 12,
-            padding: 12,
-            borderRadius: 12,
-            background: "rgba(239,68,68,0.12)",
-            border: "1px solid rgba(239,68,68,0.35)",
-            color: "#fecaca",
-            fontWeight: 800,
-          }}
-        >
-          {error}
-        </div>
-      )}
-      <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(4, minmax(180px, 1fr))", marginBottom: 14 }}>
-        {[
-          ["إجمالي القاعات", String(stats.total)],
-          ["القاعات النشطة", String(stats.active)],
-          ["القاعات المحظورة اليوم", String(stats.blocked)],
-          ["السعة الإجمالية", String(stats.capacity)],
-        ].map(([label, value]) => (
-          <div key={label} style={{ ...card, marginBottom: 0 }}>
-            <div style={{ fontSize: 13, opacity: 0.8, marginBottom: 6 }}>{label}</div>
-            <div style={{ fontSize: 28, fontWeight: 1000, color: "#f1d27a" }}>{value}</div>
-          </div>
-        ))}
-      </div>
-      <div style={card}>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <input
-            style={{ ...inputStyle, maxWidth: 340 }}
-            placeholder="بحث..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-          <GoldDropdown
-            value={statusFilter}
-            options={[
-              { value: "all", label: "كل الحالات" },
-              { value: "active", label: "نشطة" },
-              { value: "inactive", label: "موقوفة" },
-              { value: "blocked", label: "محظورة اليوم" },
-            ]}
-            onChange={(v) => setStatusFilter(v as typeof statusFilter)}
-          />
-          <button style={btn("#22c55e", "#07101f")} onClick={exportCSV}>
-            تصدير CSV
-          </button>
-          <button style={btn("#10b981", "#07101f")} onClick={exportExcel}>
-            تصدير Excel
-          </button>
-          <label style={btn("#60a5fa", "#07101f")}>
-            استيراد CSV ⬆️
-            <input
-              type="file"
-              accept=".csv,text/csv"
-              style={{ display: "none" }}
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) void importCSV(f);
-                e.currentTarget.value = "";
-              }}
-            />
-          </label>
-          <label style={btn("#93c5fd", "#07101f")}>
-            استيراد Excel ⬆️
-            <input
-              type="file"
-              accept=".xlsx,.xls"
-              style={{ display: "none" }}
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) void importExcel(f);
-                e.currentTarget.value = "";
-              }}
-            />
-          </label>
-          <div style={{ marginInlineStart: "auto", fontWeight: 900, color: "#d4af37" }}>
-            إجمالي: {rooms.length} — المعروض: {filtered.length}
-          </div>
-        </div>
-      </div>
-      {(adding || editingId) && (
+
         <div style={card}>
-          <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(4, minmax(220px, 1fr))" }}>
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>اسم القاعة</div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <input
+              style={{ ...inputStyle, maxWidth: 340 }}
+              placeholder={tr("بحث...", "Search...")}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            <GoldDropdown
+              value={statusFilter}
+              options={[
+                { value: "all", label: tr("كل الحالات", "All Statuses") },
+                { value: "active", label: tr("نشطة", "Active") },
+                { value: "inactive", label: tr("موقوفة", "Inactive") },
+                { value: "blocked", label: tr("محظورة اليوم", "Blocked Today") },
+              ]}
+              onChange={(v) => setStatusFilter(v as typeof statusFilter)}
+            />
+            <button style={btn("#22c55e", "#07101f")} onClick={exportCSV}>
+              {tr("تصدير CSV", "Export CSV")}
+            </button>
+            <button style={btn("#10b981", "#07101f")} onClick={exportExcel}>
+              {tr("تصدير Excel", "Export Excel")}
+            </button>
+            <label style={btn("#60a5fa", "#07101f")}>
+              {tr("استيراد CSV ⬆️", "Import CSV ⬆️")}
               <input
-                style={inputStyle}
-                value={current.roomName}
-                onChange={(e) => setCurrent({ roomName: e.target.value })}
+                type="file"
+                accept=".csv,text/csv"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void importCSV(f);
+                  e.currentTarget.value = "";
+                }}
               />
-            </div>
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>كود القاعة</div>
+            </label>
+            <label style={btn("#93c5fd", "#07101f")}>
+              {tr("استيراد Excel ⬆️", "Import Excel ⬆️")}
               <input
-                style={inputStyle}
-                value={current.code || ""}
-                onChange={(e) => setCurrent({ code: e.target.value })}
+                type="file"
+                accept=".xlsx,.xls"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void importExcel(f);
+                  e.currentTarget.value = "";
+                }}
               />
+            </label>
+            <div style={{ marginInlineStart: "auto", fontWeight: 900, color: "#d4af37" }}>
+              {tr("إجمالي", "Total")}: {rooms.length} — {tr("المعروض", "Shown")}: {filtered.length}
             </div>
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>المبنى</div>
-              <GoldDropdown
-                value={current.building}
-                options={BUILDING_OPTIONS}
-                placeholder="— اختر المبنى —"
-                onChange={(v) => setCurrent({ building: v })}
-              />
-            </div>
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>نوع القاعة</div>
-              <GoldDropdown
-                value={current.type}
-                options={ROOM_TYPE_OPTIONS}
-                placeholder="— اختر النوع —"
-                onChange={(v) => setCurrent({ type: v })}
-              />
-            </div>
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>السعة</div>
-              <input
-                style={inputStyle}
-                type="number"
-                value={String(current.capacity)}
-                onChange={(e) => setCurrent({ capacity: Number(e.target.value) || 0 })}
-              />
-            </div>
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>الحالة</div>
-              <GoldDropdown
-                value={current.status || "active"}
-                options={ROOM_STATUS_OPTIONS}
-                onChange={(v) => setCurrent({ status: v as Room["status"] })}
-              />
-            </div>
-            <div style={{ gridColumn: "1 / -1" }}>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>ملاحظات</div>
-              <textarea
-                style={{ ...inputStyle, minHeight: 80 }}
-                value={current.notes}
-                onChange={(e) => setCurrent({ notes: e.target.value })}
-              />
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-            {editingId ? (
-              <>
-                <button
-                  style={{ ...btn("#10b981", "#07101f"), opacity: saving ? 0.7 : 1 }}
-                  onClick={() => void saveEdit()}
-                  disabled={saving}
-                >
-                  {saving ? "جارٍ الحفظ..." : "حفظ التعديل"}
-                </button>
-                <button
-                  style={btn("#1f2937", "#d4af37")}
-                  onClick={() => setEditingId(null)}
-                  disabled={saving}
-                >
-                  إلغاء
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  style={{ ...btn("#10b981", "#07101f"), opacity: saving ? 0.7 : 1 }}
-                  onClick={() => void saveAdd()}
-                  disabled={saving}
-                >
-                  {saving ? "جارٍ الحفظ..." : "حفظ"}
-                </button>
-                <button
-                  style={btn("#1f2937", "#d4af37")}
-                  onClick={() => setAdding(false)}
-                  disabled={saving}
-                >
-                  إلغاء
-                </button>
-              </>
-            )}
           </div>
         </div>
-      )}
-      <div
-        style={{
-          ...card,
-          padding: 12,
-          borderRadius: 28,
-          background: "linear-gradient(180deg, #0a0d14 0%, #09101d 100%)",
-          boxShadow: "0 22px 60px rgba(0,0,0,0.42)",
-        }}
-      >
+
+        {(adding || editingId) && (
+          <div style={card}>
+            <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(4, minmax(220px, 1fr))" }}>
+              <div>
+                <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("اسم القاعة", "Room Name")}</div>
+                <input
+                  style={inputStyle}
+                  value={current.roomName}
+                  onChange={(e) => setCurrent({ roomName: e.target.value })}
+                />
+              </div>
+              <div>
+                <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("كود القاعة", "Room Code")}</div>
+                <input
+                  style={inputStyle}
+                  value={current.code || ""}
+                  onChange={(e) => setCurrent({ code: e.target.value })}
+                />
+              </div>
+              <div>
+                <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("المبنى", "Building")}</div>
+                <GoldDropdown
+                  value={current.building}
+                  options={BUILDING_OPTIONS}
+                  placeholder={tr("— اختر المبنى —", "— Select Building —")}
+                  onChange={(v) => setCurrent({ building: v })}
+                />
+              </div>
+              <div>
+                <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("نوع القاعة", "Room Type")}</div>
+                <GoldDropdown
+                  value={current.type}
+                  options={ROOM_TYPE_OPTIONS}
+                  placeholder={tr("— اختر النوع —", "— Select Type —")}
+                  onChange={(v) => setCurrent({ type: v })}
+                />
+              </div>
+              <div>
+                <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("السعة", "Capacity")}</div>
+                <input
+                  style={inputStyle}
+                  type="number"
+                  value={String(current.capacity)}
+                  onChange={(e) => setCurrent({ capacity: Number(e.target.value) || 0 })}
+                />
+              </div>
+              <div>
+                <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("الحالة", "Status")}</div>
+                <GoldDropdown
+                  value={current.status || "active"}
+                  options={ROOM_STATUS_OPTIONS}
+                  onChange={(v) => setCurrent({ status: v as Room["status"] })}
+                />
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("ملاحظات", "Notes")}</div>
+                <textarea
+                  style={{ ...inputStyle, minHeight: 80 }}
+                  value={current.notes}
+                  onChange={(e) => setCurrent({ notes: e.target.value })}
+                />
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+              {editingId ? (
+                <>
+                  <button
+                    style={{ ...btn("#10b981", "#07101f"), opacity: saving ? 0.7 : 1 }}
+                    onClick={() => void saveEdit()}
+                    disabled={saving}
+                  >
+                    {saving ? tr("جارٍ الحفظ...", "Saving...") : tr("حفظ التعديل", "Save Changes")}
+                  </button>
+                  <button
+                    style={btn("#1f2937", "#d4af37")}
+                    onClick={() => setEditingId(null)}
+                    disabled={saving}
+                  >
+                    {tr("إلغاء", "Cancel")}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    style={{ ...btn("#10b981", "#07101f"), opacity: saving ? 0.7 : 1 }}
+                    onClick={() => void saveAdd()}
+                    disabled={saving}
+                  >
+                    {saving ? tr("جارٍ الحفظ...", "Saving...") : tr("حفظ", "Save")}
+                  </button>
+                  <button
+                    style={btn("#1f2937", "#d4af37")}
+                    onClick={() => setAdding(false)}
+                    disabled={saving}
+                  >
+                    {tr("إلغاء", "Cancel")}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
         <div
           style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 12,
-            marginBottom: 14,
-            padding: "4px 6px 0 6px",
+            ...card,
+            padding: 12,
+            borderRadius: 28,
+            background: "linear-gradient(180deg, #0a0d14 0%, #09101d 100%)",
+            boxShadow: "0 22px 60px rgba(0,0,0,0.42)",
           }}
         >
-          <div style={{ fontWeight: 1000, fontSize: 20, color: "#f2cf63" }}>القاعات</div>
-          <div style={{ fontWeight: 900, color: "#d4af37", opacity: 0.9 }}>
-            جدول القاعات
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              marginBottom: 14,
+              padding: "4px 6px 0 6px",
+            }}
+          >
+            <div style={{ fontWeight: 1000, fontSize: 20, color: "#f2cf63" }}>{tr("القاعات", "Rooms")}</div>
+            <div style={{ fontWeight: 900, color: "#d4af37", opacity: 0.9 }}>
+              {tr("جدول القاعات", "Rooms Table")}
+            </div>
+          </div>
+          <div className="roomsTableLuxury" style={tableWrap}>
+            <table>
+              <thead>
+                <tr>
+                  <th style={thStyle}>{tr("اسم القاعة", "Room Name")}</th>
+                  <th style={thStyle}>{tr("الكود", "Code")}</th>
+                  <th style={thStyle}>{tr("المبنى", "Building")}</th>
+                  <th style={thStyle}>{tr("النوع", "Type")}</th>
+                  <th style={thStyle}>{tr("السعة", "Capacity")}</th>
+                  <th style={thStyle}>{tr("الحالة", "Status")}</th>
+                  <th style={thStyle}>{tr("الحظر الحالي", "Current Block")}</th>
+                  <th style={thStyle}>{tr("ملاحظات", "Notes")}</th>
+                  <th style={thStyle}>{tr("إجراءات", "Actions")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.length === 0 ? (
+                  <tr>
+                    <td style={tdStyle} className="emptyCell" colSpan={9}>
+                      {tr("لا توجد بيانات", "No data found")}
+                    </td>
+                  </tr>
+                ) : (
+                  filtered.map((r) => {
+                    const blockedNow = blockedRoomIdsToday.has(r.id);
+                    const roomStatus = (r.status || "active") === "active" ? tr("نشطة", "Active") : tr("موقوفة", "Inactive");
+                    return (
+                      <tr key={r.id}>
+                        <td style={tdStyle}>
+                          <div className="cell-main">{r.roomName}</div>
+                          <div className="cell-muted">{r.code ? `${tr("رمز القاعة", "Room Code")}: ${r.code}` : tr("بدون كود", "No Code")}</div>
+                        </td>
+                        <td style={tdStyle} className="cell-subtle">
+                          {r.code || "—"}
+                        </td>
+                        <td style={tdStyle} className="cell-subtle">
+                          {r.building}
+                        </td>
+                        <td style={tdStyle} className="cell-subtle">
+                          {r.type}
+                        </td>
+                        <td style={tdStyle}>
+                          <span className="cell-badge badge-capacity">{r.capacity}</span>
+                        </td>
+                        <td style={tdStyle}>
+                          <span
+                            className={`cell-badge ${
+                              (r.status || "active") === "active" ? "badge-active" : "badge-inactive"
+                            }`}
+                          >
+                            {roomStatus}
+                          </span>
+                        </td>
+                        <td style={tdStyle}>
+                          <span className={`cell-badge ${blockedNow ? "badge-blocked" : "badge-open"}`}>
+                            {blockedNow ? tr("محظورة اليوم", "Blocked Today") : tr("متاحة", "Available")}
+                          </span>
+                        </td>
+                        <td style={tdStyle} title={r.notes}>
+                          <div className="cell-subtle">{r.notes || "—"}</div>
+                        </td>
+                        <td style={tdStyle}>
+                          <div className="actionStack">
+                            <button className="actionBtn btnEdit" onClick={() => startEdit(r)}>
+                              {tr("تعديل ✏️", "Edit ✏️")}
+                            </button>
+                            <button className="actionBtn btnBlock" onClick={() => openQuickBlock(r)}>
+                              {tr("حظر ⛔", "Block ⛔")}
+                            </button>
+                            <button className="actionBtn btnHistory" onClick={() => setHistoryRoomId(r.id)}>
+                              {tr("السجل 📜", "History 📜")}
+                            </button>
+                            <button className="actionBtn btnDelete" onClick={() => void removeRoom(r.id)}>
+                              {tr("حذف 🗑", "Delete 🗑")}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
-        <div className="roomsTableLuxury" style={tableWrap}>
-          <table>
-            <thead>
-              <tr>
-                <th style={thStyle}>اسم القاعة</th>
-                <th style={thStyle}>الكود</th>
-                <th style={thStyle}>المبنى</th>
-                <th style={thStyle}>النوع</th>
-                <th style={thStyle}>السعة</th>
-                <th style={thStyle}>الحالة</th>
-                <th style={thStyle}>الحظر الحالي</th>
-                <th style={thStyle}>ملاحظات</th>
-                <th style={thStyle}>إجراءات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 ? (
-                <tr>
-                  <td style={tdStyle} className="emptyCell" colSpan={9}>
-                    لا توجد بيانات
-                  </td>
-                </tr>
-              ) : (
-                filtered.map((r) => {
-                  const blockedNow = blockedRoomIdsToday.has(r.id);
-                  const roomStatus = (r.status || "active") === "active" ? "نشطة" : "موقوفة";
-                  return (
-                    <tr key={r.id}>
-                      <td style={tdStyle}>
-                        <div className="cell-main">{r.roomName}</div>
-                        <div className="cell-muted">{r.code ? `رمز القاعة: ${r.code}` : "بدون كود"}</div>
-                      </td>
-                      <td style={tdStyle} className="cell-subtle">
-                        {r.code || "—"}
-                      </td>
-                      <td style={tdStyle} className="cell-subtle">
-                        {r.building}
-                      </td>
-                      <td style={tdStyle} className="cell-subtle">
-                        {r.type}
-                      </td>
-                      <td style={tdStyle}>
-                        <span className="cell-badge badge-capacity">{r.capacity}</span>
-                      </td>
-                      <td style={tdStyle}>
-                        <span
-                          className={`cell-badge ${
-                            (r.status || "active") === "active" ? "badge-active" : "badge-inactive"
-                          }`}
-                        >
-                          {roomStatus}
-                        </span>
-                      </td>
-                      <td style={tdStyle}>
-                        <span className={`cell-badge ${blockedNow ? "badge-blocked" : "badge-open"}`}>
-                          {blockedNow ? "محظورة اليوم" : "متاحة"}
-                        </span>
-                      </td>
-                      <td style={tdStyle} title={r.notes}>
-                        <div className="cell-subtle">{r.notes || "—"}</div>
-                      </td>
-                      <td style={tdStyle}>
-                        <div className="actionStack">
-                          <button className="actionBtn btnEdit" onClick={() => startEdit(r)}>
-                            تعديل ✏️
-                          </button>
-                          <button className="actionBtn btnBlock" onClick={() => openQuickBlock(r)}>
-                            حظر ⛔
-                          </button>
-                          <button className="actionBtn btnHistory" onClick={() => setHistoryRoomId(r.id)}>
-                            السجل 📜
-                          </button>
-                          <button className="actionBtn btnDelete" onClick={() => void removeRoom(r.id)}>
-                            حذف 🗑
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
       </div>
     </div>
   );
