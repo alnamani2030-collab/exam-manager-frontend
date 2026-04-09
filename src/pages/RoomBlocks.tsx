@@ -3,30 +3,51 @@ import GoldDropdown from "../components/GoldDropdown";
 import { useAuth } from "../auth/AuthContext";
 import { useRoomBlocksData } from "../hooks/useRoomBlocksData";
 import { useRoomsData } from "../hooks/useRoomsData";
+import { useI18n } from "../i18n/I18nProvider";
 import { blockStatusLabel, createId } from "../lib/roomScheduling";
 import type { Room } from "../services/rooms.service";
 import type { RoomBlock } from "../services/roomBlocks.service";
 
 const APP_NAME = "   ";
 
-const REASON_OPTIONS = [
+const REASON_OPTIONS_AR = [
   { value: "maintenance", label: "صيانة" },
   { value: "reserved", label: "محجوزة" },
   { value: "conflict", label: "تعارض" },
   { value: "admin", label: "قرار إداري" },
 ];
 
-const SESSION_OPTIONS = [
+const REASON_OPTIONS_EN = [
+  { value: "maintenance", label: "Maintenance" },
+  { value: "reserved", label: "Reserved" },
+  { value: "conflict", label: "Conflict" },
+  { value: "admin", label: "Administrative Decision" },
+];
+
+const SESSION_OPTIONS_AR = [
   { value: "full-day", label: "اليوم كامل" },
   { value: "الفترة الأولى", label: "الفترة الأولى" },
   { value: "الفترة الثانية", label: "الفترة الثانية" },
 ];
 
-const STATUS_FILTER_OPTIONS = [
+const SESSION_OPTIONS_EN = [
+  { value: "full-day", label: "Full Day" },
+  { value: "الفترة الأولى", label: "First Period" },
+  { value: "الفترة الثانية", label: "Second Period" },
+];
+
+const STATUS_FILTER_OPTIONS_AR = [
   { value: "all", label: "كل الحالات" },
   { value: "active", label: "نشطة" },
   { value: "expired", label: "منتهية" },
   { value: "cancelled", label: "ملغاة" },
+];
+
+const STATUS_FILTER_OPTIONS_EN = [
+  { value: "all", label: "All Statuses" },
+  { value: "active", label: "Active" },
+  { value: "expired", label: "Expired" },
+  { value: "cancelled", label: "Cancelled" },
 ];
 
 const emptyBlock: RoomBlock = {
@@ -43,6 +64,13 @@ const emptyBlock: RoomBlock = {
 };
 
 export default function RoomBlocks() {
+  const { lang, isRTL } = useI18n();
+  const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
+
+  const REASON_OPTIONS = useMemo(() => (lang === "ar" ? REASON_OPTIONS_AR : REASON_OPTIONS_EN), [lang]);
+  const SESSION_OPTIONS = useMemo(() => (lang === "ar" ? SESSION_OPTIONS_AR : SESSION_OPTIONS_EN), [lang]);
+  const STATUS_FILTER_OPTIONS = useMemo(() => (lang === "ar" ? STATUS_FILTER_OPTIONS_AR : STATUS_FILTER_OPTIONS_EN), [lang]);
+
   const roomBlocksApi = useRoomBlocksData() as any;
   const roomsApi = useRoomsData() as any;
   const { user } = useAuth() as any;
@@ -98,7 +126,7 @@ export default function RoomBlocks() {
         z-index: 6;
         background: linear-gradient(180deg, #9a7200 0%, #6f5100 100%) !important;
         color: #fff3cf !important;
-        text-align: right;
+        text-align: ${isRTL ? "right" : "left"};
         font-weight: 1000;
         font-size: 16px;
         padding: 16px 16px;
@@ -165,7 +193,7 @@ export default function RoomBlocks() {
         document.head.removeChild(styleEl);
       } catch {}
     };
-  }, []);
+  }, [isRTL]);
 
   const roomsMap = useMemo(() => {
     const map = new Map<string, Room>();
@@ -175,10 +203,10 @@ export default function RoomBlocks() {
 
   const roomsOptions = useMemo(
     () => [
-      { value: "", label: "— اختر القاعة —" },
+      { value: "", label: tr("— اختر القاعة —", "— Select Room —") },
       ...rooms.map((room) => ({ value: room.id, label: room.roomName })),
     ],
-    [rooms]
+    [rooms, lang]
   );
 
   const normalizedBlocks = useMemo<RoomBlock[]>(
@@ -232,6 +260,7 @@ export default function RoomBlocks() {
       "radial-gradient(circle at top, rgba(212,175,55,0.14), transparent 24%), radial-gradient(circle at 88% 18%, rgba(59,130,246,0.10), transparent 24%), linear-gradient(180deg, #070b12 0%, #0b1220 42%, #060a12 100%)",
     position: "relative",
     overflowX: "hidden",
+    direction: isRTL ? "rtl" : "ltr",
   };
   const card: React.CSSProperties = {
     background: "linear-gradient(180deg, rgba(11,18,32,0.94), rgba(9,16,29,0.96))",
@@ -290,7 +319,7 @@ export default function RoomBlocks() {
     color: "#d4af37",
     zIndex: 2,
     padding: 10,
-    textAlign: "right",
+    textAlign: isRTL ? "right" : "left",
     fontWeight: 900,
     borderBottom: "1px solid rgba(212,175,55,0.2)",
     whiteSpace: "nowrap",
@@ -313,10 +342,10 @@ export default function RoomBlocks() {
   };
 
   function validate(block: RoomBlock) {
-    if (!block.roomId) return "يجب اختيار القاعة.";
-    if (!block.reason.trim()) return "سبب الحظر مطلوب.";
-    if (!block.startDate || !block.endDate) return "التاريخ مطلوب.";
-    if (block.endDate < block.startDate) return "تاريخ النهاية يجب أن يكون بعد البداية.";
+    if (!block.roomId) return tr("يجب اختيار القاعة.", "You must select a room.");
+    if (!block.reason.trim()) return tr("سبب الحظر مطلوب.", "Block reason is required.");
+    if (!block.startDate || !block.endDate) return tr("التاريخ مطلوب.", "Date is required.");
+    if (block.endDate < block.startDate) return tr("تاريخ النهاية يجب أن يكون بعد البداية.", "End date must be after start date.");
 
     const overlap = roomBlocks.some(
       (existing) =>
@@ -329,7 +358,7 @@ export default function RoomBlocks() {
           existing.session === block.session)
     );
 
-    if (overlap) return "يوجد حظر متداخل لنفس القاعة في نفس الفترة.";
+    if (overlap) return tr("يوجد حظر متداخل لنفس القاعة في نفس الفترة.", "There is an overlapping block for the same room in the same period.");
     return "";
   }
 
@@ -370,7 +399,7 @@ export default function RoomBlocks() {
       setAdding(false);
       setRow({ ...emptyBlock, id: createId("block") });
     } catch {
-      alert("تعذر حفظ الحظر");
+      alert(tr("تعذر حفظ الحظر", "Unable to save block"));
     }
   }
 
@@ -406,12 +435,12 @@ export default function RoomBlocks() {
       setEditingId(null);
       setEdit({ ...emptyBlock });
     } catch {
-      alert("تعذر تحديث الحظر");
+      alert(tr("تعذر تحديث الحظر", "Unable to update block"));
     }
   }
 
   async function cancelBlock(id: string) {
-    if (!confirm("هل تريد إلغاء هذا الحظر؟")) return;
+    if (!confirm(tr("هل تريد إلغاء هذا الحظر؟", "Do you want to cancel this block?"))) return;
 
     try {
       const target = roomBlocks.find((block) => block.id === id);
@@ -430,12 +459,12 @@ export default function RoomBlocks() {
         );
       }
     } catch {
-      alert("تعذر إلغاء الحظر");
+      alert(tr("تعذر إلغاء الحظر", "Unable to cancel block"));
     }
   }
 
   async function removeBlock(id: string) {
-    if (!confirm("هل تريد حذف هذا السجل؟")) return;
+    if (!confirm(tr("هل تريد حذف هذا السجل؟", "Do you want to delete this record?"))) return;
 
     try {
       if (typeof deleteRoomBlock === "function") {
@@ -446,7 +475,7 @@ export default function RoomBlocks() {
         );
       }
     } catch {
-      alert("تعذر حذف السجل");
+      alert(tr("تعذر حذف السجل", "Unable to delete record"));
     }
   }
 
@@ -473,7 +502,8 @@ export default function RoomBlocks() {
       <div
         style={{
           position: "absolute",
-          right: -120,
+          right: isRTL ? -120 : "auto",
+          left: !isRTL ? -120 : "auto",
           top: 260,
           width: 340,
           height: 340,
@@ -516,7 +546,7 @@ export default function RoomBlocks() {
                   fontSize: 12,
                 }}
               >
-                إدارة الحظر التشغيلي للقاعات
+                {tr("إدارة الحظر التشغيلي للقاعات", "Operational room block management")}
               </div>
 
               <div>
@@ -534,7 +564,7 @@ export default function RoomBlocks() {
                     textShadow: "0 8px 28px rgba(212,175,55,0.16)",
                   }}
                 >
-                  مركز حظر القاعات
+                  {tr("مركز حظر القاعات", "Room Blocks Center")}
                 </h1>
               </div>
 
@@ -547,15 +577,17 @@ export default function RoomBlocks() {
                   maxWidth: 940,
                 }}
               >
-                تمنح هذه الصفحة الإدارة تحكمًا دقيقًا وفوريًا في حالات حظر القاعات، مع واجهة فاخرة لإضافة السجلات
-                وتعديلها ومراجعتها، وجدول تنفيذي أنيق يوضح الفترات والأسباب والحالة التشغيلية بوضوح.
+                {tr(
+                  "تمنح هذه الصفحة الإدارة تحكمًا دقيقًا وفوريًا في حالات حظر القاعات، مع واجهة فاخرة لإضافة السجلات وتعديلها ومراجعتها، وجدول تنفيذي أنيق يوضح الفترات والأسباب والحالة التشغيلية بوضوح.",
+                  "This page gives the administration precise and immediate control over room block cases, with a premium interface for adding, editing, and reviewing records, and an elegant executive table that clearly shows periods, reasons, and operational status."
+                )}
               </p>
 
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                 {[
-                  { label: "إجمالي السجلات", value: stats.total },
-                  { label: "الحظر النشط", value: stats.active },
-                  { label: "المعروض الآن", value: filtered.length },
+                  { label: tr("إجمالي السجلات", "Total Records"), value: stats.total },
+                  { label: tr("الحظر النشط", "Active Blocks"), value: stats.active },
+                  { label: tr("المعروض الآن", "Currently Shown"), value: filtered.length },
                 ].map((item) => (
                   <div
                     key={item.label}
@@ -602,343 +634,351 @@ export default function RoomBlocks() {
                   fontSize: 12,
                 }}
               >
-                {stats.active ? "توجد قيود نشطة تحت المتابعة" : "لا توجد قيود نشطة الآن"}
+                {stats.active ? tr("توجد قيود نشطة تحت المتابعة", "There are active restrictions under follow-up") : tr("لا توجد قيود نشطة الآن", "There are no active restrictions now")}
               </div>
 
               <div style={{ fontSize: 28, lineHeight: 1.5, fontWeight: 950, color: "#fff1c4" }}>
-                واجهة أكثر فخامة ووضوحًا لإدارة الحظر والتداخلات التشغيلية للقاعات.
+                {tr("واجهة أكثر فخامة ووضوحًا لإدارة الحظر والتداخلات التشغيلية للقاعات.", "A more premium and clearer interface for managing room blocks and operational conflicts.")}
               </div>
 
               <div style={{ fontSize: 14, lineHeight: 1.95, color: "rgba(255,241,196,0.78)" }}>
-                يمكنك من هنا إضافة الحظر أو تعديله أو إلغاؤه ومراجعة السجلات في تدفق بصري أنيق يعطي انطباعًا
-                قويًا من أول لحظة.
+                {tr(
+                  "يمكنك من هنا إضافة الحظر أو تعديله أو إلغاؤه ومراجعة السجلات في تدفق بصري أنيق يعطي انطباعًا قويًا من أول لحظة.",
+                  "From here you can add, edit, or cancel blocks and review records in an elegant visual flow that gives a strong impression from the first moment."
+                )}
               </div>
             </div>
           </div>
         </div>
 
-      <div style={header}>
-        <div>
-          <div style={{ fontWeight: 1000, fontSize: 18 }}>{APP_NAME}</div>
-          <div style={{ fontWeight: 900, opacity: 0.75 }}> </div>
+        <div style={header}>
+          <div>
+            <div style={{ fontWeight: 1000, fontSize: 18 }}>{APP_NAME}</div>
+            <div style={{ fontWeight: 900, opacity: 0.75 }}> </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <button style={btn("#1f2937", "#d4af37")} onClick={() => history.back()}>
+              {tr("← رجوع", "← Back")}
+            </button>
+
+            <button
+              style={{ ...btn("#ef4444", "#07101f"), opacity: pageBusy ? 0.7 : 1 }}
+              onClick={startAdd}
+              disabled={pageBusy}
+            >
+              {tr("+ إضافة حظر", "+ Add Block")}
+            </button>
+          </div>
         </div>
 
-        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          <button style={btn("#1f2937", "#d4af37")} onClick={() => history.back()}>
-            ← رجوع
-          </button>
-
-          <button
-            style={{ ...btn("#ef4444", "#07101f"), opacity: pageBusy ? 0.7 : 1 }}
-            onClick={startAdd}
-            disabled={pageBusy}
+        {stillLoading && (
+          <div
+            style={{
+              marginBottom: 12,
+              padding: 12,
+              borderRadius: 12,
+              background: "rgba(59,130,246,0.12)",
+              border: "1px solid rgba(59,130,246,0.35)",
+              color: "#bfdbfe",
+              fontWeight: 800,
+            }}
           >
-            + إضافة حظر
-          </button>
-        </div>
-      </div>
+            {tr("جار تحميل بيانات القاعات والحظر...", "Loading rooms and blocks data...")}
+          </div>
+        )}
 
-      {stillLoading && (
+        {(roomsError || roomBlocksError) && (
+          <div
+            style={{
+              marginBottom: 12,
+              padding: 12,
+              borderRadius: 12,
+              background: "rgba(239,68,68,0.12)",
+              border: "1px solid rgba(239,68,68,0.35)",
+              color: "#fecaca",
+              fontWeight: 800,
+            }}
+          >
+            {roomsError || roomBlocksError}
+          </div>
+        )}
+
         <div
           style={{
-            marginBottom: 12,
-            padding: 12,
-            borderRadius: 12,
-            background: "rgba(59,130,246,0.12)",
-            border: "1px solid rgba(59,130,246,0.35)",
-            color: "#bfdbfe",
-            fontWeight: 800,
+            display: "grid",
+            gap: 12,
+            gridTemplateColumns: "repeat(4, minmax(180px, 1fr))",
+            marginBottom: 14,
           }}
         >
-          جار تحميل بيانات القاعات والحظر...
+          {[
+            [tr("إجمالي السجلات", "Total Records"), String(stats.total)],
+            [tr("الحظر النشط", "Active Blocks"), String(stats.active)],
+            [tr("الحظر المنتهي", "Expired Blocks"), String(stats.expired)],
+            [tr("الحظر الملغي", "Cancelled Blocks"), String(stats.cancelled)],
+          ].map(([label, value]) => (
+            <div key={label} style={{ ...card, marginBottom: 0 }}>
+              <div style={{ fontSize: 13, opacity: 0.8, marginBottom: 6 }}>{label}</div>
+              <div style={{ fontSize: 28, fontWeight: 1000, color: "#f1d27a" }}>{value}</div>
+            </div>
+          ))}
         </div>
-      )}
 
-      {(roomsError || roomBlocksError) && (
-        <div
-          style={{
-            marginBottom: 12,
-            padding: 12,
-            borderRadius: 12,
-            background: "rgba(239,68,68,0.12)",
-            border: "1px solid rgba(239,68,68,0.35)",
-            color: "#fecaca",
-            fontWeight: 800,
-          }}
-        >
-          {roomsError || roomBlocksError}
-        </div>
-      )}
+        <div style={card}>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <input
+              style={{ ...inputStyle, maxWidth: 340 }}
+              placeholder={tr("بحث...", "Search...")}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
 
-      <div
-        style={{
-          display: "grid",
-          gap: 12,
-          gridTemplateColumns: "repeat(4, minmax(180px, 1fr))",
-          marginBottom: 14,
-        }}
-      >
-        {[
-          ["إجمالي السجلات", String(stats.total)],
-          ["الحظر النشط", String(stats.active)],
-          ["الحظر المنتهي", String(stats.expired)],
-          ["الحظر الملغي", String(stats.cancelled)],
-        ].map(([label, value]) => (
-          <div key={label} style={{ ...card, marginBottom: 0 }}>
-            <div style={{ fontSize: 13, opacity: 0.8, marginBottom: 6 }}>{label}</div>
-            <div style={{ fontSize: 28, fontWeight: 1000, color: "#f1d27a" }}>{value}</div>
-          </div>
-        ))}
-      </div>
+            <GoldDropdown
+              value={statusFilter}
+              options={STATUS_FILTER_OPTIONS}
+              onChange={(v) => setStatusFilter(v as typeof statusFilter)}
+            />
 
-      <div style={card}>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <input
-            style={{ ...inputStyle, maxWidth: 340 }}
-            placeholder="بحث..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-
-          <GoldDropdown
-            value={statusFilter}
-            options={STATUS_FILTER_OPTIONS}
-            onChange={(v) => setStatusFilter(v as typeof statusFilter)}
-          />
-
-          <div style={{ marginInlineStart: "auto", fontWeight: 900, color: "#d4af37" }}>
-            إجمالي: {roomBlocks.length} — المعروض: {filtered.length}
+            <div style={{ marginInlineStart: "auto", fontWeight: 900, color: "#d4af37" }}>
+              {tr("إجمالي", "Total")}: {roomBlocks.length} — {tr("المعروض", "Shown")}: {filtered.length}
+            </div>
           </div>
         </div>
-      </div>
 
-      {(adding || editingId) && (
+        {(adding || editingId) && (
+          <div style={card}>
+            <div
+              style={{
+                display: "grid",
+                gap: 10,
+                gridTemplateColumns: "repeat(4, minmax(220px, 1fr))",
+              }}
+            >
+              <div>
+                <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("القاعة", "Room")}</div>
+                <GoldDropdown
+                  value={current.roomId}
+                  options={roomsOptions}
+                  onChange={(v) => {
+                    const room = roomsMap.get(v);
+                    setCurrent({ roomId: v, roomName: room?.roomName || "" });
+                  }}
+                />
+              </div>
+
+              <div>
+                <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("نوع السبب", "Reason Type")}</div>
+                <GoldDropdown
+                  value={current.reasonType}
+                  options={REASON_OPTIONS}
+                  onChange={(v) => setCurrent({ reasonType: v })}
+                />
+              </div>
+
+              <div>
+                <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("الفترة", "Session")}</div>
+                <GoldDropdown
+                  value={current.session}
+                  options={SESSION_OPTIONS}
+                  onChange={(v) => setCurrent({ session: v as RoomBlock["session"] })}
+                />
+              </div>
+
+              <div>
+                <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("الحالة", "Status")}</div>
+                <GoldDropdown
+                  value={current.status}
+                  options={[
+                    { value: "active", label: tr("نشط", "Active") },
+                    { value: "cancelled", label: tr("ملغي", "Cancelled") },
+                  ]}
+                  onChange={(v) => setCurrent({ status: v as RoomBlock["status"] })}
+                />
+              </div>
+
+              <div>
+                <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("تاريخ البداية", "Start Date")}</div>
+                <input
+                  style={inputStyle}
+                  type="date"
+                  value={current.startDate}
+                  onChange={(e) => setCurrent({ startDate: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("تاريخ النهاية", "End Date")}</div>
+                <input
+                  style={inputStyle}
+                  type="date"
+                  value={current.endDate}
+                  onChange={(e) => setCurrent({ endDate: e.target.value })}
+                />
+              </div>
+
+              <div style={{ gridColumn: "1 / -1" }}>
+                <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("سبب الحظر", "Block Reason")}</div>
+                <textarea
+                  style={{ ...inputStyle, minHeight: 90 }}
+                  value={current.reason}
+                  onChange={(e) => setCurrent({ reason: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+              {editingId ? (
+                <>
+                  <button
+                    style={{ ...btn("#10b981", "#07101f"), opacity: pageBusy ? 0.7 : 1 }}
+                    onClick={() => void saveEdit()}
+                    disabled={pageBusy}
+                  >
+                    {pageBusy ? tr("جارٍ الحفظ...", "Saving...") : tr("حفظ التعديل", "Save Changes")}
+                  </button>
+
+                  <button
+                    style={btn("#1f2937", "#d4af37")}
+                    onClick={() => setEditingId(null)}
+                    disabled={pageBusy}
+                  >
+                    {tr("إلغاء", "Cancel")}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    style={{ ...btn("#10b981", "#07101f"), opacity: pageBusy ? 0.7 : 1 }}
+                    onClick={() => void saveAdd()}
+                    disabled={pageBusy}
+                  >
+                    {pageBusy ? tr("جارٍ الحفظ...", "Saving...") : tr("حفظ", "Save")}
+                  </button>
+
+                  <button
+                    style={btn("#1f2937", "#d4af37")}
+                    onClick={() => setAdding(false)}
+                    disabled={pageBusy}
+                  >
+                    {tr("إلغاء", "Cancel")}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
         <div style={card}>
           <div
             style={{
-              display: "grid",
-              gap: 10,
-              gridTemplateColumns: "repeat(4, minmax(220px, 1fr))",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              marginBottom: 14,
+              padding: "6px 8px 2px 8px",
+              flexWrap: "wrap",
             }}
           >
             <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>القاعة</div>
-              <GoldDropdown
-                value={current.roomId}
-                options={roomsOptions}
-                onChange={(v) => {
-                  const room = roomsMap.get(v);
-                  setCurrent({ roomId: v, roomName: room?.roomName || "" });
-                }}
-              />
+              <div style={{ fontWeight: 1000, fontSize: 22, color: "#f2cf63" }}>{tr("جدول حظر القاعات التنفيذي", "Executive Room Blocks Table")}</div>
+              <div style={{ fontWeight: 800, color: "rgba(230,199,106,0.74)", marginTop: 4 }}>
+                {tr("عرض احترافي يوضح السبب والفترة والحالة والإجراءات في بنية مؤسسية واضحة", "A professional view showing reason, period, status, and actions in a clear institutional structure")}
+              </div>
             </div>
-
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>نوع السبب</div>
-              <GoldDropdown
-                value={current.reasonType}
-                options={REASON_OPTIONS}
-                onChange={(v) => setCurrent({ reasonType: v })}
-              />
-            </div>
-
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>الفترة</div>
-              <GoldDropdown
-                value={current.session}
-                options={SESSION_OPTIONS}
-                onChange={(v) => setCurrent({ session: v as RoomBlock["session"] })}
-              />
-            </div>
-
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>الحالة</div>
-              <GoldDropdown
-                value={current.status}
-                options={[
-                  { value: "active", label: "نشط" },
-                  { value: "cancelled", label: "ملغي" },
-                ]}
-                onChange={(v) => setCurrent({ status: v as RoomBlock["status"] })}
-              />
-            </div>
-
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>تاريخ البداية</div>
-              <input
-                style={inputStyle}
-                type="date"
-                value={current.startDate}
-                onChange={(e) => setCurrent({ startDate: e.target.value })}
-              />
-            </div>
-
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>تاريخ النهاية</div>
-              <input
-                style={inputStyle}
-                type="date"
-                value={current.endDate}
-                onChange={(e) => setCurrent({ endDate: e.target.value })}
-              />
-            </div>
-
-            <div style={{ gridColumn: "1 / -1" }}>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>سبب الحظر</div>
-              <textarea
-                style={{ ...inputStyle, minHeight: 90 }}
-                value={current.reason}
-                onChange={(e) => setCurrent({ reason: e.target.value })}
-              />
+            <div style={{ fontWeight: 900, color: "#d4af37", opacity: 0.9 }}>
+              {tr("عدد الصفوف المعروضة", "Rows Shown")}: {filtered.length}
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-            {editingId ? (
-              <>
-                <button
-                  style={{ ...btn("#10b981", "#07101f"), opacity: pageBusy ? 0.7 : 1 }}
-                  onClick={() => void saveEdit()}
-                  disabled={pageBusy}
-                >
-                  {pageBusy ? "جارٍ الحفظ..." : "حفظ التعديل"}
-                </button>
-
-                <button
-                  style={btn("#1f2937", "#d4af37")}
-                  onClick={() => setEditingId(null)}
-                  disabled={pageBusy}
-                >
-                  إلغاء
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  style={{ ...btn("#10b981", "#07101f"), opacity: pageBusy ? 0.7 : 1 }}
-                  onClick={() => void saveAdd()}
-                  disabled={pageBusy}
-                >
-                  {pageBusy ? "جارٍ الحفظ..." : "حفظ"}
-                </button>
-
-                <button
-                  style={btn("#1f2937", "#d4af37")}
-                  onClick={() => setAdding(false)}
-                  disabled={pageBusy}
-                >
-                  إلغاء
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      <div style={card}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 12,
-            marginBottom: 14,
-            padding: "6px 8px 2px 8px",
-            flexWrap: "wrap",
-          }}
-        >
-          <div>
-            <div style={{ fontWeight: 1000, fontSize: 22, color: "#f2cf63" }}>جدول حظر القاعات التنفيذي</div>
-            <div style={{ fontWeight: 800, color: "rgba(230,199,106,0.74)", marginTop: 4 }}>
-              عرض احترافي يوضح السبب والفترة والحالة والإجراءات في بنية مؤسسية واضحة
-            </div>
-          </div>
-          <div style={{ fontWeight: 900, color: "#d4af37", opacity: 0.9 }}>
-            عدد الصفوف المعروضة: {filtered.length}
-          </div>
-        </div>
-
-        <div style={tableWrap} className="roomBlocksLuxury">
-          <table style={{ width: "100%", minWidth: 1120 }}>
-            <thead>
-              <tr>
-                <th style={thStyle}>اسم القاعة</th>
-                <th style={thStyle}>سبب الحظر</th>
-                <th style={thStyle}>نوع السبب</th>
-                <th style={thStyle}>من</th>
-                <th style={thStyle}>إلى</th>
-                <th style={thStyle}>الفترة</th>
-                <th style={thStyle}>الحالة</th>
-                <th style={thStyle}>أنشئ بواسطة</th>
-                <th style={thStyle}>إجراءات</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {filtered.length === 0 ? (
+          <div style={tableWrap} className="roomBlocksLuxury">
+            <table style={{ width: "100%", minWidth: 1120 }}>
+              <thead>
                 <tr>
-                  <td style={tdStyle} colSpan={9}>
-                    لا توجد بيانات.
-                  </td>
+                  <th style={thStyle}>{tr("اسم القاعة", "Room Name")}</th>
+                  <th style={thStyle}>{tr("سبب الحظر", "Block Reason")}</th>
+                  <th style={thStyle}>{tr("نوع السبب", "Reason Type")}</th>
+                  <th style={thStyle}>{tr("من", "From")}</th>
+                  <th style={thStyle}>{tr("إلى", "To")}</th>
+                  <th style={thStyle}>{tr("الفترة", "Session")}</th>
+                  <th style={thStyle}>{tr("الحالة", "Status")}</th>
+                  <th style={thStyle}>{tr("أنشئ بواسطة", "Created By")}</th>
+                  <th style={thStyle}>{tr("إجراءات", "Actions")}</th>
                 </tr>
-              ) : (
-                filtered.map((block) => (
-                  <tr key={block.id}>
-                    <td style={tdStyle}>{block.roomName}</td>
-                    <td style={tdStyle}>{block.reason}</td>
-                    <td style={tdStyle}>{block.reasonType}</td>
-                    <td style={tdStyle}>{block.startDate}</td>
-                    <td style={tdStyle}>{block.endDate}</td>
-                    <td style={tdStyle}>{block.session}</td>
-                    <td style={tdStyle}>
-                      <span
-                        className={
-                          "rbBadge " +
-                          (block.status === "active"
-                            ? "rbActive"
-                            : block.status === "expired"
-                            ? "rbExpired"
-                            : "rbCancelled")
-                        }
-                      >
-                        {block.status === "active"
-                          ? "نشط"
-                          : block.status === "expired"
-                          ? "منتهي"
-                          : "ملغي"}
-                      </span>
-                    </td>
-                    <td style={tdStyle}>{block.createdBy || "—"}</td>
-                    <td style={tdStyle}>
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        <button style={btn("#60a5fa", "#07101f")} onClick={() => startEdit(block)}>
-                          ✏️ تعديل
-                        </button>
+              </thead>
 
-                        {block.status === "active" && (
-                          <button
-                            style={btn("#f59e0b", "#07101f")}
-                            onClick={() => void cancelBlock(block.id)}
-                          >
-                            إلغاء الحظر
-                          </button>
-                        )}
-
-                        <button
-                          style={btn("#ef4444", "#07101f")}
-                          onClick={() => void removeBlock(block.id)}
-                        >
-                          🗑 حذف
-                        </button>
-                      </div>
+              <tbody>
+                {filtered.length === 0 ? (
+                  <tr>
+                    <td style={tdStyle} colSpan={9}>
+                      {tr("لا توجد بيانات.", "No data found.")}
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  filtered.map((block) => (
+                    <tr key={block.id}>
+                      <td style={tdStyle}>{block.roomName}</td>
+                      <td style={tdStyle}>{block.reason}</td>
+                      <td style={tdStyle}>{block.reasonType}</td>
+                      <td style={tdStyle}>{block.startDate}</td>
+                      <td style={tdStyle}>{block.endDate}</td>
+                      <td style={tdStyle}>
+                        {block.session === "full-day"
+                          ? tr("اليوم كامل", "Full Day")
+                          : block.session === "الفترة الأولى"
+                          ? tr("الفترة الأولى", "First Period")
+                          : tr("الفترة الثانية", "Second Period")}
+                      </td>
+                      <td style={tdStyle}>
+                        <span
+                          className={
+                            "rbBadge " +
+                            (block.status === "active"
+                              ? "rbActive"
+                              : block.status === "expired"
+                              ? "rbExpired"
+                              : "rbCancelled")
+                          }
+                        >
+                          {block.status === "active"
+                            ? tr("نشط", "Active")
+                            : block.status === "expired"
+                            ? tr("منتهي", "Expired")
+                            : tr("ملغي", "Cancelled")}
+                        </span>
+                      </td>
+                      <td style={tdStyle}>{block.createdBy || "—"}</td>
+                      <td style={tdStyle}>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          <button style={btn("#60a5fa", "#07101f")} onClick={() => startEdit(block)}>
+                            {tr("✏️ تعديل", "✏️ Edit")}
+                          </button>
+
+                          {block.status === "active" && (
+                            <button
+                              style={btn("#f59e0b", "#07101f")}
+                              onClick={() => void cancelBlock(block.id)}
+                            >
+                              {tr("إلغاء الحظر", "Cancel Block")}
+                            </button>
+                          )}
+
+                          <button
+                            style={btn("#ef4444", "#07101f")}
+                            onClick={() => void removeBlock(block.id)}
+                          >
+                            {tr("🗑 حذف", "🗑 Delete")}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
       </div>
     </div>
   );
