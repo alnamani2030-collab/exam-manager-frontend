@@ -1,4 +1,5 @@
 import React from "react";
+import { useI18n } from "../../../i18n/I18nProvider";
 
 type Props = {
   errors: string[];
@@ -12,6 +13,8 @@ type Props = {
 };
 
 export default function TaskDistributionRunFeedback({ errors, runtimeError, warnings, styles }: Props) {
+  const { lang } = useI18n();
+  const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
   if (!errors.length && !runtimeError && !warnings.length) return null;
 
   return (
@@ -28,7 +31,7 @@ export default function TaskDistributionRunFeedback({ errors, runtimeError, warn
 
       {runtimeError && (
         <div style={styles.errorsBox}>
-          <div style={styles.errChip}>❌ خطأ أثناء التشغيل: {runtimeError}</div>
+          <div style={styles.errChip}>❌ {tr("خطأ أثناء التشغيل", "Runtime error")}: {runtimeError}</div>
         </div>
       )}
 
