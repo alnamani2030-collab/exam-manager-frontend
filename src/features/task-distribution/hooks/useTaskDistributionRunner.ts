@@ -1,6 +1,14 @@
 import { useState } from "react";
 import { runTaskDistributionOptimized, type DistributionEngine, type DistributionNormalize, type DistributionTransform } from "../services/taskDistributionRunner";
 
+function tr(ar: string, en: string) {
+  if (typeof document !== "undefined") {
+    const lang = String(document.documentElement?.lang || "").toLowerCase();
+    if (lang.startsWith("en")) return en;
+  }
+  return ar;
+}
+
 export function useTaskDistributionRunner() {
   const [isRunning, setIsRunning] = useState(false);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
@@ -27,11 +35,26 @@ export function useTaskDistributionRunner() {
       const latestTeachers = params.teachers || [];
       const latestExams = params.exams || [];
 
-      if (!latestTeachers.length) throw new Error("لا يوجد معلمين. تأكد من إضافة الكادر التعليمي (داخل المدرسة الحالية).");
-      if (!latestExams.length) throw new Error("لا يوجد امتحانات. تأكد من إضافة جدول الامتحانات (داخل المدرسة الحالية).");
+      if (!latestTeachers.length) {
+        throw new Error(tr(
+          "لا يوجد معلمين. تأكد من إضافة الكادر التعليمي (داخل المدرسة الحالية).",
+          "No teachers found. Make sure the teaching staff has been added for the current school."
+        ));
+      }
+      if (!latestExams.length) {
+        throw new Error(tr(
+          "لا يوجد امتحانات. تأكد من إضافة جدول الامتحانات (داخل المدرسة الحالية).",
+          "No exams found. Make sure the exams schedule has been added for the current school."
+        ));
+      }
 
       const roomsSum = latestExams.reduce((a: number, e: any) => a + (Number(e.roomsCount) || 0), 0);
-      if (roomsSum <= 0) throw new Error("مجموع عدد القاعات = 0. تأكد أن لكل امتحان roomsCount أكبر من صفر.");
+      if (roomsSum <= 0) {
+        throw new Error(tr(
+          "مجموع عدد القاعات = 0. تأكد أن لكل امتحان roomsCount أكبر من صفر.",
+          "Total rooms count = 0. Make sure each exam has roomsCount greater than zero."
+        ));
+      }
 
       return runTaskDistributionOptimized({
         teachers: latestTeachers,
@@ -44,7 +67,11 @@ export function useTaskDistributionRunner() {
         rebalanceFairness: params.rebalanceFairness,
       });
     } catch (e: any) {
-      setRuntimeError(e?.message ? String(e.message) : "حدث خطأ غير معروف أثناء التشغيل");
+      setRuntimeError(
+        e?.message
+          ? String(e.message)
+          : tr("حدث خطأ غير معروف أثناء التشغيل", "An unknown error occurred while running")
+      );
       return null;
     } finally {
       setIsRunning(false);
