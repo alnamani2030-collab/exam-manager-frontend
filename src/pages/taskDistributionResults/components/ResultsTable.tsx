@@ -1,4 +1,5 @@
 import React from "react";
+import { useI18n } from "../../../i18n/I18nProvider";
 import type { Assignment } from "../../../contracts/taskDistributionContract";
 import type { SubCol } from "./TeacherRow";
 import { TeacherRow } from "./TeacherRow";
@@ -60,6 +61,7 @@ export type ResultsTableProps = {
 };
 
 export function ResultsTable(props: ResultsTableProps) {
+  const { lang } = useI18n();
   const {
     displayDates,
     dateToSubCols,
@@ -94,7 +96,7 @@ export function ResultsTable(props: ResultsTableProps) {
           tableLayout: "fixed",
           borderCollapse: "separate",
           borderSpacing: "6px 8px",
-          direction: "rtl",
+          direction: lang === "ar" ? "rtl" : "ltr",
           fontSize: styles.tableFontSize,
           fontWeight: 800,
           color: styles.tableText,
