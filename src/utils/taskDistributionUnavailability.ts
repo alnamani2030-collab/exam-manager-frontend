@@ -1,11 +1,5 @@
 // src/utils/taskDistributionUnavailability.ts
 
-/**
- * Unavailability rules for Task Distribution.
- * المصدر الفعلي أصبح tenant-scoped مع كاش محلي لكل جهة.
- * الهدف: منع إسناد مهام (مراقبة/احتياط/مراجعة/تصحيح) لمعلم في تاريخ+فترة محددة.
- */
-
 import { getAuditContext } from "../services/auditAuto";
 import { loadTenantArray, replaceTenantArray } from "../services/tenantData";
 
@@ -16,9 +10,9 @@ export type UnavailabilityRule = {
   id: string;
   teacherId: string;
   teacherName: string;
-  dateISO: string; // YYYY-MM-DD
+  dateISO: string;
   period: UnavailabilityPeriod;
-  blocks: UnavailabilityBlock[]; // إذا كانت تحتوي ALL => تمنع كل الأنواع
+  blocks: UnavailabilityBlock[];
   reason?: string;
   createdAt: number;
 };
@@ -28,6 +22,32 @@ const KEY_PREFIX = "exam-manager:task-distribution:unavailability:";
 const KEY_SUFFIX = ":v2";
 const SUB_COLLECTION = "unavailability";
 export const UNAVAIL_UPDATED_EVENT = "exam-manager:task-distribution:unavailability-updated";
+
+function getCurrentLang(): "ar" | "en" {
+  try {
+    const htmlLang =
+      typeof document !== "undefined"
+        ? String(document.documentElement?.lang || "").trim().toLowerCase()
+        : "";
+    if (htmlLang === "en") return "en";
+  } catch {}
+
+  try {
+    const raw =
+      typeof localStorage !== "undefined"
+        ? String(localStorage.getItem("lang") || localStorage.getItem("i18n-lang") || "").trim().toLowerCase()
+        : "";
+    if (raw === "en") return "en";
+  } catch {}
+
+  return "ar";
+}
+
+function tenantUnavailabilityAuditSummary() {
+  return getCurrentLang() === "en"
+    ? "Updated tenant-scoped task distribution unavailability"
+    : "تم تحديث عدم التوفر لتوزيع المهام على مستوى الجهة";
+}
 
 function normalizeTenantId(input?: string | null): string {
   const direct = String(input ?? "").trim();
@@ -62,13 +82,9 @@ function normalizeRule(input: any): UnavailabilityRule | null {
       blocksRaw
         .map((b: any) => String(b ?? "").trim().toUpperCase())
         .filter(Boolean)
-        .filter((b: any) => [
-          "INVIGILATION",
-          "RESERVE",
-          "REVIEW_FREE",
-          "CORRECTION_FREE",
-          "ALL",
-        ].includes(b))
+        .filter((b: any) =>
+          ["INVIGILATION", "RESERVE", "REVIEW_FREE", "CORRECTION_FREE", "ALL"].includes(b)
+        )
     )
   ) as UnavailabilityBlock[];
   if (!id || !teacherId || !teacherName || !dateISO) return null;
@@ -107,7 +123,6 @@ function readLocalRules(tenantId?: string | null): UnavailabilityRule[] {
     if (raw) return normalizeRules(JSON.parse(raw));
   } catch {}
 
-  // ترحيل النسخة القديمة فقط عند الوضع الافتراضي، حتى لا تختلط بيانات جهة بأخرى.
   const resolvedTenantId = normalizeTenantId(tenantId);
   if (tenantId && resolvedTenantId !== "default") return [];
 
@@ -174,7 +189,7 @@ export async function persistUnavailabilityToTenant(args: {
       entity: "unavailability",
       meta: {
         count: normalized.length,
-        summary: "Updated tenant-scoped task distribution unavailability",
+        summary: tenantUnavailabilityAuditSummary(),
       },
     },
   });
@@ -183,8 +198,6 @@ export async function persistUnavailabilityToTenant(args: {
 }
 
 export function buildUnavailabilityIndex(rules: UnavailabilityRule[]) {
-  // key formats:
-  // teacherId|dateISO|period|TYPE
   const set = new Set<string>();
   for (const r of rules || []) {
     const tid = String(r.teacherId || "").trim();
@@ -217,7 +230,6 @@ export function isTeacherUnavailable(args: {
 }
 
 export function buildUnavailabilityReasonMap(rules: UnavailabilityRule[]) {
-  // key formats: teacherId|dateISO|period|TYPE  => reason string (first non-empty)
   const m = new Map<string, string>();
   for (const r of rules || []) {
     const tid = String(r.teacherId || "").trim();
