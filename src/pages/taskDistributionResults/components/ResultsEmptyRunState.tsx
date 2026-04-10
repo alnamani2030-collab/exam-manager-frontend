@@ -1,4 +1,5 @@
 import React from "react";
+import { useI18n } from "../../../i18n/I18nProvider";
 import { btn, cardDark, cardHeaderRow, cardSubOnDark, cardTitleOnDark } from "../../../styles/ui";
 import { GOLD_LINE_SOFT, GOLD_TEXT } from "../constants";
 
@@ -17,22 +18,25 @@ export function ResultsEmptyRunState({
   onPickImportFile,
   onImportFileSelected,
 }: Props) {
+  const { lang } = useI18n();
+  const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
+
   return (
     <div style={cardDark}>
       <div style={cardHeaderRow}>
         <div>
-          <div style={{ ...cardTitleOnDark, color: GOLD_TEXT }}>النتائج</div>
-          <div style={{ ...cardSubOnDark, color: GOLD_LINE_SOFT }}>لا يوجد تشغيل محفوظ بعد</div>
+          <div style={{ ...cardTitleOnDark, color: GOLD_TEXT }}>{tr("النتائج", "Results")}</div>
+          <div style={{ ...cardSubOnDark, color: GOLD_LINE_SOFT }}>{tr("لا يوجد تشغيل محفوظ بعد", "No saved run yet")}</div>
         </div>
 
         <button style={btn("soft")} onClick={onBack}>
-          رجوع
+          {tr("رجوع", "Back")}
         </button>
       </div>
 
       <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
         <button style={btn("soft")} onClick={onPickImportFile}>
-          استيراد الجدول الشامل (Excel)
+          {tr("استيراد الجدول الشامل (Excel)", "Import Master Table (Excel)")}
         </button>
         <input
           ref={fileInputRef}
