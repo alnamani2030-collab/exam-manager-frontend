@@ -1,20 +1,18 @@
-import * as React from 'react';
-import { saveRun, RUN_UPDATED_EVENT } from '../../../utils/taskDistributionStorage';
-import { parseExcelToAssignments } from '../excelImport';
+import { taskLabel } from "../taskUtils";
 import {
-  buildImportedResultsRun,
-  isExcelImportFilenameSupported,
-  toImportErrorMessage,
-} from '../services/resultsPageActionHelpers';
+  getResultsDragDropTypeMismatchMessage,
+  getResultsDragDropUnsupportedMessage,
+  getResultsEmptyCellOccupiedMessage,
+} from "../services/resultsDragDropActionMessages";
+import { resolveResultsSameTypeDropTargetUid } from "../services/resultsDragDropResolvers";
 import {
-  buildClosedImportDialogState,
-  buildResultsPdfActionPayload,
-  finalizeImportedResultsRun,
-} from '../services/resultsPageActionPayloads';
-import { exportResultsPdfDocument } from '../services/resultsPdfActions';
-import { archiveResultsRunSnapshot, openResultsImportPicker } from '../services/resultsImportArchive';
-import { persistEditedResultsRun, undoEditedResultsRun } from '../services/resultsRunMutations';
-import { writeMasterTable } from '../masterTableStorage';
+  colKeyOf,
+  getAssignmentsInCell,
+  isDraggableTaskType,
+  parseColKey,
+  teacherHasInvOrResInSameSlot,
+  validatePlacement,
+} from "../services/resultsDragDropRules";
 
 function tr(ar: string, en: string) {
   try {
@@ -24,209 +22,218 @@ function tr(ar: string, en: string) {
   return ar;
 }
 
-export function useResultsPageActions({
-  tenantId,
+export function useResultsDragDropActions({
   run,
-  setRun,
-  setUndoStack,
-  fileInputRef,
-  printAreaRef,
-  pendingImported,
-  setPendingImported,
-  pendingImportedFilename,
-  setPendingImportedFilename,
-  setImportDialogOpen,
-  importError,
-  setImportError,
-  onArchived,
+  colKeyToExamId,
+  persistEditedAssignments,
+  getUnavailabilityReasonForCell,
+  markCellBlocked,
+  normalizeSubject,
 }: {
-  tenantId: string;
   run: any;
-  setRun: (value: any) => void;
-  setUndoStack: React.Dispatch<React.SetStateAction<any[][]>>;
-  fileInputRef: React.RefObject<HTMLInputElement | null>;
-  printAreaRef: React.RefObject<HTMLDivElement | null>;
-  pendingImported: any;
-  setPendingImported: (value: any) => void;
-  pendingImportedFilename: string;
-  setPendingImportedFilename: (value: string) => void;
-  setImportDialogOpen: (value: boolean) => void;
-  importError: string | null;
-  setImportError: (value: string | null) => void;
-  onArchived: () => void;
+  colKeyToExamId: Record<string, any>;
+  persistEditedAssignments: (nextAssignments: any[], note?: string, opts?: { skipUndo?: boolean }) => void;
+  getUnavailabilityReasonForCell: (teacherName: string, subColKey: string, taskType: string) => string | null;
+  markCellBlocked: (teacherName: string, subColKey: string, msg: string) => void;
+  normalizeSubject: (subject: string) => string;
 }) {
-  const handlePickImportFile = React.useCallback(() => {
-    setImportError(null);
-    openResultsImportPicker(fileInputRef.current);
-  }, [fileInputRef, setImportError]);
+  function swapAssignmentsByUid(srcUid: string, dstUid: string) {
+    if (!run) return;
+    if (!srcUid || !dstUid || srcUid === dstUid) return;
 
-  const persistEditedAssignments = React.useCallback(
-    (nextAssignments: any[], note?: string, opts?: { skipUndo?: boolean }) => {
-      if (!run) return;
+    const list = Array.isArray(run.assignments) ? run.assignments : [];
+    const src = list.find((x: any) => x?.__uid === srcUid) as any;
+    const dst = list.find((x: any) => x?.__uid === dstUid) as any;
+    if (!src || !dst) return;
 
-      if (!opts?.skipUndo) {
-        setUndoStack((prev) => {
-          try {
-            const snap = JSON.parse(JSON.stringify(run.assignments || []));
-            return [snap, ...prev].slice(0, 30);
-          } catch {
-            return prev;
-          }
-        });
-      }
+    const srcType = String(src.taskType || "");
+    const dstType = String(dst.taskType || "");
 
-      const updated = persistEditedResultsRun({
-        tenantId,
-        run,
-        nextAssignments,
-        note,
-      });
-      setRun(updated);
+    if (!isDraggableTaskType(srcType) || !isDraggableTaskType(dstType)) {
+      alert(getResultsDragDropUnsupportedMessage());
+      return;
+    }
+    if (srcType !== dstType) {
+      alert(getResultsDragDropTypeMismatchMessage());
+      return;
+    }
 
-      try {
-        window.dispatchEvent(new Event(RUN_UPDATED_EVENT));
-      } catch {}
-    },
-    [run, setRun, setUndoStack, tenantId]
-  );
+    const srcTeacher = String(src.teacherName || "").trim();
+    const dstTeacher = String(dst.teacherName || "").trim();
+    if (!srcTeacher || !dstTeacher) return;
 
-  const handleUndo = React.useCallback(
-    (undoStack: any[][]) => {
-      if (!run) return;
-      const last = undoStack[0];
-      if (!last) return;
+    const srcColKey = colKeyOf(src);
+    const dstColKey = colKeyOf(dst);
 
-      const updated = undoEditedResultsRun({
-        tenantId,
-        run,
-        assignments: last,
-      });
-      setRun(updated);
-      setUndoStack((prev) => prev.slice(1));
+    const r1 = validatePlacement(list, dstTeacher, dstColKey, String(src.taskType || ""), [srcUid, dstUid]);
+    if (r1) {
+      alert(r1);
+      return;
+    }
+    const r2 = validatePlacement(list, srcTeacher, srcColKey, String(dst.taskType || ""), [srcUid, dstUid]);
+    if (r2) {
+      alert(r2);
+      return;
+    }
 
-      try {
-        window.dispatchEvent(new Event(RUN_UPDATED_EVENT));
-      } catch {}
-    },
-    [run, setRun, setUndoStack, tenantId]
-  );
+    const m1 = getUnavailabilityReasonForCell(dstTeacher, dstColKey, srcType);
+    if (m1) {
+      markCellBlocked(dstTeacher, dstColKey, `${tr("غير متاح", "Unavailable")}: ${m1}`);
+      return;
+    }
+    const m2 = getUnavailabilityReasonForCell(srcTeacher, srcColKey, dstType);
+    if (m2) {
+      markCellBlocked(srcTeacher, srcColKey, `${tr("غير متاح", "Unavailable")}: ${m2}`);
+      return;
+    }
 
-  const handleImportFileSelected = React.useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      setImportError(null);
-      const file = e.target.files?.[0];
-      e.target.value = '';
-      if (!file) return;
-
-      if (!isExcelImportFilenameSupported(file.name)) {
-        setImportError(tr('الرجاء اختيار ملف Excel بصيغة .xlsx أو .xls', 'Please choose an Excel file in .xlsx or .xls format.'));
-        return;
-      }
-
-      try {
-        const assignments = await parseExcelToAssignments(file, run);
-        const importedRun = buildImportedResultsRun({
-          assignments,
-          filename: file.name,
-        });
-
-        setPendingImported({ run: importedRun, assignments });
-        setPendingImportedFilename(file.name);
-        setImportDialogOpen(true);
-      } catch (err: any) {
-        setImportError(toImportErrorMessage(err));
-      }
-    },
-    [run, setImportDialogOpen, setImportError, setPendingImported, setPendingImportedFilename]
-  );
-
-  const confirmImportReplace = React.useCallback(() => {
-    if (!pendingImported) return;
-
-    const importedRun = finalizeImportedResultsRun(pendingImported);
-
-    saveRun(tenantId, importedRun);
-    setRun(importedRun);
-
-    writeMasterTable(importedRun.assignments || [], {
-      runId: importedRun.runId,
-      runCreatedAtISO: importedRun.createdAtISO,
-      source: 'import',
+    const srcCol = parseColKey(srcColKey);
+    const dstCol = parseColKey(dstColKey);
+    const next = list.map((a: any) => {
+      if (a?.__uid === srcUid)
+        return {
+          ...a,
+          teacherName: dstTeacher,
+          dateISO: dstCol.dateISO,
+          period: dstCol.period,
+          subject: dstCol.subject,
+          examId: colKeyToExamId[dstColKey] || a.examId,
+          committeeNo: undefined,
+          invigilatorIndex: undefined,
+        };
+      if (a?.__uid === dstUid)
+        return {
+          ...a,
+          teacherName: srcTeacher,
+          dateISO: srcCol.dateISO,
+          period: srcCol.period,
+          subject: srcCol.subject,
+          examId: colKeyToExamId[srcColKey] || a.examId,
+          committeeNo: undefined,
+          invigilatorIndex: undefined,
+        };
+      return a;
     });
 
-    try {
-      window.dispatchEvent(new Event(RUN_UPDATED_EVENT));
-    } catch {}
+    const humanType = taskLabel(srcType as any);
+    const srcIsInvRes = srcType === "INVIGILATION" || srcType === "RESERVE";
+    const dstIsInvRes = dstType === "INVIGILATION" || dstType === "RESERVE";
+    const srcNowConflicts = srcIsInvRes && teacherHasInvOrResInSameSlot(next, dstTeacher, dstCol.dateISO, dstCol.period, [srcUid]);
+    const dstNowConflicts = dstIsInvRes && teacherHasInvOrResInSameSlot(next, srcTeacher, srcCol.dateISO, srcCol.period, [dstUid]);
 
-    try {
-      window.dispatchEvent(
-        new StorageEvent('storage', {
-          key: 'exam-manager:task-distribution:master-table:v1',
-        })
-      );
-    } catch {}
-
-    const nextDialogState = buildClosedImportDialogState();
-    setImportDialogOpen(nextDialogState.importDialogOpen);
-    setPendingImported(nextDialogState.pendingImported);
-    setPendingImportedFilename(nextDialogState.pendingImportedFilename);
-    setImportError(null);
-  }, [
-    pendingImported,
-    setImportDialogOpen,
-    setPendingImported,
-    setPendingImportedFilename,
-    setRun,
-    tenantId,
-    setImportError,
-  ]);
-
-  const closeImportDialog = React.useCallback(() => {
-    const nextDialogState = buildClosedImportDialogState();
-    setImportDialogOpen(nextDialogState.importDialogOpen);
-    setPendingImported(nextDialogState.pendingImported);
-    setPendingImportedFilename(nextDialogState.pendingImportedFilename);
-  }, [setImportDialogOpen, setPendingImported, setPendingImportedFilename]);
-
-  const handlePrintTableOnly = React.useCallback(() => {
-    if (!run) return;
-    exportResultsPdfDocument(
-      buildResultsPdfActionPayload({
-        run,
-        htmlBody: printAreaRef.current?.innerHTML || '',
-        mode: 'print',
-      })
+    persistEditedAssignments(
+      next,
+      srcNowConflicts || dstNowConflicts
+        ? `⚠️ ${tr("تعارض نفس الفترة بعد التبديل", "Same-period conflict after swap")}: ${humanType} (${tr("يمكنك التراجع", "you can undo")}).`
+        : `🖐️ ${tr("تعديل يدوي", "Manual edit")}: ${tr("تبديل", "Swap")} ${humanType} ${tr("بين", "between")} (${srcTeacher}) ${tr("و", "and")} (${dstTeacher})`
     );
-  }, [printAreaRef, run]);
+  }
 
-  const handleExportPdf = React.useCallback(() => {
+  function moveAssignmentToColumnTeacher(srcUid: string, dstTeacher: string, dstColKey: string) {
     if (!run) return;
-    exportResultsPdfDocument(
-      buildResultsPdfActionPayload({
-        run,
-        htmlBody: printAreaRef.current?.innerHTML || '',
-        mode: 'pdf',
-      })
+    if (!srcUid || !dstTeacher || !dstColKey) return;
+
+    const list = Array.isArray(run.assignments) ? run.assignments : [];
+    const src = list.find((x: any) => x?.__uid === srcUid) as any;
+    if (!src) return;
+
+    const srcType = String(src.taskType || "");
+    if (!isDraggableTaskType(srcType)) {
+      alert(getResultsDragDropUnsupportedMessage());
+      return;
+    }
+
+    const srcTeacher = String(src.teacherName || "").trim();
+    const targetTeacher = String(dstTeacher || "").trim();
+    if (!srcTeacher || !targetTeacher) return;
+
+    const srcColKey = colKeyOf(src);
+    if (srcTeacher === targetTeacher && srcColKey === dstColKey) return;
+
+    const unMsg = getUnavailabilityReasonForCell(targetTeacher, dstColKey, srcType);
+    if (unMsg) {
+      markCellBlocked(targetTeacher, dstColKey, `${tr("غير متاح", "Unavailable")}: ${unMsg}`);
+      return;
+    }
+
+    const v = validatePlacement(list, targetTeacher, dstColKey, srcType, [srcUid]);
+    if (v) {
+      alert(v);
+      return;
+    }
+
+    const dstCol = parseColKey(dstColKey);
+    const isInvOrRes = srcType === "INVIGILATION" || srcType === "RESERVE";
+    const willConflictSameSlot = isInvOrRes && teacherHasInvOrResInSameSlot(list, targetTeacher, dstCol.dateISO, dstCol.period, [srcUid]);
+
+    const next = list.map((a: any) => {
+      if (a?.__uid === srcUid) {
+        return {
+          ...a,
+          teacherName: targetTeacher,
+          dateISO: dstCol.dateISO,
+          period: dstCol.period,
+          subject: dstCol.subject,
+          examId: colKeyToExamId[dstColKey] || a.examId,
+          committeeNo: undefined,
+          invigilatorIndex: undefined,
+        };
+      }
+      return a;
+    });
+
+    const humanType = taskLabel(srcType as any);
+    const from = parseColKey(srcColKey);
+    const to = parseColKey(dstColKey);
+    persistEditedAssignments(
+      next,
+      willConflictSameSlot
+        ? `⚠️ ${tr("تعارض نفس الفترة", "Same-period conflict")}: ${tr("نقل", "move")} ${humanType} ${tr("إلى", "to")} (${targetTeacher}) ${tr("مع وجود مهمة أخرى في نفس الفترة", "while another task exists in the same period")}. (${tr("يمكنك التراجع", "you can undo")}).`
+        : `🖐️ ${tr("تعديل يدوي", "Manual edit")}: ${tr("نقل", "Move")} ${humanType} ${tr("من", "from")} (${srcTeacher}) [${from.dateISO} ${from.period} ${from.subject}] ${tr("إلى", "to")} (${targetTeacher}) [${to.dateISO} ${to.period} ${to.subject}]`
     );
-  }, [printAreaRef, run]);
+  }
 
-  const handleArchiveSnapshot = React.useCallback(() => {
+  function handleDropToCell(srcUid: string, dstTeacher: string, dstColKey: string, dstCellList: any[]) {
     if (!run) return;
-    archiveResultsRunSnapshot(tenantId, run);
-    onArchived();
-  }, [onArchived, run, tenantId]);
+    const list = Array.isArray(run.assignments) ? run.assignments : [];
+    const src = list.find((x: any) => x?.__uid === srcUid) as any;
+    if (!src) return;
+
+    const srcType = String(src.taskType || "");
+    if (!isDraggableTaskType(srcType)) return;
+
+    const sameTypeTargetUid = resolveResultsSameTypeDropTargetUid(dstCellList || [], srcType, isDraggableTaskType);
+
+    if (sameTypeTargetUid) {
+      swapAssignmentsByUid(String(srcUid), sameTypeTargetUid);
+      return;
+    }
+
+    moveAssignmentToColumnTeacher(String(srcUid), String(dstTeacher), String(dstColKey));
+  }
+
+  function handleDropToEmptyCell(srcUid: string, dstTeacher: string, dstColKey: string) {
+    if (!run) return;
+    const list = Array.isArray(run.assignments) ? run.assignments : [];
+    const src = list.find((x: any) => x?.__uid === srcUid) as any;
+    if (!src) return;
+
+    const srcType = String(src.taskType || "");
+    if (!isDraggableTaskType(srcType)) return;
+
+    const dstHasAnything = getAssignmentsInCell(list, dstTeacher, dstColKey, normalizeSubject).length > 0;
+    if (dstHasAnything) {
+      alert(getResultsEmptyCellOccupiedMessage());
+      return;
+    }
+
+    moveAssignmentToColumnTeacher(String(srcUid), String(dstTeacher), String(dstColKey));
+  }
 
   return {
-    importError,
-    pendingImportedFilename,
-    handlePickImportFile,
-    persistEditedAssignments,
-    handleUndo,
-    handleImportFileSelected,
-    confirmImportReplace,
-    closeImportDialog,
-    handlePrintTableOnly,
-    handleExportPdf,
-    handleArchiveSnapshot,
+    swapAssignmentsByUid,
+    moveAssignmentToColumnTeacher,
+    handleDropToCell,
+    handleDropToEmptyCell,
   };
 }
