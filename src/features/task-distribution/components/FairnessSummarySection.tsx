@@ -1,4 +1,5 @@
 import React from "react";
+import { useI18n } from "../../../i18n/I18nProvider";
 
 type FairRow = {
   teacherId: string;
@@ -48,6 +49,8 @@ export default function FairnessSummarySection({
   onDeleteAllDistributionData,
   styles,
 }: Props) {
+  const { lang } = useI18n();
+  const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
   const {
     fairnessWrap,
     fairnessHeader,
@@ -69,31 +72,31 @@ export default function FairnessSummarySection({
     <div style={fairnessWrap}>
       <div style={fairnessHeader}>
         <div>
-          <div style={fairnessTitle}>ملخص عدالة التوزيع</div>
-          <div style={fairnessSub}>الإجمالي = مراقبة + احتياط + مراجعة فقط (التصحيح خارج النصاب)</div>
+          <div style={fairnessTitle}>{tr("ملخص عدالة التوزيع", "Distribution Fairness Summary")}</div>
+          <div style={fairnessSub}>{tr("الإجمالي = مراقبة + احتياط + مراجعة فقط (التصحيح خارج النصاب)", "Total = invigilation + reserve + review only (correction is خارج النصاب)")}</div>
         </div>
 
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          <button type="button" style={hBtn} onClick={navToResults} title="الجدول الشامل">
-            📋 الجدول الشامل
+          <button type="button" style={hBtn} onClick={navToResults} title={tr("الجدول الشامل", "Master Table")}>
+            📋 {tr("الجدول الشامل", "Master Table")}
           </button>
 
-          <button type="button" style={hBtn} onClick={onDeleteAllDistributionData} title="حذف جميع بيانات التوزيع">
-            ✖ حذف بيانات التوزيع
+          <button type="button" style={hBtn} onClick={onDeleteAllDistributionData} title={tr("حذف جميع بيانات التوزيع", "Delete All Distribution Data")}>
+            ✖ {tr("حذف بيانات التوزيع", "Delete Distribution Data")}
           </button>
 
           <input
             style={fairnessSearchInput}
-            placeholder="بحث في الكادر التعليمي  (اسم/ID)..."
+            placeholder={tr("بحث في الكادر التعليمي (اسم/ID)...", "Search teaching staff (name/ID)...")}
             value={fairnessQuery}
             onChange={(e) => setFairnessQuery(e.target.value)}
           />
 
-          <button type="button" style={hBtn} onClick={() => setFairnessQuery("")} title="مسح البحث">
-            ✕ مسح
+          <button type="button" style={hBtn} onClick={() => setFairnessQuery("")} title={tr("مسح البحث", "Clear Search")}>
+            ✕ {tr("مسح", "Clear")}
           </button>
 
-          <span style={{ fontWeight: 900, color: "rgba(201,162,39,.82)" }}>الترتيب:</span>
+          <span style={{ fontWeight: 900, color: "rgba(201,162,39,.82)" }}>{tr("الترتيب:", "Sort:")}</span>
           <select
             style={{
               padding: "10px 12px",
@@ -107,13 +110,13 @@ export default function FairnessSummarySection({
             value={sortMode}
             onChange={(e) => setSortMode(e.target.value as any)}
           >
-            <option value="TOTAL_DESC">من الأعلى عبئًا إلى الأقل</option>
-            <option value="TOTAL_ASC">من الأقل عبئًا إلى الأعلى</option>
-            <option value="NAME_ASC">حسب الاسم (أ-ي)</option>
+            <option value="TOTAL_DESC">{tr("من الأعلى عبئًا إلى الأقل", "Highest load to lowest")}</option>
+            <option value="TOTAL_ASC">{tr("من الأقل عبئًا إلى الأعلى", "Lowest load to highest")}</option>
+            <option value="NAME_ASC">{tr("حسب الاسم (أ-ي)", "By name (A-Z)")}</option>
           </select>
 
-          <span style={pill}>المعروض: {fairnessRows.length}</span>
-          <span style={pill}>الإجمالي: {teachersCount}</span>
+          <span style={pill}>{tr("المعروض", "Shown")}: {fairnessRows.length}</span>
+          <span style={pill}>{tr("الإجمالي", "Total")}: {teachersCount}</span>
         </div>
       </div>
 
@@ -122,12 +125,12 @@ export default function FairnessSummarySection({
           <thead>
             <tr>
               <th style={{ ...th2, width: 60 }}>#</th>
-              <th style={{ ...th2, textAlign: "right", paddingRight: 16 }}>اسم المعلم</th>
-              <th style={th2}>مراقبة</th>
-              <th style={th2}>احتياط</th>
-              <th style={th2}>مراجعة</th>
-              <th style={th2}>تصحيح</th>
-              <th style={th2}>الإجمالي *</th>
+              <th style={{ ...th2, textAlign: "right", paddingRight: 16 }}>{tr("اسم المعلم", "Teacher Name")}</th>
+              <th style={th2}>{tr("مراقبة", "Invigilation")}</th>
+              <th style={th2}>{tr("احتياط", "Reserve")}</th>
+              <th style={th2}>{tr("مراجعة", "Review")}</th>
+              <th style={th2}>{tr("تصحيح", "Correction")}</th>
+              <th style={th2}>{tr("الإجمالي *", "Total *")}</th>
             </tr>
           </thead>
 
@@ -135,7 +138,7 @@ export default function FairnessSummarySection({
             {fairnessRows.length === 0 ? (
               <tr>
                 <td style={td2} colSpan={7}>
-                  لا توجد نتائج مطابقة للبحث.
+                  {tr("لا توجد نتائج مطابقة للبحث.", "No matching results found.")}
                 </td>
               </tr>
             ) : (
