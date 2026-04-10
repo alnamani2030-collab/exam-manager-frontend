@@ -45,6 +45,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import { useI18n } from "../i18n/I18nProvider";
 import { useAppData } from "../context/AppDataContext";
 import { loadTenantArray, writeTenantAudit } from "../services/tenantData";
 import { loadDistributionConstraints, saveDistributionConstraints, clearDistributionConstraints } from "../infra/cache/distributionConstraintsStorage";
@@ -79,7 +80,8 @@ const ALL_TABLE_KEY = "exam-manager:task-distribution:all-table:v1";
 const MANUAL_SUGGESTION_HISTORY_KEY_PREFIX = "exam-manager:task-distribution:manual-suggestion-history:";
 
 const LOGO_URL = "https://i.imgur.com/vdDhSMh.png";
-const APP_NAME = "برنامج ادارة الامتحانات الذكي";
+const APP_NAME_AR = "برنامج ادارة الامتحانات الذكي";
+const APP_NAME_EN = "Smart Exam Management Program";
 
 function num(v: string, fallback: number) {
   const x = Number(v);
@@ -1508,6 +1510,9 @@ export default function TaskDistributionRun() {
   const { teachers: appTeachers, exams: appExams } = useAppData();
 
   const tenantId = String(effectiveTenantId || profile?.tenantId || user?.tenantId || "").trim() || "default";
+  const { lang, isRTL } = useI18n();
+  const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
+  const APP_NAME = lang === "ar" ? APP_NAME_AR : APP_NAME_EN;
 
   const [fsTeachers, setFsTeachers] = useState<any[]>([]);
   const [fsExams, setFsExams] = useState<any[]>([]);
@@ -2655,73 +2660,73 @@ export default function TaskDistributionRun() {
     const readinessCards: ReadinessCardEntry[] = [
       {
         key: 'source',
-        title: 'مصدر البيانات',
-        value: fsLoaded ? 'Tenant مباشر' : 'AppData',
-        sub: fsLoaded ? 'تشغيل على بيانات المدرسة الحالية مباشرةً' : 'يتم استخدام AppData مؤقتًا حتى يكتمل تحميل tenant',
+        title: tr('مصدر البيانات','Data Source'),
+        value: fsLoaded ? tr('Tenant مباشر','Live Tenant') : 'AppData',
+        sub: fsLoaded ? tr('تشغيل على بيانات المدرسة الحالية مباشرةً','Running directly on the current school data') : tr('يتم استخدام AppData مؤقتًا حتى يكتمل تحميل tenant','AppData is used temporarily until tenant loading completes'),
         tone: fsLoaded ? 'good' : 'warn',
       },
       {
         key: 'quality',
-        title: 'جودة بيانات الإدخال',
+        title: tr('جودة بيانات الإدخال','Input Data Quality'),
         value: `${teachersWithoutSubjects.length + examsWithoutRooms.length + subjectCoverageIssues.length}`,
-        sub: `معلمون بلا مواد: ${teachersWithoutSubjects.length} • امتحانات بلا قاعات: ${examsWithoutRooms.length} • مواد بلا تخصص: ${subjectCoverageIssues.length}`,
+        sub: tr(`معلمون بلا مواد: ${teachersWithoutSubjects.length} • امتحانات بلا قاعات: ${examsWithoutRooms.length} • مواد بلا تخصص: ${subjectCoverageIssues.length}`, `Teachers without subjects: ${teachersWithoutSubjects.length} • Exams without rooms: ${examsWithoutRooms.length} • Subjects without matching specialty: ${subjectCoverageIssues.length}`),
         tone: teachersWithoutSubjects.length || examsWithoutRooms.length || subjectCoverageIssues.length ? 'warn' : 'good',
       },
       {
         key: 'calendar',
-        title: 'أيام التشغيل الفعلية',
+        title: tr('أيام التشغيل الفعلية','Actual Run Days'),
         value: `${workDates.length}`,
-        sub: `أيام التصحيح المحتملة: ${correctionDatesSorted.length} • الترحيل من الجمعة/السبت: ${shiftedWeekendExams.length}`,
+        sub: tr(`أيام التصحيح المحتملة: ${correctionDatesSorted.length} • الترحيل من الجمعة/السبت: ${shiftedWeekendExams.length}`, `Potential correction days: ${correctionDatesSorted.length} • Shifted from Fri/Sat: ${shiftedWeekendExams.length}`),
         tone: 'neutral',
       },
       {
         key: 'pressure',
-        title: 'الضغط المتوقع',
+        title: tr('الضغط المتوقع','Expected Pressure'),
         value: `${criticalSlots.length}/${tightSlots.length}`,
-        sub: `حرج/ضيق على مستوى الفترات بعد محاكاة الأهلية الفعلية فوق آخر تعديلات الجدول الشامل`,
+        sub: tr(`حرج/ضيق على مستوى الفترات بعد محاكاة الأهلية الفعلية فوق آخر تعديلات الجدول الشامل`, `Critical/tight period pressure after simulating actual eligibility on top of the latest master table changes`),
         tone: criticalSlots.length ? 'danger' : tightSlots.length ? 'warn' : 'good',
       },
       {
         key: 'restrictions',
-        title: 'القيود المؤثرة',
+        title: tr('القيود المؤثرة','Effective Constraints'),
         value: `${unavailabilityRules.length}`,
-        sub: `عدم توفر: ${unavailabilityRules.length} • معلمو 12: ${teachersWith12} • 13: ${teachersWith13} • 14: ${teachersWith14}`,
+        sub: tr(`عدم توفر: ${unavailabilityRules.length} • معلمو 12: ${teachersWith12} • 13: ${teachersWith13} • 14: ${teachersWith14}`, `Unavailability: ${unavailabilityRules.length} • Teachers 12: ${teachersWith12} • 13: ${teachersWith13} • 14: ${teachersWith14}`),
         tone: unavailabilityRules.length ? 'warn' : 'neutral',
       },
     ];
 
     const alerts: string[] = [];
     if (!latestTeachers.length || !latestExams.length) {
-      alerts.push('⚠️ لا يمكن التوزيع بدقة قبل اكتمال بيانات الكادر التعليمي وجدول الامتحانات.');
+      alerts.push(tr('⚠️ لا يمكن التوزيع بدقة قبل اكتمال بيانات الكادر التعليمي وجدول الامتحانات.','⚠️ Accurate distribution cannot run before the teaching staff data and exams schedule are complete.'));
     }
     if (criticalSlots.length) {
       const firstCritical = criticalSlots[0];
       const firstNames = Array.isArray((firstCritical as any)?.teacherSuggestions)
         ? (firstCritical as any).teacherSuggestions.slice(0, 3).map((item: any) => String(item?.teacherName || '').trim()).filter(Boolean)
         : [];
-      alerts.push(`⚠️ هناك ${criticalSlots.length} فترة حرجة متوقعة بعد احتساب الأهلية الفعلية. أولها ${firstCritical.dateISO} (${firstCritical.period === 'AM' ? 'الفترة الأولى' : 'الفترة الثانية'}) بهامش ${firstCritical.bufferEstimate}.${firstNames.length ? ` أسماء مقترحة مبدئية: ${firstNames.join(' • ')}` : ''}`);
+      alerts.push(tr(`⚠️ هناك ${criticalSlots.length} فترة حرجة متوقعة بعد احتساب الأهلية الفعلية. أولها ${firstCritical.dateISO} (${firstCritical.period === 'AM' ? 'الفترة الأولى' : 'الفترة الثانية'}) بهامش ${firstCritical.bufferEstimate}.${firstNames.length ? ` أسماء مقترحة مبدئية: ${firstNames.join(' • ')}` : ''}`, `⚠️ There are ${criticalSlots.length} expected critical periods after calculating actual eligibility. The first is ${firstCritical.dateISO} (${firstCritical.period === 'AM' ? 'First Period' : 'Second Period'}) with a margin of ${firstCritical.bufferEstimate}.${firstNames.length ? ` Initial suggested names: ${firstNames.join(' • ')}` : ''}`));
     }
     const rowsWithMasterCoverage = forecastRows.filter((row: any) => (row.assignedInvigilations || 0) || (row.assignedReserve || 0) || (row.assignedReviewFree || 0) || (row.assignedCorrectionFree || 0));
     if (rowsWithMasterCoverage.length) {
-      alerts.push(`ℹ️ تم ربط التقرير تلقائيًا بتعديلات الجدول الشامل الحالية ومحاكاة ما يمكن إسناده فعليًا. الفترات المتأثرة الآن: ${rowsWithMasterCoverage.length}.`);
+      alerts.push(tr(`ℹ️ تم ربط التقرير تلقائيًا بتعديلات الجدول الشامل الحالية ومحاكاة ما يمكن إسناده فعليًا. الفترات المتأثرة الآن: ${rowsWithMasterCoverage.length}.`, `ℹ️ The report is now linked automatically to the current master table updates and a simulation of what can actually be assigned. Affected periods now: ${rowsWithMasterCoverage.length}.`));
     }
     if (teachersWithoutSubjects.length) {
-      alerts.push(`ℹ️ يوجد ${teachersWithoutSubjects.length} معلم/معلمة بلا مواد مسجلة، مثل: ${teachersWithoutSubjects.slice(0, 3).map((t: any) => String(t?.fullName || t?.name || t?.id || '—')).join(' • ')}${teachersWithoutSubjects.length > 3 ? ' ...' : ''}`);
+      alerts.push(tr(`ℹ️ يوجد ${teachersWithoutSubjects.length} معلم/معلمة بلا مواد مسجلة، مثل: ${teachersWithoutSubjects.slice(0, 3).map((t: any) => String(t?.fullName || t?.name || t?.id || '—')).join(' • ')}${teachersWithoutSubjects.length > 3 ? ' ...' : ''}`, `ℹ️ There are ${teachersWithoutSubjects.length} teacher(s) without registered subjects, such as: ${teachersWithoutSubjects.slice(0, 3).map((t: any) => String(t?.fullName || t?.name || t?.id || '—')).join(' • ')}${teachersWithoutSubjects.length > 3 ? ' ...' : ''}`));
     }
     if (examsWithoutRooms.length) {
-      alerts.push(`ℹ️ يوجد ${examsWithoutRooms.length} امتحان بقاعات = 0، وهذه السجلات لن تنتج مراقبات فعلية حتى يتم تصحيحها.`);
+      alerts.push(tr(`ℹ️ يوجد ${examsWithoutRooms.length} امتحان بقاعات = 0، وهذه السجلات لن تنتج مراقبات فعلية حتى يتم تصحيحها.`, `ℹ️ There are ${examsWithoutRooms.length} exam(s) with rooms = 0, and these records will not produce actual invigilation assignments until corrected.`));
     }
     if (subjectCoverageIssues.length) {
-      alerts.push(`ℹ️ مواد بلا تخصص ظاهر في الكادر: ${subjectCoverageIssues.slice(0, 4).join(' • ')}${subjectCoverageIssues.length > 4 ? ' ...' : ''}`);
+      alerts.push(tr(`ℹ️ مواد بلا تخصص ظاهر في الكادر: ${subjectCoverageIssues.slice(0, 4).join(' • ')}${subjectCoverageIssues.length > 4 ? ' ...' : ''}`, `ℹ️ Subjects without a visible matching specialty in staff data: ${subjectCoverageIssues.slice(0, 4).join(' • ')}${subjectCoverageIssues.length > 4 ? ' ...' : ''}`));
     }
     if (shiftedWeekendExams.length) {
-      alerts.push(`ℹ️ يوجد ${shiftedWeekendExams.length} امتحان/فترة سيتم ترحيلها تلقائيًا إلى يوم الأحد بسبب وقوعها في الجمعة أو السبت.`);
+      alerts.push(tr(`ℹ️ يوجد ${shiftedWeekendExams.length} امتحان/فترة سيتم ترحيلها تلقائيًا إلى يوم الأحد بسبب وقوعها في الجمعة أو السبت.`, `ℹ️ There are ${shiftedWeekendExams.length} exam/period entries that will be shifted automatically to Sunday because they fall on Friday or Saturday.`));
     }
     if (duplicateTeacherIds.length || duplicateTeacherNames.length) {
-      alerts.push(`ℹ️ توجد تكرارات محتملة في الكادر: IDs مكررة ${duplicateTeacherIds.length} • أسماء مكررة ${duplicateTeacherNames.length}. يفضل مراجعتها قبل التشغيل النهائي.`);
+      alerts.push(tr(`ℹ️ توجد تكرارات محتملة في الكادر: IDs مكررة ${duplicateTeacherIds.length} • أسماء مكررة ${duplicateTeacherNames.length}. يفضل مراجعتها قبل التشغيل النهائي.`, `ℹ️ There may be duplicate staff records: duplicate IDs ${duplicateTeacherIds.length} • duplicate names ${duplicateTeacherNames.length}. Review them before the final run.`));
     }
     if (!alerts.length) {
-      alerts.push('✅ البيانات الأساسية تبدو جاهزة، ويمكن تشغيل الخوارزمية مع المحافظة على الشروط الحالية نفسها.');
+      alerts.push(tr('✅ البيانات الأساسية تبدو جاهزة، ويمكن تشغيل الخوارزمية مع المحافظة على الشروط الحالية نفسها.','✅ The core data appears ready, and the algorithm can run while keeping the same current rules.'));
     }
 
     return {
@@ -2819,23 +2824,23 @@ export default function TaskDistributionRun() {
   function validate(): string[] {
     const errs: string[] = [];
     // ✅ مهم: زر التشغيل يجب أن يعمل (يعرض رسالة) حتى لو لا توجد بيانات
-    if (teachersCount <= 0) errs.push("❌ لا يوجد بيانات في صفحة الكادر التعليمي. الرجاء إدخال الكادر التعليمي أولاً ثم العودة للتوزيع.");
-    if (examsCount <= 0) errs.push("❌ لا يوجد بيانات في صفحة جدول الامتحانات. الرجاء إدخال جدول الامتحانات أولاً ثم العودة للتوزيع.");
-    if (!hasBasics) errs.push("لا يمكن التشغيل قبل إدخال بيانات الكادر التعليمي  + جدول الامتحانات.");
-    if ((constraints.maxTasksPerTeacher ?? 0) <= 0) errs.push("الحد الأقصى للنصاب يجب أن يكون أكبر من 0.");
-    if ((constraints.reservePerPeriod ?? 0) < 0) errs.push("الاحتياط لكل فترة لا يمكن أن يكون سالب.");
+    if (teachersCount <= 0) errs.push(tr("❌ لا يوجد بيانات في صفحة الكادر التعليمي. الرجاء إدخال الكادر التعليمي أولاً ثم العودة للتوزيع.","❌ No data found in the teaching staff page. Please enter the teaching staff data first, then return to distribution."));
+    if (examsCount <= 0) errs.push(tr("❌ لا يوجد بيانات في صفحة جدول الامتحانات. الرجاء إدخال جدول الامتحانات أولاً ثم العودة للتوزيع.","❌ No data found in the exams schedule page. Please enter the exams schedule first, then return to distribution."));
+    if (!hasBasics) errs.push(tr("لا يمكن التشغيل قبل إدخال بيانات الكادر التعليمي  + جدول الامتحانات.","Cannot run before entering teaching staff data and exams schedule."));
+    if ((constraints.maxTasksPerTeacher ?? 0) <= 0) errs.push(tr("الحد الأقصى للنصاب يجب أن يكون أكبر من 0.","Maximum quota must be greater than 0."));
+    if ((constraints.reservePerPeriod ?? 0) < 0) errs.push(tr("الاحتياط لكل فترة لا يمكن أن يكون سالب.","Reserve per period cannot be negative."));
 
-    if ((constraints.invigilators_5_10 ?? 0) <= 0) errs.push("مراقبين لكل قاعة (صفوف 10) يجب أن يكون أكبر من 0.");
-    if ((constraints.invigilators_11 ?? 0) <= 0) errs.push("مراقبين لكل قاعة (صفوف 11) يجب أن يكون أكبر من 0.");
-    if ((constraints.invigilators_12 ?? 0) <= 0) errs.push("مراقبين لكل قاعة (أخرى/12) يجب أن يكون أكبر من 0.");
+    if ((constraints.invigilators_5_10 ?? 0) <= 0) errs.push(tr("مراقبين لكل قاعة (صفوف 10) يجب أن يكون أكبر من 0.","Invigilators per room (Grade 10) must be greater than 0."));
+    if ((constraints.invigilators_11 ?? 0) <= 0) errs.push(tr("مراقبين لكل قاعة (صفوف 11) يجب أن يكون أكبر من 0.","Invigilators per room (Grade 11) must be greater than 0."));
+    if ((constraints.invigilators_12 ?? 0) <= 0) errs.push(tr("مراقبين لكل قاعة (أخرى/12) يجب أن يكون أكبر من 0.","Invigilators per room (Other/12) must be greater than 0."));
 
-    if ((constraints.correctionDays ?? 1) <= 0) errs.push("عدد أيام التصحيح يجب أن يكون أكبر من 0.");
+    if ((constraints.correctionDays ?? 1) <= 0) errs.push(tr("عدد أيام التصحيح يجب أن يكون أكبر من 0.","Correction days must be greater than 0."));
 
     if (constraints.allowTwoPeriodsSameDay) {
       const allDates = !!constraints.allowTwoPeriodsSameDayAllDates;
       const dates = Array.isArray(constraints.allowTwoPeriodsSameDayDates) ? constraints.allowTwoPeriodsSameDayDates : [];
       if (!allDates && dates.length === 0) {
-        errs.push("السماح بفترتين (تواريخ محددة): اختر تاريخًا واحدًا على الأقل أو فعّل خيار (كل الأيام).");
+        errs.push(tr("السماح بفترتين (تواريخ محددة): اختر تاريخًا واحدًا على الأقل أو فعّل خيار (كل الأيام).","Allowing two periods (specific dates): choose at least one date or enable the all dates option."));
       }
     }
 
@@ -2905,7 +2910,7 @@ export default function TaskDistributionRun() {
   async function handleAddSuggestedTeacherToMasterTable(row: any, suggestion: any) {
     const currentRun = loadRun(tenantId) || runOut;
     if (!currentRun) {
-      return { ok: false, message: "لا يوجد تشغيل محفوظ حاليًا لإضافة الاسم إليه." };
+      return { ok: false, message: tr('لا يوجد تشغيل محفوظ حاليًا لإضافة الاسم إليه.','There is currently no saved run to add this name to.') };
     }
 
     const teacherId = String(suggestion?.teacherId || "").trim();
@@ -2915,7 +2920,7 @@ export default function TaskDistributionRun() {
     const preferredSubject = String(suggestion?.subject || row?.subjects?.[0] || "").trim();
     const appliedAtISO = new Date().toISOString();
     if (!teacherId || !teacherName || !dateISO) {
-      return { ok: false, message: "بيانات الاقتراح غير مكتملة ولا يمكن إضافته الآن." };
+      return { ok: false, message: tr('بيانات الاقتراح غير مكتملة ولا يمكن إضافته الآن.','The suggestion data is incomplete and cannot be added right now.') };
     }
 
     const currentAssignments = Array.isArray(currentRun?.assignments) ? [...currentRun.assignments] : [];
@@ -2932,10 +2937,10 @@ export default function TaskDistributionRun() {
     });
 
     if (sameTeacherSameSlot && String((sameTeacherSameSlot as any)?.taskType || "").trim() !== "RESERVE" && preferredTaskType === "INVIGILATION") {
-      return { ok: false, message: `المعلم ${teacherName} موجود بالفعل في الجدول الشامل لنفس الفترة، لذلك لا يمكن إضافته مرة أخرى.` };
+      return { ok: false, message: tr(`المعلم ${teacherName} موجود بالفعل في الجدول الشامل لنفس الفترة، لذلك لا يمكن إضافته مرة أخرى.`, `Teacher ${teacherName} already exists in the master table for the same period, so it cannot be added again.`) };
     }
     if (sameTeacherSameSlot && preferredTaskType === "RESERVE") {
-      return { ok: false, message: `المعلم ${teacherName} موجود بالفعل في الجدول الشامل لنفس الفترة.` };
+      return { ok: false, message: tr(`المعلم ${teacherName} موجود بالفعل في الجدول الشامل لنفس الفترة.`, `Teacher ${teacherName} already exists in the master table for the same period.`) };
     }
 
     const matchingExams = (exams || []).filter((exam: any) => {
@@ -2993,14 +2998,14 @@ export default function TaskDistributionRun() {
       const donorAssignmentId = String(suggestion?.transferAssignmentId || "").trim();
       const donorIdx = currentAssignments.findIndex((ass: any, idx: number) => assignmentIdentity(ass, idx) === donorAssignmentId);
       if (donorIdx < 0) {
-        return { ok: false, message: "تعذر العثور على التكليف الأصلي المقترح للنقل، ربما تم تغييره بالفعل من صفحة أخرى." };
+        return { ok: false, message: tr('تعذر العثور على التكليف الأصلي المقترح للنقل، ربما تم تغييره بالفعل من صفحة أخرى.','The original suggested assignment for transfer could not be found. It may have already been changed from another page.') };
       }
       if (sameTeacherSameSlot) {
-        return { ok: false, message: `المعلم ${teacherName} موجود بالفعل في الجدول الشامل لنفس الفترة، لذلك لا يمكن نقله إليها مرة أخرى.` };
+        return { ok: false, message: tr(`المعلم ${teacherName} موجود بالفعل في الجدول الشامل لنفس الفترة، لذلك لا يمكن نقله إليها مرة أخرى.`, `Teacher ${teacherName} already exists in the master table for the same period, so it cannot be moved there again.`) };
       }
       const previousAssignmentSnapshot = JSON.parse(JSON.stringify(currentAssignments[donorIdx]));
       const donorTaskLabel = TASK_TYPE_LABEL_AR[String(suggestion?.transferFromTaskType || normalizeStoredTaskTypeGlobal((previousAssignmentSnapshot as any)?.taskType || (previousAssignmentSnapshot as any)?.role || ""))] || String(suggestion?.transferFromTaskType || "");
-      const donorSlotLabel = `${String(suggestion?.transferFromDateISO || workDateISO(String((previousAssignmentSnapshot as any)?.dateISO || (previousAssignmentSnapshot as any)?.date || "").trim()) || "")} ${String(suggestion?.transferFromPeriod || periodToAMPM(String((previousAssignmentSnapshot as any)?.period || "AM"))) === "PM" ? "الفترة الثانية" : "الفترة الأولى"}`;
+      const donorSlotLabel = `${String(suggestion?.transferFromDateISO || workDateISO(String((previousAssignmentSnapshot as any)?.dateISO || (previousAssignmentSnapshot as any)?.date || "").trim()) || "")} ${String(suggestion?.transferFromPeriod || periodToAMPM(String((previousAssignmentSnapshot as any)?.period || "AM"))) === "PM" ? tr("الفترة الثانية","Second Period") : tr("الفترة الأولى","First Period")}`;
       const movedAssignment = {
         ...currentAssignments[donorIdx],
         teacherId,
@@ -3021,7 +3026,7 @@ export default function TaskDistributionRun() {
         manualSuggestedNote: String(suggestion?.note || "").trim(),
       };
       const nextAssignments = currentAssignments.map((ass: any, idx: number) => idx === donorIdx ? movedAssignment : ass);
-      note = `🔁 تم نقل ${teacherName} من ${donorSlotLabel} (${donorTaskLabel}) إلى ${dateISO} ${period === "AM" ? "الفترة الأولى" : "الفترة الثانية"}`;
+      note = tr(`🔁 تم نقل ${teacherName} من ${donorSlotLabel} (${donorTaskLabel}) إلى ${dateISO} ${period === "AM" ? "الفترة الأولى" : "الفترة الثانية"}`, `🔁 ${teacherName} was moved from ${donorSlotLabel} (${donorTaskLabel}) to ${dateISO} ${period === "AM" ? "First Period" : "Second Period"}`);
       const nextRun = ensureExplicitTaskTypes({
         ...currentRun,
         assignments: nextAssignments,
@@ -3055,7 +3060,7 @@ export default function TaskDistributionRun() {
         by: user?.uid || undefined,
         meta: { teacherId, teacherName, fromDateISO: suggestion?.transferFromDateISO || null, fromPeriod: suggestion?.transferFromPeriod || null, dateISO, period, taskType: preferredTaskType, subject },
       }).catch(() => {});
-      return { ok: true, message: `${note}. ويمكنك طلب اسم بديل أو التراجع من سجل الإضافات الأخيرة إذا احتجت.` };
+      return { ok: true, message: tr(`${note}. ويمكنك طلب اسم بديل أو التراجع من سجل الإضافات الأخيرة إذا احتجت.`, `${note}. You can also request another name or undo it from the recent additions history if needed.`) };
     }
 
     if (sameTeacherSameSlot && String((sameTeacherSameSlot as any)?.taskType || "").trim() === "RESERVE" && preferredTaskType === "INVIGILATION") {
@@ -3083,7 +3088,7 @@ export default function TaskDistributionRun() {
           manualSuggestedNote: String(suggestion?.note || "").trim(),
         };
       });
-      note = `➕ تم تحويل ${teacherName} من احتياط إلى مراقبة في ${dateISO} ${period === "AM" ? "الفترة الأولى" : "الفترة الثانية"}`;
+      note = tr(`➕ تم تحويل ${teacherName} من احتياط إلى مراقبة في ${dateISO} ${period === "AM" ? "الفترة الأولى" : "الفترة الثانية"}`, `➕ ${teacherName} was converted from reserve to invigilation on ${dateISO} ${period === "AM" ? "First Period" : "Second Period"}`);
       const nextRun = ensureExplicitTaskTypes({
         ...currentRun,
         assignments: nextAssignments,
@@ -3117,7 +3122,7 @@ export default function TaskDistributionRun() {
         by: user?.uid || undefined,
         meta: { teacherId, teacherName, dateISO, period, taskType: "INVIGILATION", subject, source: normalizedSuggestionSource === "FREE" ? "RESERVE" : normalizedSuggestionSource },
       }).catch(() => {});
-      return { ok: true, message: `${note}. إذا بقي عجز في نفس الفترة ستظهر لك اقتراحات جديدة مباشرة، ويمكنك التراجع من سجل الإضافات الأخيرة.` };
+      return { ok: true, message: tr(`${note}. إذا بقي عجز في نفس الفترة ستظهر لك اقتراحات جديدة مباشرة، ويمكنك التراجع من سجل الإضافات الأخيرة.`, `${note}. If a shortage remains in the same period, new suggestions will appear immediately, and you can undo it from the recent additions history.`) };
     }
 
     const now = Date.now();
@@ -3145,7 +3150,7 @@ export default function TaskDistributionRun() {
       }],
     }).assignments?.[0] || null;
     if (!newAssignment) {
-      return { ok: false, message: "تعذر تجهيز السجل الجديد للإضافة." };
+      return { ok: false, message: tr('تعذر تجهيز السجل الجديد للإضافة.','The new record could not be prepared for insertion.') };
     }
 
     note = `➕ تمت إضافة ${teacherName} إلى الجدول الشامل (${TASK_TYPE_LABEL_AR[preferredTaskType] || preferredTaskType}) في ${dateISO} ${period === "AM" ? "الفترة الأولى" : "الفترة الثانية"}`;
@@ -3181,18 +3186,18 @@ export default function TaskDistributionRun() {
       by: user?.uid || undefined,
       meta: { teacherId, teacherName, dateISO, period, taskType: preferredTaskType, subject, source: normalizedSuggestionSource },
     }).catch(() => {});
-    return { ok: true, message: `${note}. إذا بقي عجز في نفس الفترة يمكنك الضغط على "اقتراح اسم آخر" أو التراجع من سجل الإضافات الأخيرة.` };
+    return { ok: true, message: tr(`${note}. إذا بقي عجز في نفس الفترة يمكنك الضغط على "اقتراح اسم آخر" أو التراجع من سجل الإضافات الأخيرة.`, `${note}. If a shortage remains in the same period, you can click "Suggest another name" or undo it from the recent additions history.`) };
   }
 
   async function handleUndoManualSuggestion(historyId: string) {
     const entry = (manualSuggestionHistory || []).find((item) => String(item?.id || "") === String(historyId || ""));
     if (!entry) {
-      return { ok: false, message: "لم يعد سجل هذه الإضافة متوفرًا للتراجع." };
+      return { ok: false, message: tr('لم يعد سجل هذه الإضافة متوفرًا للتراجع.','The record for this addition is no longer available for undo.') };
     }
 
     const currentRun = loadRun(tenantId) || runOut;
     if (!currentRun) {
-      return { ok: false, message: "لا يوجد تشغيل محفوظ حاليًا للتراجع عنه." };
+      return { ok: false, message: tr('لا يوجد تشغيل محفوظ حاليًا للتراجع عنه.','There is currently no saved run to undo.') };
     }
 
     const currentAssignments = Array.isArray(currentRun?.assignments) ? [...currentRun.assignments] : [];
@@ -3216,10 +3221,10 @@ export default function TaskDistributionRun() {
     }
 
     if (!changed) {
-      return { ok: false, message: `تعذر التراجع عن ${entry.teacherName} لأن السجل الأصلي لم يعد متاحًا كما كان.` };
+      return { ok: false, message: tr(`تعذر التراجع عن ${entry.teacherName} لأن السجل الأصلي لم يعد متاحًا كما كان.`, `Could not undo ${entry.teacherName} because the original record is no longer available as it was.`) };
     }
 
-    const note = `↩️ تم التراجع عن الإضافة اليدوية لـ ${entry.teacherName} في ${entry.dateISO} ${entry.period === "AM" ? "الفترة الأولى" : "الفترة الثانية"}`;
+    const note = tr(`↩️ تم التراجع عن الإضافة اليدوية لـ ${entry.teacherName} في ${entry.dateISO} ${entry.period === "AM" ? "الفترة الأولى" : "الفترة الثانية"}`, `↩️ Manual addition for ${entry.teacherName} was undone on ${entry.dateISO} ${entry.period === "AM" ? "First Period" : "Second Period"}`);
     const nextRun = ensureExplicitTaskTypes({
       ...currentRun,
       assignments: nextAssignments,
@@ -3236,7 +3241,7 @@ export default function TaskDistributionRun() {
       by: user?.uid || undefined,
       meta: { teacherId: entry.teacherId, teacherName: entry.teacherName, dateISO: entry.dateISO, period: entry.period, taskType: entry.taskType, source: entry.source },
     }).catch(() => {});
-    return { ok: true, message: `${note}. تم تحديث الجدول الشامل وتقرير الضغط مباشرة.` };
+    return { ok: true, message: tr(`${note}. تم تحديث الجدول الشامل وتقرير الضغط مباشرة.`, `${note}. The master table and pressure report were updated immediately.`) };
   }
 
   // ✅ ملخص العدالة: الإجمالي = (مراقبة + احتياط + مراجعة) فقط
@@ -3277,7 +3282,7 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
 
   const page: React.CSSProperties = {
     color: GOLD_2,
-    direction: "rtl",
+    direction: isRTL ? "rtl" : "ltr",
     minHeight: "100vh",
     background:
       "radial-gradient(circle at top, rgba(201,162,39,0.12), transparent 24%), radial-gradient(circle at 88% 18%, rgba(59,130,246,0.10), transparent 24%), linear-gradient(180deg, #07101f 0%, #0a1020 42%, #060b16 100%)",
@@ -3589,7 +3594,34 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
 
   const grid3Responsive = grid3;
 
-  const boolText = (v: boolean) => (v ? "مفعل" : "غير مفعل");
+  const boolText = (v: boolean) => (v ? tr("مفعل","Enabled") : tr("غير مفعل","Disabled"));
+
+  const reasonLabelUI = (code?: string) => {
+    switch (code) {
+      case "NO_TEACHERS":
+        return tr("لا يوجد معلمين","No teachers available");
+      case "MAX_TASKS_REACHED":
+        return tr("وصل الحد الأقصى للنصاب","Maximum quota reached");
+      case "PERIOD_CONFLICT":
+        return tr("تعارض في نفس الفترة","Same period conflict");
+      case "BACK_TO_BACK_BLOCK":
+        return tr("منع حسب القيود","Blocked by constraints");
+      case "REVIEW_FREE_BLOCK":
+        return tr("مفرّغ للمراجعة","Freed for review");
+      case "CORRECTION_FREE_BLOCK":
+        return tr("مفرّغ للتصحيح","Freed for correction");
+      case "SPECIALTY_BLOCK":
+        return tr("ممنوع لمعلم المادة","Blocked for subject teacher");
+      case "ARABIC_ONCE":
+        return tr("اللغة العربية (مرة واحدة)","Arabic once only");
+      case "THREE_HOURS_ALREADY":
+        return tr("مراقبة 3 ساعات سبق تنفيذها","3-hour invigilation already assigned");
+      case "UNAVAILABLE":
+        return tr("غير متاح (غياب/عدم توفر)","Unavailable (absence/unavailability)");
+      default:
+        return tr("سبب غير معروف","Unknown reason");
+    }
+  };
 
   const allowTwo = !!constraints.allowTwoPeriodsSameDay;
   const twoAllDates = !!constraints.allowTwoPeriodsSameDayAllDates;
@@ -3677,7 +3709,7 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
                     fontSize: 12,
                   }}
                 >
-                  تشغيل فعلي مباشر من بيانات الكادر والامتحانات
+                  {tr("تشغيل فعلي مباشر من بيانات الكادر والامتحانات","Live direct run from teaching staff and exams data")}
                 </div>
 
                 <div style={{ display: "grid", gap: 8 }}>
@@ -3693,7 +3725,7 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
                       textShadow: "0 10px 30px rgba(201,162,39,.18)",
                     }}
                   >
-                    منصة تشغيل توزيع المهام
+                    {tr("منصة تشغيل توزيع المهام","Task Distribution Run Platform")}
                   </h1>
                 </div>
 
@@ -3706,16 +3738,14 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
                     maxWidth: 900,
                   }}
                 >
-                  هذه الصفحة تمثل مركز التشغيل التنفيذي للتوزيع، حيث تُحمّل بيانات الكادر والامتحانات والقيود
-                  الفعلية، ثم تُنتج توزيعًا ذكيًا ومنظمًا مع قياس العدالة والعجز والتنبيهات في واجهة مؤسسية
-                  فاخرة تساعد الإدارة على الانطلاق بسرعة وثقة.
+                  {tr("هذه الصفحة تمثل مركز التشغيل التنفيذي للتوزيع، حيث تُحمّل بيانات الكادر والامتحانات والقيود الفعلية، ثم تُنتج توزيعًا ذكيًا ومنظمًا مع قياس العدالة والعجز والتنبيهات في واجهة مؤسسية فاخرة تساعد الإدارة على الانطلاق بسرعة وثقة.","This page represents the executive run center for distribution, loading teaching staff, exams, and live constraints, then producing an organized smart distribution with fairness, shortage, and alerts in a premium institutional interface that helps administration move quickly and confidently.")}
                 </p>
 
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                   {[
-                    { label: "مصدر التشغيل", value: fsLoaded ? "بيانات الجهة المباشرة" : "بيانات التطبيق الحالية" },
-                    { label: "الجاهزية", value: hasBasics ? "جاهز للتشغيل" : "ينتظر اكتمال البيانات" },
-                    { label: "آخر تشغيل", value: latestRunSummary?.createdAtISO ? String(latestRunSummary.createdAtISO).slice(0, 16).replace("T", " ") : "لا يوجد" },
+                    { label: tr("مصدر التشغيل","Run Source"), value: fsLoaded ? tr("بيانات الجهة المباشرة","Live tenant data") : tr("بيانات التطبيق الحالية","Current app data") },
+                    { label: tr("الجاهزية","Readiness"), value: hasBasics ? tr("جاهز للتشغيل","Ready to run") : tr("ينتظر اكتمال البيانات","Waiting for complete data") },
+                    { label: tr("آخر تشغيل","Last Run"), value: latestRunSummary?.createdAtISO ? String(latestRunSummary.createdAtISO).slice(0, 16).replace("T", " ") : tr("لا يوجد","None") },
                   ].map((item) => (
                     <div
                       key={item.label}
@@ -3762,18 +3792,17 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
                     fontSize: 12,
                   }}
                 >
-                  {runtimeError || errors.length ? "يحتاج مراجعة قبل التشغيل" : "الوضع التشغيلي جاهز"}
+                  {runtimeError || errors.length ? tr("يحتاج مراجعة قبل التشغيل","Needs review before running") : tr("الوضع التشغيلي جاهز","Operational status is ready")}
                 </div>
 
                 <div style={{ fontSize: 30, lineHeight: 1.45, fontWeight: 950, color: "#f8e7a6" }}>
                   {runOut
-                    ? "تم ربط الصفحة بآخر تشغيل محفوظ ويمكنك مراجعة العدالة والعجز والتحسينات مباشرة."
-                    : "ابدأ تشغيل التوزيع من هنا وشاهد النتائج والعدالة والتنبيهات في تدفق واحد منظم."}
+                    ? tr("تم ربط الصفحة بآخر تشغيل محفوظ ويمكنك مراجعة العدالة والعجز والتحسينات مباشرة.","The page is linked to the latest saved run and you can review fairness, shortages, and improvements directly.")
+                    : tr("ابدأ تشغيل التوزيع من هنا وشاهد النتائج والعدالة والتنبيهات في تدفق واحد منظم.","Start the distribution run here and review results, fairness, and alerts in one organized flow.")}
                 </div>
 
                 <div style={{ fontSize: 14, lineHeight: 1.95, color: "rgba(201,162,39,.78)" }}>
-                  الواجهة المطورة تبرز حالة الجاهزية، وعدد البيانات الأساسية، وإجمالي التكليفات، مع انتقال بصري أنيق
-                  من لوحة التشغيل إلى أقسام العدالة والجاهزية والتفاصيل.
+                  {tr("الواجهة المطورة تبرز حالة الجاهزية، وعدد البيانات الأساسية، وإجمالي التكليفات، مع انتقال بصري أنيق من لوحة التشغيل إلى أقسام العدالة والجاهزية والتفاصيل.","The enhanced interface highlights readiness, core data counts, and total assignments, with an elegant visual transition from the run panel to fairness, readiness, and detail sections.")}
                 </div>
               </div>
             </div>
@@ -3787,39 +3816,39 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
             >
               {[
                 {
-                  label: "المعلمون",
+                  label: tr("المعلمون","Teachers"),
                   value: teachersCount,
-                  hint: "الكادر الجاهز للتوزيع",
+                  hint: tr("الكادر الجاهز للتوزيع","Teaching staff ready for distribution"),
                   tone: "#f8e7a6",
                 },
                 {
-                  label: "الاختبارات",
+                  label: tr("الاختبارات","Exams"),
                   value: examsCount,
-                  hint: "المواد/الفترات الفعلية",
+                  hint: tr("المواد/الفترات الفعلية","Actual subjects/periods"),
                   tone: "#93c5fd",
                 },
                 {
-                  label: "اللجان",
+                  label: tr("اللجان","Committees"),
                   value: derived.totalRooms,
-                  hint: "إجمالي القاعات المطلوبة",
+                  hint: tr("إجمالي القاعات المطلوبة","Total required rooms"),
                   tone: "#86efac",
                 },
                 {
-                  label: "أيام الامتحانات",
+                  label: tr("أيام الامتحانات","Exam Days"),
                   value: derived.uniqueDates,
-                  hint: "عدد الأيام الفعلية",
+                  hint: tr("عدد الأيام الفعلية","Actual number of days"),
                   tone: "#c4b5fd",
                 },
                 {
-                  label: "إسنادات آخر تشغيل",
+                  label: tr("إسنادات آخر تشغيل","Last Run Assignments"),
                   value: latestRunSummary?.totalAssignments ?? 0,
-                  hint: "إجمالي ما تم توليده",
+                  hint: tr("إجمالي ما تم توليده","Total generated"),
                   tone: "#fde68a",
                 },
                 {
-                  label: "تحذيرات آخر تشغيل",
+                  label: tr("تحذيرات آخر تشغيل","Last Run Warnings"),
                   value: latestRunSummary?.warnings ?? 0,
-                  hint: "رسائل تحتاج انتباهًا",
+                  hint: tr("رسائل تحتاج انتباهًا","Messages needing attention"),
                   tone: (latestRunSummary?.warnings ?? 0) > 0 ? "#fca5a5" : "#bbf7d0",
                 },
               ].map((item) => (
@@ -3933,7 +3962,7 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
         unfilledSlots={unfilledSlots}
         debugOpen={debugOpen}
         setDebugOpen={setDebugOpen}
-        reasonLabel={reasonLabel}
+        reasonLabel={reasonLabelUI}
         styles={{
           card,
           cardSub,
