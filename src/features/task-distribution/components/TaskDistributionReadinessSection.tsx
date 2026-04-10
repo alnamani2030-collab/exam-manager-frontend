@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useI18n } from "../../../i18n/I18nProvider";
 
 type ReadinessCard = {
   key: string;
@@ -90,10 +91,10 @@ type Props = {
   onUndoSuggestion?: (historyId: string) => Promise<SuggestionActionResult | void> | SuggestionActionResult | void;
 };
 
-function statusMeta(status: ForecastRow["status"]) {
-  if (status === "SAFE") return { label: "مريح", bg: "rgba(34,197,94,.16)", border: "rgba(34,197,94,.35)", color: "#86efac" };
-  if (status === "TIGHT") return { label: "ضيق", bg: "rgba(245,158,11,.14)", border: "rgba(245,158,11,.30)", color: "#fcd34d" };
-  return { label: "حرج", bg: "rgba(239,68,68,.14)", border: "rgba(239,68,68,.30)", color: "#fca5a5" };
+function statusMeta(status: ForecastRow["status"], tr: (ar: string, en: string) => string) {
+  if (status === "SAFE") return { label: tr("مريح", "Safe"), bg: "rgba(34,197,94,.16)", border: "rgba(34,197,94,.35)", color: "#86efac" };
+  if (status === "TIGHT") return { label: tr("ضيق", "Tight"), bg: "rgba(245,158,11,.14)", border: "rgba(245,158,11,.30)", color: "#fcd34d" };
+  return { label: tr("حرج", "Critical"), bg: "rgba(239,68,68,.14)", border: "rgba(239,68,68,.30)", color: "#fca5a5" };
 }
 
 function cardTone(tone: ReadinessCard["tone"]) {
@@ -103,40 +104,40 @@ function cardTone(tone: ReadinessCard["tone"]) {
   return { bg: "rgba(255,255,255,.04)", border: "rgba(255,255,255,.10)", color: "rgba(255,255,255,.90)" };
 }
 
-function shortageText(row: ForecastRow) {
+function shortageText(row: ForecastRow, tr: (ar: string, en: string) => string) {
   const invGap = Math.max(0, Number(row.remainingInvigilations || 0));
   const reserveGap = Math.max(0, Number(row.remainingReserve || 0));
-  if (!invGap && !reserveGap) return "مكتمل";
+  if (!invGap && !reserveGap) return tr("مكتمل", "Complete");
   const chunks: string[] = [];
-  if (invGap) chunks.push(`مراقبة ${invGap}`);
-  if (reserveGap) chunks.push(`احتياط ${reserveGap}`);
+  if (invGap) chunks.push(`${tr("مراقبة", "Invigilation")} ${invGap}`);
+  if (reserveGap) chunks.push(`${tr("احتياط", "Reserve")} ${reserveGap}`);
   return chunks.join(" • ");
 }
 
-function slotLabel(row: ForecastRow) {
-  return `${row.dateISO} • ${row.period === "AM" ? "الفترة الأولى" : "الفترة الثانية"}`;
+function slotLabel(row: ForecastRow, tr: (ar: string, en: string) => string) {
+  return `${row.dateISO} • ${row.period === "AM" ? tr("الفترة الأولى", "First Period") : tr("الفترة الثانية", "Second Period")}`;
 }
 
-function suggestionChipMeta(suggestion: ForecastTeacherSuggestion, compact = false) {
+function suggestionChipMeta(suggestion: ForecastTeacherSuggestion, tr: (ar: string, en: string) => string, compact = false) {
   if (suggestion.source === "RESERVE") {
-    return { bg: "rgba(59,130,246,.12)", border: "rgba(59,130,246,.25)", color: "#93c5fd", label: compact ? "احتياط" : "من الاحتياط" };
+    return { bg: "rgba(59,130,246,.12)", border: "rgba(59,130,246,.25)", color: "#93c5fd", label: compact ? tr("احتياط", "Reserve") : tr("من الاحتياط", "From reserve") };
   }
   if (suggestion.source === "FREE") {
-    return { bg: "rgba(34,197,94,.12)", border: "rgba(34,197,94,.24)", color: "#86efac", label: compact ? "متاح" : "متاح مباشر" };
+    return { bg: "rgba(34,197,94,.12)", border: "rgba(34,197,94,.24)", color: "#86efac", label: compact ? tr("متاح", "Available") : tr("متاح مباشر", "Directly available") };
   }
   if (suggestion.source === "MAX_TASK_RELAX") {
-    return { bg: "rgba(249,115,22,.14)", border: "rgba(249,115,22,.28)", color: "#fdba74", label: compact ? "+نصاب" : "زيادة النصاب" };
+    return { bg: "rgba(249,115,22,.14)", border: "rgba(249,115,22,.28)", color: "#fdba74", label: compact ? tr("+نصاب", "+Quota") : tr("زيادة النصاب", "Increase quota") };
   }
   if (suggestion.source === "SAME_DAY_RELAX") {
-    return { bg: "rgba(168,85,247,.14)", border: "rgba(168,85,247,.28)", color: "#d8b4fe", label: compact ? "فترتان" : "فترتان" };
+    return { bg: "rgba(168,85,247,.14)", border: "rgba(168,85,247,.28)", color: "#d8b4fe", label: compact ? tr("فترتان", "Two periods") : tr("فترتان", "Two periods") };
   }
   if (suggestion.source === "SPECIALTY_RELAX") {
-    return { bg: "rgba(236,72,153,.14)", border: "rgba(236,72,153,.28)", color: "#f9a8d4", label: compact ? "استثناء مادة" : "استثناء المادة" };
+    return { bg: "rgba(236,72,153,.14)", border: "rgba(236,72,153,.28)", color: "#f9a8d4", label: compact ? tr("استثناء مادة", "Subject exception") : tr("استثناء المادة", "Subject exception") };
   }
   if (suggestion.source === "TRANSFER_SAFE") {
-    return { bg: "rgba(14,165,233,.14)", border: "rgba(14,165,233,.28)", color: "#7dd3fc", label: compact ? "نقل" : "نقل من فترة مريحة" };
+    return { bg: "rgba(14,165,233,.14)", border: "rgba(14,165,233,.28)", color: "#7dd3fc", label: compact ? tr("نقل", "Move") : tr("نقل من فترة مريحة", "Move from a safe slot") };
   }
-  return { bg: "rgba(234,179,8,.14)", border: "rgba(234,179,8,.28)", color: "#fde68a", label: compact ? "رفع تصحيح" : "رفع التصحيح" };
+  return { bg: "rgba(234,179,8,.14)", border: "rgba(234,179,8,.28)", color: "#fde68a", label: compact ? tr("رفع تصحيح", "Lift correction") : tr("رفع التصحيح", "Lift correction") };
 }
 
 export default function TaskDistributionReadinessSection({
@@ -150,6 +151,8 @@ export default function TaskDistributionReadinessSection({
   appliedSuggestionHistory = [],
   onUndoSuggestion,
 }: Props) {
+  const { lang } = useI18n();
+  const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
   const { card, cardSub, gold2, note, th2, td2, line, pill } = styles;
   const [statusFilter, setStatusFilter] = useState<"ALL" | ForecastRow["status"]>("ALL");
   const [searchTerm, setSearchTerm] = useState("");
@@ -165,7 +168,7 @@ export default function TaskDistributionReadinessSection({
     return forecastRows.filter((row) => {
       if (statusFilter !== "ALL" && row.status !== statusFilter) return false;
       if (!needle) return true;
-      const haystack = [row.dateISO, row.period === "AM" ? "الأولى" : "الثانية", ...row.subjects].join(" ").toLowerCase();
+      const haystack = [row.dateISO, row.period === "AM" ? tr("الأولى", "First") : tr("الثانية", "Second"), ...row.subjects].join(" ").toLowerCase();
       return haystack.includes(needle);
     });
   }, [forecastRows, searchTerm, statusFilter]);
@@ -204,7 +207,7 @@ export default function TaskDistributionReadinessSection({
       return { ...prev, [row.key]: Array.from(rowHidden) };
     });
     if (!silent) {
-      setActionNotice({ tone: "warn", message: `تم استبعاد ${suggestion.teacherName} من اقتراحات ${slotLabel(row)} مؤقتًا.` });
+      setActionNotice({ tone: "warn", message: `${tr("تم استبعاد", "Excluded")} ${suggestion.teacherName} ${tr("من اقتراحات", "from suggestions of")} ${slotLabel(row, tr)} ${tr("مؤقتًا.", "temporarily.")}` });
     }
   }
 
@@ -216,7 +219,7 @@ export default function TaskDistributionReadinessSection({
       return next;
     });
     setVisibleSuggestionStart((prev) => ({ ...prev, [rowKey]: 0 }));
-    setActionNotice({ tone: "good", message: "تمت إعادة جميع الأسماء المستبعدة لهذه الفترة إلى قائمة الاقتراحات." });
+    setActionNotice({ tone: "good", message: tr("تمت إعادة جميع الأسماء المستبعدة لهذه الفترة إلى قائمة الاقتراحات.", "All dismissed names for this slot were restored to the suggestions list.") });
   }
 
   const forecastSummary = useMemo(() => {
@@ -239,7 +242,7 @@ export default function TaskDistributionReadinessSection({
 
   const filterButton = (key: "ALL" | ForecastRow["status"], label: string, count: number) => {
     const active = statusFilter === key;
-    const tone = key === "CRITICAL" ? statusMeta("CRITICAL") : key === "TIGHT" ? statusMeta("TIGHT") : key === "SAFE" ? statusMeta("SAFE") : { bg: "rgba(255,255,255,.05)", border: line, color: "rgba(255,255,255,.95)", label: "الكل" };
+    const tone = key === "CRITICAL" ? statusMeta("CRITICAL", tr) : key === "TIGHT" ? statusMeta("TIGHT", tr) : key === "SAFE" ? statusMeta("SAFE", tr) : { bg: "rgba(255,255,255,.05)", border: line, color: "rgba(255,255,255,.95)", label: tr("الكل", "All") };
     return (
       <button
         key={key}
@@ -299,7 +302,7 @@ export default function TaskDistributionReadinessSection({
       }
       setPendingSuggestion(null);
     } catch (error: any) {
-      setActionNotice({ tone: "danger", message: error?.message || "حدث خطأ غير متوقع أثناء إضافة الاسم المقترح." });
+      setActionNotice({ tone: "danger", message: error?.message || tr("حدث خطأ غير متوقع أثناء إضافة الاسم المقترح.", "An unexpected error occurred while adding the suggested name.") });
     } finally {
       setSubmittingSuggestionKey(null);
     }
@@ -309,7 +312,7 @@ export default function TaskDistributionReadinessSection({
     if (!pendingSuggestion) return;
     const nextSuggestion = getNextSuggestion(pendingSuggestion.row, pendingSuggestion.suggestion);
     if (!nextSuggestion || suggestionIdentity(nextSuggestion) === suggestionIdentity(pendingSuggestion.suggestion)) {
-      setActionNotice({ tone: "warn", message: "لا يوجد اسم بديل مختلف حاليًا لهذه الفترة." });
+      setActionNotice({ tone: "warn", message: tr("لا يوجد اسم بديل مختلف حاليًا لهذه الفترة.", "There is no different alternative name currently for this slot.") });
       return;
     }
     setPendingSuggestion({ row: pendingSuggestion.row, suggestion: nextSuggestion });
@@ -335,7 +338,7 @@ export default function TaskDistributionReadinessSection({
         setActionNotice({ tone: result.ok === false ? "danger" : "good", message: result.message });
       }
     } catch (error: any) {
-      setActionNotice({ tone: "danger", message: error?.message || "حدث خطأ غير متوقع أثناء التراجع عن الإضافة اليدوية." });
+      setActionNotice({ tone: "danger", message: error?.message || tr("حدث خطأ غير متوقع أثناء التراجع عن الإضافة اليدوية.", "An unexpected error occurred while undoing the manual addition.") });
     } finally {
       setUndoingHistoryId(null);
     }
@@ -349,7 +352,7 @@ export default function TaskDistributionReadinessSection({
       <>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "flex-end" }}>
           {visible.map((suggestion) => {
-            const sourceMeta = suggestionChipMeta(suggestion, compactLabel);
+            const sourceMeta = suggestionChipMeta(suggestion, tr, compactLabel);
             const key = `${row.key}-${suggestion.teacherId}-${suggestion.subject}`;
             const busy = submittingSuggestionKey === `${row.key}__${suggestion.teacherId}__${suggestion.subject}`;
             return (
@@ -375,7 +378,7 @@ export default function TaskDistributionReadinessSection({
                 }}
               >
                 <span>{suggestion.teacherName}</span>
-                <span style={{ opacity: 0.82 }}>• {busy ? "جارٍ الإضافة..." : sourceMeta.label}</span>
+                <span style={{ opacity: 0.82 }}>• {busy ? tr("جارٍ الإضافة...", "Adding...") : sourceMeta.label}</span>
               </button>
             );
           })}
@@ -393,7 +396,7 @@ export default function TaskDistributionReadinessSection({
                 cursor: "pointer",
               }}
             >
-              اقتراح اسم آخر
+              {tr("اقتراح اسم آخر", "Suggest another name")}
             </button>
           ) : null}
           {dismissedCount ? (
@@ -410,11 +413,11 @@ export default function TaskDistributionReadinessSection({
                 cursor: "pointer",
               }}
             >
-              إعادة {dismissedCount} اسم مستبعد
+              {tr("إعادة", "Restore")} {dismissedCount} {tr("اسم مستبعد", "dismissed names")}
             </button>
           ) : null}
           {(total > limit || dismissedCount) ? (
-            <span style={{ ...note, alignSelf: "center" }}>المتوفر الآن: {total} اسم</span>
+            <span style={{ ...note, alignSelf: "center" }}>{tr("المتوفر الآن", "Currently available")}: {total} {tr("اسم", "names")}</span>
           ) : null}
         </div>
       </>
@@ -426,17 +429,17 @@ export default function TaskDistributionReadinessSection({
       <div style={{ ...card, marginTop: 18 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
           <div>
-            <div style={{ fontWeight: 950, fontSize: 16, color: gold2 }}>فحص جاهزية التشغيل</div>
+            <div style={{ fontWeight: 950, fontSize: 16, color: gold2 }}>{tr("فحص جاهزية التشغيل", "Run readiness check")}</div>
             <div style={{ ...cardSub, marginTop: 4 }}>
-              قراءة مباشرة من بيانات البرنامج الحالية قبل تنفيذ الخوارزمية، مع احتساب المتاح الفعلي القابل للإسناد بعد تطبيق شروط التوزيع نفسها.
+              {tr("قراءة مباشرة من بيانات البرنامج الحالية قبل تنفيذ الخوارزمية، مع احتساب المتاح الفعلي القابل للإسناد بعد تطبيق شروط التوزيع نفسها.", "A direct reading from the current program data before running the algorithm, while calculating the actually available assignments after applying the same distribution rules.")}
             </div>
           </div>
           {latestRunSummary ? (
             <span style={pill}>
-              آخر تشغيل: {latestRunSummary.createdAtISO.slice(0, 16).replace("T", " ")} • {latestRunSummary.totalAssignments} مهمة
+              {tr("آخر تشغيل", "Last run")}: {latestRunSummary.createdAtISO.slice(0, 16).replace("T", " ")} • {latestRunSummary.totalAssignments} {tr("مهمة", "tasks")}
             </span>
           ) : (
-            <span style={pill}>لا يوجد تشغيل محفوظ بعد</span>
+            <span style={pill}>{tr("لا يوجد تشغيل محفوظ بعد", "No saved run yet")}</span>
           )}
         </div>
 
@@ -452,7 +455,7 @@ export default function TaskDistributionReadinessSection({
               color: "rgba(255,255,255,.92)",
             }}
           >
-            تم حذف بيانات التوزيع، وتمت تصفية تقرير الضغط المتوقع وملخص الجاهزية من هذه الصفحة. سيعاد بناء التقرير تلقائيًا عند تعديل القيود أو تشغيل التوزيع مرة أخرى.
+            {tr("تم حذف بيانات التوزيع، وتمت تصفية تقرير الضغط المتوقع وملخص الجاهزية من هذه الصفحة. سيعاد بناء التقرير تلقائيًا عند تعديل القيود أو تشغيل التوزيع مرة أخرى.", "Distribution data has been deleted, and the expected pressure report and readiness summary have been cleared from this page. The report will be rebuilt automatically when constraints are changed or the distribution is run again.")}
           </div>
         ) : (
           <>
@@ -489,7 +492,7 @@ export default function TaskDistributionReadinessSection({
                       cursor: "pointer",
                     }}
                   >
-                    إغلاق
+                    {tr("إغلاق", "Close")}
                   </button>
                 </div>
               );
@@ -506,10 +509,10 @@ export default function TaskDistributionReadinessSection({
               >
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
                   <div>
-                    <div style={{ fontWeight: 950, fontSize: 16, color: gold2 }}>سجل الإضافات اليدوية الأخيرة</div>
-                    <div style={{ ...note, marginTop: 4 }}>يمكنك التراجع عن أي اسم تمت إضافته من الاقتراحات إذا أردت إعادة احتساب الضغط والعجز فورًا.</div>
+                    <div style={{ fontWeight: 950, fontSize: 16, color: gold2 }}>{tr("سجل الإضافات اليدوية الأخيرة", "Recent manual additions log")}</div>
+                    <div style={{ ...note, marginTop: 4 }}>{tr("يمكنك التراجع عن أي اسم تمت إضافته من الاقتراحات إذا أردت إعادة احتساب الضغط والعجز فورًا.", "You can undo any name added from suggestions if you want to recalculate pressure and shortage immediately.")}</div>
                   </div>
-                  <span style={pill}>{appliedSuggestionHistory.length} عملية محفوظة</span>
+                  <span style={pill}>{appliedSuggestionHistory.length} {tr("عملية محفوظة", "saved actions")}</span>
                 </div>
                 <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
                   {appliedSuggestionHistory.slice(0, 6).map((entry) => {
@@ -519,8 +522,8 @@ export default function TaskDistributionReadinessSection({
                       subject: entry.subject,
                       source: entry.source as any,
                       note: entry.note,
-                    } as ForecastTeacherSuggestion, true);
-                    const actionLabel = entry.actionKind === "CONVERT_RESERVE" ? "تحويل من الاحتياط" : entry.actionKind === "MOVE_FROM_SAFE" ? "نقل من فترة مريحة" : (entry.taskType === "RESERVE" ? "إضافة احتياط" : "إضافة مراقبة");
+                    } as ForecastTeacherSuggestion, tr, true);
+                    const actionLabel = entry.actionKind === "CONVERT_RESERVE" ? tr("تحويل من الاحتياط", "Converted from reserve") : entry.actionKind === "MOVE_FROM_SAFE" ? "نقل من فترة مريحة" : (entry.taskType === "RESERVE" ? tr("إضافة احتياط", "Add reserve") : tr("إضافة مراقبة", "Add invigilation"));
                     const isBusy = undoingHistoryId === entry.id;
                     return (
                       <div
@@ -540,11 +543,11 @@ export default function TaskDistributionReadinessSection({
                         <div style={{ display: "grid", gap: 6 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                             <span style={{ ...pill, borderColor: sourceMeta.border, color: sourceMeta.color }}>{entry.teacherName}</span>
-                            <span style={pill}>{entry.dateISO} • {entry.period === "AM" ? "الفترة الأولى" : "الفترة الثانية"}</span>
+                            <span style={pill}>{entry.dateISO} • {entry.period === "AM" ? tr("الفترة الأولى", "First Period") : tr("الفترة الثانية", "Second Period")}</span>
                             <span style={{ ...pill, borderColor: sourceMeta.border, color: sourceMeta.color }}>{actionLabel}</span>
                           </div>
                           <div style={{ ...note }}>{entry.subject || "—"}{entry.note ? ` • ${entry.note}` : ""}</div>
-                          <div style={{ ...note, opacity: 0.88 }}>تمت الإضافة: {String(entry.appliedAtISO || "").slice(0, 16).replace("T", " ")}</div>
+                          <div style={{ ...note, opacity: 0.88 }}>{tr("تمت الإضافة", "Added on")}: {String(entry.appliedAtISO || "").slice(0, 16).replace("T", " ")}</div>
                         </div>
                         {onUndoSuggestion ? (
                           <button
@@ -562,7 +565,7 @@ export default function TaskDistributionReadinessSection({
                               opacity: isBusy ? 0.7 : 1,
                             }}
                           >
-                            {isBusy ? "جارٍ التراجع..." : "تراجع عن هذه الإضافة"}
+                            {isBusy ? tr("جارٍ التراجع...", "Undoing...") : tr("تراجع عن هذه الإضافة", "Undo this addition")}
                           </button>
                         ) : null}
                       </div>
@@ -616,56 +619,56 @@ export default function TaskDistributionReadinessSection({
 
             {latestRunSummary ? (
               <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${line}` }}>
-                <div style={{ fontWeight: 950, marginBottom: 10 }}>ملخص آخر تشغيل محفوظ</div>
+                <div style={{ fontWeight: 950, marginBottom: 10 }}>{tr("ملخص آخر تشغيل محفوظ", "Summary of the last saved run")}</div>
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                  <span style={pill}>مراقبة: {latestRunSummary.inv}</span>
-                  <span style={pill}>احتياط: {latestRunSummary.res}</span>
-                  <span style={pill}>مراجعة: {latestRunSummary.rev}</span>
-                  <span style={pill}>تصحيح: {latestRunSummary.cor}</span>
-                  <span style={pill}>تحذيرات: {latestRunSummary.warnings}</span>
+                  <span style={pill}>{tr("مراقبة", "Invigilation")}: {latestRunSummary.inv}</span>
+                  <span style={pill}>{tr("احتياط", "Reserve")}: {latestRunSummary.res}</span>
+                  <span style={pill}>{tr("مراجعة", "Review")}: {latestRunSummary.rev}</span>
+                  <span style={pill}>{tr("تصحيح", "Correction")}: {latestRunSummary.cor}</span>
+                  <span style={pill}>{tr("تحذيرات", "Warnings")}: {latestRunSummary.warnings}</span>
                 </div>
               </div>
             ) : null}
 
             <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${line}` }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 6 }}>
-                <div style={{ fontWeight: 950 }}>تقدير الضغط المتوقع لكل يوم/فترة</div>
+                <div style={{ fontWeight: 950 }}>{tr("تقدير الضغط المتوقع لكل يوم/فترة", "Expected pressure estimate for each day/period")}</div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  {filterButton("ALL", "الكل", forecastRows.length)}
-                  {filterButton("CRITICAL", "الحرجة", forecastSummary.critical.length)}
-                  {filterButton("TIGHT", "الضيقة", forecastSummary.tight.length)}
-                  {filterButton("SAFE", "المريحة", forecastSummary.safe.length)}
+                  {filterButton("ALL", tr("الكل", "All"), forecastRows.length)}
+                  {filterButton("CRITICAL", tr("الحرجة", "Critical"), forecastSummary.critical.length)}
+                  {filterButton("TIGHT", tr("الضيقة", "Tight"), forecastSummary.tight.length)}
+                  {filterButton("SAFE", tr("المريحة", "Safe"), forecastSummary.safe.length)}
                 </div>
               </div>
               <div style={note}>
-                هذا تقدير تشغيلي قبل التنفيذ يعتمد على القاعات والاحتياط وعدم التوفر وتفريغ المراجعة/التصحيح المتوقع، ويرتبط أيضًا تلقائيًا بآخر تعديلات الجدول الشامل لنفس الفترات.
+                {tr("هذا تقدير تشغيلي قبل التنفيذ يعتمد على القاعات والاحتياط وعدم التوفر وتفريغ المراجعة/التصحيح المتوقع، ويرتبط أيضًا تلقائيًا بآخر تعديلات الجدول الشامل لنفس الفترات.", "This is a pre-run operational estimate based on rooms, reserve, unavailability, and expected review/correction release. It is also automatically tied to the latest master table changes for the same slots.")}
               </div>
 
               {forecastRows.length === 0 ? (
-                <div style={{ ...note, marginTop: 12 }}>لا توجد فترات امتحان كافية لبناء توقعات التشغيل.</div>
+                <div style={{ ...note, marginTop: 12 }}>{tr("لا توجد فترات امتحان كافية لبناء توقعات التشغيل.", "There are not enough exam slots to build run forecasts.")}</div>
               ) : (
                 <>
                               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, marginTop: 14 }}>
                     {[
                       {
                         key: "critical",
-                        title: "الفترات الحرجة",
+                        title: tr("الفترات الحرجة", "Critical slots"),
                         value: String(forecastSummary.critical.length),
-                        sub: `العجز المتبقي: مراقبة ${forecastSummary.remainingInv} • احتياط ${forecastSummary.remainingReserve}`,
+                        sub: `${tr("العجز المتبقي", "Remaining shortage")}: ${tr("مراقبة", "Invigilation")} ${forecastSummary.remainingInv} • ${tr("احتياط", "Reserve")} ${forecastSummary.remainingReserve}`,
                         tone: forecastSummary.critical.length ? cardTone("danger") : cardTone("good"),
                       },
                       {
                         key: "tight",
-                        title: "الفترات الضيقة",
+                        title: tr("الفترات الضيقة", "Tight slots"),
                         value: String(forecastSummary.tight.length),
-                        sub: "تحتاج متابعة قريبة قبل الاعتماد النهائي",
+                        sub: tr("تحتاج متابعة قريبة قبل الاعتماد النهائي", "Needs close follow-up before final approval"),
                         tone: forecastSummary.tight.length ? cardTone("warn") : cardTone("neutral"),
                       },
                       {
                         key: "safe",
-                        title: "الفترات المريحة",
+                        title: tr("الفترات المريحة", "Safe slots"),
                         value: String(forecastSummary.safe.length),
-                        sub: "يمكن السحب منها عند الحاجة وفق نفس الشروط",
+                        sub: tr("يمكن السحب منها عند الحاجة وفق نفس الشروط", "Can be used when needed under the same conditions"),
                         tone: cardTone("good"),
                       },
                     ].map((item) => (
@@ -679,20 +682,20 @@ export default function TaskDistributionReadinessSection({
 
                   {forecastSummary.actionRows.length ? (
                     <div style={{ marginTop: 14, borderRadius: 18, border: `1px solid ${line}`, background: "rgba(255,255,255,.03)", padding: 14 }}>
-                      <div style={{ fontWeight: 950, color: gold2 }}>أولويات المعالجة المقترحة</div>
-                      <div style={{ ...note, marginTop: 4 }}>هذه قائمة مرتبة بالفترات التي تحتاج تدخلًا أولًا مع أفضل الأسماء المقترحة المتاحة حاليًا وفق الشروط الحالية نفسها. عند الضغط على الاسم ستظهر رسالة تأكيد لإضافته إلى الجدول الشامل.</div>
+                      <div style={{ fontWeight: 950, color: gold2 }}>{tr("أولويات المعالجة المقترحة", "Suggested handling priorities")}</div>
+                      <div style={{ ...note, marginTop: 4 }}>{tr("هذه قائمة مرتبة بالفترات التي تحتاج تدخلًا أولًا مع أفضل الأسماء المقترحة المتاحة حاليًا وفق الشروط الحالية نفسها. عند الضغط على الاسم ستظهر رسالة تأكيد لإضافته إلى الجدول الشامل.", "This is an ordered list of the slots that need intervention first, with the best currently available suggested names under the same current rules. Clicking a name shows a confirmation prompt to add it to the master table.")}</div>
                       <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
                         {forecastSummary.actionRows.map((row) => {
-                          const meta = statusMeta(row.status);
+                          const meta = statusMeta(row.status, tr);
                           return (
                             <div key={`action-${row.key}`} style={{ borderRadius: 14, border: `1px solid ${meta.border}`, background: meta.bg, padding: 12 }}>
                               <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                                <div style={{ fontWeight: 900 }}>{slotLabel(row)}</div>
+                                <div style={{ fontWeight: 900 }}>{slotLabel(row, tr)}</div>
                                 <span style={{ ...pill, borderColor: meta.border, color: meta.color }}>{meta.label}</span>
                               </div>
-                              <div style={{ ...note, marginTop: 6 }}>العجز الحالي: {shortageText(row)} • المواد: {row.subjects.slice(0, 3).join(" • ") || "—"}</div>
+                              <div style={{ ...note, marginTop: 6 }}>{tr("العجز الحالي", "Current shortage")}: {shortageText(row, tr)} • {tr("المواد", "Subjects")}: {row.subjects.slice(0, 3).join(" • ") || "—"}</div>
                               <div style={{ marginTop: 10 }}>
-                                {row.teacherSuggestions?.length ? renderSuggestionPills(row, 4, false) : <span style={{ ...note, color: "#fca5a5" }}>لا توجد أسماء قابلة للنقل حاليًا في هذه الفترة.</span>}
+                                {row.teacherSuggestions?.length ? renderSuggestionPills(row, 4, false) : <span style={{ ...note, color: "#fca5a5" }}>{tr("لا توجد أسماء قابلة للنقل حاليًا في هذه الفترة.", "There are currently no transferable names for this slot.")}</span>}
                               </div>
                             </div>
                           );
@@ -706,7 +709,7 @@ export default function TaskDistributionReadinessSection({
                       <input
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        placeholder="ابحث بالتاريخ أو المادة أو الفترة"
+                        placeholder={tr("ابحث بالتاريخ أو المادة أو الفترة", "Search by date, subject, or period")}
                         style={{
                           minWidth: 260,
                           borderRadius: 12,
@@ -718,32 +721,32 @@ export default function TaskDistributionReadinessSection({
                         }}
                       />
                     </div>
-                    <div style={note}>المعروض الآن: {filteredRows.length} من أصل {forecastRows.length} فترة</div>
+                    <div style={note}>{tr("المعروض الآن", "Currently shown")}: {filteredRows.length} {tr("من أصل", "out of")} {forecastRows.length} {tr("فترة", "slots")}</div>
                   </div>
 
                   <div style={{ overflow: "auto", marginTop: 12 }}>
                     <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0 }}>
                       <thead>
                         <tr>
-                          <th style={th2}>الحالة</th>
-                          <th style={th2}>التاريخ</th>
-                          <th style={th2}>الفترة</th>
-                          <th style={th2}>القاعات</th>
-                          <th style={{ ...th2, textAlign: "right", paddingRight: 16 }}>المواد</th>
-                          <th style={th2}>المراقبة</th>
-                          <th style={th2}>الاحتياط</th>
-                          <th style={th2}>غير المتاح</th>
-                          <th style={th2}>مراجعة</th>
-                          <th style={th2}>تصحيح</th>
-                          <th style={th2}>المتاح</th>
-                          <th style={th2}>العجز</th>
-                          <th style={th2}>الهامش</th>
-                          <th style={{ ...th2, minWidth: 340 }}>اقتراحات سد العجز</th>
+                          <th style={th2}>{tr("الحالة", "Status")}</th>
+                          <th style={th2}>{tr("التاريخ", "Date")}</th>
+                          <th style={th2}>{tr("الفترة", "Period")}</th>
+                          <th style={th2}>{tr("القاعات", "Rooms")}</th>
+                          <th style={{ ...th2, textAlign: "right", paddingRight: 16 }}>{tr("المواد", "Subjects")}</th>
+                          <th style={th2}>{tr("المراقبة", "Invigilation")}</th>
+                          <th style={th2}>{tr("احتياط", "Reserve")}</th>
+                          <th style={th2}>{tr("غير المتاح", "Unavailable")}</th>
+                          <th style={th2}>{tr("مراجعة", "Review")}</th>
+                          <th style={th2}>{tr("تصحيح", "Correction")}</th>
+                          <th style={th2}>{tr("المتاح", "Available")}</th>
+                          <th style={th2}>{tr("العجز", "Shortage")}</th>
+                          <th style={th2}>{tr("الهامش", "Buffer")}</th>
+                          <th style={{ ...th2, minWidth: 340 }}>{tr("اقتراحات سد العجز", "Shortage-fill suggestions")}</th>
                         </tr>
                       </thead>
                       <tbody>
                         {filteredRows.map((row) => {
-                          const meta = statusMeta(row.status);
+                          const meta = statusMeta(row.status, tr);
                           return (
                             <tr key={row.key}>
                               <td style={td2}>
@@ -765,7 +768,7 @@ export default function TaskDistributionReadinessSection({
                                 </span>
                               </td>
                               <td style={td2}>{row.dateISO}</td>
-                              <td style={td2}>{row.period === "AM" ? "الأولى" : "الثانية"}</td>
+                              <td style={td2}>{row.period === "AM" ? tr("الأولى", "First") : tr("الثانية", "Second")}</td>
                               <td style={td2}>{row.rooms}</td>
                               <td style={{ ...td2, textAlign: "right", paddingRight: 16 }}>{row.subjects.slice(0, 3).join(" • ") || "—"}{row.subjects.length > 3 ? ` +${row.subjects.length - 3}` : ""}</td>
                               <td style={td2}>{`${row.assignedInvigilations || 0}/${row.invigilatorsRequired}`}</td>
@@ -774,17 +777,17 @@ export default function TaskDistributionReadinessSection({
                               <td style={td2}>{`${row.assignedReviewFree || 0}/${row.reviewFreeEstimate}`}</td>
                               <td style={td2}>{`${row.assignedCorrectionFree || 0}/${row.correctionFreeEstimate}`}</td>
                               <td style={td2}>{row.availableEstimate}</td>
-                              <td style={{ ...td2, fontWeight: 900, color: (row.remainingInvigilations || row.remainingReserve) ? "#fca5a5" : "rgba(255,255,255,.82)" }}>{shortageText(row)}</td>
+                              <td style={{ ...td2, fontWeight: 900, color: (row.remainingInvigilations || row.remainingReserve) ? "#fca5a5" : "rgba(255,255,255,.82)" }}>{shortageText(row, tr)}</td>
                               <td style={{ ...td2, fontWeight: 950, color: row.bufferEstimate < 0 ? "#fca5a5" : row.bufferEstimate === 0 ? "#fcd34d" : "#86efac" }}>
                                 {row.bufferEstimate > 0 ? `+${row.bufferEstimate}` : row.bufferEstimate}
                               </td>
                               <td style={{ ...td2, minWidth: 340 }}>
                                 {row.status === "SAFE" ? (
-                                  <span style={{ ...note, color: "rgba(255,255,255,.70)" }}>لا يحتاج اقتراحات حالياً</span>
+                                  <span style={{ ...note, color: "rgba(255,255,255,.70)" }}>{tr("لا يحتاج اقتراحات حالياً", "No suggestions needed right now")}</span>
                                 ) : row.teacherSuggestions?.length ? (
                                   renderSuggestionPills(row, 6, true)
                                 ) : (
-                                  <span style={{ ...note, color: "#fca5a5" }}>لا توجد أسماء صالحة حاليًا وفق الشروط الحالية</span>
+                                  <span style={{ ...note, color: "#fca5a5" }}>{tr("لا توجد أسماء صالحة حاليًا وفق الشروط الحالية", "There are currently no valid names under the current rules")}</span>
                                 )}
                               </td>
                             </tr>
@@ -801,7 +804,7 @@ export default function TaskDistributionReadinessSection({
       </div>
 
       {pendingSuggestion ? (() => {
-        const sourceMeta = suggestionChipMeta(pendingSuggestion.suggestion, false);
+        const sourceMeta = suggestionChipMeta(pendingSuggestion.suggestion, tr, false);
         const willNeedOverride = !["FREE", "RESERVE"].includes(pendingSuggestion.suggestion.source);
         return (
           <div
@@ -826,9 +829,9 @@ export default function TaskDistributionReadinessSection({
                 padding: 18,
               }}
             >
-              <div style={{ fontWeight: 950, fontSize: 20, color: gold2 }}>إضافة الاسم المقترح إلى الجدول الشامل</div>
+              <div style={{ fontWeight: 950, fontSize: 20, color: gold2 }}>{tr("إضافة الاسم المقترح إلى الجدول الشامل", "Add the suggested name to the master table")}</div>
               <div style={{ ...note, marginTop: 8 }}>
-                {slotLabel(pendingSuggestion.row)} • العجز الحالي: {shortageText(pendingSuggestion.row)}
+                {slotLabel(pendingSuggestion.row, tr)} • {tr("العجز الحالي", "Current shortage")}: {shortageText(pendingSuggestion.row, tr)}
               </div>
               <div style={{ marginTop: 14, display: "flex", flexWrap: "wrap", gap: 8 }}>
                 <span style={{ ...pill, borderColor: sourceMeta.border, color: sourceMeta.color }}>{pendingSuggestion.suggestion.teacherName}</span>
@@ -836,19 +839,19 @@ export default function TaskDistributionReadinessSection({
                 <span style={{ ...pill, borderColor: sourceMeta.border, color: sourceMeta.color }}>{sourceMeta.label}</span>
                 {pendingSuggestion.suggestion.source === "TRANSFER_SAFE" && pendingSuggestion.suggestion.transferFromDateISO ? (
                   <span style={pill}>
-                    {pendingSuggestion.suggestion.transferFromDateISO} • {pendingSuggestion.suggestion.transferFromPeriod === "PM" ? "الفترة الثانية" : "الفترة الأولى"}
+                    {pendingSuggestion.suggestion.transferFromDateISO} • {pendingSuggestion.suggestion.transferFromPeriod === "PM" ? tr("الفترة الثانية", "Second Period") : tr("الفترة الأولى", "First Period")}
                   </span>
                 ) : null}
               </div>
               <div style={{ marginTop: 14, borderRadius: 14, border: `1px solid ${line}`, background: "rgba(255,255,255,.04)", padding: 12, color: "rgba(255,255,255,.92)", fontWeight: 800 }}>
                 {pendingSuggestion.suggestion.source === "TRANSFER_SAFE"
-                  ? `هل تريد نقل ${pendingSuggestion.suggestion.teacherName} من ${pendingSuggestion.suggestion.transferFromDateISO || "فترة مريحة"} ${pendingSuggestion.suggestion.transferFromPeriod === "PM" ? "الفترة الثانية" : "الفترة الأولى"} إلى ${slotLabel(pendingSuggestion.row)}؟ سيتم سحب تكليفه الحالي من الجدول الشامل ثم إضافته هنا مباشرة.`
+                  ? `${tr("هل تريد نقل", "Do you want to move")} ${pendingSuggestion.suggestion.teacherName} ${tr("من", "from")} ${pendingSuggestion.suggestion.transferFromDateISO || tr("فترة مريحة", "a safe slot")} ${pendingSuggestion.suggestion.transferFromPeriod === "PM" ? tr("الفترة الثانية", "Second Period") : tr("الفترة الأولى", "First Period")} ${tr("إلى", "to")} ${slotLabel(pendingSuggestion.row, tr)}؟ ${tr("سيتم سحب تكليفه الحالي من الجدول الشامل ثم إضافته هنا مباشرة.", "Its current assignment will be removed from the master table and then added here immediately.")}`
                   : willNeedOverride
                     ? `هذا الاسم ليس متاحًا مباشرة وفق الشروط الحالية، لكنه مقترح إذا تم تطبيق هذا الاستثناء: ${pendingSuggestion.suggestion.note}. هل تريد إضافته يدويًا إلى الجدول الشامل رغم ذلك؟`
                     : `هل تريد إضافة ${pendingSuggestion.suggestion.teacherName} إلى الجدول الشامل لهذه الفترة؟ سيتم تحديث تقرير الضغط والاقتراحات مباشرة بعد الحفظ.`}
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 16 }}>
-                <div style={note}>{pendingSuggestion.suggestion.source === "TRANSFER_SAFE" ? "سيتم النقل بشكل شبه تلقائي مع تحديث الجدول الشامل والضغط المتوقع فورًا. ويمكنك طلب اسم بديل أو التراجع لاحقًا من سجل الإضافات الأخيرة." : "بعد الإضافة يمكنك طلب اقتراح اسم آخر من نفس الفترة إذا بقي عجز."}</div>
+                <div style={note}>{pendingSuggestion.suggestion.source === "TRANSFER_SAFE" ? tr("سيتم النقل بشكل شبه تلقائي مع تحديث الجدول الشامل والضغط المتوقع فورًا. ويمكنك طلب اسم بديل أو التراجع لاحقًا من سجل الإضافات الأخيرة.", "The move will be handled almost automatically with immediate updates to the master table and expected pressure. You can request an alternative name or undo it later from the recent additions log.") : tr("بعد الإضافة يمكنك طلب اقتراح اسم آخر من نفس الفترة إذا بقي عجز.", "After adding, you can request another suggested name from the same slot if a shortage remains.")}</div>
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                   <button
                     type="button"
@@ -864,7 +867,7 @@ export default function TaskDistributionReadinessSection({
                       cursor: "pointer",
                     }}
                   >
-                    لا
+                    {tr("لا", "No")}
                   </button>
                   <button
                     type="button"
@@ -880,7 +883,7 @@ export default function TaskDistributionReadinessSection({
                       cursor: "pointer",
                     }}
                   >
-                    اسم بديل
+                    {tr("اسم بديل", "Alternative name")}
                   </button>
                   <button
                     type="button"
@@ -912,7 +915,7 @@ export default function TaskDistributionReadinessSection({
                       cursor: "pointer",
                     }}
                   >
-                    {submittingSuggestionKey ? "جارٍ الحفظ..." : "نعم، أضف"}
+                    {submittingSuggestionKey ? tr("جارٍ الحفظ...", "Saving...") : tr("نعم، أضف", "Yes, add")}
                   </button>
                 </div>
               </div>
