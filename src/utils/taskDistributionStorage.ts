@@ -12,13 +12,39 @@ export type ArchivedDistributionRun = {
   run: DistributionRun;
 };
 
+function getCurrentLang(): "ar" | "en" {
+  try {
+    const htmlLang =
+      typeof document !== "undefined"
+        ? String(document.documentElement?.lang || "").trim().toLowerCase()
+        : "";
+    if (htmlLang === "en") return "en";
+  } catch {}
+
+  try {
+    const raw =
+      typeof localStorage !== "undefined"
+        ? String(localStorage.getItem("lang") || localStorage.getItem("i18n-lang") || "").trim().toLowerCase()
+        : "";
+    if (raw === "en") return "en";
+  } catch {}
+
+  return "ar";
+}
 
 export function formatArchiveTitle(item: ArchivedDistributionRun): string {
-  const name = String(item?.name || '').trim();
+  const name = String(item?.name || "").trim();
   if (name) return name;
-  const date = String(item?.createdAtISO || '').slice(0, 10) || '—';
-  const runId = String(item?.run?.runId || item?.archiveId || '').trim();
-  return `نسخة مؤرشفة • ${date}${runId ? ` • ${runId}` : ''}`;
+
+  const lang = getCurrentLang();
+  const date = String(item?.createdAtISO || "").slice(0, 10) || "—";
+  const runId = String(item?.run?.runId || item?.archiveId || "").trim();
+
+  if (lang === "en") {
+    return `Archived Copy • ${date}${runId ? ` • ${runId}` : ""}`;
+  }
+
+  return `نسخة مؤرشفة • ${date}${runId ? ` • ${runId}` : ""}`;
 }
 
 export const RUN_UPDATED_EVENT = "exam-manager:task-distribution:run-updated";
@@ -96,7 +122,6 @@ export function mergeArchivedRuns(
   const local = listArchivedRuns(tenantId);
   const map = new Map<string, ArchivedDistributionRun>();
 
-  // seed local
   for (const it of local) {
     if (!it?.archiveId) continue;
     map.set(String(it.archiveId), it);
@@ -105,8 +130,7 @@ export function mergeArchivedRuns(
   let added = 0;
   let updated = 0;
 
-  // merge incoming
-  for (const it of (incoming || [])) {
+  for (const it of incoming || []) {
     if (!it?.archiveId) continue;
     const id = String(it.archiveId);
     const prev = map.get(id);
@@ -117,10 +141,9 @@ export function mergeArchivedRuns(
       continue;
     }
 
-    // choose newer if possible
     const a = String(prev.createdAtISO || "");
     const b = String(it.createdAtISO || "");
-    const pickIncoming = b && a ? (b > a) : (!!b && !a);
+    const pickIncoming = b && a ? b > a : !!b && !a;
 
     if (pickIncoming) {
       map.set(id, it);
@@ -128,15 +151,19 @@ export function mergeArchivedRuns(
     }
   }
 
-  const next = Array.from(map.values()).sort((a, b) =>
-    String(b?.createdAtISO || "").localeCompare(String(a?.createdAtISO || ""))
-  ).slice(0, maxKeep);
+  const next = Array.from(map.values())
+    .sort((a, b) =>
+      String(b?.createdAtISO || "").localeCompare(String(a?.createdAtISO || ""))
+    )
+    .slice(0, maxKeep);
 
   localStorage.setItem(taskDistributionArchiveKey(tenantId), JSON.stringify(next));
 
   try {
     window.dispatchEvent(
-      new CustomEvent(ARCHIVE_UPDATED_EVENT, { detail: { tenantId, ts: Date.now(), added, updated } })
+      new CustomEvent(ARCHIVE_UPDATED_EVENT, {
+        detail: { tenantId, ts: Date.now(), added, updated },
+      })
     );
   } catch {}
 
@@ -175,7 +202,6 @@ export function addRunToArchive(
     );
   } catch {}
 
-  // best-effort cloud save (doesn't block UI)
   saveArchiveCloud(tenantId, item);
 }
 
@@ -202,7 +228,6 @@ export function clearArchive(tenantId: string) {
 
 export function saveRun(tenantId: string, run: DistributionRun) {
   localStorage.setItem(taskDistributionKey(tenantId), JSON.stringify(run));
-  // keep master tables in sync for reports
   try {
     syncMasterTableWithRun(run);
   } catch {}
@@ -226,7 +251,6 @@ export function loadRun(tenantId: string): DistributionRun | null {
 export function clearRun(tenantId: string) {
   localStorage.removeItem(taskDistributionKey(tenantId));
 
-  // remove master tables so reports won't show stale data
   try {
     localStorage.removeItem(MASTER_TABLE_KEY);
     localStorage.removeItem(ALL_TABLE_KEY);
