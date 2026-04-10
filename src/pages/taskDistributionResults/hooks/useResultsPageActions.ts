@@ -16,6 +16,14 @@ import { archiveResultsRunSnapshot, openResultsImportPicker } from '../services/
 import { persistEditedResultsRun, undoEditedResultsRun } from '../services/resultsRunMutations';
 import { writeMasterTable } from '../masterTableStorage';
 
+function tr(ar: string, en: string) {
+  try {
+    const lang = String(document?.documentElement?.lang || "").toLowerCase();
+    if (lang.startsWith("en")) return en;
+  } catch {}
+  return ar;
+}
+
 export function useResultsPageActions({
   tenantId,
   run,
@@ -111,7 +119,7 @@ export function useResultsPageActions({
       if (!file) return;
 
       if (!isExcelImportFilenameSupported(file.name)) {
-        setImportError('الرجاء اختيار ملف Excel بصيغة .xlsx أو .xls');
+        setImportError(tr('الرجاء اختيار ملف Excel بصيغة .xlsx أو .xls', 'Please choose an Excel file in .xlsx or .xls format.'));
         return;
       }
 
@@ -137,18 +145,15 @@ export function useResultsPageActions({
 
     const importedRun = finalizeImportedResultsRun(pendingImported);
 
-    // حفظ الـ run
     saveRun(tenantId, importedRun);
     setRun(importedRun);
 
-    // حفظ الجدول الشامل المستورد
     writeMasterTable(importedRun.assignments || [], {
       runId: importedRun.runId,
       runCreatedAtISO: importedRun.createdAtISO,
       source: 'import',
     });
 
-    // إشعار الصفحات الأخرى بالتحديث
     try {
       window.dispatchEvent(new Event(RUN_UPDATED_EVENT));
     } catch {}
