@@ -1,4 +1,5 @@
 import React from "react";
+import { useI18n } from "../../../i18n/I18nProvider";
 import type { SubCol } from "./TeacherRow";
 import { ResultsTableDateHeaderCell } from "./ResultsTableDateHeaderCell";
 import { ResultsTableSubColHeaderCell } from "./ResultsTableSubColHeaderCell";
@@ -35,6 +36,8 @@ export function ResultsTableHeader({
   onDeleteSubCol,
   showTeacherSidebar = true,
 }: Props) {
+  const { lang } = useI18n();
+  const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
   const headerPillBg = "linear-gradient(180deg, #b99628, #7f6410)";
   const subHeaderBg = "linear-gradient(180deg, #a78620, #6f5810)";
   const headerPillShadow = "0 14px 28px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.14)";
@@ -53,7 +56,7 @@ export function ResultsTableHeader({
               boxShadow: headerPillShadow,
             }}
           >
-            المعلم
+            {tr("المعلم", "Teacher")}
           </th>
         ) : null}
 
@@ -85,8 +88,8 @@ export function ResultsTableHeader({
             boxShadow: headerPillShadow,
           }}
         >
-          إجمالي المعلم
-          <div style={{ fontSize: 12, opacity: 0.9, marginTop: 4 }}>(مراقبة+احتياط+مراجعة)</div>
+          {tr("إجمالي المعلم", "Teacher Total")}
+          <div style={{ fontSize: 12, opacity: 0.9, marginTop: 4 }}>{tr("(مراقبة+احتياط+مراجعة)", "(Invigilation+Reserve+Review)")}</div>
         </th>
       </tr>
 
