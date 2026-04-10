@@ -1,6 +1,105 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useI18n } from "../../../i18n/I18nProvider";
 
+const SUBJECT_TRANSLATIONS: Record<string, string> = {
+  "التربية الإسلامية 5": "Islamic Education 5",
+  "التربية الإسلامية 6": "Islamic Education 6",
+  "التربية الإسلامية 7": "Islamic Education 7",
+  "التربية الإسلامية 8": "Islamic Education 8",
+  "التربية الإسلامية 9": "Islamic Education 9",
+  "التربية الإسلامية 10": "Islamic Education 10",
+  "التربية الإسلامية 11": "Islamic Education 11",
+  "التربية الإسلامية 12": "Islamic Education 12",
+  "اللغة العربية 6": "Arabic Language 6",
+  "اللغة العربية 7": "Arabic Language 7",
+  "اللغة العربية 8": "Arabic Language 8",
+  "اللغة العربية 9": "Arabic Language 9",
+  "اللغة العربية 10": "Arabic Language 10",
+  "اللغة العربية 11": "Arabic Language 11",
+  "اللغة العربية 12": "Arabic Language 12",
+  "اللغة الإنجليزية 6": "English Language 6",
+  "اللغة الإنجليزية 7": "English Language 7",
+  "اللغة الإنجليزية 8": "English Language 8",
+  "اللغة الإنجليزية 9": "English Language 9",
+  "اللغة الإنجليزية 10": "English Language 10",
+  "اللغة الإنجليزية 11": "English Language 11",
+  "اللغة الإنجليزية 12": "English Language 12",
+  "الرياضيات 5": "Mathematics 5",
+  "الرياضيات 6": "Mathematics 6",
+  "الرياضيات 7": "Mathematics 7",
+  "الرياضيات 8": "Mathematics 8",
+  "الرياضيات 9": "Mathematics 9",
+  "الرياضيات 10": "Mathematics 10",
+  "الرياضيات 11": "Mathematics 11",
+  "الرياضيات 12": "Mathematics 12",
+  "الرياضيات الأساسية 11": "Basic Mathematics 11",
+  "الرياضيات المتقدمة 11": "Advanced Mathematics 11",
+  "الرياضيات الأساسية 12": "Basic Mathematics 12",
+  "الرياضيات المتقدمة 12": "Advanced Mathematics 12",
+  "الدراسات الاجتماعية 5": "Social Studies 5",
+  "الدراسات الاجتماعية 6": "Social Studies 6",
+  "الدراسات الاجتماعية 7": "Social Studies 7",
+  "الدراسات الاجتماعية 8": "Social Studies 8",
+  "الدراسات الاجتماعية 9": "Social Studies 9",
+  "الدراسات الاجتماعية 10": "Social Studies 10",
+  "التاريخ والحضارة الإسلامية 11": "Islamic History and Civilization 11",
+  "الجغرافيا البشرية 11": "Human Geography 11",
+  "هذا وطني 11": "This Is My Nation 11",
+  "التاريخ والحضارة الإسلامية 12": "Islamic History and Civilization 12",
+  "الجغرافيا البشرية 12": "Human Geography 12",
+  "هذا وطني 12": "This Is My Nation 12",
+  "العلوم 5": "Science 5",
+  "العلوم 6": "Science 6",
+  "العلوم 7": "Science 7",
+  "العلوم 8": "Science 8",
+  "الفيزياء 9": "Physics 9",
+  "الفيزياء 10": "Physics 10",
+  "الفيزياء 11": "Physics 11",
+  "الفيزياء 12": "Physics 12",
+  "الكيمياء 9": "Chemistry 9",
+  "الكيمياء 10": "Chemistry 10",
+  "الكيمياء 11": "Chemistry 11",
+  "الكيمياء 12": "Chemistry 12",
+  "الأحياء 9": "Biology 9",
+  "الأحياء 10": "Biology 10",
+  "الأحياء 11": "Biology 11",
+  "الأحياء 12": "Biology 12",
+  "الرياضة المدرسية 11": "School Sports 11",
+  "الفنون التشكيلية 11": "Visual Arts 11",
+  "المهارات الموسيقية 11": "Music Skills 11",
+  "الرياضة المدرسية 12": "School Sports 12",
+  "الفنون التشكيلية 12": "Visual Arts 12",
+  "المهارات الموسيقية 12": "Music Skills 12",
+  "مواد التخصصات الهندسية والصناعية 12": "Engineering and Industrial Specializations 12",
+  "مهارات اللغة الإنجليزية 11": "English Skills 11",
+  "مهارات اللغة الإنجليزية 12": "English Skills 12",
+  "تقنية المعلومات 11": "Information Technology 11",
+  "تقنية المعلومات 12": "Information Technology 12",
+  "السفر و السياحة و إدارة الأعمال و تقنية المعلومات 12": "Travel, Tourism, Business Administration and IT 12",
+  "اللغة الفرنسية 10": "French Language 10",
+  "اللغة الألمانية 10": "German Language 10",
+  "اللغة الصينية 10": "Chinese Language 10",
+  "اللغة الفرنسية 11": "French Language 11",
+  "اللغة الألمانية 11": "German Language 11",
+  "اللغة الصينية 11": "Chinese Language 11",
+  "اللغة الفرنسية 12": "French Language 12",
+  "اللغة الألمانية 12": "German Language 12",
+  "اللغة الصينية 12": "Chinese Language 12",
+  "العلوم البيئية 11": "Environmental Science 11",
+  "العلوم البيئية 12": "Environmental Science 12",
+};
+
+function translateSubjectValue(value: string, lang: "ar" | "en") {
+  const raw = String(value || "").trim();
+  if (!raw || lang === "ar") return raw;
+  return SUBJECT_TRANSLATIONS[raw] || raw;
+}
+
+function translateSubjectsList(values: string[], lang: "ar" | "en") {
+  return (Array.isArray(values) ? values : []).map((value) => translateSubjectValue(String(value || ""), lang));
+}
+
+
 type ReadinessCard = {
   key: string;
   title: string;
@@ -153,6 +252,8 @@ export default function TaskDistributionReadinessSection({
 }: Props) {
   const { lang } = useI18n();
   const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
+  const translateSubject = (value: string) => translateSubjectValue(value, lang);
+  const translateSubjects = (values: string[]) => translateSubjectsList(values, lang);
   const { card, cardSub, gold2, note, th2, td2, line, pill } = styles;
   const [statusFilter, setStatusFilter] = useState<"ALL" | ForecastRow["status"]>("ALL");
   const [searchTerm, setSearchTerm] = useState("");
@@ -168,7 +269,7 @@ export default function TaskDistributionReadinessSection({
     return forecastRows.filter((row) => {
       if (statusFilter !== "ALL" && row.status !== statusFilter) return false;
       if (!needle) return true;
-      const haystack = [row.dateISO, row.period === "AM" ? tr("الأولى", "First") : tr("الثانية", "Second"), ...row.subjects].join(" ").toLowerCase();
+      const haystack = [row.dateISO, row.period === "AM" ? tr("الأولى", "First") : tr("الثانية", "Second"), ...translateSubjects(row.subjects)].join(" ").toLowerCase();
       return haystack.includes(needle);
     });
   }, [forecastRows, searchTerm, statusFilter]);
@@ -359,7 +460,7 @@ export default function TaskDistributionReadinessSection({
               <button
                 key={key}
                 type="button"
-                title={`${suggestion.note}${suggestion.source === "TRANSFER_SAFE" && suggestion.transferFromDateISO ? `\nسيتم نقل التكليف الحالي من ${suggestion.transferFromDateISO} ${suggestion.transferFromPeriod === "PM" ? "الفترة الثانية" : "الفترة الأولى"}` : ""}${onSuggestionPick ? "\nاضغط لإضافة الاسم إلى الجدول الشامل" : ""}`}
+                title={`${suggestion.note}${suggestion.source === "TRANSFER_SAFE" && suggestion.transferFromDateISO ? `\n${tr("سيتم نقل التكليف الحالي من", "The current assignment will be moved from")} ${suggestion.transferFromDateISO} ${suggestion.transferFromPeriod === "PM" ? tr("الفترة الثانية", "Second Period") : tr("الفترة الأولى", "First Period")}` : ""}${onSuggestionPick ? `\n${tr("اضغط لإضافة الاسم إلى الجدول الشامل", "Click to add this name to the master table")}` : ""}`}
                 onClick={() => onSuggestionPick && setPendingSuggestion({ row, suggestion })}
                 disabled={busy || !onSuggestionPick}
                 style={{
@@ -523,7 +624,7 @@ export default function TaskDistributionReadinessSection({
                       source: entry.source as any,
                       note: entry.note,
                     } as ForecastTeacherSuggestion, tr, true);
-                    const actionLabel = entry.actionKind === "CONVERT_RESERVE" ? tr("تحويل من الاحتياط", "Converted from reserve") : entry.actionKind === "MOVE_FROM_SAFE" ? "نقل من فترة مريحة" : (entry.taskType === "RESERVE" ? tr("إضافة احتياط", "Add reserve") : tr("إضافة مراقبة", "Add invigilation"));
+                    const actionLabel = entry.actionKind === "CONVERT_RESERVE" ? tr("تحويل من الاحتياط", "Converted from reserve") : entry.actionKind === "MOVE_FROM_SAFE" ? tr("نقل من فترة مريحة", "Move from a safe slot") : (entry.taskType === "RESERVE" ? tr("إضافة احتياط", "Add reserve") : tr("إضافة مراقبة", "Add invigilation"));
                     const isBusy = undoingHistoryId === entry.id;
                     return (
                       <div
@@ -546,7 +647,7 @@ export default function TaskDistributionReadinessSection({
                             <span style={pill}>{entry.dateISO} • {entry.period === "AM" ? tr("الفترة الأولى", "First Period") : tr("الفترة الثانية", "Second Period")}</span>
                             <span style={{ ...pill, borderColor: sourceMeta.border, color: sourceMeta.color }}>{actionLabel}</span>
                           </div>
-                          <div style={{ ...note }}>{entry.subject || "—"}{entry.note ? ` • ${entry.note}` : ""}</div>
+                          <div style={{ ...note }}>{translateSubject(entry.subject || "—")}{entry.note ? ` • ${entry.note}` : ""}</div>
                           <div style={{ ...note, opacity: 0.88 }}>{tr("تمت الإضافة", "Added on")}: {String(entry.appliedAtISO || "").slice(0, 16).replace("T", " ")}</div>
                         </div>
                         {onUndoSuggestion ? (
@@ -693,7 +794,7 @@ export default function TaskDistributionReadinessSection({
                                 <div style={{ fontWeight: 900 }}>{slotLabel(row, tr)}</div>
                                 <span style={{ ...pill, borderColor: meta.border, color: meta.color }}>{meta.label}</span>
                               </div>
-                              <div style={{ ...note, marginTop: 6 }}>{tr("العجز الحالي", "Current shortage")}: {shortageText(row, tr)} • {tr("المواد", "Subjects")}: {row.subjects.slice(0, 3).join(" • ") || "—"}</div>
+                              <div style={{ ...note, marginTop: 6 }}>{tr("العجز الحالي", "Current shortage")}: {shortageText(row, tr)} • {tr("المواد", "Subjects")}: {translateSubjects(row.subjects).slice(0, 3).join(" • ") || "—"}</div>
                               <div style={{ marginTop: 10 }}>
                                 {row.teacherSuggestions?.length ? renderSuggestionPills(row, 4, false) : <span style={{ ...note, color: "#fca5a5" }}>{tr("لا توجد أسماء قابلة للنقل حاليًا في هذه الفترة.", "There are currently no transferable names for this slot.")}</span>}
                               </div>
@@ -770,7 +871,7 @@ export default function TaskDistributionReadinessSection({
                               <td style={td2}>{row.dateISO}</td>
                               <td style={td2}>{row.period === "AM" ? tr("الأولى", "First") : tr("الثانية", "Second")}</td>
                               <td style={td2}>{row.rooms}</td>
-                              <td style={{ ...td2, textAlign: "right", paddingRight: 16 }}>{row.subjects.slice(0, 3).join(" • ") || "—"}{row.subjects.length > 3 ? ` +${row.subjects.length - 3}` : ""}</td>
+                              <td style={{ ...td2, textAlign: "right", paddingRight: 16 }}>{translateSubjects(row.subjects).slice(0, 3).join(" • ") || "—"}{row.subjects.length > 3 ? ` +${row.subjects.length - 3}` : ""}</td>
                               <td style={td2}>{`${row.assignedInvigilations || 0}/${row.invigilatorsRequired}`}</td>
                               <td style={td2}>{`${row.assignedReserve || 0}/${row.reserveRequired}`}</td>
                               <td style={td2}>{row.unavailableCount}</td>
@@ -835,7 +936,7 @@ export default function TaskDistributionReadinessSection({
               </div>
               <div style={{ marginTop: 14, display: "flex", flexWrap: "wrap", gap: 8 }}>
                 <span style={{ ...pill, borderColor: sourceMeta.border, color: sourceMeta.color }}>{pendingSuggestion.suggestion.teacherName}</span>
-                <span style={pill}>{pendingSuggestion.suggestion.subject || "—"}</span>
+                <span style={pill}>{translateSubject(pendingSuggestion.suggestion.subject || "—")}</span>
                 <span style={{ ...pill, borderColor: sourceMeta.border, color: sourceMeta.color }}>{sourceMeta.label}</span>
                 {pendingSuggestion.suggestion.source === "TRANSFER_SAFE" && pendingSuggestion.suggestion.transferFromDateISO ? (
                   <span style={pill}>
