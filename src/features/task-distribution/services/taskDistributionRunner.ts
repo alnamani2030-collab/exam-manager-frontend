@@ -1,5 +1,13 @@
 import { buildFairnessRows } from "./taskDistributionFairness";
 
+function tr(ar: string, en: string) {
+  if (typeof document !== "undefined") {
+    const lang = String(document.documentElement?.lang || "").toLowerCase();
+    if (lang.startsWith("en")) return en;
+  }
+  return ar;
+}
+
 export type DistributionEngine = (params: {
   teachers: any[];
   exams: any[];
