@@ -51,11 +51,11 @@ export function useResultsClipboardShortcuts({
           getAssignmentsInCell,
           isDraggableTaskType,
         });
-        if (action.kind === 'swap') {
+        if (action.kind === "swap") {
           swapAssignmentsByUid(action.srcUid, action.dstUid);
           return;
         }
-        if (action.kind === 'move') {
+        if (action.kind === "move") {
           moveAssignmentToColumnTeacher(action.srcUid, action.dstTeacher, action.dstColKey);
         }
       }
