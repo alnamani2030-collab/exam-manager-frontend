@@ -83,6 +83,114 @@ const LOGO_URL = "https://i.imgur.com/vdDhSMh.png";
 const APP_NAME_AR = "برنامج ادارة الامتحانات الذكي";
 const APP_NAME_EN = "Smart Exam Management Program";
 
+function trGlobal(ar: string, en: string) {
+  try {
+    const lang = String(document?.documentElement?.lang || "").toLowerCase();
+    if (lang.startsWith("en")) return en;
+  } catch {}
+  return ar;
+}
+
+
+const SUBJECT_TRANSLATIONS: Record<string, string> = {
+  "التربية الإسلامية 5": "Islamic Education 5",
+  "التربية الإسلامية 6": "Islamic Education 6",
+  "التربية الإسلامية 7": "Islamic Education 7",
+  "التربية الإسلامية 8": "Islamic Education 8",
+  "التربية الإسلامية 9": "Islamic Education 9",
+  "التربية الإسلامية 10": "Islamic Education 10",
+  "التربية الإسلامية 11": "Islamic Education 11",
+  "التربية الإسلامية 12": "Islamic Education 12",
+  "اللغة العربية 6": "Arabic Language 6",
+  "اللغة العربية 7": "Arabic Language 7",
+  "اللغة العربية 8": "Arabic Language 8",
+  "اللغة العربية 9": "Arabic Language 9",
+  "اللغة العربية 10": "Arabic Language 10",
+  "اللغة العربية 11": "Arabic Language 11",
+  "اللغة العربية 12": "Arabic Language 12",
+  "اللغة الإنجليزية 6": "English Language 6",
+  "اللغة الإنجليزية 7": "English Language 7",
+  "اللغة الإنجليزية 8": "English Language 8",
+  "اللغة الإنجليزية 9": "English Language 9",
+  "اللغة الإنجليزية 10": "English Language 10",
+  "اللغة الإنجليزية 11": "English Language 11",
+  "اللغة الإنجليزية 12": "English Language 12",
+  "الرياضيات 5": "Mathematics 5",
+  "الرياضيات 6": "Mathematics 6",
+  "الرياضيات 7": "Mathematics 7",
+  "الرياضيات 8": "Mathematics 8",
+  "الرياضيات 9": "Mathematics 9",
+  "الرياضيات 10": "Mathematics 10",
+  "الرياضيات 11": "Mathematics 11",
+  "الرياضيات 12": "Mathematics 12",
+  "الرياضيات الأساسية 11": "Basic Mathematics 11",
+  "الرياضيات المتقدمة 11": "Advanced Mathematics 11",
+  "الرياضيات الأساسية 12": "Basic Mathematics 12",
+  "الرياضيات المتقدمة 12": "Advanced Mathematics 12",
+  "الدراسات الاجتماعية 5": "Social Studies 5",
+  "الدراسات الاجتماعية 6": "Social Studies 6",
+  "الدراسات الاجتماعية 7": "Social Studies 7",
+  "الدراسات الاجتماعية 8": "Social Studies 8",
+  "الدراسات الاجتماعية 9": "Social Studies 9",
+  "الدراسات الاجتماعية 10": "Social Studies 10",
+  "التاريخ والحضارة الإسلامية 11": "Islamic History and Civilization 11",
+  "الجغرافيا البشرية 11": "Human Geography 11",
+  "هذا وطني 11": "This Is My Nation 11",
+  "التاريخ والحضارة الإسلامية 12": "Islamic History and Civilization 12",
+  "الجغرافيا البشرية 12": "Human Geography 12",
+  "هذا وطني 12": "This Is My Nation 12",
+  "العلوم 5": "Science 5",
+  "العلوم 6": "Science 6",
+  "العلوم 7": "Science 7",
+  "العلوم 8": "Science 8",
+  "الفيزياء 9": "Physics 9",
+  "الفيزياء 10": "Physics 10",
+  "الفيزياء 11": "Physics 11",
+  "الفيزياء 12": "Physics 12",
+  "الكيمياء 9": "Chemistry 9",
+  "الكيمياء 10": "Chemistry 10",
+  "الكيمياء 11": "Chemistry 11",
+  "الكيمياء 12": "Chemistry 12",
+  "الأحياء 9": "Biology 9",
+  "الأحياء 10": "Biology 10",
+  "الأحياء 11": "Biology 11",
+  "الأحياء 12": "Biology 12",
+  "الرياضة المدرسية 11": "School Sports 11",
+  "الفنون التشكيلية 11": "Visual Arts 11",
+  "المهارات الموسيقية 11": "Music Skills 11",
+  "الرياضة المدرسية 12": "School Sports 12",
+  "الفنون التشكيلية 12": "Visual Arts 12",
+  "المهارات الموسيقية 12": "Music Skills 12",
+  "مواد التخصصات الهندسية والصناعية 12": "Engineering and Industrial Specializations 12",
+  "مهارات اللغة الإنجليزية 11": "English Skills 11",
+  "مهارات اللغة الإنجليزية 12": "English Skills 12",
+  "تقنية المعلومات 11": "Information Technology 11",
+  "تقنية المعلومات 12": "Information Technology 12",
+  "السفر و السياحة و إدارة الأعمال و تقنية المعلومات 12": "Travel, Tourism, Business Administration and IT 12",
+  "اللغة الفرنسية 10": "French Language 10",
+  "اللغة الألمانية 10": "German Language 10",
+  "اللغة الصينية 10": "Chinese Language 10",
+  "اللغة الفرنسية 11": "French Language 11",
+  "اللغة الألمانية 11": "German Language 11",
+  "اللغة الصينية 11": "Chinese Language 11",
+  "اللغة الفرنسية 12": "French Language 12",
+  "اللغة الألمانية 12": "German Language 12",
+  "اللغة الصينية 12": "Chinese Language 12",
+  "العلوم البيئية 11": "Environmental Science 11",
+  "العلوم البيئية 12": "Environmental Science 12",
+};
+
+function translateSubjectValue(value: string, lang: "ar" | "en") {
+  const raw = String(value || "").trim();
+  if (!raw || lang === "ar") return raw;
+  return SUBJECT_TRANSLATIONS[raw] || raw;
+}
+
+function translateSubjectsList(values: string[], lang: "ar" | "en") {
+  return (Array.isArray(values) ? values : []).map((value) => translateSubjectValue(String(value || ""), lang));
+}
+
+
 function num(v: string, fallback: number) {
   const x = Number(v);
   return Number.isFinite(x) ? x : fallback;
@@ -1497,7 +1605,10 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
     const alt = suggestedCorrectionDates[d];
     if (!alt) continue;
     out.warnings.push(
-      `⚠️ يوجد عجز في المراقبة بتاريخ ${d} بسبب تفريغ معلمي المادة للتصحيح. اقترح نقل يوم التصحيح إلى ${alt}.`
+      trGlobal(
+        `⚠️ يوجد عجز في المراقبة بتاريخ ${d} بسبب تفريغ معلمي المادة للتصحيح. اقترح نقل يوم التصحيح إلى ${alt}.`,
+        `⚠️ There is an invigilation shortage on ${d} because subject teachers were released for correction. Suggested correction day: ${alt}.`
+      )
     );
   }
 
@@ -1512,6 +1623,7 @@ export default function TaskDistributionRun() {
   const tenantId = String(effectiveTenantId || profile?.tenantId || user?.tenantId || "").trim() || "default";
   const { lang, isRTL } = useI18n();
   const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
+  const translateSubject = (value: string) => translateSubjectValue(value, lang);
   const APP_NAME = lang === "ar" ? APP_NAME_AR : APP_NAME_EN;
 
   const [fsTeachers, setFsTeachers] = useState<any[]>([]);
@@ -2296,7 +2408,7 @@ export default function TaskDistributionRun() {
                   teacherName: pickedReserve.teacherName,
                   subject: examSubject,
                   source: "RESERVE",
-                  note: `تحويل من الاحتياط لنفس الفترة • ${examSubject}`,
+                  note: tr(`تحويل من الاحتياط لنفس الفترة • ${examSubject}`, `Convert from reserve in the same slot • ${translateSubject(examSubject)}`),
                 });
               }
               continue;
@@ -2318,7 +2430,7 @@ export default function TaskDistributionRun() {
                   teacherName: teacherNameMapLocal.get(picked.id) || picked.id,
                   subject: examSubject,
                   source: "FREE",
-                  note: `معلم متاح لنفس الفترة • ${examSubject}`,
+                  note: tr(`معلم متاح لنفس الفترة • ${examSubject}`, `Teacher available in the same slot • ${translateSubject(examSubject)}`),
                 });
               }
               continue;
@@ -2371,7 +2483,7 @@ export default function TaskDistributionRun() {
     function findDirectTargetMetaForTeacher(artifacts: any, row: any, teacherId: string) {
       const targetTaskType = Number(row?.remainingInvigilations || 0) > 0 ? "INVIGILATION" : (Number(row?.remainingReserve || 0) > 0 ? "RESERVE" : "INVIGILATION");
       if (targetTaskType === "RESERVE") {
-        const reserveSubject = row.subjects?.[0] ? String(row.subjects[0]) : "احتياط";
+        const reserveSubject = row.subjects?.[0] ? String(row.subjects[0]) : tr("احتياط", "Reserve");
         if (canAssignUsingState(artifacts.state, teacherId, row.dateISO, row.period, "RESERVE", reserveSubject, {})) {
           return {
             taskType: "RESERVE",
@@ -2469,7 +2581,7 @@ export default function TaskDistributionRun() {
           teacherName,
           subject: String(targetMeta.subject || donorSubject || row.subjects?.[0] || "").trim(),
           source: "TRANSFER_SAFE",
-          note: `نقل من ${donorDateISO} ${donorPeriod === "PM" ? "الفترة الثانية" : "الفترة الأولى"} (${TASK_TYPE_LABEL_AR[donorTaskType] || donorTaskType})${donorSubject ? ` • ${donorSubject}` : ""}`,
+          note: tr(`نقل من ${donorDateISO} ${donorPeriod === "PM" ? "الفترة الثانية" : "الفترة الأولى"} (${TASK_TYPE_LABEL_AR[donorTaskType] || donorTaskType})${donorSubject ? ` • ${donorSubject}` : ""}`, `Move from ${donorDateISO} ${donorPeriod === "PM" ? "Second Period" : "First Period"} (${donorTaskType})${donorSubject ? ` • ${translateSubject(donorSubject)}` : ""}`),
           transferAssignmentId: donorAssignmentId,
           transferFromDateISO: donorDateISO,
           transferFromPeriod: donorPeriod,
@@ -2559,7 +2671,7 @@ export default function TaskDistributionRun() {
 
       let additionalReserve = 0;
       if (!dayHasMasterInvShortage) {
-        const reserveSubject = row.subjects?.[0] ? String(row.subjects[0]) : "احتياط";
+        const reserveSubject = row.subjects?.[0] ? String(row.subjects[0]) : tr("احتياط", "Reserve");
         const remainingReserveNeed = Math.max(0, row.reserveRequired - slotAssignments.res);
         for (let i = 0; i < remainingReserveNeed; i++) {
           if (!assignReserveUsingState(state, row.dateISO, row.period, reserveSubject)) break;
