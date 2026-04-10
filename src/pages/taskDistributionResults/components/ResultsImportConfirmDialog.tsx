@@ -1,53 +1,37 @@
 import React from "react";
 import { useI18n } from "../../../i18n/I18nProvider";
-import { btn, cardDark, cardHeaderRow, cardSubOnDark, cardTitleOnDark } from "../../../styles/ui";
-import { GOLD_LINE_SOFT, GOLD_TEXT } from "../constants";
+import { ConfirmModal } from "./ConfirmModal";
 
-type Props = {
-  importError: string | null;
-  fileInputRef: React.RefObject<HTMLInputElement | null>;
-  onBack: () => void;
-  onPickImportFile: () => void;
-  onImportFileSelected: (e: React.ChangeEvent<HTMLInputElement>) => void;
-};
-
-export function ResultsEmptyRunState({
-  importError,
-  fileInputRef,
-  onBack,
-  onPickImportFile,
-  onImportFileSelected,
-}: Props) {
+export function ResultsImportConfirmDialog({
+  open,
+  filename,
+  compact,
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean;
+  filename: string;
+  compact?: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
   const { lang } = useI18n();
   const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
 
+  if (!open) return null;
+
+  const subtitle = compact
+    ? `${tr("هل تريد استبدال بيانات الجدول الشامل؟", "Do you want to replace the master table data?")}\n${tr("الملف", "File")}: ${filename || "—"}\n${tr("(سيتم تفريغ الجدول الشامل وتعبئته ببيانات Excel)", "(The master table will be cleared and filled with Excel data)")}`
+    : `${tr("هل تريد استبدال بيانات الجدول الشامل مباشرة؟", "Do you want to replace the master table data directly?")}\n${tr("الملف", "File")}: ${filename || "—"}\n${tr("(سيتم تفريغ الجدول الشامل وتعبئته ببيانات Excel)", "(The master table will be cleared and filled with Excel data)")}\n\n${tr("ملاحظة: أي مهام في الجمعة/السبت سيتم نقلها تلقائيًا إلى الأحد.", "Note: Any tasks on Friday/Saturday will be moved automatically to Sunday.")}`;
+
   return (
-    <div style={cardDark}>
-      <div style={cardHeaderRow}>
-        <div>
-          <div style={{ ...cardTitleOnDark, color: GOLD_TEXT }}>{tr("النتائج", "Results")}</div>
-          <div style={{ ...cardSubOnDark, color: GOLD_LINE_SOFT }}>{tr("لا يوجد تشغيل محفوظ بعد", "No saved run yet")}</div>
-        </div>
-
-        <button style={btn("soft")} onClick={onBack}>
-          {tr("رجوع", "Back")}
-        </button>
-      </div>
-
-      <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
-        <button style={btn("soft")} onClick={onPickImportFile}>
-          {tr("استيراد الجدول الشامل (Excel)", "Import Master Table (Excel)")}
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
-          style={{ display: "none" }}
-          onChange={onImportFileSelected}
-        />
-      </div>
-
-      {importError && <div style={{ marginTop: 10, color: "#fecaca", fontWeight: 800 }}>{importError}</div>}
-    </div>
+    <ConfirmModal
+      title={tr("استبدال بيانات الجدول الشامل", "Replace Master Table Data")}
+      subtitle={subtitle}
+      confirmText={tr("نعم", "Yes")}
+      cancelText={tr("اغلاق", "Close")}
+      onConfirm={onConfirm}
+      onCancel={onCancel}
+    />
   );
 }
