@@ -1,4 +1,5 @@
 import React from "react";
+import { useI18n } from "../../../i18n/I18nProvider";
 
 import {
   cardHeaderRow,
@@ -44,68 +45,74 @@ export function ResultsPageHeader({
   showTeacherSidebar,
   onToggleTeacherSidebar,
 }: Props) {
+  const { lang } = useI18n();
+  const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
+
   return (
     <>
       <div style={{ ...cardHeaderRow, marginBottom: 0 }}>
         <div>
           <div style={{ ...cardTitleOnDark, color: GOLD_TEXT, letterSpacing: 0.2 }}>
-            جدول التوزيع الشامل (اليوم ← امتحانات اليوم حسب الفترة)
+            {tr("جدول التوزيع الشامل (اليوم ← امتحانات اليوم حسب الفترة)", "Master Distribution Table (Day ← Exams by Period)")}
           </div>
           <div style={{ ...cardSubOnDark, color: GOLD_LINE_SOFT }}>
             Run ID: {runId} • {String(createdAtISO || "").slice(0, 10) || "—"}
           </div>
           <div style={{ marginTop: 8, color: "rgba(255,255,255,0.85)", fontWeight: 900, fontSize: 12 }}>
-            ✋ التعديل اليدوي: اسحب “مراقبة / احتياط / تصحيح” وأسقطها فوق <b>نفس نوع المهمة</b> للتبديل فورًا.
+            {tr("✋ التعديل اليدوي: اسحب “مراقبة / احتياط / تصحيح” وأسقطها فوق ", "✋ Manual edit: drag “Invigilation / Reserve / Correction” and drop it onto ")}
+            <b>{tr("نفس نوع المهمة", "the same task type")}</b>
+            {tr(" للتبديل فورًا.", " to swap immediately.")}
             <div style={{ marginTop: 4, opacity: 0.95 }}>
-              ❌ ممنوع التبديل إذا المعلم الهدف لديه مهمة مسبقًا في <b>نفس العمود</b>.
+              ❌ {tr("ممنوع التبديل إذا المعلم الهدف لديه مهمة مسبقًا في ", "Swap is not allowed if the target teacher already has a task in ")}
+              <b>{tr("نفس العمود", "the same column")}</b>.
             </div>
           </div>
         </div>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
           <button style={btn("soft")} onClick={onGoHome}>
-            الرئيسية
+            {tr("الرئيسية", "Home")}
           </button>
 
           <button style={btn("soft")} onClick={onPickImportFile}>
-            استيراد الجدول الشامل (Excel)
+            {tr("استيراد الجدول الشامل (Excel)", "Import Master Table (Excel)")}
           </button>
 
           <button style={btn("soft")} onClick={onExportPdf}>
-            تصدير PDF (الجدول + الأسماء)
+            {tr("تصدير PDF (الجدول + الأسماء)", "Export PDF (Table + Names)")}
           </button>
 
-          <button style={btn("soft")} onClick={onArchiveSnapshot} title="حفظ نسخة من الجدول الشامل في صفحة الأرشيف">
-            إرسال للأرشيف
+          <button style={btn("soft")} onClick={onArchiveSnapshot} title={tr("حفظ نسخة من الجدول الشامل في صفحة الأرشيف", "Save a copy of the master table in the archive page")}>
+            {tr("إرسال للأرشيف", "Send to Archive")}
           </button>
 
           <button
             style={btn(tableFullScreen ? "danger" : "soft")}
             onClick={onToggleFullscreen}
-            title={tableFullScreen ? "عودة للحجم الطبيعي" : "تكبير الجدول الشامل ملء الشاشة"}
+            title={tableFullScreen ? tr("عودة للحجم الطبيعي", "Return to normal size") : tr("تكبير الجدول الشامل ملء الشاشة", "Open the master table in fullscreen")}
           >
-            {tableFullScreen ? "إغلاق ملء الشاشة" : "ملء الشاشة"}
+            {tableFullScreen ? tr("إغلاق ملء الشاشة", "Close Fullscreen") : tr("ملء الشاشة", "Fullscreen")}
           </button>
 
           <button style={btn(showTeacherSidebar ? "brand" : "soft")} onClick={onToggleTeacherSidebar}>
-            {showTeacherSidebar ? "إخفاء قائمة المعلمين" : "إظهار قائمة المعلمين"}
+            {showTeacherSidebar ? tr("إخفاء قائمة المعلمين", "Hide Teachers List") : tr("إظهار قائمة المعلمين", "Show Teachers List")}
           </button>
 
           <button
             style={{ ...btn("soft"), ...(undoDisabled ? btnDisabled : {}) }}
             onClick={onUndo}
             disabled={undoDisabled}
-            title={undoDisabled ? "لا يوجد تعديلات للتراجع" : "التراجع عن آخر تعديل"}
+            title={undoDisabled ? tr("لا يوجد تعديلات للتراجع", "There are no edits to undo") : tr("التراجع عن آخر تعديل", "Undo the last edit")}
           >
-            تراجع
+            {tr("تراجع", "Undo")}
           </button>
 
           <button style={btn("soft")} onClick={onExportExcel}>
-            تصدير Excel (XLSX)
+            {tr("تصدير Excel (XLSX)", "Export Excel (XLSX)")}
           </button>
 
           <button style={btn("brand")} onClick={onPrintTableOnly}>
-            طباعة (الجدول فقط)
+            {tr("طباعة (الجدول فقط)", "Print (Table Only)")}
           </button>
         </div>
       </div>
