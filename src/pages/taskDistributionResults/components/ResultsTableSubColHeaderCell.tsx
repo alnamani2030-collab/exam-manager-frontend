@@ -1,4 +1,5 @@
 import React from "react";
+import { useI18n } from "../../../i18n/I18nProvider";
 
 type Props = {
   subject: string;
@@ -23,6 +24,8 @@ export function ResultsTableSubColHeaderCell({
   isDayEnd = false,
   onDeleteAll,
 }: Props) {
+  const { lang } = useI18n();
+  const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
   const heavyLine = `8px solid ${goldLine}`;
   const normalLine = `4px solid ${goldLine}`;
 
@@ -47,7 +50,7 @@ export function ResultsTableSubColHeaderCell({
     >
       <div style={{ fontWeight: 900 }}>{subject}</div>
       <div style={{ fontSize: 12, opacity: 0.9, marginTop: 4 }}>{periodLabel}</div>
-      <div style={{ fontSize: 12, opacity: 0.95, marginTop: 4 }}>مجموع اللجان: {committees}</div>
+      <div style={{ fontSize: 12, opacity: 0.95, marginTop: 4 }}>{tr("مجموع اللجان", "Total Committees")}: {committees}</div>
 
       {onDeleteAll ? (
         <div style={{ marginTop: 8 }}>
@@ -55,7 +58,7 @@ export function ResultsTableSubColHeaderCell({
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              if (window.confirm(`حذف جميع المراقبات/التكليفات لهذا العمود؟`)) {
+              if (window.confirm(tr("حذف جميع المراقبات/التكليفات لهذا العمود؟", "Delete all invigilation/assignments for this column?"))) {
                 onDeleteAll();
               }
             }}
@@ -69,9 +72,9 @@ export function ResultsTableSubColHeaderCell({
               padding: "5px 10px",
               cursor: "pointer",
             }}
-            title="حذف كل تكليفات هذه المادة/الفترة"
+            title={tr("حذف كل تكليفات هذه المادة/الفترة", "Delete all assignments for this subject/period")}
           >
-            حذف الكل
+            {tr("حذف الكل", "Delete All")}
           </button>
         </div>
       ) : null}
