@@ -1,4 +1,5 @@
 import type React from "react";
+import { useI18n } from "../../../i18n/I18nProvider";
 import { cardDark, ui } from "../../../styles/ui";
 
 type WarningItem =
@@ -51,10 +52,10 @@ function getWarningKey(item: WarningItem, index: number): string {
   return item.id ?? `${index}-${item.title ?? item.message ?? "warning"}`;
 }
 
-function renderWarningContent(item: WarningItem) {
+function renderWarningContent(item: WarningItem, fallbackWarningText: string) {
   if (typeof item === "string") return item;
 
-  const mainText = item.title ?? item.message ?? "تحذير";
+  const mainText = item.title ?? item.message ?? fallbackWarningText;
   return (
     <>
       <strong>{mainText}</strong>
@@ -64,16 +65,19 @@ function renderWarningContent(item: WarningItem) {
 }
 
 export function ResultsWarningsPanel({ warnings = [] }: Props) {
+  const { lang } = useI18n();
+  const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
+
   if (!warnings.length) return null;
 
   return (
     <section style={wrap} aria-label="results-warnings-panel">
-      <h3 style={titleStyle}>تحذيرات النتائج</h3>
+      <h3 style={titleStyle}>{tr("تحذيرات النتائج", "Results Warnings")}</h3>
 
       <ul style={listStyle}>
         {warnings.map((warning, index) => (
           <li key={getWarningKey(warning, index)} style={itemStyle}>
-            {renderWarningContent(warning)}
+            {renderWarningContent(warning, tr("تحذير", "Warning"))}
           </li>
         ))}
       </ul>
