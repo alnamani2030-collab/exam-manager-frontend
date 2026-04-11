@@ -1,12 +1,10 @@
 import React from "react";
+import { useI18n } from "../../../i18n/I18nProvider";
 import type { SubCol } from "./TeacherRow";
 
 type Props = {
   allSubCols: SubCol[];
-  totalsDetailBySubCol: Record<
-    string,
-    { inv: number; res: number; corr: number; total: number; deficit: number; committees: number; required?: number }
-  >;
+  totalsDetailBySubCol: Record<string, { inv: number; res: number; corr: number; total: number; deficit: number; committees: number; required?: number }>;
   committeesCountBySubCol: Record<string, number>;
   styles: {
     tableFontSize: string;
@@ -17,6 +15,9 @@ type Props = {
 };
 
 export function ResultsTotalsRow({ allSubCols, totalsDetailBySubCol, committeesCountBySubCol, styles, showTeacherSidebar = true }: Props) {
+  const { lang } = useI18n();
+  const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
+
   return (
     <tr>
       {showTeacherSidebar ? (
@@ -36,7 +37,7 @@ export function ResultsTotalsRow({ allSubCols, totalsDetailBySubCol, committeesC
             whiteSpace: "nowrap",
           }}
         >
-          الإجمالي (تفصيل لكل مادة)
+          {tr("الإجمالي (تفصيل لكل مادة)", "Total (details per subject)")}
         </td>
       ) : null}
 
@@ -67,11 +68,11 @@ export function ResultsTotalsRow({ allSubCols, totalsDetailBySubCol, committeesC
             }}
           >
             <div style={{ lineHeight: 1.65, fontSize: 13 }}>
-              <div>مراقبة: {d.inv}</div>
-              <div>احتياط: {d.res}</div>
-              <div>تصحيح: {d.corr}</div>
-              <div style={{ marginTop: 6, opacity: 0.95 }}>المجموع: {d.total}</div>
-              <div style={{ marginTop: 4, color: d.deficit > 0 ? "#fecaca" : "#bbf7d0" }}>العجز: {d.deficit}</div>
+              <div>{tr("مراقبة", "Invigilation")}: {d.inv}</div>
+              <div>{tr("احتياط", "Reserve")}: {d.res}</div>
+              <div>{tr("تصحيح", "Correction")}: {d.corr}</div>
+              <div style={{ marginTop: 6, opacity: 0.95 }}>{tr("المجموع", "Total")}: {d.total}</div>
+              <div style={{ marginTop: 4, color: d.deficit > 0 ? "#fecaca" : "#bbf7d0" }}>{tr("العجز", "Deficit")}: {d.deficit}</div>
             </div>
           </td>
         );
