@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useI18n } from "../i18n/I18nProvider";
 
 type Lang = "ar" | "en";
 type TaskType = "INVIGILATION" | "RESERVE" | "REVIEW_FREE" | "CORRECTION_FREE";
@@ -84,8 +85,14 @@ function readAssignmentsFromStorage(): Assignment[] {
     if (Array.isArray(parsed?.assignments) && parsed.assignments.length) return parsed.assignments;
   }
 
-  const masterData = safeParseJson<{ rows?: Assignment[]; data?: Assignment[] }>(window.localStorage.getItem(MASTER_TABLE_KEY));
-  const rows = Array.isArray(masterData?.rows) ? masterData.rows : Array.isArray(masterData?.data) ? masterData.data : [];
+  const masterData = safeParseJson<{ rows?: Assignment[]; data?: Assignment[] }>(
+    window.localStorage.getItem(MASTER_TABLE_KEY)
+  );
+  const rows = Array.isArray(masterData?.rows)
+    ? masterData.rows
+    : Array.isArray(masterData?.data)
+    ? masterData.data
+    : [];
   if (rows.length) return rows;
 
   return [];
@@ -113,12 +120,13 @@ function buildTeacherAnalytics(assignments: Assignment[]): TeacherAnalyticsRow[]
     else if (taskType === "REVIEW_FREE") current.review += 1;
     else if (taskType === "CORRECTION_FREE") current.correction += 1;
 
-    // ✅ التصحيح لا يدخل ضمن الحمل
     current.total = current.monitoring + current.reserve + current.review;
     map.set(teacher, current);
   }
 
-  return Array.from(map.values()).sort((a, b) => b.total - a.total || a.teacher.localeCompare(b.teacher, "ar"));
+  return Array.from(map.values()).sort(
+    (a, b) => b.total - a.total || a.teacher.localeCompare(b.teacher, "ar")
+  );
 }
 
 function buildTaskDistribution(rows: TeacherAnalyticsRow[]): DistributionItem[] {
@@ -128,10 +136,34 @@ function buildTaskDistribution(rows: TeacherAnalyticsRow[]): DistributionItem[] 
   const correction = rows.reduce((sum, row) => sum + row.correction, 0);
 
   return [
-    { key: "INVIGILATION", nameAr: "مراقبة", nameEn: "Invigilation", value: monitoring, color: COLORS.INVIGILATION },
-    { key: "RESERVE", nameAr: "احتياط", nameEn: "Reserve", value: reserve, color: COLORS.RESERVE },
-    { key: "REVIEW_FREE", nameAr: "مراجعة", nameEn: "Review", value: review, color: COLORS.REVIEW_FREE },
-    { key: "CORRECTION_FREE", nameAr: "تصحيح", nameEn: "Correction", value: correction, color: COLORS.CORRECTION_FREE },
+    {
+      key: "INVIGILATION",
+      nameAr: "مراقبة",
+      nameEn: "Invigilation",
+      value: monitoring,
+      color: COLORS.INVIGILATION,
+    },
+    {
+      key: "RESERVE",
+      nameAr: "احتياط",
+      nameEn: "Reserve",
+      value: reserve,
+      color: COLORS.RESERVE,
+    },
+    {
+      key: "REVIEW_FREE",
+      nameAr: "مراجعة",
+      nameEn: "Review",
+      value: review,
+      color: COLORS.REVIEW_FREE,
+    },
+    {
+      key: "CORRECTION_FREE",
+      nameAr: "تصحيح",
+      nameEn: "Correction",
+      value: correction,
+      color: COLORS.CORRECTION_FREE,
+    },
   ];
 }
 
@@ -140,7 +172,8 @@ function scoreFairness(rows: TeacherAnalyticsRow[]): number {
   const totals = rows.map((row) => row.total);
   const avg = totals.reduce((a, b) => a + b, 0) / totals.length;
   if (avg === 0) return 100;
-  const variance = totals.reduce((sum, value) => sum + Math.pow(value - avg, 2), 0) / totals.length;
+  const variance =
+    totals.reduce((sum, value) => sum + Math.pow(value - avg, 2), 0) / totals.length;
   const std = Math.sqrt(variance);
   return Math.max(0, Math.min(100, Math.round(100 - (std / avg) * 45)));
 }
@@ -155,7 +188,10 @@ function labelTaskType(type: TaskType, lang: Lang): string {
   return lang === "ar" ? map[type].ar : map[type].en;
 }
 
-function buildAutoRedistributionSuggestions(rows: TeacherAnalyticsRow[], lang: Lang): TransferSuggestion[] {
+function buildAutoRedistributionSuggestions(
+  rows: TeacherAnalyticsRow[],
+  lang: Lang
+): TransferSuggestion[] {
   const suggestions: TransferSuggestion[] = [];
   const taskTypes: TaskType[] = ["INVIGILATION", "RESERVE", "REVIEW_FREE"];
 
@@ -169,7 +205,12 @@ function buildAutoRedistributionSuggestions(rows: TeacherAnalyticsRow[], lang: L
   const highestTotal = [...rows].sort((a, b) => b.total - a.total)[0];
   const lowestTotal = [...rows].sort((a, b) => a.total - b.total)[0];
 
-  if (highestTotal && lowestTotal && highestTotal.teacher !== lowestTotal.teacher && highestTotal.total - lowestTotal.total >= 3) {
+  if (
+    highestTotal &&
+    lowestTotal &&
+    highestTotal.teacher !== lowestTotal.teacher &&
+    highestTotal.total - lowestTotal.total >= 3
+  ) {
     suggestions.push({
       taskType: "INVIGILATION",
       from: highestTotal.teacher,
@@ -207,7 +248,13 @@ function buildAutoRedistributionSuggestions(rows: TeacherAnalyticsRow[], lang: L
 
 function buildInsights(rows: TeacherAnalyticsRow[], lang: Lang): string[] {
   if (!rows.length) {
-    return [tr(lang, "لا توجد بيانات كافية لاستخراج ملاحظات تحليلية حالياً.", "There is not enough data yet to generate analytical insights.")];
+    return [
+      tr(
+        lang,
+        "لا توجد بيانات كافية لاستخراج ملاحظات تحليلية حالياً.",
+        "There is not enough data yet to generate analytical insights."
+      ),
+    ];
   }
 
   const highest = [...rows].sort((a, b) => b.total - a.total)[0];
@@ -217,10 +264,26 @@ function buildInsights(rows: TeacherAnalyticsRow[], lang: Lang): string[] {
   const withoutReview = rows.filter((row) => row.review === 0).length;
 
   return [
-    tr(lang, `درجة عدالة التوزيع الحالية تقارب ${fairness}%.`, `Current workload fairness is about ${fairness}%.`),
-    tr(lang, `أعلى حمل على ${highest.teacher} بإجمالي ${highest.total} مهام.`, `${highest.teacher} has the highest load with ${highest.total} tasks.`),
-    tr(lang, `أقل حمل على ${lowest.teacher} بإجمالي ${lowest.total} مهام.`, `${lowest.teacher} has the lowest load with ${lowest.total} tasks.`),
-    tr(lang, `عدد المعلمين بدون احتياط: ${withoutReserve}، وبدون مراجعة: ${withoutReview}.`, `${withoutReserve} teachers have no reserve tasks, and ${withoutReview} have no review tasks.`),
+    tr(
+      lang,
+      `درجة عدالة التوزيع الحالية تقارب ${fairness}%.`,
+      `Current workload fairness is about ${fairness}%.`
+    ),
+    tr(
+      lang,
+      `أعلى حمل على ${highest.teacher} بإجمالي ${highest.total} مهام.`,
+      `${highest.teacher} has the highest load with ${highest.total} tasks.`
+    ),
+    tr(
+      lang,
+      `أقل حمل على ${lowest.teacher} بإجمالي ${lowest.total} مهام.`,
+      `${lowest.teacher} has the lowest load with ${lowest.total} tasks.`
+    ),
+    tr(
+      lang,
+      `عدد المعلمين بدون احتياط: ${withoutReserve}، وبدون مراجعة: ${withoutReview}.`,
+      `${withoutReserve} teachers have no reserve tasks, and ${withoutReview} have no review tasks.`
+    ),
   ];
 }
 
@@ -248,7 +311,8 @@ function runSelfTests(): void {
     {
       name: "distribution total equals rows total",
       pass:
-        buildTaskDistribution(rows).reduce((sum, item) => sum + item.value, 0) === rows.reduce((sum, row) => sum + row.total, 0),
+        buildTaskDistribution(rows).reduce((sum, item) => sum + item.value, 0) ===
+        rows.reduce((sum, row) => sum + row.total, 0),
     },
     {
       name: "fairness score is bounded",
@@ -266,7 +330,15 @@ function runSelfTests(): void {
   }
 }
 
-function KpiCard({ title, value, subtitle }: { title: string; value: string | number; subtitle: string }) {
+function KpiCard({
+  title,
+  value,
+  subtitle,
+}: {
+  title: string;
+  value: string | number;
+  subtitle: string;
+}) {
   return (
     <div style={styles.kpiCard}>
       <div style={styles.kpiTitle}>{title}</div>
@@ -276,16 +348,34 @@ function KpiCard({ title, value, subtitle }: { title: string; value: string | nu
   );
 }
 
-function ProgressBar({ value, max, color }: { value: number; max: number; color: string }) {
+function ProgressBar({
+  value,
+  max,
+  color,
+}: {
+  value: number;
+  max: number;
+  color: string;
+}) {
   const width = max > 0 ? Math.max(8, (value / max) * 100) : 0;
   return (
     <div style={styles.progressTrack}>
-      {value > 0 ? <div style={{ ...styles.progressFill, width: `${width}%`, background: color }} /> : null}
+      {value > 0 ? (
+        <div style={{ ...styles.progressFill, width: `${width}%`, background: color }} />
+      ) : null}
     </div>
   );
 }
 
-function LegendItem({ color, label, value }: { color: string; label: string; value: number }) {
+function LegendItem({
+  color,
+  label,
+  value,
+}: {
+  color: string;
+  label: string;
+  value: number;
+}) {
   return (
     <div style={styles.legendItem}>
       <div style={{ ...styles.legendDot, background: color }} />
@@ -306,22 +396,38 @@ function PieLikeChart({ data, lang }: { data: DistributionItem[]; lang: Lang }) 
   });
 
   const gradient = segments.length
-    ? segments.map((segment) => `${segment.color} ${segment.start * 100}% ${segment.end * 100}%`).join(", ")
+    ? segments
+        .map((segment) => `${segment.color} ${segment.start * 100}% ${segment.end * 100}%`)
+        .join(", ")
     : "#333 0% 100%";
 
   return (
     <div style={styles.panel}>
-      <SectionHeader title={tr(lang, "توزيع أنواع المهام", "Task-type distribution")} subtitle={tr(lang, "عرض بصري مباشر لحجم كل نوع من التكليفات", "A direct visual summary of each assignment type.")} />
+      <SectionHeader
+        title={tr(lang, "توزيع أنواع المهام", "Task-type distribution")}
+        subtitle={tr(
+          lang,
+          "عرض بصري مباشر لحجم كل نوع من التكليفات",
+          "A direct visual summary of each assignment type."
+        )}
+      />
       <div style={styles.chartWrap}>
         <div style={{ ...styles.pieCircle, background: `conic-gradient(${gradient})` }}>
           <div style={styles.pieHole}>
             <div style={styles.pieLabel}>{tr(lang, "الإجمالي", "Total")}</div>
-            <div style={styles.pieValue}>{data.reduce((sum, item) => sum + item.value, 0)}</div>
+            <div style={styles.pieValue}>
+              {data.reduce((sum, item) => sum + item.value, 0)}
+            </div>
           </div>
         </div>
         <div style={styles.legendList}>
           {data.map((item) => (
-            <LegendItem key={item.key} color={item.color} label={lang === "ar" ? item.nameAr : item.nameEn} value={item.value} />
+            <LegendItem
+              key={item.key}
+              color={item.color}
+              label={lang === "ar" ? item.nameAr : item.nameEn}
+              value={item.value}
+            />
           ))}
         </div>
       </div>
@@ -335,7 +441,10 @@ function TeacherBars({ rows, lang }: { rows: TeacherAnalyticsRow[]; lang: Lang }
 
   return (
     <div style={styles.panel}>
-      <SectionHeader title={tr(lang, "مقارنة أحمال المعلمين", "Teacher workload comparison")} subtitle={tr(lang, "أعلى 8 معلمين من حيث إجمالي الحمل", "Top 8 teachers by total workload.")} />
+      <SectionHeader
+        title={tr(lang, "مقارنة أحمال المعلمين", "Teacher workload comparison")}
+        subtitle={tr(lang, "أعلى 8 معلمين من حيث إجمالي الحمل", "Top 8 teachers by total workload.")}
+      />
       <div style={styles.barList}>
         {topRows.map((row) => (
           <div key={row.teacher} style={styles.barRow}>
@@ -356,23 +465,55 @@ function TeacherBars({ rows, lang }: { rows: TeacherAnalyticsRow[]; lang: Lang }
   );
 }
 
-
-function StatusBadge({ label, tone = "gold" }: { label: string; tone?: "gold" | "green" | "blue" }) {
+function StatusBadge({
+  label,
+  tone = "gold",
+}: {
+  label: string;
+  tone?: "gold" | "green" | "blue";
+}) {
   const palette = {
-    gold: { bg: "rgba(250,204,21,0.12)", border: "rgba(250,204,21,0.22)", color: "#fde68a" },
-    green: { bg: "rgba(16,185,129,0.12)", border: "rgba(16,185,129,0.22)", color: "#a7f3d0" },
-    blue: { bg: "rgba(96,165,250,0.12)", border: "rgba(96,165,250,0.22)", color: "#bfdbfe" },
+    gold: {
+      bg: "rgba(250,204,21,0.12)",
+      border: "rgba(250,204,21,0.22)",
+      color: "#fde68a",
+    },
+    green: {
+      bg: "rgba(16,185,129,0.12)",
+      border: "rgba(16,185,129,0.22)",
+      color: "#a7f3d0",
+    },
+    blue: {
+      bg: "rgba(96,165,250,0.12)",
+      border: "rgba(96,165,250,0.22)",
+      color: "#bfdbfe",
+    },
   } as const;
   const current = palette[tone];
 
   return (
-    <span style={{ ...styles.statusBadge, background: current.bg, borderColor: current.border, color: current.color }}>
+    <span
+      style={{
+        ...styles.statusBadge,
+        background: current.bg,
+        borderColor: current.border,
+        color: current.color,
+      }}
+    >
       {label}
     </span>
   );
 }
 
-function SummaryTile({ label, value, hint }: { label: string; value: string | number; hint: string }) {
+function SummaryTile({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string | number;
+  hint: string;
+}) {
   return (
     <div style={styles.summaryTile}>
       <div style={styles.summaryTileLabel}>{label}</div>
@@ -382,13 +523,34 @@ function SummaryTile({ label, value, hint }: { label: string; value: string | nu
   );
 }
 
-
-function StatusChip({ label, tone = "gold" }: { label: string; tone?: "gold" | "green" | "blue" | "slate" }) {
+function StatusChip({
+  label,
+  tone = "gold",
+}: {
+  label: string;
+  tone?: "gold" | "green" | "blue" | "slate";
+}) {
   const toneStyles: Record<string, React.CSSProperties> = {
-    gold: { background: "rgba(245, 158, 11, 0.12)", color: "#fde68a", border: "1px solid rgba(245, 158, 11, 0.22)" },
-    green: { background: "rgba(16, 185, 129, 0.12)", color: "#a7f3d0", border: "1px solid rgba(16, 185, 129, 0.22)" },
-    blue: { background: "rgba(59, 130, 246, 0.12)", color: "#bfdbfe", border: "1px solid rgba(59, 130, 246, 0.22)" },
-    slate: { background: "rgba(148, 163, 184, 0.12)", color: "#e2e8f0", border: "1px solid rgba(148, 163, 184, 0.2)" },
+    gold: {
+      background: "rgba(245, 158, 11, 0.12)",
+      color: "#fde68a",
+      border: "1px solid rgba(245, 158, 11, 0.22)",
+    },
+    green: {
+      background: "rgba(16, 185, 129, 0.12)",
+      color: "#a7f3d0",
+      border: "1px solid rgba(16, 185, 129, 0.22)",
+    },
+    blue: {
+      background: "rgba(59, 130, 246, 0.12)",
+      color: "#bfdbfe",
+      border: "1px solid rgba(59, 130, 246, 0.22)",
+    },
+    slate: {
+      background: "rgba(148, 163, 184, 0.12)",
+      color: "#e2e8f0",
+      border: "1px solid rgba(148, 163, 184, 0.2)",
+    },
   };
 
   return <span style={{ ...styles.statusChip, ...toneStyles[tone] }}>{label}</span>;
@@ -407,7 +569,7 @@ function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }
 }
 
 export default function AnalyticsDashboardProductionGrade() {
-  const [lang, setLang] = useState<Lang>("ar");
+  const { lang } = useI18n();
   const [assignments, setAssignments] = useState<Assignment[]>(() => readAssignmentsFromStorage());
   const [showSuggestions, setShowSuggestions] = useState(true);
 
@@ -434,13 +596,21 @@ export default function AnalyticsDashboardProductionGrade() {
   const rows = useMemo(() => buildTeacherAnalytics(assignments), [assignments]);
   const taskDistribution = useMemo(() => buildTaskDistribution(rows), [rows]);
   const insights = useMemo(() => buildInsights(rows, lang), [rows, lang]);
-  const suggestions = useMemo(() => buildAutoRedistributionSuggestions(rows, lang), [rows, lang]);
+  const suggestions = useMemo(
+    () => buildAutoRedistributionSuggestions(rows, lang),
+    [rows, lang]
+  );
   const fairness = useMemo(() => scoreFairness(rows), [rows]);
   const totalTasks = useMemo(() => rows.reduce((sum, row) => sum + row.total, 0), [rows]);
   const highest = rows[0];
   const lowest = [...rows].sort((a, b) => a.total - b.total)[0];
   const gapValue = highest && lowest ? highest.total - lowest.total : 0;
-  const fairnessLabel = fairness >= 85 ? tr(lang, "متوازن جداً", "Highly balanced") : fairness >= 70 ? tr(lang, "جيد", "Good") : tr(lang, "بحاجة لتحسين", "Needs improvement");
+  const fairnessLabel =
+    fairness >= 85
+      ? tr(lang, "متوازن جداً", "Highly balanced")
+      : fairness >= 70
+      ? tr(lang, "جيد", "Good")
+      : tr(lang, "بحاجة لتحسين", "Needs improvement");
   const activeTaskTypes = taskDistribution.filter((item) => item.value > 0).length;
   const maxMonitoring = Math.max(1, ...rows.map((row) => row.monitoring));
   const maxReserve = Math.max(1, ...rows.map((row) => row.reserve));
@@ -457,29 +627,50 @@ export default function AnalyticsDashboardProductionGrade() {
           <div style={styles.topBarBrandWrap}>
             <div style={styles.brandMark}>EM</div>
             <div>
-              <div style={styles.topBarTitle}>{tr(lang, "مركز قيادة التحليلات", "Ultra Analytics Command Center")}</div>
-              <div style={styles.topBarSub}>{tr(lang, "لوحة تنفيذية فائقة الفخامة لقراءة الأحمال واتخاذ القرار", "Ultra-premium executive dashboard for workload visibility and decision support")}</div>
+              <div style={styles.topBarTitle}>
+                {tr(lang, "مركز قيادة التحليلات", "Ultra Analytics Command Center")}
+              </div>
+              <div style={styles.topBarSub}>
+                {tr(
+                  lang,
+                  "لوحة تنفيذية فائقة الفخامة لقراءة الأحمال واتخاذ القرار",
+                  "Ultra-premium executive dashboard for workload visibility and decision support"
+                )}
+              </div>
             </div>
           </div>
           <div style={styles.topBarBadges}>
             <StatusBadge label={tr(lang, "بيانات حقيقية فقط", "Real data only")} tone="green" />
-            <StatusBadge label={tr(lang, `حالة التوازن: ${fairnessLabel}`, `Balance status: ${fairnessLabel}`)} tone={fairness >= 70 ? "gold" : "blue"} />
+            <StatusBadge
+              label={tr(lang, `حالة التوازن: ${fairnessLabel}`, `Balance status: ${fairnessLabel}`)}
+              tone={fairness >= 70 ? "gold" : "blue"}
+            />
           </div>
         </div>
 
         <div style={styles.premiumRibbon}>
-          <div style={styles.premiumRibbonItem}>{tr(lang, "رؤية تنفيذية فورية", "Instant executive visibility")}</div>
+          <div style={styles.premiumRibbonItem}>
+            {tr(lang, "رؤية تنفيذية فورية", "Instant executive visibility")}
+          </div>
           <div style={styles.premiumRibbonDivider} />
-          <div style={styles.premiumRibbonItem}>{tr(lang, "تحليلات مباشرة من النظام", "Direct analytics from the system")}</div>
+          <div style={styles.premiumRibbonItem}>
+            {tr(lang, "تحليلات مباشرة من النظام", "Direct analytics from the system")}
+          </div>
           <div style={styles.premiumRibbonDivider} />
-          <div style={styles.premiumRibbonItem}>{tr(lang, "قرار أسرع بثقة أعلى", "Faster decisions with higher confidence")}</div>
+          <div style={styles.premiumRibbonItem}>
+            {tr(lang, "قرار أسرع بثقة أعلى", "Faster decisions with higher confidence")}
+          </div>
         </div>
 
         <div style={styles.hero}>
           <div style={styles.heroGrid}>
             <div>
-              <div style={styles.heroEyebrow}>{tr(lang, "نظام إدارة الامتحانات المطور", "Enhanced Exam Management System")}</div>
-              <h1 style={styles.heroTitle}>{tr(lang, "لوحة التحليل الذكي", "Smart Analytics Dashboard")}</h1>
+              <div style={styles.heroEyebrow}>
+                {tr(lang, "نظام إدارة الامتحانات المطور", "Enhanced Exam Management System")}
+              </div>
+              <h1 style={styles.heroTitle}>
+                {tr(lang, "لوحة التحليل الذكي", "Smart Analytics Dashboard")}
+              </h1>
               <p style={styles.heroText}>
                 {tr(
                   lang,
@@ -505,8 +696,16 @@ export default function AnalyticsDashboardProductionGrade() {
             </div>
 
             <div style={styles.heroSpotlight}>
-              <div style={styles.heroSpotlightBadge}>{tr(lang, "تحليل مباشر من بيانات البرنامج", "Live analytics from program data")}</div>
-              <div style={styles.heroSpotlightTitle}>{tr(lang, "رؤية أوضح. قرار أسرع. واجهة عالمية تبهر المستخدم من اللحظة الأولى.", "Sharper visibility. Faster decisions. A dashboard that impresses.")}</div>
+              <div style={styles.heroSpotlightBadge}>
+                {tr(lang, "تحليل مباشر من بيانات البرنامج", "Live analytics from program data")}
+              </div>
+              <div style={styles.heroSpotlightTitle}>
+                {tr(
+                  lang,
+                  "رؤية أوضح. قرار أسرع. واجهة عالمية تبهر المستخدم من اللحظة الأولى.",
+                  "Sharper visibility. Faster decisions. A dashboard that impresses."
+                )}
+              </div>
               <div style={styles.heroSpotlightText}>
                 {tr(
                   lang,
@@ -515,14 +714,19 @@ export default function AnalyticsDashboardProductionGrade() {
                 )}
               </div>
               <div style={styles.heroButtons}>
-                <button style={styles.primaryButton} onClick={() => setAssignments(readAssignmentsFromStorage())}>
+                <button
+                  style={styles.primaryButton}
+                  onClick={() => setAssignments(readAssignmentsFromStorage())}
+                >
                   {tr(lang, "تحديث الآن", "Refresh now")}
                 </button>
-                <button style={styles.secondaryButton} onClick={() => setShowSuggestions((value) => !value)}>
-                  {showSuggestions ? tr(lang, "إخفاء اقتراحات AI", "Hide AI suggestions") : tr(lang, "إظهار اقتراحات AI", "Show AI suggestions")}
-                </button>
-                <button style={styles.secondaryButton} onClick={() => setLang((value) => (value === "ar" ? "en" : "ar"))}>
-                  {lang === "ar" ? "English" : "العربية"}
+                <button
+                  style={styles.secondaryButton}
+                  onClick={() => setShowSuggestions((value) => !value)}
+                >
+                  {showSuggestions
+                    ? tr(lang, "إخفاء اقتراحات AI", "Hide AI suggestions")
+                    : tr(lang, "إظهار اقتراحات AI", "Show AI suggestions")}
                 </button>
               </div>
             </div>
@@ -530,16 +734,42 @@ export default function AnalyticsDashboardProductionGrade() {
         </div>
 
         <div style={styles.executiveStrip}>
-          <SummaryTile label={tr(lang, "ملخص تنفيذي", "Executive summary")} value={rows.length ? fairnessLabel : tr(lang, "بانتظار البيانات", "Awaiting data")} hint={tr(lang, "قراءة سريعة لحالة التشغيل الحالية", "A quick reading of the current run") } />
-          <SummaryTile label={tr(lang, "أنواع المهام النشطة", "Active task types")} value={activeTaskTypes} hint={tr(lang, "عدد الأنواع التي ظهرت فعلياً في هذا التشغيل", "Task categories that actually appeared in this run")} />
-          <SummaryTile label={tr(lang, "أعلى حمل", "Highest load")} value={highest ? highest.total : 0} hint={highest ? highest.teacher : tr(lang, "لا يوجد", "None")} />
-          <SummaryTile label={tr(lang, "فجوة التوزيع", "Distribution gap")} value={gapValue} hint={tr(lang, "الفارق بين أعلى وأقل معلم حملاً", "Difference between highest and lowest load")} />
+          <SummaryTile
+            label={tr(lang, "ملخص تنفيذي", "Executive summary")}
+            value={rows.length ? fairnessLabel : tr(lang, "بانتظار البيانات", "Awaiting data")}
+            hint={tr(lang, "قراءة سريعة لحالة التشغيل الحالية", "A quick reading of the current run")}
+          />
+          <SummaryTile
+            label={tr(lang, "أنواع المهام النشطة", "Active task types")}
+            value={activeTaskTypes}
+            hint={tr(
+              lang,
+              "عدد الأنواع التي ظهرت فعلياً في هذا التشغيل",
+              "Task categories that actually appeared in this run"
+            )}
+          />
+          <SummaryTile
+            label={tr(lang, "أعلى حمل", "Highest load")}
+            value={highest ? highest.total : 0}
+            hint={highest ? highest.teacher : tr(lang, "لا يوجد", "None")}
+          />
+          <SummaryTile
+            label={tr(lang, "فجوة التوزيع", "Distribution gap")}
+            value={gapValue}
+            hint={tr(
+              lang,
+              "الفارق بين أعلى وأقل معلم حملاً",
+              "Difference between highest and lowest load"
+            )}
+          />
         </div>
 
         <div style={styles.executiveStrip}>
           <div style={styles.executiveItem}>
             <div style={styles.executiveLabel}>{tr(lang, "الحالة التشغيلية", "Operational status")}</div>
-            <div style={styles.executiveValue}>{rows.length ? tr(lang, "نشط", "Active") : tr(lang, "بانتظار البيانات", "Waiting for data")}</div>
+            <div style={styles.executiveValue}>
+              {rows.length ? tr(lang, "نشط", "Active") : tr(lang, "بانتظار البيانات", "Waiting for data")}
+            </div>
           </div>
           <div style={styles.executiveItem}>
             <div style={styles.executiveLabel}>{tr(lang, "مصدر البيانات", "Data source")}</div>
@@ -556,10 +786,30 @@ export default function AnalyticsDashboardProductionGrade() {
         </div>
 
         <div style={styles.kpiGrid}>
-          <KpiCard title={tr(lang, "عدد المعلمين", "Teachers")} value={rows.length} subtitle={tr(lang, "المشاركون في هذا التشغيل", "Participating in this run")} />
-          <KpiCard title={tr(lang, "إجمالي الأحمال", "Total workload")} value={totalTasks} subtitle={tr(lang, "مراقبة + احتياط + مراجعة فقط", "Invigilation + reserve + review only")} />
-          <KpiCard title={tr(lang, "درجة العدالة", "Fairness score")} value={`${fairness}%`} subtitle={tr(lang, "كلما ارتفعت كانت الأحمال أكثر توازناً", "Higher means a better-balanced workload")} />
-          <KpiCard title={tr(lang, "أعلى فجوة", "Highest gap")} value={highest && lowest ? highest.total - lowest.total : 0} subtitle={tr(lang, "الفرق بين أعلى وأقل حمل", "Difference between highest and lowest load")} />
+          <KpiCard
+            title={tr(lang, "عدد المعلمين", "Teachers")}
+            value={rows.length}
+            subtitle={tr(lang, "المشاركون في هذا التشغيل", "Participating in this run")}
+          />
+          <KpiCard
+            title={tr(lang, "إجمالي الأحمال", "Total workload")}
+            value={totalTasks}
+            subtitle={tr(lang, "مراقبة + احتياط + مراجعة فقط", "Invigilation + reserve + review only")}
+          />
+          <KpiCard
+            title={tr(lang, "درجة العدالة", "Fairness score")}
+            value={`${fairness}%`}
+            subtitle={tr(
+              lang,
+              "كلما ارتفعت كانت الأحمال أكثر توازناً",
+              "Higher means a better-balanced workload"
+            )}
+          />
+          <KpiCard
+            title={tr(lang, "أعلى فجوة", "Highest gap")}
+            value={highest && lowest ? highest.total - lowest.total : 0}
+            subtitle={tr(lang, "الفرق بين أعلى وأقل حمل", "Difference between highest and lowest load")}
+          />
         </div>
 
         <div style={styles.twoCols}>
@@ -569,39 +819,94 @@ export default function AnalyticsDashboardProductionGrade() {
 
         <div style={styles.twoCols}>
           <div style={styles.panel}>
-            <SectionHeader title={tr(lang, "التحليل التفصيلي للمعلمين", "Detailed teacher analytics")} subtitle={tr(lang, "عرض تفصيلي لكل معلم حسب نوع المهمة وإجمالي الحمل", "Detailed teacher-by-teacher breakdown by task type and total load.")} />
+            <SectionHeader
+              title={tr(lang, "التحليل التفصيلي للمعلمين", "Detailed teacher analytics")}
+              subtitle={tr(
+                lang,
+                "عرض تفصيلي لكل معلم حسب نوع المهمة وإجمالي الحمل",
+                "Detailed teacher-by-teacher breakdown by task type and total load."
+              )}
+            />
             <div style={styles.teacherList}>
               {rows.length ? (
                 rows.map((row, index) => (
                   <div key={row.teacher} style={styles.teacherCard}>
                     <div style={styles.teacherHeader}>
                       <div>
-                        <div style={styles.teacherName}>{index + 1}. {row.teacher}</div>
-                        <div style={styles.teacherSub}>{tr(lang, "إجمالي الحمل (بدون التصحيح)", "Total load (excluding correction)")}: {row.total}</div>
+                        <div style={styles.teacherName}>
+                          {index + 1}. {row.teacher}
+                        </div>
+                        <div style={styles.teacherSub}>
+                          {tr(lang, "إجمالي الحمل (بدون التصحيح)", "Total load (excluding correction)")}: {row.total}
+                        </div>
                       </div>
                       <div style={styles.pillsWrap}>
-                        <span style={{ ...styles.pill, background: "rgba(250,204,21,0.18)", color: COLORS.INVIGILATION }}>{tr(lang, "مراقبة", "Invigilation")}: {row.monitoring}</span>
-                        <span style={{ ...styles.pill, background: "rgba(251,146,60,0.18)", color: COLORS.RESERVE }}>{tr(lang, "احتياط", "Reserve")}: {row.reserve}</span>
-                        <span style={{ ...styles.pill, background: "rgba(74,222,128,0.18)", color: COLORS.REVIEW_FREE }}>{tr(lang, "مراجعة", "Review")}: {row.review}</span>
-                        <span style={{ ...styles.pill, background: "rgba(229,231,235,0.18)", color: COLORS.CORRECTION_FREE }}>{tr(lang, "تصحيح", "Correction")}: {row.correction}</span>
+                        <span
+                          style={{
+                            ...styles.pill,
+                            background: "rgba(250,204,21,0.18)",
+                            color: COLORS.INVIGILATION,
+                          }}
+                        >
+                          {tr(lang, "مراقبة", "Invigilation")}: {row.monitoring}
+                        </span>
+                        <span
+                          style={{
+                            ...styles.pill,
+                            background: "rgba(251,146,60,0.18)",
+                            color: COLORS.RESERVE,
+                          }}
+                        >
+                          {tr(lang, "احتياط", "Reserve")}: {row.reserve}
+                        </span>
+                        <span
+                          style={{
+                            ...styles.pill,
+                            background: "rgba(74,222,128,0.18)",
+                            color: COLORS.REVIEW_FREE,
+                          }}
+                        >
+                          {tr(lang, "مراجعة", "Review")}: {row.review}
+                        </span>
+                        <span
+                          style={{
+                            ...styles.pill,
+                            background: "rgba(229,231,235,0.18)",
+                            color: COLORS.CORRECTION_FREE,
+                          }}
+                        >
+                          {tr(lang, "تصحيح", "Correction")}: {row.correction}
+                        </span>
                       </div>
                     </div>
                     <div style={styles.progressGrid}>
                       <div>
-                        <div style={styles.metricLabel}>{tr(lang, "مراقبة", "Invigilation")} — {row.monitoring}</div>
+                        <div style={styles.metricLabel}>
+                          {tr(lang, "مراقبة", "Invigilation")} — {row.monitoring}
+                        </div>
                         <ProgressBar value={row.monitoring} max={maxMonitoring} color={COLORS.INVIGILATION} />
                       </div>
                       <div>
-                        <div style={styles.metricLabel}>{tr(lang, "احتياط", "Reserve")} — {row.reserve}</div>
+                        <div style={styles.metricLabel}>
+                          {tr(lang, "احتياط", "Reserve")} — {row.reserve}
+                        </div>
                         <ProgressBar value={row.reserve} max={maxReserve} color={COLORS.RESERVE} />
                       </div>
                       <div>
-                        <div style={styles.metricLabel}>{tr(lang, "مراجعة", "Review")} — {row.review}</div>
+                        <div style={styles.metricLabel}>
+                          {tr(lang, "مراجعة", "Review")} — {row.review}
+                        </div>
                         <ProgressBar value={row.review} max={maxReview} color={COLORS.REVIEW_FREE} />
                       </div>
                       <div>
-                        <div style={styles.metricLabel}>{tr(lang, "تصحيح", "Correction")} — {row.correction}</div>
-                        <ProgressBar value={row.correction} max={maxCorrection} color={COLORS.CORRECTION_FREE} />
+                        <div style={styles.metricLabel}>
+                          {tr(lang, "تصحيح", "Correction")} — {row.correction}
+                        </div>
+                        <ProgressBar
+                          value={row.correction}
+                          max={maxCorrection}
+                          color={COLORS.CORRECTION_FREE}
+                        />
                       </div>
                     </div>
                   </div>
@@ -609,19 +914,42 @@ export default function AnalyticsDashboardProductionGrade() {
               ) : (
                 <div style={styles.emptyState}>
                   <div style={styles.emptyStateIcon}>✦</div>
-                  <div style={styles.emptyStateTitle}>{tr(lang, "لا توجد بيانات حقيقية متاحة حالياً", "No real data is currently available")}</div>
-                  <div style={styles.emptyStateText}>{tr(lang, "يرجى تنفيذ التوزيع من داخل البرنامج أولاً، ثم العودة إلى هذه الصفحة لعرض التحليلات الفعلية المستمدة من النظام فقط.", "Please run the distribution from within the program first, then return to this page to view the actual analytics generated only from system data.")}</div>
-                  <div style={styles.emptyStateHint}>{tr(lang, "بمجرد توفر البيانات سيظهر هنا التحليل الكامل والرسوم والمؤشرات بشكل تلقائي.", "Once real data is available, the complete analytics, charts, and indicators will appear here automatically.")}</div>
+                  <div style={styles.emptyStateTitle}>
+                    {tr(lang, "لا توجد بيانات حقيقية متاحة حالياً", "No real data is currently available")}
+                  </div>
+                  <div style={styles.emptyStateText}>
+                    {tr(
+                      lang,
+                      "يرجى تنفيذ التوزيع من داخل البرنامج أولاً، ثم العودة إلى هذه الصفحة لعرض التحليلات الفعلية المستمدة من النظام فقط.",
+                      "Please run the distribution from within the program first, then return to this page to view the actual analytics generated only from system data."
+                    )}
+                  </div>
+                  <div style={styles.emptyStateHint}>
+                    {tr(
+                      lang,
+                      "بمجرد توفر البيانات سيظهر هنا التحليل الكامل والرسوم والمؤشرات بشكل تلقائي.",
+                      "Once real data is available, the complete analytics, charts, and indicators will appear here automatically."
+                    )}
+                  </div>
                 </div>
               )}
             </div>
           </div>
 
           <div style={styles.panel}>
-            <SectionHeader title={tr(lang, "ملاحظات تحليلية", "Analytical notes")} subtitle={tr(lang, "خلاصة سريعة تساعد المسؤول على فهم الوضع الحالي", "Quick insights to help administrators understand the current state.")} />
+            <SectionHeader
+              title={tr(lang, "ملاحظات تحليلية", "Analytical notes")}
+              subtitle={tr(
+                lang,
+                "خلاصة سريعة تساعد المسؤول على فهم الوضع الحالي",
+                "Quick insights to help administrators understand the current state."
+              )}
+            />
             <div style={styles.notesList}>
               {insights.map((note, index) => (
-                <div key={`${note}-${index}`} style={styles.noteCard}>{note}</div>
+                <div key={`${note}-${index}`} style={styles.noteCard}>
+                  {note}
+                </div>
               ))}
             </div>
           </div>
@@ -629,7 +957,14 @@ export default function AnalyticsDashboardProductionGrade() {
 
         {showSuggestions && (
           <div style={{ ...styles.panel, borderColor: "rgba(16,185,129,0.28)" }}>
-            <SectionHeader title={tr(lang, "اقتراحات AI لإعادة التوزيع", "AI redistribution suggestions")} subtitle={tr(lang, "اقتراحات استرشادية لتحسين التوازن دون تنفيذ تلقائي", "Advisory suggestions to improve balance without automatic execution.")} />
+            <SectionHeader
+              title={tr(lang, "اقتراحات AI لإعادة التوزيع", "AI redistribution suggestions")}
+              subtitle={tr(
+                lang,
+                "اقتراحات استرشادية لتحسين التوازن دون تنفيذ تلقائي",
+                "Advisory suggestions to improve balance without automatic execution."
+              )}
+            />
             <div style={styles.sectionSub}>
               {tr(
                 lang,
@@ -644,14 +979,36 @@ export default function AnalyticsDashboardProductionGrade() {
                     <div style={styles.suggestionTitle}>{labelTaskType(item.taskType, lang)}</div>
                     <div style={styles.suggestionBody}>{item.reason}</div>
                     <div style={styles.tagsWrap}>
-                      <span style={{ ...styles.tag, background: "rgba(239,68,68,0.16)", color: "#fecaca" }}>{tr(lang, "من", "From")}: {item.from}</span>
-                      <span style={{ ...styles.tag, background: "rgba(16,185,129,0.16)", color: "#a7f3d0" }}>{tr(lang, "إلى", "To")}: {item.to}</span>
+                      <span
+                        style={{
+                          ...styles.tag,
+                          background: "rgba(239,68,68,0.16)",
+                          color: "#fecaca",
+                        }}
+                      >
+                        {tr(lang, "من", "From")}: {item.from}
+                      </span>
+                      <span
+                        style={{
+                          ...styles.tag,
+                          background: "rgba(16,185,129,0.16)",
+                          color: "#a7f3d0",
+                        }}
+                      >
+                        {tr(lang, "إلى", "To")}: {item.to}
+                      </span>
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <div style={styles.emptyState}>{tr(lang, "لا توجد فجوات كبيرة حالياً. التوزيع يبدو متوازناً بشكل جيد.", "No major gaps detected right now. The distribution already looks fairly balanced.")}</div>
+              <div style={styles.emptyState}>
+                {tr(
+                  lang,
+                  "لا توجد فجوات كبيرة حالياً. التوزيع يبدو متوازناً بشكل جيد.",
+                  "No major gaps detected right now. The distribution already looks fairly balanced."
+                )}
+              </div>
             )}
           </div>
         )}
@@ -686,7 +1043,8 @@ const styles: Record<string, React.CSSProperties> = {
   bgGrid: {
     position: "fixed",
     inset: 0,
-    backgroundImage: "linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px)",
+    backgroundImage:
+      "linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px)",
     backgroundSize: "34px 34px",
     maskImage: "radial-gradient(circle at center, black 46%, transparent 100%)",
     pointerEvents: "none",
@@ -739,11 +1097,13 @@ const styles: Record<string, React.CSSProperties> = {
   },
   sectionLine: {
     height: 1,
-    background: "linear-gradient(90deg, rgba(245,158,11,0.35), rgba(255,255,255,0.05), rgba(255,255,255,0))",
+    background:
+      "linear-gradient(90deg, rgba(245,158,11,0.35), rgba(255,255,255,0.05), rgba(255,255,255,0))",
   },
   page: {
     minHeight: "100vh",
-    background: "radial-gradient(circle at top, rgba(250,204,21,0.16), transparent 22%), radial-gradient(circle at 20% 20%, rgba(59,130,246,0.09), transparent 25%), linear-gradient(180deg, #070707 0%, #030303 100%)",
+    background:
+      "radial-gradient(circle at top, rgba(250,204,21,0.16), transparent 22%), radial-gradient(circle at 20% 20%, rgba(59,130,246,0.09), transparent 25%), linear-gradient(180deg, #070707 0%, #030303 100%)",
     color: "#fef3c7",
     padding: 20,
     fontFamily: "Tahoma, Arial, sans-serif",
@@ -758,11 +1118,11 @@ const styles: Record<string, React.CSSProperties> = {
     width: 620,
     height: 620,
     borderRadius: "50%",
-    background: "radial-gradient(circle, rgba(250,204,21,0.18) 0%, rgba(250,204,21,0.05) 35%, transparent 72%)",
+    background:
+      "radial-gradient(circle, rgba(250,204,21,0.18) 0%, rgba(250,204,21,0.05) 35%, transparent 72%)",
     pointerEvents: "none",
     filter: "blur(8px)",
   },
-
   pageGlowBottom: {
     position: "absolute",
     bottom: -220,
@@ -902,8 +1262,10 @@ const styles: Record<string, React.CSSProperties> = {
   hero: {
     border: "1px solid rgba(250,204,21,0.16)",
     borderRadius: 38,
-    background: "linear-gradient(135deg, rgba(36,29,7,0.92), rgba(0,0,0,0.92), rgba(31,24,4,0.94))",
-    boxShadow: "0 30px 100px rgba(0,0,0,0.48), inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 0 rgba(255,255,255,0.03)",
+    background:
+      "linear-gradient(135deg, rgba(36,29,7,0.92), rgba(0,0,0,0.92), rgba(31,24,4,0.94))",
+    boxShadow:
+      "0 30px 100px rgba(0,0,0,0.48), inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 0 rgba(255,255,255,0.03)",
     padding: 30,
     position: "relative",
     overflow: "hidden",
