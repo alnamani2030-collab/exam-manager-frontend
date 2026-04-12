@@ -1,16 +1,7 @@
-// ✅ src/pages/TaskDistributionPrint.tsx  (الملف كامل بعد التعديل)
-// ✅ FIX 1: الطباعة الآن تطبع "التقرير فقط" (بدون القوائم/الواجهة) عبر نافذة طباعة مستقلة
-// ✅ FIX 2: تقرير المعلم (فردي) يتم Auto-Fit ليصبح "صفحة واحدة" A4 قدر الإمكان
-// ✅ FIX 3: حل مشكلة "صفحة بيضاء" في بعض المتصفحات (لم نعد نعتمد على visibility/fixed داخل نفس الصفحة)
-// ✅ FIX 4: زر واتساب: فتح مباشر + Fallbacks متعددة (wa.me / api.whatsapp.com / web.whatsapp.com / whatsapp://)
-// ✅ FIX 5: عمود "المادة" في تقرير المعلم أصبح بنفس عرض عمود "الفترة" لتجنب تكسير النص
-// ✅ NEW: إظهار الرقم الوظيفي للمعلم في تقرير المعلم (فردي) عبر صفحة الكادر التعليمي employeeNo
-// ✅ تحديث تلقائي لصفحة التقرير عند تغيّر: Run + master/all/results + الشعار + بيانات المدرسة + الامتحانات + الكادر التعليمي
-// عبر: RUN_UPDATED_EVENT + focus + storage + interval (لنفس التبويب)
-
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import { useI18n } from "../i18n/I18nProvider";
 import { loadTenantArray, writeTenantAudit } from "../services/tenantData";
 import { loadRun, RUN_UPDATED_EVENT, taskDistributionKey } from "../utils/taskDistributionStorage";
 import type { TaskType } from "../contracts/taskDistributionContract";
@@ -47,55 +38,106 @@ function normalizeISODate(d: string) {
   return m ? m[1] : String(d);
 }
 
-/** ✅ convert AM/BM/PM to Arabic periods */
-function formatPeriod(p: string) {
+function dayNameFromISO(d: string, lang: "ar" | "en") {
+  if (!d) return "";
+  const x = new Date(`${normalizeISODate(d)}T00:00:00`);
+  if (Number.isNaN(x.getTime())) return "";
+  const locale = lang === "ar" ? "ar" : "en";
+  return new Intl.DateTimeFormat(locale, { weekday: "long" }).format(x);
+}
+
+/** ✅ convert AM/BM/PM to periods */
+function formatPeriod(p: string, lang: "ar" | "en") {
   const raw = (p || "").toString().trim();
   if (!raw) return "—";
 
-  if (raw.includes("الأولى")) return "الفترة الأولى";
-  if (raw.includes("الثانية")) return "الفترة الثانية";
+  const lower = raw.toLowerCase();
+  if (lang === "ar") {
+    if (raw.includes("الأولى")) return "الفترة الأولى";
+    if (raw.includes("الثانية")) return "الفترة الثانية";
+    if (lower === "am" || lower.startsWith("am") || lower === "a" || lower === "a m") return "الفترة الأولى";
+    if (lower === "pm" || lower.startsWith("pm") || lower === "p" || lower === "p m" || lower === "bm" || lower.startsWith("bm") || lower === "b" || lower === "b m") {
+      return "الفترة الثانية";
+    }
+    return raw;
+  }
 
-  const n = raw.toLowerCase().replace(/\./g, "").replace(/\s+/g, " ").trim();
-
-  if (n === "am" || n.startsWith("am") || n.includes(" am") || n === "a m" || n === "a") return "الفترة الأولى";
-
-  if (
-    n === "pm" ||
-    n.startsWith("pm") ||
-    n.includes(" pm") ||
-    n === "p m" ||
-    n === "p" ||
-    n === "bm" ||
-    n.startsWith("bm") ||
-    n.includes(" bm") ||
-    n === "b m" ||
-    n === "b"
-  )
-    return "الفترة الثانية";
-
+  if (lower.includes("first period") || raw.includes("الأولى")) return "First Period";
+  if (lower.includes("second period") || raw.includes("الثانية")) return "Second Period";
+  if (lower === "am" || lower.startsWith("am") || lower === "a" || lower === "a m") return "First Period";
+  if (lower === "pm" || lower.startsWith("pm") || lower === "p" || lower === "p m" || lower === "bm" || lower.startsWith("bm") || lower === "b" || lower === "b m") {
+    return "Second Period";
+  }
   return raw;
 }
 
 /** ✅ period key for exam matching */
 function normalizePeriodKey(p: string) {
-  const fp = formatPeriod(p || "");
-  if (fp.includes("الأولى")) return "p1";
-  if (fp.includes("الثانية")) return "p2";
-  return normalizeText(fp);
+  const raw = (p || "").toString();
+  if (raw.includes("الأولى") || /first period/i.test(raw)) return "p1";
+  if (raw.includes("الثانية") || /second period/i.test(raw)) return "p2";
+  const n = raw.trim().toLowerCase().replace(/\./g, "").replace(/\s+/g, " ");
+  if (n === "am" || n.startsWith("am") || n === "a" || n === "a m") return "p1";
+  if (n === "pm" || n.startsWith("pm") || n === "bm" || n.startsWith("bm") || n === "p" || n === "b" || n === "p m" || n === "b m") return "p2";
+  return normalizeText(raw);
 }
 
-function taskLabel(t: TaskType | string) {
+function normalizePhone(raw: string) {
+  return String(raw || "").replace(/[^\d]/g, "");
+}
+
+function normalizePeriod(value: any): "AM" | "PM" {
+  return String(value || "").toUpperCase() === "PM" ? "PM" : "AM";
+}
+
+function normalizeSubjectText(value: any) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function getRowSubject(row: any) {
+  return normalizeSubjectText(
+    row?.subject ??
+      row?.examSubject ??
+      row?.subjectName ??
+      row?.examName ??
+      row?.name ??
+      ""
+  );
+}
+
+function getRowDateISO(row: any) {
+  return String(row?.dateISO ?? row?.date ?? "").trim();
+}
+
+function getRowPeriod(row: any): "AM" | "PM" {
+  return normalizePeriod(row?.period ?? row?.periodKey ?? row?.p ?? "AM");
+}
+
+function getRowCommitteeNo(row: any) {
+  const value =
+    row?.committeeNo ??
+    row?.committee ??
+    row?.roomNo ??
+    row?.room ??
+    row?.committeeLabel ??
+    row?.committeeNumber;
+  if (value === undefined || value === null || value === "") return "";
+  return String(value).trim();
+}
+
+function taskLabel(t: TaskType | string, lang: "ar" | "en") {
   switch (t) {
     case "INVIGILATION":
-      return "مراقبة";
+      return lang === "ar" ? "مراقبة" : "Invigilation";
     case "RESERVE":
-      return "احتياط";
+      return lang === "ar" ? "احتياط" : "Reserve";
     case "REVIEW_FREE":
-      return "فاضي للمراجعة";
+      return lang === "ar" ? "فاضي للمراجعة" : "Free for Review";
     case "CORRECTION_FREE":
-      return "فاضي للتصحيح";
+      return lang === "ar" ? "فاضي للتصحيح" : "Free for Correction";
     default:
-      return typeof t === "string" && t.trim() ? t : "فارغ";
+      if (typeof t === "string" && t.trim()) return t;
+      return lang === "ar" ? "فارغ" : "Empty";
   }
 }
 
@@ -112,17 +154,17 @@ type SchoolData = {
 
 type Exam = {
   subject: string;
-  dateISO: string; // YYYY-MM-DD
-  dayLabel: string; // الأحد..الخ
-  time: string; // 08:00
+  dateISO: string;
+  dayLabel: string;
+  time: string;
   durationMinutes?: number;
-  period: string; // الفترة الأولى/الثانية أو AM/PM/BM...
+  period: string;
   roomsCount?: number;
 };
 
 type Teacher = {
   id: string;
-  employeeNo: string; // ✅ الرقم الوظيفي
+  employeeNo: string;
   fullName: string;
   phone: string;
 };
@@ -137,7 +179,6 @@ function getTaskType(a: AnyAssignment): TaskType | string {
   return (a?.taskType || a?.type || a?.assignmentType || a?.dutyType || "INVIGILATION") as any;
 }
 
-/** ✅ FIX: Strong committee/room number extraction */
 function getRoomNumber(a: AnyAssignment): string {
   const direct =
     a?.committeeNumber ??
@@ -212,7 +253,6 @@ function getRoomNumber(a: AnyAssignment): string {
   return "";
 }
 
-/** ✅ NEW: تحويل رقم اللجنة لرقم للمقارنة والترتيب */
 function parseCommitteeNumber(v: any): { num: number; raw: string } {
   const raw = (v ?? "").toString().trim();
   if (!raw) return { num: Number.POSITIVE_INFINITY, raw: "" };
@@ -236,10 +276,6 @@ function getExamPeriod(a: AnyAssignment): string {
 function getExamTime(a: AnyAssignment): string {
   return a?.time || a?.examTime || a?.exam?.time || "";
 }
-
-/** -------------------------------------------
- * ✅ Print helpers (تقرير فقط + صفحة واحدة للمعلم الفردي)
- * ------------------------------------------ */
 
 const printWindowCss = `
 @page {
@@ -350,7 +386,6 @@ html, body {
 }
 `;
 
-/** ✅ اطبع عنصر فقط (بدون القوائم/الواجهة) + اجعله صفحة واحدة إذا كانت صفحة واحدة فقط */
 async function printOnlyElement(el: HTMLElement, title = "report") {
   const clone = el.cloneNode(true) as HTMLElement;
   clone.querySelectorAll(".no-print").forEach((n) => n.remove());
@@ -440,18 +475,12 @@ async function printOnlyElement(el: HTMLElement, title = "report") {
   w.document.close();
 }
 
-/** -------------------------------------------
- * WhatsApp helpers (FIX: فتح مباشر + فوالباك)
- * ------------------------------------------ */
 function sanitizePhoneToWhatsApp(phoneRaw: string): string {
   let p = String(phoneRaw || "").trim();
   if (!p) return "";
   p = p.replace(/[^\d]/g, "");
-
-  // ✅ عمان غالباً 8 أرقام → نضيف 968
   if (p.length === 8) p = `968${p}`;
   if (p.startsWith("0") && p.length >= 9) p = `968${p.slice(1)}`;
-
   return p;
 }
 
@@ -460,18 +489,11 @@ function openWhatsAppWindow({ text, phone }: { text: string; phone?: string }) {
   const encoded = encodeURIComponent(text || "");
 
   const urls = [
-    // 1) محاولة فتح التطبيق مباشرة (قد يعمل على بعض الأنظمة)
     `whatsapp://send?${cleanPhone ? `phone=${cleanPhone}&` : ""}text=${encoded}`,
-
-    // 2) wa.me
     cleanPhone ? `https://wa.me/${cleanPhone}?text=${encoded}` : `https://wa.me/?text=${encoded}`,
-
-    // 3) api.whatsapp.com
     cleanPhone
       ? `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encoded}`
       : `https://api.whatsapp.com/send?text=${encoded}`,
-
-    // 4) web.whatsapp.com (مفيد على الكمبيوتر)
     cleanPhone
       ? `https://web.whatsapp.com/send?phone=${cleanPhone}&text=${encoded}`
       : `https://web.whatsapp.com/send?text=${encoded}`,
@@ -479,24 +501,17 @@ function openWhatsAppWindow({ text, phone }: { text: string; phone?: string }) {
 
   const features = "noopener,noreferrer,width=980,height=760,top=70,left=120,resizable=yes,scrollbars=yes";
 
-  // ✅ نفتح الرابط مباشرة (بدون about:blank ثم location) لتفادي مشاكل/حظر/ERR_CONNECTION_RESET أحيانًا
   for (const url of urls) {
     try {
       const w = window.open(url, "_blank", features);
       if (w) return true;
-    } catch {
-      // نكمل للفallback التالي
-    }
+    } catch {}
   }
 
-  // ✅ آخر حل: افتح في نفس الصفحة (إذا المتصفح منع الـpopup)
   window.location.href = urls[1];
   return false;
 }
 
-/** -------------------------------------------
- * PNG export (بدون مكتبات)
- * ------------------------------------------ */
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -553,91 +568,12 @@ async function exportElementToPng(el: HTMLElement, filename: string) {
   downloadBlob(blob, filename);
 }
 
-async function elementToPngBlob(el: HTMLElement): Promise<Blob> {
-  const rect = el.getBoundingClientRect();
-  const w = Math.max(1, Math.floor(rect.width));
-  const h = Math.max(1, Math.floor(rect.height));
-
-  const clone = el.cloneNode(true) as HTMLElement;
-  clone.querySelectorAll(".no-print").forEach((n) => n.remove());
-
-  const serializer = new XMLSerializer();
-  const xhtml = serializer.serializeToString(clone);
-
-  const svg = `
-  <svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
-    <foreignObject width="100%" height="100%">
-      <div xmlns="http://www.w3.org/1999/xhtml">${xhtml}</div>
-    </foreignObject>
-  </svg>`.trim();
-
-  const svgBlob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
-  const svgUrl = URL.createObjectURL(svgBlob);
-  const img = new Image();
-  img.decoding = "async";
-
-  await new Promise<void>((resolve, reject) => {
-    img.onload = () => resolve();
-    img.onerror = () => reject(new Error("PNG_EXPORT_FAILED"));
-    img.src = svgUrl;
-  });
-
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("NO_CTX");
-
-  ctx.drawImage(img, 0, 0);
-  URL.revokeObjectURL(svgUrl);
-
-  const blob: Blob | null = await new Promise((resolve) => canvas.toBlob(resolve, "image/png", 1));
-  if (!blob) throw new Error("NO_BLOB");
-  return blob;
-}
-
-async function elementToPdfBlob(el: HTMLElement): Promise<Blob> {
-  const html2canvas = (await import("html2canvas")).default;
-  const { jsPDF } = await import("jspdf");
-
-  const canvas = await html2canvas(el, {
-    backgroundColor: "#ffffff",
-    scale: 2,
-    useCORS: true,
-    logging: false,
-  });
-
-  const imgData = canvas.toDataURL("image/png");
-  const pdf = new jsPDF("p", "mm", "a4");
-
-  const pageWidth = pdf.internal.pageSize.getWidth();
-  const pageHeight = pdf.internal.pageSize.getHeight();
-  const imgWidth = pageWidth;
-  const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-  let heightLeft = imgHeight;
-  let position = 0;
-
-  pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-  heightLeft -= pageHeight;
-
-  while (heightLeft > 0) {
-    position = heightLeft - imgHeight;
-    pdf.addPage();
-    pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-    heightLeft -= pageHeight;
-  }
-
-  return pdf.output("blob");
-}
-
-/** -------------------------------------------
- * Main
- * ------------------------------------------ */
 export default function TaskDistributionPrint() {
   const nav = useNavigate();
   const loc = useLocation();
   const { user, effectiveTenantId } = useAuth() as any;
+  const { lang } = useI18n();
+  const tr = React.useCallback((ar: string, en: string) => (lang === "ar" ? ar : en), [lang]);
   const tenantId = String(effectiveTenantId || user?.tenantId || "").trim() || "default";
 
   const printAreaRef = useRef<HTMLDivElement | null>(null);
@@ -724,9 +660,7 @@ export default function TaskDistributionPrint() {
       const nextLogo = (localStorage.getItem(LOGO_KEY) || "").trim() || DEFAULT_LOGO_URL;
       setLogoUrl(nextLogo);
 
-      // teachers/exams أصبحت من Firestore
       refreshRosterFromFirestore();
-
       setStorageTick((x) => x + 1);
     }
   }
@@ -760,7 +694,6 @@ export default function TaskDistributionPrint() {
 
     const iv = window.setInterval(() => {
       refreshFromStorage();
-      // تحديث دوري خفيف لضمان تزامن الطباعة
       refreshRosterFromFirestore();
     }, 2500);
 
@@ -770,7 +703,6 @@ export default function TaskDistributionPrint() {
       window.removeEventListener("focus", refreshFromStorage);
       window.clearInterval(iv);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId]);
 
   const qs = useMemo(() => new URLSearchParams(loc.search), [loc.search]);
@@ -782,18 +714,15 @@ export default function TaskDistributionPrint() {
   const requestedPeriod = (qs.get("period") || "").trim();
 
   const schoolHeader = useMemo(() => {
-    const countryName = "سلطنة عمان";
-    const ministryName = "وزارة التعليم";
-    const directorateName = schoolData.governorate?.trim() || "المديرية العامة للتعليم";
-    const schoolName = schoolData.name?.trim() || "المدرسة";
-    const semesterLabel = schoolData.semester?.trim() || "الفصل الدراسي الأول";
+    const countryName = lang === "ar" ? "سلطنة عمان" : "Sultanate of Oman";
+    const ministryName = lang === "ar" ? "وزارة التعليم" : "Ministry of Education";
+    const directorateName = schoolData.governorate?.trim() || (lang === "ar" ? "المديرية العامة للتعليم" : "General Directorate of Education");
+    const schoolName = schoolData.name?.trim() || (lang === "ar" ? "المدرسة" : "School");
+    const semesterLabel = schoolData.semester?.trim() || (lang === "ar" ? "الفصل الدراسي الأول" : "First Semester");
     const yearLabel = "2026/2025";
     return { countryName, ministryName, directorateName, schoolName, semesterLabel, yearLabel };
-  }, [schoolData]);
+  }, [schoolData, lang]);
 
-  /** -------------------------------------------
-   * Exams index
-   * ------------------------------------------ */
   const examsIndex = useMemo(() => {
     const map = new Map<string, { dayLabel: string; time: string }>();
     for (const ex of examsList || []) {
@@ -812,9 +741,6 @@ export default function TaskDistributionPrint() {
     return examsIndex.get(key) || null;
   }
 
-  /** -------------------------------------------
-   * Teachers index (name -> phone / employeeNo)
-   * ------------------------------------------ */
   const teacherPhoneIndex = useMemo(() => {
     const map = new Map<string, string>();
     for (const t of teachers || []) {
@@ -849,9 +775,6 @@ export default function TaskDistributionPrint() {
     return teacherEmployeeIndex.get(key) || "";
   }
 
-  /** -------------------------------------------
-   * Load master table
-   * ------------------------------------------ */
   const masterTableRows = useMemo<AnyAssignment[]>(() => {
     const m1 = readJson<any>("exam-manager:task-distribution:master-table:v1");
     const m2 = readJson<any>("exam-manager:task-distribution:all-table:v1");
@@ -860,7 +783,6 @@ export default function TaskDistributionPrint() {
     const payload = m1 || m2 || m3 || null;
     const rows = payload?.rows || payload?.data || null;
 
-    // ✅ مهم: إذا كان "الجدول الشامل" من Run قديم، لا نسمح له أن يطغى على Run الحالي
     const meta = payload?.meta || {};
     const matchesCurrentRun = !run || meta?.runId === run.runId || meta?.runCreatedAtISO === run.createdAtISO;
 
@@ -868,9 +790,6 @@ export default function TaskDistributionPrint() {
     return Array.isArray(run?.assignments) ? (run!.assignments as any[]) : [];
   }, [run, storageTick]);
 
-  /** -------------------------------------------
-   * Options
-   * ------------------------------------------ */
   const teacherOptions = useMemo(() => {
     const set = new Map<string, string>();
     for (const r of masterTableRows || []) {
@@ -879,8 +798,8 @@ export default function TaskDistributionPrint() {
       const k = normalizeText(n);
       if (!set.has(k)) set.set(k, n);
     }
-    return Array.from(set.values()).sort((a, b) => a.localeCompare(b, "ar"));
-  }, [masterTableRows]);
+    return Array.from(set.values()).sort((a, b) => a.localeCompare(b, lang === "ar" ? "ar" : "en"));
+  }, [masterTableRows, lang]);
 
   const subjectOptions = useMemo(() => {
     const set = new Map<string, string>();
@@ -890,12 +809,9 @@ export default function TaskDistributionPrint() {
       const n = normalizeText(s);
       if (!set.has(n)) set.set(n, s);
     }
-    return Array.from(set.values()).sort((a, b) => a.localeCompare(b, "ar"));
-  }, [masterTableRows]);
+    return Array.from(set.values()).sort((a, b) => a.localeCompare(b, lang === "ar" ? "ar" : "en"));
+  }, [masterTableRows, lang]);
 
-  /** -------------------------------------------
-   * Apply filters
-   * ------------------------------------------ */
   const filteredRows = useMemo(() => {
     let rows = [...(masterTableRows || [])];
 
@@ -920,14 +836,6 @@ export default function TaskDistributionPrint() {
     return rows;
   }, [masterTableRows, reportType, dateISO, teacherNameFilter, subjectFilter, requestedPeriod]);
 
-  /** -------------------------------------------
-   * Header exam info
-   * ------------------------------------------ */
-
-
-  /** -------------------------------------------
-   * Query helper
-   * ------------------------------------------ */
   function setQueryParam(key: string, value: string) {
     const sp = new URLSearchParams(loc.search);
     if (!value) sp.delete(key);
@@ -947,7 +855,6 @@ export default function TaskDistributionPrint() {
     setQueryParam("reportType", "teacher");
   }
 
-  // ✅ طباعة "التقرير فقط" عبر نافذة مستقلة
   async function openPrintDialog() {
     const el = printAreaRef.current;
     if (!el) return;
@@ -984,15 +891,15 @@ export default function TaskDistributionPrint() {
 
   if (!run) {
     return (
-      <div style={styles.pageWrapDark}>
+      <div style={{ ...styles.pageWrapDark, direction: lang === "ar" ? "rtl" : "ltr" }}>
         <div style={styles.darkCard}>
           <div style={styles.darkRow}>
             <div>
-              <div style={{ fontSize: 16, fontWeight: 800, color: "white" }}>طباعة التقرير</div>
-              <div style={{ color: "rgba(255,255,255,.75)", marginTop: 4 }}>لا يوجد تشغيل محفوظ بعد</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: "white" }}>{tr("طباعة التقرير", "Print Report")}</div>
+              <div style={{ color: "rgba(255,255,255,.75)", marginTop: 4 }}>{tr("لا يوجد تشغيل محفوظ بعد", "No saved run yet")}</div>
             </div>
             <button style={styles.btnSoft} onClick={() => nav("/task-distribution")}>
-              رجوع
+              {tr("رجوع", "Back")}
             </button>
           </div>
         </div>
@@ -1005,36 +912,9 @@ export default function TaskDistributionPrint() {
   const title =
     reportType === "teacher"
       ? teacherNameFilter
-        ? "تقرير معلم (فردي)"
-        : "تقرير الكادر التعليمي (الكل)"
-      : "كشف يومي (امتحانات)";
-
-  /** -------------------------------------------
-   * DAILY groups
-   * ------------------------------------------ */
-  const dailyInvigilators = useMemo(() => {
-    if (reportType !== "daily") return [];
-    const rows = filteredRows.filter((r) => getTaskType(r) === "INVIGILATION");
-    rows.sort((a, b) => {
-      const ra = parseCommitteeNumber(getRoomNumber(a));
-      const rb = parseCommitteeNumber(getRoomNumber(b));
-      if (ra.num !== rb.num) return ra.num - rb.num;
-      if (ra.raw !== rb.raw) return ra.raw.localeCompare(rb.raw, "ar");
-      return (getTeacherName(a) || "").localeCompare(getTeacherName(b) || "", "ar");
-    });
-    return rows;
-  }, [filteredRows, reportType]);
-
-  const dailyReserves = useMemo(() => {
-    if (reportType !== "daily") return [];
-    return filteredRows.filter((r) => getTaskType(r) === "RESERVE");
-  }, [filteredRows, reportType]);
-
-  const dailyReviewFree = useMemo(() => {
-    if (reportType !== "daily") return [];
-    return filteredRows.filter((r) => getTaskType(r) === "REVIEW_FREE");
-  }, [filteredRows, reportType]);
-
+        ? tr("تقرير معلم (فردي)", "Teacher Report (Individual)")
+        : tr("تقرير الكادر التعليمي (الكل)", "Teaching Staff Report (All)")
+      : tr("كشف يومي (امتحانات)", "Daily Report (Exams)");
 
   const dailyPages = useMemo(() => {
     if (reportType !== "daily") return [] as any[];
@@ -1070,8 +950,8 @@ export default function TaskDistributionPrint() {
         const ra = parseCommitteeNumber(getRoomNumber(a));
         const rb = parseCommitteeNumber(getRoomNumber(b));
         if (ra.num !== rb.num) return ra.num - rb.num;
-        if (ra.raw !== rb.raw) return ra.raw.localeCompare(rb.raw, "ar");
-        return (getTeacherName(a) || "").localeCompare(getTeacherName(b) || "", "ar");
+        if (ra.raw !== rb.raw) return ra.raw.localeCompare(rb.raw, lang === "ar" ? "ar" : "en");
+        return (getTeacherName(a) || "").localeCompare(getTeacherName(b) || "", lang === "ar" ? "ar" : "en");
       });
     };
 
@@ -1086,61 +966,39 @@ export default function TaskDistributionPrint() {
         if (a.dISO !== b.dISO) return a.dISO.localeCompare(b.dISO);
         const pa = normalizePeriodKey(a.period);
         const pb = normalizePeriodKey(b.period);
-        if (pa !== pb) return pa.localeCompare(pb, "ar");
-        return a.subject.localeCompare(b.subject, "ar");
+        if (pa !== pb) return pa.localeCompare(pb, lang === "ar" ? "ar" : "en");
+        return a.subject.localeCompare(b.subject, lang === "ar" ? "ar" : "en");
       });
 
-    // ✅ عند اختيار مادة فقط بدون تحديد فترة، وقد توجد نفس المادة في أكثر من فترة
-    // نختار الصفحة الأهم عمليًا: التي تحتوي أكبر عدد من المراقبين
     if (subjectFilter && !requestedPeriod && pages.length > 1) {
       const ranked = [...pages].sort((a, b) => {
         if (b.invigilators.length !== a.invigilators.length) return b.invigilators.length - a.invigilators.length;
         if (b.reserves.length !== a.reserves.length) return b.reserves.length - a.reserves.length;
         if (b.reviewFree.length !== a.reviewFree.length) return b.reviewFree.length - a.reviewFree.length;
-        return normalizePeriodKey(a.period).localeCompare(normalizePeriodKey(b.period), "ar");
+        return normalizePeriodKey(a.period).localeCompare(normalizePeriodKey(b.period), lang === "ar" ? "ar" : "en");
       });
       return ranked.length ? [ranked[0]] : [];
     }
 
     return pages;
-  }, [reportType, filteredRows, examsIndex, subjectFilter, requestedPeriod]);
+  }, [reportType, filteredRows, subjectFilter, requestedPeriod, examsIndex, lang]);
 
-  /** -------------------------------------------
-   * WhatsApp text
-   * ------------------------------------------ */
   const shareText = useMemo(() => {
-    const base = `تقرير توزيع المهام - ${schoolHeader.schoolName}\n`;
-    const typeLine = `نوع التقرير: ${title}\n`;
-    const teacherLine = teacherNameFilter ? `المعلم: ${teacherNameFilter}\n` : "";
-    const empLine = teacherNameFilter ? `الرقم الوظيفي: ${getTeacherEmployeeNoByName(teacherNameFilter) || "—"}\n` : "";
-    const subjectLine = subjectFilter ? `المادة: ${subjectFilter}\n` : "";
-    const dateLine = dateISO ? `التاريخ: ${dateISO}\n` : "";
-    return `${base}${typeLine}${teacherLine}${empLine}${subjectLine}${dateLine}تم الإنشاء من النظام.`;
-  }, [schoolHeader.schoolName, title, teacherNameFilter, subjectFilter, dateISO, teacherEmployeeIndex]);
+    const base = `${tr("تقرير توزيع المهام", "Task Distribution Report")} - ${schoolHeader.schoolName}
+`;
+    const typeLine = `${tr("نوع التقرير", "Report Type")}: ${title}
+`;
+    const teacherLine = teacherNameFilter ? `${tr("المعلم", "Teacher")}: ${teacherNameFilter}
+` : "";
+    const empLine = teacherNameFilter ? `${tr("الرقم الوظيفي", "Employee No")}: ${getTeacherEmployeeNoByName(teacherNameFilter) || "—"}
+` : "";
+    const subjectLine = subjectFilter ? `${tr("المادة", "Subject")}: ${subjectFilter}
+` : "";
+    const dateLine = dateISO ? `${tr("التاريخ", "Date")}: ${dateISO}
+` : "";
+    return `${base}${typeLine}${teacherLine}${empLine}${subjectLine}${dateLine}${tr("تم الإنشاء من النظام.", "Generated from the system.")}`;
+  }, [schoolHeader.schoolName, title, teacherNameFilter, subjectFilter, dateISO, teacherEmployeeIndex, tr]);
 
-  const headerExamInfo = useMemo(() => {
-    const page = reportType === "daily" && dailyPages.length ? dailyPages[0] : null;
-    const r = page ? null : filteredRows[0] || masterTableRows[0] || null;
-
-    const subject = page?.subject || subjectFilter || (r ? getExamSubject(r) : "");
-    const dISO = page?.dISO || (r ? normalizeISODate(getExamDateISO(r)) : dateISO);
-    const period = page?.period || (r ? getExamPeriod(r) : "");
-
-    let dayLabel = page?.dayLabel || (r ? getExamDayLabel(r) : "");
-    let time = page?.time || (r ? getExamTime(r) : "");
-
-    const meta = lookupExamMeta(subject, dISO, period);
-    if (meta) {
-      dayLabel = meta.dayLabel || dayLabel;
-      time = meta.time || time;
-    }
-
-    return { subject, dISO, dayLabel, period, time };
-  }, [reportType, dailyPages, filteredRows, masterTableRows, dateISO, subjectFilter, examsIndex]);
-
-  /** -------------------------------------------
-   * Teacher pages (all teachers)
-   * ------------------------------------------ */
   const allTeachersPages = useMemo(() => {
     if (reportType !== "teacher" || teacherNameFilter) return [];
     const pages = teacherOptions.map((tName) => {
@@ -1156,18 +1014,18 @@ export default function TaskDistributionPrint() {
         const db = normalizeISODate(getExamDateISO(b));
         if (da !== db) return da.localeCompare(db);
 
-        const pa = formatPeriod(getExamPeriod(a));
-        const pb = formatPeriod(getExamPeriod(b));
-        if (pa !== pb) return pa.localeCompare(pb, "ar");
+        const pa = formatPeriod(getExamPeriod(a), lang);
+        const pb = formatPeriod(getExamPeriod(b), lang);
+        if (pa !== pb) return pa.localeCompare(pb, lang === "ar" ? "ar" : "en");
 
-        return (getExamSubject(a) || "").toString().localeCompare((getExamSubject(b) || "").toString(), "ar");
+        return (getExamSubject(a) || "").toString().localeCompare((getExamSubject(b) || "").toString(), lang === "ar" ? "ar" : "en");
       });
 
       return { teacherName: tName, rows };
     });
 
     return pages.filter((p) => p.rows.length > 0);
-  }, [reportType, teacherNameFilter, teacherOptions, masterTableRows, subjectFilter]);
+  }, [reportType, teacherNameFilter, teacherOptions, masterTableRows, subjectFilter, lang]);
 
   function DailySheet(props: {
     subject: string;
@@ -1182,9 +1040,9 @@ export default function TaskDistributionPrint() {
     createdAtISO: string;
   }) {
     return (
-      <div className="print-sheet print-daily" style={{ ...styles.sheet, ...(props.pageBreak ? styles.pageBreak : {}) }}>
+      <div className="print-sheet print-daily" style={{ ...styles.sheet, ...(props.pageBreak ? styles.pageBreak : {}), direction: lang === "ar" ? "rtl" : "ltr" }}>
         <div style={styles.headerGrid}>
-          <div style={styles.headerRight}>
+          <div style={{ ...styles.headerRight, textAlign: lang === "ar" ? "right" : "left" }}>
             <div style={styles.headerRightLine}>{schoolHeader.countryName}</div>
             <div style={styles.headerRightLine}>{schoolHeader.ministryName}</div>
             <div style={styles.headerRightLine}>{schoolHeader.directorateName}</div>
@@ -1192,13 +1050,13 @@ export default function TaskDistributionPrint() {
           </div>
 
           <div style={styles.headerCenter}>
-            <img src={logoUrl} alt="شعار" style={{ width: 66, height: 66, objectFit: "contain" }} />
+            <img src={logoUrl} alt={tr("شعار", "Logo")} style={{ width: 66, height: 66, objectFit: "contain" }} />
           </div>
 
-          <div style={styles.headerLeft}>
-            <div style={styles.headerLeftTitle}>كشف مراقبة امتحان</div>
+          <div style={{ ...styles.headerLeft, textAlign: lang === "ar" ? "left" : "right" }}>
+            <div style={styles.headerLeftTitle}>{tr("كشف مراقبة امتحان", "Exam Invigilation Sheet")}</div>
             <div style={styles.headerLeftSub}>{schoolHeader.semesterLabel}</div>
-            <div style={styles.headerLeftSub}>العام الدراسي {schoolHeader.yearLabel}</div>
+            <div style={styles.headerLeftSub}>{tr("العام الدراسي", "Academic Year")} {schoolHeader.yearLabel}</div>
           </div>
         </div>
 
@@ -1207,40 +1065,40 @@ export default function TaskDistributionPrint() {
         <div style={styles.examBarWide}>
           <div style={styles.examBarWideInner}>
             <div style={styles.examBarWideItem}>
-              <span style={styles.examLabel}>الفترة:</span> <span style={styles.examValue}>{formatPeriod(props.period)}</span>
+              <span style={styles.examLabel}>{tr("الفترة", "Period")}:</span> <span style={styles.examValue}>{formatPeriod(props.period, lang)}</span>
             </div>
             <div style={styles.examBarWideSep}>|</div>
 
             <div style={styles.examBarWideItem}>
-              <span style={styles.examLabel}>اليوم:</span> <span style={styles.examValue}>{props.dayLabel || "—"}</span>
+              <span style={styles.examLabel}>{tr("اليوم", "Day")}:</span> <span style={styles.examValue}>{props.dayLabel || "—"}</span>
             </div>
             <div style={styles.examBarWideSep}>|</div>
 
             <div style={styles.examBarWideItem}>
-              <span style={styles.examLabel}>الوقت:</span> <span style={styles.examValue}>{props.time || "—"}</span>
+              <span style={styles.examLabel}>{tr("الوقت", "Time")}:</span> <span style={styles.examValue}>{props.time || "—"}</span>
             </div>
 
             <div style={styles.examBarWideItem}>
-              <span style={styles.examLabel}>المادة:</span> <span style={styles.examValue}>{props.subject || "—"}</span>
+              <span style={styles.examLabel}>{tr("المادة", "Subject")}:</span> <span style={styles.examValue}>{props.subject || "—"}</span>
             </div>
 
             <div style={styles.examBarWideItem}>
-              <span style={styles.examLabel}>التاريخ:</span> <span style={styles.examValue}>{props.dISO || "—"}</span>
+              <span style={styles.examLabel}>{tr("التاريخ", "Date")}:</span> <span style={styles.examValue}>{props.dISO || "—"}</span>
             </div>
           </div>
         </div>
 
         <div style={styles.chipRow}>
-          <div style={styles.chip}>كشف بأسماء المراقبين</div>
+          <div style={styles.chip}>{tr("كشف بأسماء المراقبين", "Invigilators List")}</div>
         </div>
 
         <table style={styles.table}>
           <thead>
             <tr>
-              <th style={{ ...styles.th, width: 56, textAlign: "center" }}>م</th>
-              <th style={{ ...styles.th }}>اسم المراقب</th>
-              <th style={{ ...styles.th, width: 120 }}>رقم اللجنة</th>
-              <th style={{ ...styles.th, width: 120 }}>التوقيع</th>
+              <th style={{ ...styles.th, width: 56, textAlign: "center" }}>{tr("م", "No.")}</th>
+              <th style={{ ...styles.th }}>{tr("اسم المراقب", "Invigilator Name")}</th>
+              <th style={{ ...styles.th, width: 120 }}>{tr("رقم اللجنة", "Committee No.")}</th>
+              <th style={{ ...styles.th, width: 120 }}>{tr("التوقيع", "Signature")}</th>
             </tr>
           </thead>
           <tbody>
@@ -1267,13 +1125,13 @@ export default function TaskDistributionPrint() {
         </table>
 
         <div style={styles.reserveBlock}>
-          <div style={styles.reserveTitle}>المراقبون الاحتياط</div>
+          <div style={styles.reserveTitle}>{tr("المراقبون الاحتياط", "Reserve Invigilators")}</div>
           <table style={styles.reserveTable}>
             <thead>
               <tr>
-                <th style={{ ...styles.th, width: 56, textAlign: "center" }}>م</th>
-                <th style={{ ...styles.th }}>اسم المراقب الاحتياط</th>
-                <th style={{ ...styles.th, width: 150 }}>التوقيع</th>
+                <th style={{ ...styles.th, width: 56, textAlign: "center" }}>{tr("م", "No.")}</th>
+                <th style={{ ...styles.th }}>{tr("اسم المراقب الاحتياط", "Reserve Invigilator Name")}</th>
+                <th style={{ ...styles.th, width: 150 }}>{tr("التوقيع", "Signature")}</th>
               </tr>
             </thead>
             <tbody>
@@ -1298,14 +1156,14 @@ export default function TaskDistributionPrint() {
           </table>
 
           <div style={{ marginTop: 8 }}>
-            <div style={styles.reserveTitle}>المعلمون الفارغون للمراجعة</div>
+            <div style={styles.reserveTitle}>{tr("المعلمون الفارغون للمراجعة", "Teachers Free for Review")}</div>
             <table style={styles.reserveTable}>
               <thead>
                 <tr>
-                  <th style={{ ...styles.th, width: 56, textAlign: "center" }}>م</th>
-                  <th style={{ ...styles.th }}>اسم المعلم</th>
-                  <th style={{ ...styles.th, width: 150 }}>التوقيع</th>
-                  <th style={{ ...styles.th, width: 170 }}>ملاحظات</th>
+                  <th style={{ ...styles.th, width: 56, textAlign: "center" }}>{tr("م", "No.")}</th>
+                  <th style={{ ...styles.th }}>{tr("اسم المعلم", "Teacher Name")}</th>
+                  <th style={{ ...styles.th, width: 150 }}>{tr("التوقيع", "Signature")}</th>
+                  <th style={{ ...styles.th, width: 170 }}>{tr("ملاحظات", "Notes")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -1315,7 +1173,7 @@ export default function TaskDistributionPrint() {
                       <td style={styles.tdNum}>{idx + 1}</td>
                       <td style={{ ...styles.td, fontWeight: 900 }}>{getTeacherName(r) || "—"}</td>
                       <td style={styles.td}></td>
-                      <td style={styles.td}>فارغ للمراجعة</td>
+                      <td style={styles.td}>{tr("فارغ للمراجعة", "Free for Review")}</td>
                     </tr>
                   ))
                 ) : (
@@ -1324,7 +1182,7 @@ export default function TaskDistributionPrint() {
                       <td style={styles.tdNum}>{i + 1}</td>
                       <td style={styles.td}></td>
                       <td style={styles.td}></td>
-                      <td style={styles.td}>فارغ للمراجعة</td>
+                      <td style={styles.td}>{tr("فارغ للمراجعة", "Free for Review")}</td>
                     </tr>
                   ))
                 )}
@@ -1334,25 +1192,22 @@ export default function TaskDistributionPrint() {
         </div>
 
         <div style={styles.bottomSigRow}>
-          <div style={styles.bottomSigCell}>رئيس الكنترول</div>
-          <div style={styles.bottomSigCell}>مدير المدرسة</div>
+          <div style={styles.bottomSigCell}>{tr("رئيس الكنترول", "Head of Control")}</div>
+          <div style={styles.bottomSigCell}>{tr("مدير المدرسة", "School Principal")}</div>
         </div>
 
-        <div style={styles.footerNote}>تم إنشاء التقرير من نظام توزيع مهام المراقبة — {props.createdAtISO}</div>
+        <div style={styles.footerNote}>{tr("تم إنشاء التقرير من نظام توزيع مهام المراقبة", "Report generated from the invigilation task distribution system")} — {props.createdAtISO}</div>
       </div>
     );
   }
 
-  /** -------------------------------------------
-   * Teacher sheet
-   * ------------------------------------------ */
   function TeacherSheet(props: { teacherName: string; rows: AnyAssignment[]; pageBreak?: boolean; createdAtISO: string }) {
     const employeeNo = getTeacherEmployeeNoByName(props.teacherName);
 
     return (
-      <div className="print-sheet" style={{ ...styles.sheet, ...(props.pageBreak ? styles.pageBreak : {}) }}>
+      <div className="print-sheet" style={{ ...styles.sheet, ...(props.pageBreak ? styles.pageBreak : {}), direction: lang === "ar" ? "rtl" : "ltr" }}>
         <div style={styles.headerGrid}>
-          <div style={styles.headerRight}>
+          <div style={{ ...styles.headerRight, textAlign: lang === "ar" ? "right" : "left" }}>
             <div style={styles.headerRightLine}>{schoolHeader.countryName}</div>
             <div style={styles.headerRightLine}>{schoolHeader.ministryName}</div>
             <div style={styles.headerRightLine}>{schoolHeader.directorateName}</div>
@@ -1360,13 +1215,13 @@ export default function TaskDistributionPrint() {
           </div>
 
           <div style={styles.headerCenter}>
-            <img src={logoUrl} alt="شعار" style={{ width: 66, height: 66, objectFit: "contain" }} />
+            <img src={logoUrl} alt={tr("شعار", "Logo")} style={{ width: 66, height: 66, objectFit: "contain" }} />
           </div>
 
-          <div style={styles.headerLeft}>
-            <div style={styles.headerLeftTitle}>تقرير معلم (فردي)</div>
+          <div style={{ ...styles.headerLeft, textAlign: lang === "ar" ? "left" : "right" }}>
+            <div style={styles.headerLeftTitle}>{tr("تقرير معلم (فردي)", "Teacher Report (Individual)")}</div>
             <div style={styles.headerLeftSub}>{schoolHeader.semesterLabel}</div>
-            <div style={styles.headerLeftSub}>العام الدراسي {schoolHeader.yearLabel}</div>
+            <div style={styles.headerLeftSub}>{tr("العام الدراسي", "Academic Year")} {schoolHeader.yearLabel}</div>
           </div>
         </div>
 
@@ -1374,34 +1229,29 @@ export default function TaskDistributionPrint() {
 
         <div style={styles.teacherInfoBox}>
           <div style={styles.teacherInfoRow}>
-            <span style={styles.teacherInfoLabel}>اسم المعلم:</span>
+            <span style={styles.teacherInfoLabel}>{tr("اسم المعلم", "Teacher Name")}:</span>
             <span style={styles.teacherInfoValue}>{props.teacherName || "—"}</span>
           </div>
 
           <div style={styles.teacherInfoRow}>
-            <span style={styles.teacherInfoLabel}>الرقم الوظيفي:</span>
+            <span style={styles.teacherInfoLabel}>{tr("الرقم الوظيفي", "Employee No")}:</span>
             <span style={styles.teacherInfoValue}>{employeeNo || "—"}</span>
           </div>
         </div>
 
         <div style={styles.tableTitleWrap}>
-          <div style={styles.tableTitle}>جدول مهام المراقبة والمراجعة والتصحيح</div>
+          <div style={styles.tableTitle}>{tr("جدول مهام المراقبة والمراجعة والتصحيح", "Invigilation, Review, and Correction Tasks Schedule")}</div>
         </div>
 
         <table style={styles.table}>
           <thead>
             <tr>
-              <th style={{ ...styles.th, width: 56 }}>م</th>
-              <th style={{ ...styles.th, width: 170 }}>اليوم والتاريخ</th>
-              <th style={{ ...styles.th, width: 120 }}>الفترة</th>
-
-              {/* ✅ تركنا طبيعة العمل ثابتة */}
-              <th style={{ ...styles.th, width: 120 }}>طبيعة العمل</th>
-
-              {/* ✅ FIX: عمود المادة بنفس عرض الفترة */}
-              <th style={{ ...styles.th, width: 120 }}>المادة</th>
-
-              <th style={{ ...styles.th, width: 120 }}>رقم اللجنة</th>
+              <th style={{ ...styles.th, width: 56 }}>{tr("م", "No.")}</th>
+              <th style={{ ...styles.th, width: 170 }}>{tr("اليوم والتاريخ", "Day and Date")}</th>
+              <th style={{ ...styles.th, width: 120 }}>{tr("الفترة", "Period")}</th>
+              <th style={{ ...styles.th, width: 120 }}>{tr("طبيعة العمل", "Task Type")}</th>
+              <th style={{ ...styles.th, width: 120 }}>{tr("المادة", "Subject")}</th>
+              <th style={{ ...styles.th, width: 120 }}>{tr("رقم اللجنة", "Committee No.")}</th>
             </tr>
           </thead>
           <tbody>
@@ -1420,12 +1270,9 @@ export default function TaskDistributionPrint() {
                       <div style={{ fontWeight: 900 }}>{day}</div>
                       <div style={{ fontWeight: 800, color: "#334155" }}>{dISO || "—"}</div>
                     </td>
-                    <td style={styles.td}>{formatPeriod(per)}</td>
-                    <td style={styles.td}>{taskLabel(getTaskType(r))}</td>
-
-                    {/* ✅ المادة بعرض ثابت + لفّ واضح */}
+                    <td style={styles.td}>{formatPeriod(per, lang)}</td>
+                    <td style={styles.td}>{taskLabel(getTaskType(r), lang)}</td>
                     <td style={{ ...styles.td, wordBreak: "break-word", overflowWrap: "anywhere" }}>{sub || "—"}</td>
-
                     <td style={styles.td}>{getRoomNumber(r) || "—"}</td>
                   </tr>
                 );
@@ -1446,28 +1293,28 @@ export default function TaskDistributionPrint() {
         </table>
 
         <div style={styles.importantSection}>
-          <div style={styles.importantTitle}>تنبيهات هامة:</div>
+          <div style={styles.importantTitle}>{tr("تنبيهات هامة:", "Important Notes:")}</div>
           <ul style={styles.importantList}>
-            <li style={styles.importantLi}>يجب الحضور إلى مقر اللجنة قبل بدء الامتحان بـ 20 دقيقة على الأقل.</li>
-            <li style={styles.importantLi}>يرجى الالتزام التام بالتعليمات الواردة في لائحة إدارة الامتحانات.</li>
-            <li style={styles.importantLi}>يمنع استخدام الهاتف النقال داخل قاعات الامتحان.</li>
-            <li style={styles.importantLi}>في حال وجود عذر طارئ يمنعك من الحضور، يرجى إبلاغ إدارة المدرسة فوراً لتوفير البديل.</li>
+            <li style={styles.importantLi}>{tr("يجب الحضور إلى مقر اللجنة قبل بدء الامتحان بـ 20 دقيقة على الأقل.", "You must arrive at the committee location at least 20 minutes before the exam starts.")}</li>
+            <li style={styles.importantLi}>{tr("يرجى الالتزام التام بالتعليمات الواردة في لائحة إدارة الامتحانات.", "Please fully comply with the instructions in the exam administration regulations.")}</li>
+            <li style={styles.importantLi}>{tr("يمنع استخدام الهاتف النقال داخل قاعات الامتحان.", "Using a mobile phone inside exam halls is prohibited.")}</li>
+            <li style={styles.importantLi}>{tr("في حال وجود عذر طارئ يمنعك من الحضور، يرجى إبلاغ إدارة المدرسة فوراً لتوفير البديل.", "If there is an emergency excuse preventing your attendance, please inform the school administration immediately to arrange a replacement.")}</li>
           </ul>
 
           <div style={styles.importantSigRow}>
             <div style={styles.importantSigCol}>
-              <div style={styles.importantSigLabel}>توقيع المعلم بالعلم</div>
+              <div style={styles.importantSigLabel}>{tr("توقيع المعلم بالعلم", "Teacher Signature (Acknowledgment)")}</div>
               <div style={styles.importantSigLine} />
             </div>
 
             <div style={styles.importantSigCol}>
-              <div style={styles.importantSigLabel}>مدير المدرسة</div>
+              <div style={styles.importantSigLabel}>{tr("مدير المدرسة", "School Principal")}</div>
               <div style={styles.importantSigLine} />
             </div>
           </div>
         </div>
 
-        <div style={styles.footerNote}>تم إنشاء التقرير من نظام توزيع مهام المراقبة — {props.createdAtISO}</div>
+        <div style={styles.footerNote}>{tr("تم إنشاء التقرير من نظام توزيع مهام المراقبة", "Report generated from the invigilation task distribution system")} — {props.createdAtISO}</div>
       </div>
     );
   }
@@ -1476,7 +1323,6 @@ export default function TaskDistributionPrint() {
     const phone = teacherNameFilter ? getTeacherWhatsAppPhoneByName(teacherNameFilter) : "";
     openWhatsAppWindow({ text: shareText, phone: phone || undefined });
 
-    // محاولة تنزيل PNG للتقرير
     window.setTimeout(async () => {
       try {
         const el = printAreaRef.current;
@@ -1484,24 +1330,22 @@ export default function TaskDistributionPrint() {
         const safeName = (teacherNameFilter || title || "report").replace(/[\\/:*?"<>|]/g, "_");
         await exportElementToPng(el, `report_${safeName}_${dateISO || "all"}.png`);
       } catch {
-        alert("تعذر إنشاء صورة للتقرير (قد يكون بسبب الشعار الخارجي). يمكنك استخدام حفظ PDF من زر الطباعة.");
+        alert(tr("تعذر إنشاء صورة للتقرير (قد يكون بسبب الشعار الخارجي). يمكنك استخدام حفظ PDF من زر الطباعة.", "Could not generate an image for the report. You can use Save as PDF from the print button."));
       }
     }, 250);
 
-    // فتح نافذة الطباعة (تقرير فقط + صفحة واحدة قدر الإمكان)
     window.setTimeout(() => {
       openPrintDialog();
     }, 650);
   }
 
   return (
-    <div style={styles.outer}>
+    <div style={{ ...styles.outer, direction: lang === "ar" ? "rtl" : "ltr" }}>
       <style>{printCss}</style>
 
-      {/* TOP ACTION BAR */}
       <div className="no-print" style={styles.topActionBar}>
         <div style={styles.topActionTitle}>
-          <div style={{ fontSize: 16, fontWeight: 900, color: "#0f172a" }}>خيارات العرض والطباعة</div>
+          <div style={{ fontSize: 16, fontWeight: 900, color: "#0f172a" }}>{tr("خيارات العرض والطباعة", "View and Print Options")}</div>
         </div>
 
         <div style={styles.topActionBtns}>
@@ -1511,39 +1355,38 @@ export default function TaskDistributionPrint() {
               setReportTeacher();
               setTeacherSelection("");
             }}
-            title="طباعة الكل (كل معلم صفحة)"
+            title={tr("طباعة الكل (كل معلم صفحة)", "Print all (one page per teacher)")}
           >
-            طباعة الكل
+            {tr("طباعة الكل", "Print All")}
           </button>
 
-          <button style={{ ...styles.pillBtn, ...styles.pillPrint }} onClick={openPrintDialog} title="طباعة (تقرير فقط)">
-            طباعة
+          <button style={{ ...styles.pillBtn, ...styles.pillPrint }} onClick={openPrintDialog} title={tr("طباعة (تقرير فقط)", "Print (report only)")}>
+            {tr("طباعة", "Print")}
           </button>
 
-          <button style={{ ...styles.pillBtn, ...styles.pillPdf }} onClick={openPrintDialog} title="PDF (Save as PDF) تقرير فقط">
+          <button style={{ ...styles.pillBtn, ...styles.pillPdf }} onClick={openPrintDialog} title={tr("PDF (Save as PDF) تقرير فقط", "PDF (Save as PDF) report only")}>
             PDF
           </button>
 
-          <button style={{ ...styles.pillBtn, ...styles.pillWa }} onClick={handleWhatsAppClick} title="واتساب + مرفق التقرير">
-            واتساب
+          <button style={{ ...styles.pillBtn, ...styles.pillWa }} onClick={handleWhatsAppClick} title={tr("واتساب + مرفق التقرير", "WhatsApp + attach report")}>
+            {tr("واتساب", "WhatsApp")}
           </button>
         </div>
 
         <div style={styles.topActionRight}>
           <select className="td-print-select" value={reportType} onChange={(e) => setQueryParam("reportType", e.target.value)} style={styles.topSelect}>
-            <option value="teacher" style={blackGoldDropdownOptionStyle}>تقرير معلم (فردي)</option>
-            <option value="daily" style={blackGoldDropdownOptionStyle}>كشف يومي (امتحانات)</option>
+            <option value="teacher" style={blackGoldDropdownOptionStyle}>{tr("تقرير معلم (فردي)", "Teacher Report (Individual)")}</option>
+            <option value="daily" style={blackGoldDropdownOptionStyle}>{tr("كشف يومي (امتحانات)", "Daily Report (Exams)")}</option>
           </select>
         </div>
       </div>
 
-      {/* Filters row */}
       <div className="no-print" style={styles.filtersRow1to1}>
         <div style={styles.filtersGrid}>
           <div style={styles.filterBox}>
-            <div style={styles.filterBoxLabel}>المعلم</div>
+            <div style={styles.filterBoxLabel}>{tr("المعلم", "Teacher")}</div>
             <select className="td-print-select" value={teacherNameFilter} onChange={(e) => setTeacherSelection(e.target.value)} style={styles.filterSelect}>
-              <option value="" style={blackGoldDropdownOptionStyle}>— اختر المعلم — (فارغ = طباعة الكل)</option>
+              <option value="" style={blackGoldDropdownOptionStyle}>{tr("— اختر المعلم — (فارغ = طباعة الكل)", "— Select Teacher — (empty = print all)")}</option>
               {teacherOptions.map((t) => (
                 <option key={t} value={t} style={blackGoldDropdownOptionStyle}>
                   {t}
@@ -1553,9 +1396,9 @@ export default function TaskDistributionPrint() {
           </div>
 
           <div style={styles.filterBox}>
-            <div style={styles.filterBoxLabel}>المادة</div>
+            <div style={styles.filterBoxLabel}>{tr("المادة", "Subject")}</div>
             <select className="td-print-select" value={subjectFilter} onChange={(e) => setQueryParam("subject", e.target.value)} style={styles.filterSelect}>
-              <option value="" style={blackGoldDropdownOptionStyle}>— كل المواد —</option>
+              <option value="" style={blackGoldDropdownOptionStyle}>{tr("— كل المواد —", "— All Subjects —")}</option>
               {subjectOptions.map((s) => (
                 <option key={s} value={s} style={blackGoldDropdownOptionStyle}>
                   {s}
@@ -1565,29 +1408,27 @@ export default function TaskDistributionPrint() {
           </div>
 
           <div style={styles.filterBox}>
-            <div style={styles.filterBoxLabel}>سريع</div>
+            <div style={styles.filterBoxLabel}>{tr("سريع", "Quick")}</div>
             <button style={styles.quickBtn} onClick={setReportDaily}>
-              عرض الكشف اليومي
+              {tr("عرض الكشف اليومي", "Show Daily Report")}
             </button>
           </div>
 
           <div style={styles.filterBox}>
-            <div style={styles.filterBoxLabel}>تنقل</div>
+            <div style={styles.filterBoxLabel}>{tr("تنقل", "Navigation")}</div>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
               <button style={styles.quickBtnSoft} onClick={() => nav("/task-distribution/results")}>
-                النتائج
+                {tr("النتائج", "Results")}
               </button>
               <button style={styles.quickBtnSoft} onClick={() => nav("/task-distribution")}>
-                الرئيسية
+                {tr("الرئيسية", "Home")}
               </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* ✅ PRINT AREA: هذا هو التقرير */}
       <div id="print-root" ref={printAreaRef}>
-        {/* DAILY REPORT */}
         {reportType === "daily" && (
           <>
             {dailyPages.length ? (
@@ -1607,14 +1448,13 @@ export default function TaskDistributionPrint() {
                 />
               ))
             ) : (
-              <div className="print-sheet" style={styles.sheet}>
-                <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 10 }}>لا توجد بيانات للكشف اليومي.</div>
+              <div className="print-sheet" style={{ ...styles.sheet, direction: lang === "ar" ? "rtl" : "ltr" }}>
+                <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 10 }}>{tr("لا توجد بيانات للكشف اليومي.", "No data for the daily report.")}</div>
               </div>
             )}
           </>
         )}
 
-        {/* TEACHER REPORT */}
         {reportType === "teacher" && (
           <>
             {!teacherNameFilter &&
@@ -1629,8 +1469,8 @@ export default function TaskDistributionPrint() {
                   />
                 ))
               ) : (
-                <div className="print-sheet" style={styles.sheet}>
-                  <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 10 }}>لا توجد بيانات لتقرير الكادر التعليمي.</div>
+                <div className="print-sheet" style={{ ...styles.sheet, direction: lang === "ar" ? "rtl" : "ltr" }}>
+                  <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 10 }}>{tr("لا توجد بيانات لتقرير الكادر التعليمي.", "No data for the teaching staff report.")}</div>
                 </div>
               ))}
 
@@ -1650,9 +1490,6 @@ export default function TaskDistributionPrint() {
   );
 }
 
-/** -------------------------------------------
- * Styles
- * ------------------------------------------ */
 const styles: Record<string, React.CSSProperties> = {
   outer: {
     minHeight: "100vh",
@@ -1761,7 +1598,6 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: "pointer",
   },
 
-  // شاشة البرنامج (عادي)
   sheet: {
     width: "210mm",
     minHeight: "297mm",
@@ -1792,7 +1628,6 @@ const styles: Record<string, React.CSSProperties> = {
 
   hr: { height: 2, background: "#111", opacity: 0.85, margin: "10px 0 12px 0" },
 
-  // شريط بيانات الامتحان (نموذج 1)
   examBarWide: { border: "3px solid #111", borderRadius: 12, padding: "8px 10px", marginBottom: 10 },
   examBarWideInner: {
     display: "flex",
@@ -1875,7 +1710,6 @@ const styles: Record<string, React.CSSProperties> = {
   btnSoft: { background: "rgba(255,255,255,.10)", color: "white", border: "1px solid rgba(255,255,255,.18)", padding: "10px 14px", borderRadius: 12, cursor: "pointer", fontWeight: 800 },
 };
 
-/** ✅ إبقاء CSS داخل الصفحة فقط — الطباعة الفعلية تتم عبر نافذة جديدة */
 const blackGoldDropdownOptionStyle = { background: "#000000", color: "#FFD700" } as const;
 
 const printCss = `
