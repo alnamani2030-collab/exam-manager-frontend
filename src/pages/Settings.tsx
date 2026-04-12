@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
+import { useI18n } from "../i18n/I18nProvider";
 import { loadRun, RUN_UPDATED_EVENT, MASTER_TABLE_UPDATED_EVENT } from "../utils/taskDistributionStorage";
 import { loadTenantArray } from "../services/tenantData";
 import { exportElementAsPdf } from "../lib/pdfExport";
@@ -34,7 +35,7 @@ function readJson<T = any>(key: string, fallback: T): T {
   }
 }
 
-function dayNameArFromISO(iso: string): string {
+function dayNameFromISO(iso: string, lang: "ar" | "en"): string {
   const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (!m) return "";
   const y = Number(m[1]);
@@ -42,11 +43,16 @@ function dayNameArFromISO(iso: string): string {
   const d = Number(m[3]);
   const dt = new Date(Date.UTC(y, mo, d));
   const wd = dt.getUTCDay();
+  if (lang === "en") {
+    return ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][wd] || "";
+  }
   return ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"][wd] || "";
 }
 
-function formatPeriodAr(p: "AM" | "PM" | string) {
-  return String(p || "").toUpperCase() === "PM" ? "الفترة الثانية" : "الفترة الأولى";
+function formatPeriodLabel(p: "AM" | "PM" | string, lang: "ar" | "en") {
+  const isPm = String(p || "").toUpperCase() === "PM";
+  if (lang === "en") return isPm ? "Second Period" : "First Period";
+  return isPm ? "الفترة الثانية" : "الفترة الأولى";
 }
 
 function normalizePhone(raw: string) {
@@ -94,6 +100,8 @@ function getRowCommitteeNo(row: any) {
 
 export default function Settings() {
   const auth = useAuth() as any;
+  const { lang } = useI18n();
+  const tr = React.useCallback((ar: string, en: string) => (lang === "ar" ? ar : en), [lang]);
   const tenantId = String(auth?.tenantId || auth?.profile?.tenantId || "").trim();
 
   const [tick, setTick] = useState(0);
@@ -336,8 +344,8 @@ export default function Settings() {
 
   const branding = useMemo(() => {
     const logo = String(localStorage.getItem(LOGO_KEY) || "").trim();
-    return { appName: "نظام إدارة الامتحانات الذكي", logo };
-  }, [tick]);
+    return { appName: tr("نظام إدارة الامتحانات الذكي", "Advanced Exam Management System"), logo };
+  }, [tick, tr]);
 
   const exams = useMemo(() => {
     const primary = Array.isArray(fsExams) ? fsExams : [];
@@ -389,11 +397,7 @@ export default function Settings() {
       return inv_12 || 2;
     };
 
-    // fallback من جدول الامتحانات: نفس المادة + التاريخ + الفترة
-    const examsSummaryMap = new Map<
-      string,
-      { roomsCount: number; dayLabel?: string }
-    >();
+    const examsSummaryMap = new Map<string, { roomsCount: number; dayLabel?: string }>();
 
     for (const ex of exams) {
       const key = `${ex.dateISO}__${ex.period}__${normalizeSubjectText(ex.subject)}`;
@@ -428,8 +432,8 @@ export default function Settings() {
 
       return {
         ...ex,
-        day: ex.dayLabel || dayNameArFromISO(ex.dateISO),
-        periodLabel: formatPeriodAr(ex.period),
+        day: ex.dayLabel || dayNameFromISO(ex.dateISO, lang),
+        periodLabel: formatPeriodLabel(ex.period, lang),
         invAssigned,
         reserveAssigned,
         invPerRoom,
@@ -453,7 +457,6 @@ export default function Settings() {
 
         if (!subject || !dateISO) continue;
 
-        // ✅ بدون examId حتى لا تتكرر نفس المادة في نفس اليوم/الفترة
         const key = `${dateISO}__${period}__${subject}`;
 
         if (!grouped.has(key)) {
@@ -461,7 +464,7 @@ export default function Settings() {
             key,
             subject,
             dateISO,
-            dayLabel: dayNameArFromISO(dateISO),
+            dayLabel: dayNameFromISO(dateISO, lang),
             period,
             committeeSet: new Set<string>(),
             invAssigned: 0,
@@ -495,8 +498,6 @@ export default function Settings() {
 
         const roomsFromAssignments = Math.max(0, item.committeeSet.size || 0);
         const roomsFromExams = Math.max(0, Number(fallbackExamSummary?.roomsCount || 0));
-
-        // ✅ نأخذ الأكبر حتى لا تظهر القاعات = صفر
         const roomsCount = Math.max(roomsFromAssignments, roomsFromExams);
 
         const invPerRoom = invigilatorsPerRoomForSubject(item.subject);
@@ -516,8 +517,8 @@ export default function Settings() {
           period: item.period,
           roomsCount,
           durationMinutes: undefined,
-          day: (fallbackExamSummary?.dayLabel || item.dayLabel) || dayNameArFromISO(item.dateISO),
-          periodLabel: formatPeriodAr(item.period),
+          day: (fallbackExamSummary?.dayLabel || item.dayLabel) || dayNameFromISO(item.dateISO, lang),
+          periodLabel: formatPeriodLabel(item.period, lang),
           invAssigned: item.invAssigned,
           reserveAssigned,
           invPerRoom,
@@ -545,7 +546,7 @@ export default function Settings() {
       });
 
     return sortDir === "desc" ? sorted.reverse() : sorted;
-  }, [exams, assignments.rows, assignments.source, sortDir]);
+  }, [exams, assignments.rows, assignments.source, sortDir, lang]);
 
   const totals = useMemo(() => {
     const t = { committees: 0, inv: 0, reserve: 0, deficit: 0, total: 0, requiredTotal: 0 };
@@ -566,7 +567,7 @@ export default function Settings() {
 
   const exportPDF = async () => {
     const el = document.getElementById("dist-stats-report");
-    const title = "تقرير إحصائية التوزيع";
+    const title = tr("تقرير إحصائية التوزيع", "Distribution Statistics Report");
 
     if (!el) {
       await exportElementAsPdf({
@@ -581,7 +582,7 @@ export default function Settings() {
     }
 
     const html = `<!doctype html>
-      <html lang="ar" dir="rtl">
+      <html lang="${lang}" dir="${lang === "ar" ? "rtl" : "ltr"}">
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -605,7 +606,7 @@ export default function Settings() {
             <img class="logo" src="${localStorage.getItem("exam-manager:app-logo") || ""}" alt="logo" />
             <div>
               <p class="ttl">${title}</p>
-              <p class="sub">${new Date().toLocaleString("ar")}</p>
+              <p class="sub">${new Date().toLocaleString(lang === "ar" ? "ar" : "en-GB")}</p>
             </div>
           </div>
         </div>
@@ -620,7 +621,7 @@ export default function Settings() {
       action: "settings_export_pdf",
       entity: "settings",
       title,
-      subtitle: new Date().toLocaleString("ar"),
+      subtitle: new Date().toLocaleString(lang === "ar" ? "ar" : "en-GB"),
       html,
     });
   };
@@ -649,14 +650,13 @@ export default function Settings() {
 
     const lines = big
       .slice(0, 10)
-      .map((r: any) => `• ${r.dateISO} (${r.day}) - ${r.subject} - ${r.periodLabel} | عجز: ${r.deficit}`)
+      .map((r: any) => `• ${r.dateISO} (${r.day}) - ${r.subject} - ${r.periodLabel} | ${tr("عجز", "Deficit")}: ${r.deficit}`)
       .join("\n");
 
     const msg =
-      `تنبيه عاجل: يوجد عجز كبير في توزيع المراقبة.\n` +
-      `إجمالي العجز: ${totalDeficit}\n\n` +
-      `تفاصيل (أعلى 10):\n${lines}\n\n` +
-      `يرجى مراجعة التوزيع والجدول الشامل.`;
+      lang === "ar"
+        ? `تنبيه عاجل: يوجد عجز كبير في توزيع المراقبة.\nإجمالي العجز: ${totalDeficit}\n\nتفاصيل (أعلى 10):\n${lines}\n\nيرجى مراجعة التوزيع والجدول الشامل.`
+        : `Urgent alert: There is a large invigilation distribution deficit.\nTotal deficit: ${totalDeficit}\n\nDetails (top 10):\n${lines}\n\nPlease review the distribution and the master table.`;
 
     const url = `https://wa.me/${adminPhone}?text=${encodeURIComponent(msg)}`;
 
@@ -664,14 +664,27 @@ export default function Settings() {
     lastWhatsAppAlertRef.current = signature;
 
     window.open(url, "_blank", "noopener,noreferrer");
-  }, [reportRows, totalDeficit, run]);
+  }, [reportRows, totalDeficit, run, lang, tr]);
 
   return (
-    <div style={{ padding: 20, direction: "rtl", background: "#0f0f0f", minHeight: "100vh" }}>
+    <div
+      style={{
+        padding: 20,
+        direction: lang === "ar" ? "rtl" : "ltr",
+        background: "#0f0f0f",
+        minHeight: "100vh",
+      }}
+    >
       <SettingsReportHeader
         logo={branding.logo}
         appName={branding.appName}
-        sourceLabel={assignments.source === "run" ? "آخر تشغيل (Run)" : assignments.source === "none" ? "-" : "نسخة جدول مساعدة"}
+        sourceLabel={
+          assignments.source === "run"
+            ? tr("آخر تشغيل (Run)", "Last Run")
+            : assignments.source === "none"
+            ? "-"
+            : tr("نسخة جدول مساعدة", "Helper Table Copy")
+        }
         totalDeficit={totalDeficit}
         sortDir={sortDir}
         isStatsFull={isStatsFull}
