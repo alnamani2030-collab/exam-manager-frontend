@@ -27,6 +27,7 @@ import {
 import { getActionErrorMessage } from "../services/functionsRuntimePolicy";
 import { MINISTRY_SCOPE } from "../constants/directorates";
 import { useSuperSystemTenants } from "../features/super-admin/hooks/useSuperSystemTenants";
+import { useI18n } from "../i18n/I18nProvider";
 import {
   archiveAndDeleteTenant,
   createTenantForScope,
@@ -67,7 +68,6 @@ const UI = {
     linkAdminDesc: "إضافة/ربط Admin بمدرسة محددة.",
     enterProgram: "الدخول للبرنامج",
     enterProgramDesc: "الانتقال للواجهة الرئيسية بعد اختيار المدرسة.",
-    scopeSupervisor: "مشرف نطاق",
     ownerRoleText: "أنت مالك المنصة، ويمكنك من هذه الشاشة مراجعة نطاق المحافظات بالكامل، كما يمكنك العودة إلى لوحة المالك لإدارة كل الصلاحيات العليا والمستخدمين والمدارس.",
     scopeRoleText: "أنت مشرف نطاق، لذلك ترى وتدير فقط المدارس والمستخدمين المرتبطين بنطاقك الإداري.",
     manageTenants: "إدارة المدارس (Tenants)",
@@ -89,7 +89,6 @@ const UI = {
     reloadData: "إعادة تحميل البيانات",
     refresh: "تحديث",
     createTenant: "إنشاء مدرسة جديدة (Tenant)",
-    tenantIdSubdomain: "Tenant ID (Subdomain)",
     active: "مفعل",
     createSchoolBtn: "إنشاء مدرسة جديدة",
     superCanCreate: "السوبر أدمن يمكنه إنشاء مدارس لأي محافظة (حسب إعدادات المدرسة).",
@@ -116,6 +115,9 @@ const UI = {
     noLinkData: "لا توجد بيانات ربط حالياً.",
     suggestedImport: "صيغة الاستيراد المقترحة: Tenant ID ، اسم المدرسة ، البريد الإلكتروني المرتبط",
     invalidEmail: "يرجى إدخال بريد صحيح.",
+    createError: "تعذر إنشاء المدرسة. تأكد من الصلاحيات ثم جرّب مرة أخرى.",
+    saveEditError: "تعذر حفظ بيانات المدرسة. تأكد من الصلاحيات ثم جرّب مرة أخرى.",
+    deleteTenantError: "تعذر حذف المدرسة. تأكد من الصلاحيات ثم جرّب مرة أخرى.",
     saveUserError: "تعذر حفظ المستخدم. تأكد من الصلاحيات ثم جرّب مرة أخرى.",
     noValidImport: "لم يتم العثور على بيانات صالحة داخل الملف.",
     importSuccess: "تم استيراد بيانات الجدول بنجاح.",
@@ -153,11 +155,10 @@ const UI = {
     addSchool: "Add new school",
     addSchoolDesc: "Create a school inside your governorate.",
     linkAdmin: "Admin linking",
-    linkAdminDesc: "Add/link an Admin to a specific school.",
+    linkAdminDesc: "Add/link Admin to a specific school.",
     enterProgram: "Enter program",
     enterProgramDesc: "Go to the main interface after selecting the school.",
-    scopeSupervisor: "Scope Supervisor",
-    ownerRoleText: "You are the platform owner, and from this screen you can review the full governorate scope and return to the owner panel to manage all top-level permissions, users, and schools.",
+    ownerRoleText: "You are the platform owner, and from this screen you can review all governorates and return to the owner panel to manage top-level permissions, users, and schools.",
     scopeRoleText: "You are a scope supervisor, so you only see and manage schools and users linked to your administrative scope.",
     manageTenants: "School Management (Tenants)",
     search: "Search...",
@@ -178,7 +179,6 @@ const UI = {
     reloadData: "Reload data",
     refresh: "Refresh",
     createTenant: "Create New School (Tenant)",
-    tenantIdSubdomain: "Tenant ID (Subdomain)",
     active: "Enabled",
     createSchoolBtn: "Create new school",
     superCanCreate: "The super admin can create schools for any governorate (depending on school settings).",
@@ -192,7 +192,7 @@ const UI = {
     saveUser: "Save user",
     noteAdminOnly: "Note: this page allows the super admin to add Admin only.",
     noteOneSchool: "The same email cannot be linked to more than one school, and each email can only be linked to one school.",
-    schoolAdminTable: "{ui.schoolAdminTable}",
+    schoolAdminTable: "School-admin linking table",
     updating: "Updating...",
     recordCount: "Record count",
     importing: "Importing...",
@@ -203,8 +203,11 @@ const UI = {
     action: "Action",
     deleteLink: "Delete link",
     noLinkData: "No linking data currently available.",
-    suggestedImport: "{ui.suggestedImport}",
+    suggestedImport: "Suggested import format: Tenant ID, School name, Linked email",
     invalidEmail: "Please enter a valid email.",
+    createError: "Unable to create the school. Check permissions and try again.",
+    saveEditError: "Unable to save school data. Check permissions and try again.",
+    deleteTenantError: "Unable to delete the school. Check permissions and try again.",
     saveUserError: "Unable to save the user. Check permissions and try again.",
     noValidImport: "No valid data was found in the file.",
     importSuccess: "Table data was imported successfully.",
@@ -222,11 +225,24 @@ const UI = {
     schoolMissing: "The school does not exist.",
     outsideGov: "You cannot add a user to a school outside your governorate.",
     emailLinked: "The same email cannot be linked to more than one school. Each email can only be linked to one school.",
-    userSaved: "The user was saved successfully.",
+    userSaved: "User saved successfully.",
     exampleBousher: "Example: Bousher",
     exampleSchool: "Example: Azzan 12-9",
   },
 } as const;
+
+function translateRoleLabel(label: string, lang: Lang): string {
+  const map: Record<string, { ar: string; en: string }> = {
+    "مالك المنصة": { ar: "مالك المنصة", en: "Platform Owner" },
+    "مشرف نطاق": { ar: "مشرف نطاق", en: "Domain Supervisor" },
+    "مدير جهة": { ar: "مدير جهة", en: "Tenant Admin" },
+    "مدير": { ar: "مدير", en: "Manager" },
+    "مستخدم تشغيلي": { ar: "مستخدم تشغيلي", en: "Operational User" },
+    "مستخدم": { ar: "مستخدم", en: "User" },
+  };
+  return map[label]?.[lang] || label;
+}
+
 
 type TenantAdminLinkRow = {
   tenantId: string;
@@ -236,10 +252,14 @@ type TenantAdminLinkRow = {
 
 export default function SuperSystem() {
   const navigate = useNavigate();
+  const { lang, setLang } = useI18n();
+  const isAr = lang === "ar";
+  const ui = UI[(lang as Lang) || "ar"];
   const auth = useAuth() as any;
   const { user, allow, logout } = auth;
   const authzSnapshot = useMemo(() => buildAuthzSnapshot(auth), [auth]);
-  const roleBadge = resolveRoleBadgeStyle(authzSnapshot);
+  const roleBadgeBase = resolveRoleBadgeStyle(authzSnapshot);
+  const roleBadge = { ...roleBadgeBase, label: translateRoleLabel(roleBadgeBase.label, lang as Lang) };
   const isOwner = isPlatformOwner(authzSnapshot);
   const canManageSystem = canAccessCapability(authzSnapshot, "SYSTEM_ADMIN");
 
@@ -260,10 +280,6 @@ export default function SuperSystem() {
     visibleTenants,
     selectedTenant,
   } = useSuperSystemTenants({ canSeeAllGovs, myGov });
-
-  const [lang, setLang] = useState<Lang>("ar");
-  const ui = UI[lang];
-  const isAr = lang === "ar";
 
   const [editTenantName, setEditTenantName] = useState("");
   const [editTenantEnabled, setEditTenantEnabled] = useState(true);
@@ -342,7 +358,7 @@ export default function SuperSystem() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "tenant-admin-links.xls";
+    a.download = isAr ? "tenant-admin-links.xls" : "tenant-admin-links.xls";
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -365,8 +381,8 @@ export default function SuperSystem() {
     const header = rawRows[0].map((h) => h.toLowerCase());
 
     const tenantIdIndex = header.findIndex((h) => h.includes("tenant"));
-    const tenantNameIndex = header.findIndex((h) => h.includes("اسم المدرسة") || h.includes("school") || h.includes("School"));
-    const emailIndex = header.findIndex((h) => h.includes("البريد") || h.includes("email") || h.includes("Email"));
+    const tenantNameIndex = header.findIndex((h) => h.includes("{ui.schoolName}") || h.includes("school"));
+    const emailIndex = header.findIndex((h) => h.includes("البريد") || h.includes("email"));
 
     const startAt =
       tenantIdIndex >= 0 || tenantNameIndex >= 0 || emailIndex >= 0 ? 1 : 0;
@@ -446,9 +462,7 @@ export default function SuperSystem() {
     const email = String(row.email || "").trim().toLowerCase();
     if (!email) return;
 
-    const ok = confirm(
-      ui.linkDeleteConfirm.replace("{school}", row.tenantName || row.tenantId).replace("{email}", email)
-    );
+    const ok = confirm(ui.linkDeleteConfirm.replace("{school}", row.tenantName || row.tenantId).replace("{email}", email));
     if (!ok) return;
 
     try {
@@ -572,7 +586,7 @@ export default function SuperSystem() {
         alert(
           getActionErrorMessage(
             e,
-            "تعذر إنشاء المدرسة. تأكد من الصلاحيات ثم جرّب مرة أخرى."
+            ui.createError
           )
         );
       }
@@ -581,7 +595,7 @@ export default function SuperSystem() {
 
   const saveSelectedTenant = async () => {
     if (!selectedTenantId) {
-      alert(ui.chooseSchoolFirst);
+      alert("اختر مدرسة أولاً.");
       return;
     }
 
@@ -609,7 +623,7 @@ export default function SuperSystem() {
       alert(
         getActionErrorMessage(
           e,
-          "تعذر حفظ بيانات المدرسة. تأكد من الصلاحيات ثم جرّب مرة أخرى."
+          ui.saveEditError
         )
       );
     } finally {
@@ -636,7 +650,7 @@ export default function SuperSystem() {
       alert(
         getActionErrorMessage(
           e,
-          "تعذر حذف المدرسة. تأكد من الصلاحيات ثم جرّب مرة أخرى."
+          ui.deleteTenantError
         )
       );
     }
@@ -645,7 +659,7 @@ export default function SuperSystem() {
   const saveAdminUser = async () => {
     const tenantId = String(selectedTenantId || "").trim();
     if (!tenantId) {
-      alert(ui.chooseSchoolFirst);
+      alert("اختر مدرسة أولاً.");
       return;
     }
 
@@ -816,8 +830,8 @@ export default function SuperSystem() {
         </div>
         <div style={{ lineHeight: 1.8, opacity: 0.92 }}>
           {isOwner
-            ? ui.ownerRoleText
-            : ui.scopeRoleText}
+            ? "أنت مالك المنصة، ويمكنك من هذه الشاشة مراجعة نطاق المحافظات بالكامل، كما يمكنك {ui.back} إلى لوحة المالك لإدارة كل الصلاحيات العليا والمستخدمين والمدارس."
+            : "أنت مشرف نطاق، لذلك ترى وتدير فقط المدارس والمستخدمين المرتبطين بنطاقك الإداري."}
         </div>
       </div>
 
@@ -930,7 +944,7 @@ export default function SuperSystem() {
                   onClick={() => setEditReloadTick((x: number) => x + 1)}
                   title={ui.reloadData}
                 >
-                  {ui.refresh}
+                  تحديث
                 </button>
               </div>
             </div>
@@ -948,12 +962,12 @@ export default function SuperSystem() {
               placeholder={ui.exampleSchool}
             />
 
-            <label className="label">{ui.tenantIdSubdomain}</label>
+            <label className="label">Tenant ID (Subdomain)</label>
             <input
               className="input"
               value={newTenantId}
               onChange={(e) => setNewTenantId(safeId(e.target.value))}
-              placeholder={isAr ? "مثال: azaan-9-12" : "Example: azaan-9-12"}
+              placeholder="مثال: azaan-9-12"
             />
 
             <div />
@@ -968,7 +982,7 @@ export default function SuperSystem() {
 
             <div />
             <button className="btn primary" onClick={createTenant}>
-              {ui.createSchoolBtn}
+              إنشاء مدرسة جديدة
             </button>
           </div>
 
@@ -1073,7 +1087,7 @@ export default function SuperSystem() {
                   onClick={() => setEditReloadTick((x: number) => x + 1)}
                   disabled={tenantAdminBusy}
                 >
-                  {ui.refresh} الجدول
+                  {ui.refreshTable}
                 </button>
 
                 <button
@@ -1199,7 +1213,7 @@ export default function SuperSystem() {
             </div>
 
             <div style={{ marginTop: 10, opacity: 0.78, lineHeight: 1.9 }}>
-              {ui.suggestedImport}
+              صيغة الاستيراد المقترحة: Tenant ID ، {ui.schoolName} ، {ui.linkedEmail}
             </div>
           </div>
         </div>
