@@ -89,6 +89,42 @@ function clampPercent(value: number) {
   return Math.max(0, Math.min(100, value));
 }
 
+
+const SUBJECT_TRANSLATIONS: Record<string, string> = {
+  "العلوم البيئية 11": "Environmental Science 11",
+  "العلوم البيئية 12": "Environmental Science 12",
+  "الرياضيات 10": "Mathematics 10",
+  "الرياضيات 11": "Mathematics 11",
+  "الرياضيات 12": "Mathematics 12",
+  "الرياضيات المدرسية 11": "School Sports 11",
+  "الرياضيات المدرسية 12": "School Sports 12",
+  "اللغة العربية 10": "Arabic Language 10",
+  "اللغة العربية 11": "Arabic Language 11",
+  "اللغة الإنجليزية 10": "English Language 10",
+  "اللغة الإنجليزية 11": "English Language 11",
+  "التربية الإسلامية 10": "Islamic Education 10",
+  "التربية الإسلامية 11": "Islamic Education 11",
+  "الجغرافيا البشرية 11": "Human Geography 11",
+  "الدراسات الاجتماعية 10": "Social Studies 10",
+  "الفنون التشكيلية 11": "Fine Arts 11",
+  "الفنون التشكيلية 12": "Fine Arts 12",
+  "المهارات الموسيقية 11": "Musical Skills 11",
+  "الكيمياء 10": "Chemistry 10",
+  "الكيمياء 11": "Chemistry 11",
+  "الفيزياء 10": "Physics 10",
+  "الفيزياء 11": "Physics 11",
+  "الأحياء 10": "Biology 10",
+  "الأحياء 11": "Biology 11",
+  "التاريخ والحضارة الإسلامية 11": "Islamic History and Civilization 11",
+  "تقنية المعلومات 11": "Information Technology 11",
+};
+
+function translateSubjectName(subject: string, lang: string) {
+  const value = String(subject || "").trim();
+  if (!value) return value;
+  return lang === "ar" ? value : SUBJECT_TRANSLATIONS[value] || value;
+}
+
 function toneColor(tone: Insight["tone"] | AlertLevel) {
   if (tone === "good" || tone === "success") return GREEN;
   if (tone === "warn" || tone === "warning") return AMBER;
@@ -492,7 +528,7 @@ export default function AnalyticsPage() {
   );
 
   const topSubjectBars = useMemo(
-    () => [...derived.examsBySubject.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([label, value]) => ({ label, value, color: GOLD })),
+    () => [...derived.examsBySubject.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([label, value]) => ({ label: translateSubjectName(label, lang), value, color: GOLD })),
     [derived.examsBySubject]
   );
 
@@ -669,7 +705,7 @@ export default function AnalyticsPage() {
                 <StatCard label={tr("الصحة التشغيلية للقاعات", "Room operational health")} value={`${roomHealth.availableRoomsAfterBlocks}/${roomHealth.activeRooms}`} color={BLUE} hint={tr("القاعات المتاحة بعد الحظر", "Available rooms after blocks")} />
                 <StatCard label={tr("توازن الأحمال", "Load balance")} value={derived.teacherLoadRows.length ? `${derived.loadGap}` : 0} color={derived.loadGap <= 2 ? GREEN : AMBER} hint={tr("فجوة أعلى حمل مقابل أقل حمل", "Gap between max and min load")} />
                 <StatCard label={tr("القاعات المحظورة النشطة", "Active blocked rooms")} value={derived.activeBlocks.length} color={derived.activeBlocks.length ? AMBER : GREEN} hint={tr("تحتاج مراجعة قبل الجدولة", "Requires schedule attention")} />
-                <StatCard label={tr("أعلى مادة", "Top subject")} value={derived.busiestSubject?.[0] || tr("لا يوجد", "N/A")} color={GOLD} hint={derived.busiestSubject ? tr(`${derived.busiestSubject[1]} امتحان`, `${derived.busiestSubject[1]} exams`) : tr("لا توجد مادة بارزة بعد", "No subject peak yet")} />
+                <StatCard label={tr("أعلى مادة", "Top subject")} value={derived.busiestSubject?.[0] ? translateSubjectName(derived.busiestSubject[0], lang) : tr("لا يوجد", "N/A")} color={GOLD} hint={derived.busiestSubject ? tr(`${derived.busiestSubject[1]} امتحان`, `${derived.busiestSubject[1]} exams`) : tr("لا توجد مادة بارزة بعد", "No subject peak yet")} />
               </div>
             </div>
 
