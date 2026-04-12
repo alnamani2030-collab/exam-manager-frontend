@@ -45,6 +45,189 @@ const safeId = (value: string) =>
 
 const MINISTRY_LOGO_URL = "https://i.imgur.com/vdDhSMh.png";
 
+type Lang = "ar" | "en";
+
+const UI = {
+  ar: {
+    ministry: "وزارة التعليم",
+    systemTitle: "نظام إدارة الامتحانات المطور",
+    ownerPanel: "لوحة مالك المنصة",
+    back: "العودة",
+    logout: "تسجيل خروج",
+    ownerSubtitle: "مالك المنصة داخل نطاق المحافظات",
+    allGovsSubtitle: "عرض جميع المحافظات",
+    govManagerSubtitle: "مدير المحافظة - إدارة المدارس والمستخدمين",
+    manageSchools: "إدارة المدارس",
+    manageSchoolsDesc: "عرض/بحث المدارس + حذف/اختيار.",
+    editSchool: "تعديل بيانات المدرسة",
+    editSchoolDesc: "تعديل اسم المدرسة والشعار والولاية (داخل محافظتك).",
+    addSchool: "إضافة مدرسة جديدة",
+    addSchoolDesc: "إنشاء مدرسة داخل محافظتك.",
+    linkAdmin: "ربط الأدمن",
+    linkAdminDesc: "إضافة/ربط Admin بمدرسة محددة.",
+    enterProgram: "الدخول للبرنامج",
+    enterProgramDesc: "الانتقال للواجهة الرئيسية بعد اختيار المدرسة.",
+    scopeSupervisor: "مشرف نطاق",
+    ownerRoleText: "أنت مالك المنصة، ويمكنك من هذه الشاشة مراجعة نطاق المحافظات بالكامل، كما يمكنك العودة إلى لوحة المالك لإدارة كل الصلاحيات العليا والمستخدمين والمدارس.",
+    scopeRoleText: "أنت مشرف نطاق، لذلك ترى وتدير فقط المدارس والمستخدمين المرتبطين بنطاقك الإداري.",
+    manageTenants: "إدارة المدارس (Tenants)",
+    search: "بحث...",
+    delete: "حذف",
+    select: "اختيار",
+    governorate: "المحافظة",
+    enabled: "مفعل",
+    disabled: "غير مفعل",
+    noSchools: "لا توجد مدارس.",
+    editSelectedSchool: "تعديل بيانات المدرسة المختارة",
+    chooseSchoolFirst: "اختر مدرسة من القائمة أولاً.",
+    schoolName: "اسم المدرسة",
+    status: "الحالة",
+    wilaya: "الولاية",
+    logoUrl: "رابط الشعار",
+    saving: "جاري الحفظ...",
+    saveChanges: "حفظ التغييرات",
+    reloadData: "إعادة تحميل البيانات",
+    refresh: "تحديث",
+    createTenant: "إنشاء مدرسة جديدة (Tenant)",
+    tenantIdSubdomain: "Tenant ID (Subdomain)",
+    active: "مفعل",
+    createSchoolBtn: "إنشاء مدرسة جديدة",
+    superCanCreate: "السوبر أدمن يمكنه إنشاء مدارس لأي محافظة (حسب إعدادات المدرسة).",
+    fixedGovernorate: "سيتم تثبيت محافظة المدرسة تلقائيًا على:",
+    unspecified: "غير محددة",
+    addLinkAdmin: "إضافة/ربط Admin بالمدرسة",
+    selectedSchool: "المدرسة المحددة",
+    emailDoc: "البريد الإلكتروني (مفتاح الوثيقة)",
+    optionalName: "الاسم (اختياري)",
+    userName: "اسم المستخدم",
+    saveUser: "حفظ المستخدم",
+    noteAdminOnly: "ملاحظة: هذه الصفحة تسمح للسوبر بإضافة Admin فقط.",
+    noteOneSchool: "لا يمكن ربط نفس البريد الإلكتروني بأكثر من مدرسة، والبريد الإلكتروني يربط بمدرسة واحدة فقط.",
+    schoolAdminTable: "جدول ربط المدارس مع الأدمن",
+    updating: "جارٍ التحديث...",
+    recordCount: "عدد السجلات",
+    importing: "جارٍ الاستيراد...",
+    importExcel: "استيراد Excel",
+    refreshTable: "تحديث الجدول",
+    exportExcel: "تصدير Excel",
+    linkedEmail: "البريد الإلكتروني المرتبط",
+    action: "إجراء",
+    deleteLink: "حذف الربط",
+    noLinkData: "لا توجد بيانات ربط حالياً.",
+    suggestedImport: "صيغة الاستيراد المقترحة: Tenant ID ، اسم المدرسة ، البريد الإلكتروني المرتبط",
+    invalidEmail: "يرجى إدخال بريد صحيح.",
+    saveUserError: "تعذر حفظ المستخدم. تأكد من الصلاحيات ثم جرّب مرة أخرى.",
+    noValidImport: "لم يتم العثور على بيانات صالحة داخل الملف.",
+    importSuccess: "تم استيراد بيانات الجدول بنجاح.",
+    importFailed: "تعذر استيراد الملف. تأكد من أن الملف بصيغة CSV أو Excel محفوظ كنص قابل للقراءة.",
+    linkDeleteConfirm: "تأكيد حذف ربط المدرسة ({school}) مع البريد ({email})؟",
+    linkDeleted: "تم حذف الربط من الجدول بنجاح.",
+    linkDeleteFailed: "تعذر حذف الربط. تأكد من الصلاحيات ثم جرّب مرة أخرى.",
+    tenantCreated: "تم إنشاء المدرسة بنجاح ✅",
+    tenantExists: "Tenant ID مستخدم بالفعل. اختر Tenant ID جديد.",
+    noGov: "حساب السوبر غير مرتبط بمحافظة.",
+    schoolNameRequired: "يرجى إدخال اسم المدرسة.",
+    schoolSaved: "تم حفظ بيانات المدرسة بنجاح.",
+    tenantDeleteConfirm: "تأكيد حذف المدرسة ({id})؟",
+    tenantDeleted: "تم حذف المدرسة بنجاح.",
+    schoolMissing: "المدرسة غير موجودة.",
+    outsideGov: "لا يمكنك إضافة مستخدم لمدرسة خارج محافظتك.",
+    emailLinked: "لا يمكن ربط نفس البريد الإلكتروني بأكثر من مدرسة. البريد الإلكتروني يربط بمدرسة واحدة فقط.",
+    userSaved: "تم حفظ المستخدم بنجاح.",
+    exampleBousher: "مثال: بوشر",
+    exampleSchool: "مثال: أزان 12-9",
+  },
+  en: {
+    ministry: "Ministry of Education",
+    systemTitle: "Advanced Exam Management System",
+    ownerPanel: "Platform Owner Panel",
+    back: "Back",
+    logout: "Log out",
+    ownerSubtitle: "Platform owner across governorates",
+    allGovsSubtitle: "Viewing all governorates",
+    govManagerSubtitle: "Governorate manager - schools and users administration",
+    manageSchools: "School management",
+    manageSchoolsDesc: "View/search schools + delete/select.",
+    editSchool: "Edit school data",
+    editSchoolDesc: "Edit school name, logo, and wilaya (inside your governorate).",
+    addSchool: "Add new school",
+    addSchoolDesc: "Create a school inside your governorate.",
+    linkAdmin: "Admin linking",
+    linkAdminDesc: "Add/link an Admin to a specific school.",
+    enterProgram: "Enter program",
+    enterProgramDesc: "Go to the main interface after selecting the school.",
+    scopeSupervisor: "Scope Supervisor",
+    ownerRoleText: "You are the platform owner, and from this screen you can review the full governorate scope and return to the owner panel to manage all top-level permissions, users, and schools.",
+    scopeRoleText: "You are a scope supervisor, so you only see and manage schools and users linked to your administrative scope.",
+    manageTenants: "School Management (Tenants)",
+    search: "Search...",
+    delete: "Delete",
+    select: "Select",
+    governorate: "Governorate",
+    enabled: "Enabled",
+    disabled: "Disabled",
+    noSchools: "No schools found.",
+    editSelectedSchool: "Edit selected school data",
+    chooseSchoolFirst: "Choose a school from the list first.",
+    schoolName: "School name",
+    status: "Status",
+    wilaya: "Wilaya",
+    logoUrl: "Logo URL",
+    saving: "Saving...",
+    saveChanges: "Save changes",
+    reloadData: "Reload data",
+    refresh: "Refresh",
+    createTenant: "Create New School (Tenant)",
+    tenantIdSubdomain: "Tenant ID (Subdomain)",
+    active: "Enabled",
+    createSchoolBtn: "Create new school",
+    superCanCreate: "The super admin can create schools for any governorate (depending on school settings).",
+    fixedGovernorate: "The school governorate will be fixed automatically to:",
+    unspecified: "Unspecified",
+    addLinkAdmin: "Add/Link Admin to School",
+    selectedSchool: "Selected school",
+    emailDoc: "Email (document key)",
+    optionalName: "Name (optional)",
+    userName: "User name",
+    saveUser: "Save user",
+    noteAdminOnly: "Note: this page allows the super admin to add Admin only.",
+    noteOneSchool: "The same email cannot be linked to more than one school, and each email can only be linked to one school.",
+    schoolAdminTable: "{ui.schoolAdminTable}",
+    updating: "Updating...",
+    recordCount: "Record count",
+    importing: "Importing...",
+    importExcel: "Import Excel",
+    refreshTable: "Refresh table",
+    exportExcel: "Export Excel",
+    linkedEmail: "Linked email",
+    action: "Action",
+    deleteLink: "Delete link",
+    noLinkData: "No linking data currently available.",
+    suggestedImport: "{ui.suggestedImport}",
+    invalidEmail: "Please enter a valid email.",
+    saveUserError: "Unable to save the user. Check permissions and try again.",
+    noValidImport: "No valid data was found in the file.",
+    importSuccess: "Table data was imported successfully.",
+    importFailed: "Unable to import the file. Make sure the file is CSV or Excel saved as readable text.",
+    linkDeleteConfirm: "Confirm deleting the school link ({school}) with email ({email})?",
+    linkDeleted: "The link was deleted successfully.",
+    linkDeleteFailed: "Unable to delete the link. Check permissions and try again.",
+    tenantCreated: "School created successfully ✅",
+    tenantExists: "Tenant ID is already used. Choose a new Tenant ID.",
+    noGov: "The super account is not linked to a governorate.",
+    schoolNameRequired: "Please enter the school name.",
+    schoolSaved: "School data saved successfully.",
+    tenantDeleteConfirm: "Confirm deleting the school ({id})?",
+    tenantDeleted: "School deleted successfully.",
+    schoolMissing: "The school does not exist.",
+    outsideGov: "You cannot add a user to a school outside your governorate.",
+    emailLinked: "The same email cannot be linked to more than one school. Each email can only be linked to one school.",
+    userSaved: "The user was saved successfully.",
+    exampleBousher: "Example: Bousher",
+    exampleSchool: "Example: Azzan 12-9",
+  },
+} as const;
+
 type TenantAdminLinkRow = {
   tenantId: string;
   tenantName: string;
@@ -77,6 +260,10 @@ export default function SuperSystem() {
     visibleTenants,
     selectedTenant,
   } = useSuperSystemTenants({ canSeeAllGovs, myGov });
+
+  const [lang, setLang] = useState<Lang>("ar");
+  const ui = UI[lang];
+  const isAr = lang === "ar";
 
   const [editTenantName, setEditTenantName] = useState("");
   const [editTenantEnabled, setEditTenantEnabled] = useState(true);
@@ -130,8 +317,8 @@ export default function SuperSystem() {
           <table border="1">
             <tr>
               <th>Tenant ID</th>
-              <th>اسم المدرسة</th>
-              <th>البريد الإلكتروني المرتبط</th>
+              <th>{ui.schoolName}</th>
+              <th>{ui.linkedEmail}</th>
             </tr>
             ${rows
               .map(
@@ -178,8 +365,8 @@ export default function SuperSystem() {
     const header = rawRows[0].map((h) => h.toLowerCase());
 
     const tenantIdIndex = header.findIndex((h) => h.includes("tenant"));
-    const tenantNameIndex = header.findIndex((h) => h.includes("اسم المدرسة") || h.includes("school"));
-    const emailIndex = header.findIndex((h) => h.includes("البريد") || h.includes("email"));
+    const tenantNameIndex = header.findIndex((h) => h.includes("اسم المدرسة") || h.includes("school") || h.includes("School"));
+    const emailIndex = header.findIndex((h) => h.includes("البريد") || h.includes("email") || h.includes("Email"));
 
     const startAt =
       tenantIdIndex >= 0 || tenantNameIndex >= 0 || emailIndex >= 0 ? 1 : 0;
@@ -205,7 +392,7 @@ export default function SuperSystem() {
       const importedRows = await parseExcelLikeFile(file);
 
       if (!importedRows.length) {
-        alert("لم يتم العثور على بيانات صالحة داخل الملف.");
+        alert(ui.noValidImport);
         return;
       }
 
@@ -245,10 +432,10 @@ export default function SuperSystem() {
       }
 
       setEditReloadTick((x) => x + 1);
-      alert("تم استيراد بيانات الجدول بنجاح.");
+      alert(ui.importSuccess);
     } catch (e) {
       console.error(e);
-      alert("تعذر استيراد الملف. تأكد من أن الملف بصيغة CSV أو Excel محفوظ كنص قابل للقراءة.");
+      alert(ui.importFailed);
     } finally {
       setImportBusy(false);
       if (excelInputRef.current) excelInputRef.current.value = "";
@@ -260,7 +447,7 @@ export default function SuperSystem() {
     if (!email) return;
 
     const ok = confirm(
-      `تأكيد حذف ربط المدرسة (${row.tenantName || row.tenantId}) مع البريد (${email})؟`
+      ui.linkDeleteConfirm.replace("{school}", row.tenantName || row.tenantId).replace("{email}", email)
     );
     if (!ok) return;
 
@@ -275,10 +462,10 @@ export default function SuperSystem() {
             )
         )
       );
-      alert("تم حذف الربط من الجدول بنجاح.");
+      alert(ui.linkDeleted);
     } catch (e) {
       console.error(e);
-      alert("تعذر حذف الربط. تأكد من الصلاحيات ثم جرّب مرة أخرى.");
+      alert(ui.linkDeleteFailed);
     }
   };
 
@@ -374,13 +561,13 @@ export default function SuperSystem() {
       setNewTenantEnabled(true);
       setSelectedTenantId(result.tenantId);
       setEditReloadTick((x: number) => x + 1);
-      alert("تم إنشاء المدرسة بنجاح ✅");
+      alert(ui.tenantCreated);
     } catch (e: any) {
       console.error(e);
       if (String(e?.message || "") === "TENANT_EXISTS") {
-        alert("Tenant ID مستخدم بالفعل. اختر Tenant ID جديد.");
+        alert(ui.tenantExists);
       } else if (String(e?.message || "") === "MISSING_GOVERNORATE") {
-        alert("حساب السوبر غير مرتبط بمحافظة.");
+        alert(ui.noGov);
       } else {
         alert(
           getActionErrorMessage(
@@ -394,13 +581,13 @@ export default function SuperSystem() {
 
   const saveSelectedTenant = async () => {
     if (!selectedTenantId) {
-      alert("اختر مدرسة أولاً.");
+      alert(ui.chooseSchoolFirst);
       return;
     }
 
     const name = String(editTenantName || "").trim();
     if (!name) {
-      alert("يرجى إدخال اسم المدرسة.");
+      alert(ui.schoolNameRequired);
       return;
     }
 
@@ -416,7 +603,7 @@ export default function SuperSystem() {
         myGov,
       });
       setEditReloadTick((x: number) => x + 1);
-      alert("تم حفظ بيانات المدرسة بنجاح.");
+      alert(ui.schoolSaved);
     } catch (e: any) {
       console.error(e);
       alert(
@@ -433,7 +620,7 @@ export default function SuperSystem() {
   const deleteTenant = async (tenantId: string) => {
     const id = String(tenantId || "").trim();
     if (!id) return;
-    if (!confirm(`تأكيد حذف المدرسة (${id})؟`)) return;
+    if (!confirm(ui.tenantDeleteConfirm.replace("{id}", id))) return;
 
     try {
       await archiveAndDeleteTenant({
@@ -443,7 +630,7 @@ export default function SuperSystem() {
       setTenants((prev) => prev.filter((t) => t.id !== id));
       if (selectedTenantId === id) setSelectedTenantId("");
       setEditReloadTick((x: number) => x + 1);
-      alert("تم حذف المدرسة بنجاح.");
+      alert(ui.tenantDeleted);
     } catch (e) {
       console.error(e);
       alert(
@@ -458,18 +645,18 @@ export default function SuperSystem() {
   const saveAdminUser = async () => {
     const tenantId = String(selectedTenantId || "").trim();
     if (!tenantId) {
-      alert("اختر مدرسة أولاً.");
+      alert(ui.chooseSchoolFirst);
       return;
     }
 
     const tenant = tenants.find((t) => t.id === tenantId);
     if (!tenant) {
-      alert("المدرسة غير موجودة.");
+      alert(ui.schoolMissing);
       return;
     }
 
     if (!canSeeAllGovs && String(tenant.governorate || "") !== myGov) {
-      alert("لا يمكنك إضافة مستخدم لمدرسة خارج محافظتك.");
+      alert(ui.outsideGov);
       return;
     }
 
@@ -477,7 +664,7 @@ export default function SuperSystem() {
     try {
       const alreadyLinked = await isEmailAlreadyLinkedToAnotherSchool(userEmail, tenantId);
       if (alreadyLinked) {
-        alert("لا يمكن ربط نفس البريد الإلكتروني بأكثر من مدرسة. البريد الإلكتروني يربط بمدرسة واحدة فقط.");
+        alert(ui.emailLinked);
         return;
       }
 
@@ -495,15 +682,15 @@ export default function SuperSystem() {
       setUserName("");
       setUserEnabled(true);
       setEditReloadTick((x: number) => x + 1);
-      alert("تم حفظ المستخدم بنجاح.");
+      alert(ui.userSaved);
     } catch (e: any) {
       console.error(e);
       alert(
         String(e?.message || "") === "INVALID_EMAIL"
-          ? "يرجى إدخال بريد صحيح."
+          ? ui.invalidEmail
           : getActionErrorMessage(
               e,
-              "تعذر حفظ المستخدم. تأكد من الصلاحيات ثم جرّب مرة أخرى."
+              ui.saveUserError
             )
       );
     } finally {
@@ -512,42 +699,45 @@ export default function SuperSystem() {
   };
 
   return (
-    <div className="super-system-page" dir="rtl">
+    <div className="super-system-page" dir={isAr ? "rtl" : "ltr"}>
       <div className="super-header">
         <div className="super-header-right super-brand">
           <img
             className="super-brand-logo"
             src={MINISTRY_LOGO_URL}
-            alt="وزارة التعليم"
+            alt={ui.ministry}
           />
           <div className="super-brand-text">
-            <div className="super-brand-ministry">وزارة التعليم</div>
+            <div className="super-brand-ministry">{ui.ministry}</div>
             <div className="super-brand-gov">{myGov || ""}</div>
           </div>
         </div>
 
         <div className="super-header-center">
-          <div className="super-program-title">نظام إدارة الامتحانات المطور</div>
+          <div className="super-program-title">{ui.systemTitle}</div>
           <div className="super-subtitle">
             {isOwner
-              ? "مالك المنصة داخل نطاق المحافظات"
+              ? ui.ownerSubtitle
               : canSeeAllGovs
-              ? "عرض جميع المحافظات"
-              : "مدير المحافظة - إدارة المدارس والمستخدمين"}
+              ? ui.allGovsSubtitle
+              : ui.govManagerSubtitle}
           </div>
         </div>
 
         <div className="super-header-left">
+          <button className="super-btn" onClick={() => setLang(isAr ? "en" : "ar")}>
+            {isAr ? "English" : "العربية"}
+          </button>
           {isOwner ? (
             <button className="super-btn" onClick={() => navigate("/system")}>
-              لوحة مالك المنصة
+              {ui.ownerPanel}
             </button>
           ) : null}
           <button className="super-btn" onClick={() => navigate("/")}>
-            العودة
+            {ui.back}
           </button>
           <button className="super-btn danger" onClick={() => logout()}>
-            تسجيل خروج
+            {ui.logout}
           </button>
         </div>
       </div>
@@ -561,8 +751,8 @@ export default function SuperSystem() {
             })
           }
         >
-          <div className="super-card-title">إدارة المدارس</div>
-          <div className="super-card-desc">عرض/بحث المدارس + حذف/اختيار.</div>
+          <div className="super-card-title">{ui.manageSchools}</div>
+          <div className="super-card-desc">{ui.manageSchoolsDesc}</div>
         </button>
 
         <button
@@ -573,9 +763,9 @@ export default function SuperSystem() {
             })
           }
         >
-          <div className="super-card-title">تعديل بيانات المدرسة</div>
+          <div className="super-card-title">{ui.editSchool}</div>
           <div className="super-card-desc">
-            تعديل اسم المدرسة والشعار والولاية (داخل محافظتك).
+            {ui.editSchoolDesc}
           </div>
         </button>
 
@@ -587,8 +777,8 @@ export default function SuperSystem() {
             })
           }
         >
-          <div className="super-card-title">إضافة مدرسة جديدة</div>
-          <div className="super-card-desc">إنشاء مدرسة داخل محافظتك.</div>
+          <div className="super-card-title">{ui.addSchool}</div>
+          <div className="super-card-desc">{ui.addSchoolDesc}</div>
         </button>
 
         <button
@@ -599,14 +789,14 @@ export default function SuperSystem() {
             })
           }
         >
-          <div className="super-card-title">ربط الأدمن</div>
-          <div className="super-card-desc">إضافة/ربط Admin بمدرسة محددة.</div>
+          <div className="super-card-title">{ui.linkAdmin}</div>
+          <div className="super-card-desc">{ui.linkAdminDesc}</div>
         </button>
 
         <button className="super-card" onClick={() => navigate("/")}>
-          <div className="super-card-title">الدخول للبرنامج</div>
+          <div className="super-card-title">{ui.enterProgram}</div>
           <div className="super-card-desc">
-            الانتقال للواجهة الرئيسية بعد اختيار المدرسة.
+            {ui.enterProgramDesc}
           </div>
         </button>
       </div>
@@ -626,18 +816,18 @@ export default function SuperSystem() {
         </div>
         <div style={{ lineHeight: 1.8, opacity: 0.92 }}>
           {isOwner
-            ? "أنت مالك المنصة، ويمكنك من هذه الشاشة مراجعة نطاق المحافظات بالكامل، كما يمكنك العودة إلى لوحة المالك لإدارة كل الصلاحيات العليا والمستخدمين والمدارس."
-            : "أنت مشرف نطاق، لذلك ترى وتدير فقط المدارس والمستخدمين المرتبطين بنطاقك الإداري."}
+            ? ui.ownerRoleText
+            : ui.scopeRoleText}
         </div>
       </div>
 
       <div className="super-grid">
         <div className="super-panel" id="section-tenants">
-          <div className="super-panel-title">إدارة المدارس (Tenants)</div>
+          <div className="super-panel-title">{ui.manageTenants}</div>
           <div style={{ marginBottom: 10 }}>
             <input
               className="input"
-              placeholder="بحث..."
+              placeholder={ui.search}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -649,12 +839,12 @@ export default function SuperSystem() {
                 key={t.id}
                 className={`tenant-row ${selectedTenantId === t.id ? "active" : ""}`}
               >
-                <button className="icon-btn" title="حذف" onClick={() => deleteTenant(t.id)}>
+                <button className="icon-btn" title={ui.delete} onClick={() => deleteTenant(t.id)}>
                   🗑️
                 </button>
                 <button
                   className="icon-btn"
-                  title="اختيار"
+                  title={ui.select}
                   onClick={() => setSelectedTenantId(t.id)}
                 >
                   📁
@@ -663,7 +853,7 @@ export default function SuperSystem() {
                   <div className="tenant-name">{t.name || t.id}</div>
                   <div className="tenant-id">{t.id}</div>
                   <div className="tenant-id" style={{ opacity: 0.8 }}>
-                    {t.governorate ? `المحافظة: ${t.governorate}` : ""}
+                    {t.governorate ? `${ui.governorate}: ${t.governorate}` : ""}
                   </div>
                 </div>
                 <div
@@ -674,34 +864,34 @@ export default function SuperSystem() {
                     gap: 8,
                   }}
                 >
-                  <span style={{ opacity: 0.9 }}>{t.enabled ? "مفعل" : "غير مفعل"}</span>
+                  <span style={{ opacity: 0.9 }}>{t.enabled ? ui.enabled : ui.disabled}</span>
                   <input type="checkbox" checked={t.enabled !== false} readOnly />
                 </div>
               </div>
             ))}
             {!visibleTenants.length ? (
-              <div style={{ padding: 12, opacity: 0.8 }}>لا توجد مدارس.</div>
+              <div style={{ padding: 12, opacity: 0.8 }}>{ui.noSchools}</div>
             ) : null}
           </div>
         </div>
 
         <div className="super-panel" id="section-edit">
-          <div className="super-panel-title">تعديل بيانات المدرسة المختارة</div>
+          <div className="super-panel-title">{ui.editSelectedSchool}</div>
           {!selectedTenantId ? (
-            <div style={{ padding: 12, opacity: 0.85 }}>اختر مدرسة من القائمة أولاً.</div>
+            <div style={{ padding: 12, opacity: 0.85 }}>{ui.chooseSchoolFirst}</div>
           ) : (
             <div className="form-grid">
               <label className="label">Tenant ID</label>
               <input className="input" value={selectedTenantId} readOnly />
 
-              <label className="label">اسم المدرسة</label>
+              <label className="label">{ui.schoolName}</label>
               <input
                 className="input"
                 value={editTenantName}
                 onChange={(e) => setEditTenantName(e.target.value)}
               />
 
-              <label className="label">الحالة</label>
+              <label className="label">{ui.status}</label>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <input
                   type="checkbox"
@@ -709,19 +899,19 @@ export default function SuperSystem() {
                   onChange={(e) => setEditTenantEnabled(e.target.checked)}
                 />
                 <span style={{ opacity: 0.9 }}>
-                  {editTenantEnabled ? "مفعل" : "غير مفعل"}
+                  {editTenantEnabled ? ui.enabled : ui.disabled}
                 </span>
               </div>
 
-              <label className="label">الولاية</label>
+              <label className="label">{ui.wilaya}</label>
               <input
                 className="input"
                 value={editWilayatAr}
                 onChange={(e) => setEditWilayatAr(e.target.value)}
-                placeholder="مثال: بوشر"
+                placeholder={ui.exampleBousher}
               />
 
-              <label className="label">رابط الشعار</label>
+              <label className="label">{ui.logoUrl}</label>
               <input
                 className="input"
                 value={editLogoUrl}
@@ -732,15 +922,15 @@ export default function SuperSystem() {
               <div />
               <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                 <button className="btn" disabled={editBusy} onClick={saveSelectedTenant}>
-                  {editBusy ? "جاري الحفظ..." : "حفظ التغييرات"}
+                  {editBusy ? ui.saving : ui.saveChanges}
                 </button>
                 <button
                   className="btn btn-ghost"
                   disabled={editBusy}
                   onClick={() => setEditReloadTick((x: number) => x + 1)}
-                  title="إعادة تحميل البيانات"
+                  title={ui.reloadData}
                 >
-                  تحديث
+                  {ui.refresh}
                 </button>
               </div>
             </div>
@@ -748,27 +938,27 @@ export default function SuperSystem() {
         </div>
 
         <div className="super-panel" id="section-create">
-          <div className="super-panel-title">إنشاء مدرسة جديدة (Tenant)</div>
+          <div className="super-panel-title">{ui.createTenant}</div>
           <div className="form-grid">
-            <label className="label">اسم المدرسة</label>
+            <label className="label">{ui.schoolName}</label>
             <input
               className="input"
               value={newTenantName}
               onChange={(e) => setNewTenantName(e.target.value)}
-              placeholder="مثال: أزان 12-9"
+              placeholder={ui.exampleSchool}
             />
 
-            <label className="label">Tenant ID (Subdomain)</label>
+            <label className="label">{ui.tenantIdSubdomain}</label>
             <input
               className="input"
               value={newTenantId}
               onChange={(e) => setNewTenantId(safeId(e.target.value))}
-              placeholder="مثال: azaan-9-12"
+              placeholder={isAr ? "مثال: azaan-9-12" : "Example: azaan-9-12"}
             />
 
             <div />
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span className="label">مفعل</span>
+              <span className="label">{ui.active}</span>
               <input
                 type="checkbox"
                 checked={newTenantEnabled}
@@ -778,30 +968,30 @@ export default function SuperSystem() {
 
             <div />
             <button className="btn primary" onClick={createTenant}>
-              إنشاء مدرسة جديدة
+              {ui.createSchoolBtn}
             </button>
           </div>
 
           <div style={{ marginTop: 10, opacity: 0.8, lineHeight: 1.9 }}>
             {canSeeAllGovs ? (
-              <div>السوبر أدمن يمكنه إنشاء مدارس لأي محافظة (حسب إعدادات المدرسة).</div>
+              <div>{ui.superCanCreate}</div>
             ) : (
               <div>
-                سيتم تثبيت محافظة المدرسة تلقائيًا على: <b>{myGov || "غير محددة"}</b>
+                {ui.fixedGovernorate} <b>{myGov || ui.unspecified}</b>
               </div>
             )}
           </div>
         </div>
 
         <div className="super-panel" id="section-admin">
-          <div className="super-panel-title">إضافة/ربط Admin بالمدرسة</div>
+          <div className="super-panel-title">{ui.addLinkAdmin}</div>
 
           <div style={{ marginBottom: 10, opacity: 0.85 }}>
-            المدرسة المحددة: <b>{selectedTenant?.name || selectedTenantId || "—"}</b>
+            {ui.selectedSchool}: <b>{selectedTenant?.name || selectedTenantId || "—"}</b>
           </div>
 
           <div className="form-grid">
-            <label className="label">البريد الإلكتروني (مفتاح الوثيقة)</label>
+            <label className="label">{ui.emailDoc}</label>
             <input
               className="input"
               value={userEmail}
@@ -809,17 +999,17 @@ export default function SuperSystem() {
               placeholder="name@example.com"
             />
 
-            <label className="label">الاسم (اختياري)</label>
+            <label className="label">{ui.optionalName}</label>
             <input
               className="input"
               value={userName}
               onChange={(e) => setUserName(e.target.value)}
-              placeholder="اسم المستخدم"
+              placeholder={ui.userName}
             />
 
             <div />
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span className="label">مفعل</span>
+              <span className="label">{ui.active}</span>
               <input
                 type="checkbox"
                 checked={userEnabled}
@@ -829,16 +1019,16 @@ export default function SuperSystem() {
 
             <div />
             <button className="btn primary" onClick={saveAdminUser} disabled={saveBusy}>
-              {saveBusy ? "جارٍ الحفظ..." : "حفظ المستخدم"}
+              {saveBusy ? ui.saving : ui.saveUser}
             </button>
           </div>
 
           <div style={{ marginTop: 10, opacity: 0.8, lineHeight: 1.9 }}>
             <div>
-              ملاحظة: هذه الصفحة تسمح للسوبر بإضافة <b>Admin</b> فقط.
+              {ui.noteAdminOnly}
             </div>
             <div>
-              لا يمكن ربط نفس البريد الإلكتروني بأكثر من مدرسة، والبريد الإلكتروني يربط بمدرسة واحدة فقط.
+              {ui.noteOneSchool}
             </div>
           </div>
 
@@ -862,12 +1052,12 @@ export default function SuperSystem() {
               }}
             >
               <div style={{ fontWeight: 900, color: "#d4af37" }}>
-                جدول ربط المدارس مع الأدمن
+                {ui.schoolAdminTable}
               </div>
 
               <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                 <span style={{ opacity: 0.85 }}>
-                  {tenantAdminBusy ? "جارٍ التحديث..." : `عدد السجلات: ${tenantAdminRows.length}`}
+                  {tenantAdminBusy ? ui.updating : `${ui.recordCount}: ${tenantAdminRows.length}`}
                 </span>
 
                 <button
@@ -875,7 +1065,7 @@ export default function SuperSystem() {
                   onClick={() => excelInputRef.current?.click()}
                   disabled={importBusy}
                 >
-                  {importBusy ? "جارٍ الاستيراد..." : "استيراد Excel"}
+                  {importBusy ? ui.importing : ui.importExcel}
                 </button>
 
                 <button
@@ -883,7 +1073,7 @@ export default function SuperSystem() {
                   onClick={() => setEditReloadTick((x: number) => x + 1)}
                   disabled={tenantAdminBusy}
                 >
-                  تحديث الجدول
+                  {ui.refresh} الجدول
                 </button>
 
                 <button
@@ -891,7 +1081,7 @@ export default function SuperSystem() {
                   onClick={exportTenantAdminLinksToExcel}
                   disabled={!tenantAdminRows.length}
                 >
-                  تصدير Excel
+                  {ui.exportExcel}
                 </button>
               </div>
             </div>
@@ -936,7 +1126,7 @@ export default function SuperSystem() {
                         textAlign: "right",
                       }}
                     >
-                      اسم المدرسة
+                      {ui.schoolName}
                     </th>
                     <th
                       style={{
@@ -945,7 +1135,7 @@ export default function SuperSystem() {
                         textAlign: "right",
                       }}
                     >
-                      البريد الإلكتروني المرتبط
+                      {ui.linkedEmail}
                     </th>
                     <th
                       style={{
@@ -955,7 +1145,7 @@ export default function SuperSystem() {
                         width: 120,
                       }}
                     >
-                      إجراء
+                      {ui.action}
                     </th>
                   </tr>
                 </thead>
@@ -984,7 +1174,7 @@ export default function SuperSystem() {
                             className="btn danger"
                             onClick={() => deleteTenantAdminLink(row)}
                           >
-                            حذف الربط
+                            {ui.deleteLink}
                           </button>
                         </td>
                       </tr>
@@ -1000,7 +1190,7 @@ export default function SuperSystem() {
                           opacity: 0.8,
                         }}
                       >
-                        لا توجد بيانات ربط حالياً.
+                        {ui.noLinkData}
                       </td>
                     </tr>
                   )}
@@ -1009,7 +1199,7 @@ export default function SuperSystem() {
             </div>
 
             <div style={{ marginTop: 10, opacity: 0.78, lineHeight: 1.9 }}>
-              صيغة الاستيراد المقترحة: Tenant ID ، اسم المدرسة ، البريد الإلكتروني المرتبط
+              {ui.suggestedImport}
             </div>
           </div>
         </div>
