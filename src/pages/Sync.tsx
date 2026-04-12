@@ -377,7 +377,10 @@ export default function Sync() {
       setBusy("sync");
       setMsg("");
       const ok = window.confirm(
-        "سيتم رفع كل الأرشيف المحلي إلى السحابة، ثم تنزيل أي نسخ ناقصة من السحابة (بدون حذف الموجود).\nهل تريد المتابعة؟"
+        tr(
+          "سيتم رفع كل الأرشيف المحلي إلى السحابة، ثم تنزيل أي نسخ ناقصة من السحابة (بدون حذف الموجود).\nهل تريد المتابعة؟",
+          "All local archive items will be uploaded to the cloud, then any missing cloud copies will be downloaded (without deleting existing items).\nDo you want to continue?"
+        )
       );
       if (!ok) return;
 
@@ -428,20 +431,9 @@ export default function Sync() {
       };
 
       const ok = window.confirm(
-        `⚠️ تنبيه مهم:\n` +
-          `سيتم **استبدال** بيانات البرنامج الأساسية (IndexedDB).\n\n` +
-          `سيتم **دمج** الأرشيف (لا حذف للأرشيف):\n` +
-          `- أرشيف محلي: +${stats.archiveLocal}\n` +
-          `- أرشيف سحابي: +${stats.archiveCloud}\n\n` +
-          `ملخص البيانات التي ستُستبدل:\n` +
-          `- الكادر التعليمي: ${stats.teachers}\n` +
-          `- الامتحانات: ${stats.exams}\n` +
-          `- القاعات: ${stats.rooms}\n` +
-          `- المهام: ${stats.tasks}\n` +
-          `- التشغيلات: ${stats.runs}\n` +
-          `- الإعدادات: ${stats.settings}\n` +
-          `- السجل (Audit): ${stats.audit}\n\n` +
-          `هل تريد المتابعة؟`
+        lang === "ar"
+          ? `⚠️ تنبيه مهم:\nسيتم **استبدال** بيانات البرنامج الأساسية (IndexedDB).\n\nسيتم **دمج** الأرشيف (لا حذف للأرشيف):\n- أرشيف محلي: +${stats.archiveLocal}\n- أرشيف سحابي: +${stats.archiveCloud}\n\nملخص البيانات التي ستُستبدل:\n- الكادر التعليمي: ${stats.teachers}\n- الامتحانات: ${stats.exams}\n- القاعات: ${stats.rooms}\n- المهام: ${stats.tasks}\n- التشغيلات: ${stats.runs}\n- الإعدادات: ${stats.settings}\n- السجل (Audit): ${stats.audit}\n\nهل تريد المتابعة؟`
+          : `⚠️ Important warning:\nThe core program data (IndexedDB) will be **replaced**.\n\nThe archive will be **merged** (archive items will not be deleted):\n- Local archive: +${stats.archiveLocal}\n- Cloud archive: +${stats.archiveCloud}\n\nSummary of data to be replaced:\n- Teachers: ${stats.teachers}\n- Exams: ${stats.exams}\n- Rooms: ${stats.rooms}\n- Tasks: ${stats.tasks}\n- Runs: ${stats.runs}\n- Settings: ${stats.settings}\n- Audit Log: ${stats.audit}\n\nDo you want to continue?`
       );
       if (!ok) return;
 
@@ -463,7 +455,10 @@ export default function Sync() {
 
   const onReset = async () => {
     const ok = window.confirm(
-      "⚠️ سيتم حذف بيانات البرنامج الأساسية (IndexedDB) فقط.\nلن نحذف الأرشيف المحلي أو السحابي من هذه الصفحة.\nهل أنت متأكد؟"
+      tr(
+        "⚠️ سيتم حذف بيانات البرنامج الأساسية (IndexedDB) فقط.\nلن نحذف الأرشيف المحلي أو السحابي من هذه الصفحة.\nهل أنت متأكد؟",
+        "⚠️ Only the core program data (IndexedDB) will be deleted.\nLocal or cloud archive items will not be deleted from this page.\nAre you sure?"
+      )
     );
     if (!ok) return;
 
@@ -523,9 +518,9 @@ export default function Sync() {
       validateBackupFile(cloudFile);
 
       const ok = window.confirm(
-        `⚠️ سيتم استيراد نسخة السحابة إلى localStorage (مفاتيح exam-manager).\n` +
-          `لن نحذف مفاتيح خارج exam-manager.\n\n` +
-          `هل تريد المتابعة؟`
+        lang === "ar"
+          ? `⚠️ سيتم استيراد نسخة السحابة إلى localStorage (مفاتيح exam-manager).\nلن نحذف مفاتيح خارج exam-manager.\n\nهل تريد المتابعة؟`
+          : `⚠️ The cloud backup will be imported into localStorage (exam-manager keys).\nKeys outside exam-manager will not be deleted.\n\nDo you want to continue?`
       );
       if (!ok) return;
 
