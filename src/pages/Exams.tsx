@@ -3,13 +3,15 @@ import GoldDropdown from "../components/GoldDropdown";
 import { type Exam } from "../services/exams.service";
 import type { Room } from "../services/rooms.service";
 import { useAuth } from "../auth/AuthContext";
+import { useI18n } from "../i18n/I18nProvider";
 import { useExamsData } from "../hooks/useExamsData";
 import { useRoomsData } from "../hooks/useRoomsData";
 import { useRoomBlocksData } from "../hooks/useRoomBlocksData";
 import { useExamRoomAssignmentsData } from "../hooks/useExamRoomAssignmentsData";
 import { createId, isRoomBlockedForExam } from "../lib/roomScheduling";
 
-const APP_NAME = "نظام إدارة الامتحانات المطوّر";
+const APP_NAME_AR = "نظام إدارة الامتحانات المطوّر";
+const APP_NAME_EN = "Advanced Exam Management System";
 const SUBCOLLECTION = "exams";
 const ASSIGNMENTS_STORAGE_PREFIX = "exam_room_assignments";
 
@@ -102,14 +104,102 @@ const SUBJECT_OPTIONS_RAW = [
   "العلوم البيئية 12",
 ];
 
-const SUBJECT_OPTIONS = SUBJECT_OPTIONS_RAW.map((s) => ({
-  value: s,
-  label: s || "— اختر المادة —",
-}));
+const SUBJECT_TRANSLATIONS: Record<string, string> = {
+  "التربية الإسلامية 5": "Islamic Education 5",
+  "التربية الإسلامية 6": "Islamic Education 6",
+  "التربية الإسلامية 7": "Islamic Education 7",
+  "التربية الإسلامية 8": "Islamic Education 8",
+  "التربية الإسلامية 9": "Islamic Education 9",
+  "التربية الإسلامية 10": "Islamic Education 10",
+  "التربية الإسلامية 11": "Islamic Education 11",
+  "التربية الإسلامية 12": "Islamic Education 12",
+  "اللغة العربية 6": "Arabic Language 6",
+  "اللغة العربية 7": "Arabic Language 7",
+  "اللغة العربية 8": "Arabic Language 8",
+  "اللغة العربية 9": "Arabic Language 9",
+  "اللغة العربية 10": "Arabic Language 10",
+  "اللغة العربية 11": "Arabic Language 11",
+  "اللغة العربية 12": "Arabic Language 12",
+  "اللغة الإنجليزية 6": "English Language 6",
+  "اللغة الإنجليزية 7": "English Language 7",
+  "اللغة الإنجليزية 8": "English Language 8",
+  "اللغة الإنجليزية 9": "English Language 9",
+  "اللغة الإنجليزية 10": "English Language 10",
+  "اللغة الإنجليزية 11": "English Language 11",
+  "اللغة الإنجليزية 12": "English Language 12",
+  "الرياضيات 5": "Mathematics 5",
+  "الرياضيات 6": "Mathematics 6",
+  "الرياضيات 7": "Mathematics 7",
+  "الرياضيات 8": "Mathematics 8",
+  "الرياضيات 9": "Mathematics 9",
+  "الرياضيات 10": "Mathematics 10",
+  "الرياضيات 11": "Mathematics 11",
+  "الرياضيات 12": "Mathematics 12",
+  "الرياضيات الأساسية 11": "Basic Mathematics 11",
+  "الرياضيات المتقدمة 11": "Advanced Mathematics 11",
+  "الرياضيات الأساسية 12": "Basic Mathematics 12",
+  "الرياضيات المتقدمة 12": "Advanced Mathematics 12",
+  "الدراسات الاجتماعية 5": "Social Studies 5",
+  "الدراسات الاجتماعية 6": "Social Studies 6",
+  "الدراسات الاجتماعية 7": "Social Studies 7",
+  "الدراسات الاجتماعية 8": "Social Studies 8",
+  "الدراسات الاجتماعية 9": "Social Studies 9",
+  "الدراسات الاجتماعية 10": "Social Studies 10",
+  "التاريخ والحضارة الإسلامية 11": "Islamic History and Civilization 11",
+  "الجغرافيا البشرية 11": "Human Geography 11",
+  "هذا وطني 11": "This Is My Nation 11",
+  "التاريخ والحضارة الإسلامية 12": "Islamic History and Civilization 12",
+  "الجغرافيا البشرية 12": "Human Geography 12",
+  "هذا وطني 12": "This Is My Nation 12",
+  "العلوم 5": "Science 5",
+  "العلوم 6": "Science 6",
+  "العلوم 7": "Science 7",
+  "العلوم 8": "Science 8",
+  "الفيزياء 9": "Physics 9",
+  "الفيزياء 10": "Physics 10",
+  "الفيزياء 11": "Physics 11",
+  "الفيزياء 12": "Physics 12",
+  "الكيمياء 9": "Chemistry 9",
+  "الكيمياء 10": "Chemistry 10",
+  "الكيمياء 11": "Chemistry 11",
+  "الكيمياء 12": "Chemistry 12",
+  "الأحياء 9": "Biology 9",
+  "الأحياء 10": "Biology 10",
+  "الأحياء 11": "Biology 11",
+  "الأحياء 12": "Biology 12",
+  "الرياضة المدرسية 11": "School Sports 11",
+  "الفنون التشكيلية 11": "Visual Arts 11",
+  "المهارات الموسيقية 11": "Music Skills 11",
+  "الرياضة المدرسية 12": "School Sports 12",
+  "الفنون التشكيلية 12": "Visual Arts 12",
+  "المهارات الموسيقية 12": "Music Skills 12",
+  "مواد التخصصات الهندسية والصناعية 12": "Engineering and Industrial Specializations 12",
+  "مهارات اللغة الإنجليزية 11": "English Skills 11",
+  "مهارات اللغة الإنجليزية 12": "English Skills 12",
+  "تقنية المعلومات 11": "Information Technology 11",
+  "تقنية المعلومات 12": "Information Technology 12",
+  "السفر و السياحة و إدارة الأعمال و تقنية المعلومات 12": "Travel, Tourism, Business Administration and IT 12",
+  "اللغة الفرنسية 10": "French Language 10",
+  "اللغة الألمانية 10": "German Language 10",
+  "اللغة الصينية 10": "Chinese Language 10",
+  "اللغة الفرنسية 11": "French Language 11",
+  "اللغة الألمانية 11": "German Language 11",
+  "اللغة الصينية 11": "Chinese Language 11",
+  "اللغة الفرنسية 12": "French Language 12",
+  "اللغة الألمانية 12": "German Language 12",
+  "اللغة الصينية 12": "Chinese Language 12",
+  "العلوم البيئية 11": "Environmental Science 11",
+  "العلوم البيئية 12": "Environmental Science 12",
+};
 
-const PERIOD_OPTIONS = [
+const PERIOD_OPTIONS_AR = [
   { value: "الفترة الأولى", label: "الفترة الأولى" },
   { value: "الفترة الثانية", label: "الفترة الثانية" },
+];
+
+const PERIOD_OPTIONS_EN = [
+  { value: "الفترة الأولى", label: "First Period" },
+  { value: "الفترة الثانية", label: "Second Period" },
 ];
 
 function genId() {
@@ -196,32 +286,6 @@ function downloadText(filename: string, content: string) {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
-}
-
-function toCSV(rows: Exam[]) {
-  const header = ["المادة", "التاريخ", "اليوم", "الوقت", "المدة", "الفترة", "القاعات"];
-  const escape = (s: string) => {
-    const v = (s ?? "").replace(/\r?\n/g, " ").trim();
-    if (/[",]/.test(v)) return `"${v.replace(/"/g, '""')}"`;
-    return v;
-  };
-  const lines = [
-    header.join(","),
-    ...rows.map((e) =>
-      [
-        e.subject,
-        e.dateISO,
-        e.dayLabel,
-        e.time,
-        String(e.durationMinutes),
-        e.period,
-        String(e.roomsCount),
-      ]
-        .map(escape)
-        .join(",")
-    ),
-  ];
-  return lines.join("\n");
 }
 
 function normalizeHeader(h: string) {
@@ -351,12 +415,13 @@ function parseExamsFromObjects(rows: any[]): Exam[] {
     .filter((e) => e.subject || e.dateISO);
 }
 
-function dayFromISO(iso: string) {
+function dayFromISO(iso: string, lang: "ar" | "en") {
   try {
     const d = new Date(iso + "T00:00:00");
     const w = d.getDay();
     const ar = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
-    return ar[w] || "";
+    const en = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    return (lang === "ar" ? ar : en)[w] || "";
   } catch {
     return "";
   }
@@ -395,22 +460,6 @@ function sortRoomsByCode(a: Room, b: Room) {
   });
 }
 
-function fixExam(e: Exam): Exam {
-  const rooms = Number(e.roomsCount) || 1;
-  return {
-    ...e,
-    id: e.id || genId(),
-    subject: String(e.subject || "").trim(),
-    dateISO: String(e.dateISO || "").trim(),
-    dayLabel: String(e.dayLabel || "").trim() || dayFromISO(e.dateISO),
-    period: String(e.period || "").trim() || "الفترة الأولى",
-    time: String(e.time || "").trim() || "08:00",
-    durationMinutes: Number(e.durationMinutes) || 120,
-    roomsCount: rooms < 1 ? 1 : rooms,
-  };
-}
-
-
 function normalizeExamPeriod(period: string) {
   const raw = String(period || "").trim();
   if (!raw) return "";
@@ -419,6 +468,7 @@ function normalizeExamPeriod(period: string) {
 
   if (
     n.includes("الفترة الأولى") ||
+    n.includes("first period") ||
     n === "الأولى" ||
     n === "اولى" ||
     n === "p1" ||
@@ -430,6 +480,7 @@ function normalizeExamPeriod(period: string) {
 
   if (
     n.includes("الفترة الثانية") ||
+    n.includes("second period") ||
     n === "الثانية" ||
     n === "ثانية" ||
     n === "p2" ||
@@ -466,6 +517,25 @@ type AvailableRoomRow = Room & {
 };
 
 export default function Exams() {
+  const { lang, isRTL } = useI18n();
+  const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
+  const translateSubject = (s: string) => (lang === "ar" ? s : SUBJECT_TRANSLATIONS[s] || s);
+  const APP_NAME = lang === "ar" ? APP_NAME_AR : APP_NAME_EN;
+
+  const SUBJECT_OPTIONS = useMemo(
+    () =>
+      SUBJECT_OPTIONS_RAW.map((s) => ({
+        value: s,
+        label: s ? translateSubject(s) : tr("— اختر المادة —", "— Select Subject —"),
+      })),
+    [lang]
+  );
+
+  const PERIOD_OPTIONS = useMemo(
+    () => (lang === "ar" ? PERIOD_OPTIONS_AR : PERIOD_OPTIONS_EN),
+    [lang]
+  );
+
   const { tenantId, exams, setExams } = useExamsData();
   const [query, setQuery] = useState("");
   const [adding, setAdding] = useState(false);
@@ -530,7 +600,6 @@ export default function Exams() {
         setExamRoomAssignments(savedAssignments as any);
       }
     } catch {
-      // ignore localStorage read errors
     } finally {
       assignmentsHydratedRef.current = true;
     }
@@ -541,7 +610,6 @@ export default function Exams() {
     try {
       localStorage.setItem(assignmentsStorageKey, JSON.stringify(examRoomAssignments));
     } catch {
-      // ignore localStorage write errors
     }
   }, [assignmentsStorageKey, examRoomAssignments]);
 
@@ -565,11 +633,13 @@ export default function Exams() {
 
       .examTable3D th,
       .examTable3D td {
-        border-right: 2px solid rgba(184,134,11,0.95) !important;
+        border-right: ${isRTL ? "2px solid rgba(184,134,11,0.95)" : "none"} !important;
+        border-left: ${!isRTL ? "2px solid rgba(184,134,11,0.95)" : "none"} !important;
       }
       .examTable3D th:last-child,
       .examTable3D td:last-child {
         border-right: none !important;
+        border-left: none !important;
       }
 
       .examTable3D thead th {
@@ -638,7 +708,7 @@ export default function Exams() {
     return () => {
       document.head.removeChild(style);
     };
-  }, []);
+  }, [isRTL]);
 
   const todayISO = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const roomsById = useMemo(() => new Map(rooms.map((room) => [room.id, room])), [rooms]);
@@ -690,11 +760,11 @@ export default function Exams() {
         const sameDateConflictLabel = sameDateSamePeriodAssignments
           .map((assignment) => {
             const otherExam = examsById.get(assignment.examId);
-            const subject = String(otherExam?.subject || "مادة أخرى").trim();
+            const subject = String(otherExam?.subject || tr("مادة أخرى", "Another Subject")).trim();
             const period = String(otherExam?.period || assignment.period || "").trim();
             return period ? `${subject} — ${period}` : subject;
           })
-          .join("، ");
+          .join(lang === "ar" ? "، " : ", ");
 
         return {
           ...room,
@@ -704,7 +774,7 @@ export default function Exams() {
           sameDateConflictLabel,
         };
       });
-  }, [rooms, selectedExam, activeBlocks, examRoomAssignments, examsById]);
+  }, [rooms, selectedExam, activeBlocks, examRoomAssignments, examsById, lang]);
 
   const filtered = useMemo(() => {
     const q = query.trim();
@@ -721,12 +791,12 @@ export default function Exams() {
   }, [exams, query, dateSortOrder]);
 
   function validateExam(e: Exam) {
-    if (!e.subject.trim()) return "المادة مطلوبة.";
-    if (!e.dateISO.trim()) return "التاريخ مطلوب.";
-    if (!e.time.trim()) return "الوقت مطلوب.";
-    if (!e.durationMinutes || e.durationMinutes <= 0) return "المدة مطلوبة.";
-    if (!e.period.trim()) return "الفترة مطلوبة.";
-    if (!e.roomsCount || e.roomsCount <= 0) return "عدد القاعات مطلوب.";
+    if (!e.subject.trim()) return tr("المادة مطلوبة.", "Subject is required.");
+    if (!e.dateISO.trim()) return tr("التاريخ مطلوب.", "Date is required.");
+    if (!e.time.trim()) return tr("الوقت مطلوب.", "Time is required.");
+    if (!e.durationMinutes || e.durationMinutes <= 0) return tr("المدة مطلوبة.", "Duration is required.");
+    if (!e.period.trim()) return tr("الفترة مطلوبة.", "Period is required.");
+    if (!e.roomsCount || e.roomsCount <= 0) return tr("عدد القاعات مطلوب.", "Rooms count is required.");
     return "";
   }
 
@@ -746,6 +816,21 @@ export default function Exams() {
     });
   }
 
+  function fixExam(e: Exam): Exam {
+    const rooms = Number(e.roomsCount) || 1;
+    return {
+      ...e,
+      id: e.id || genId(),
+      subject: String(e.subject || "").trim(),
+      dateISO: String(e.dateISO || "").trim(),
+      dayLabel: String(e.dayLabel || "").trim() || dayFromISO(e.dateISO, lang),
+      period: String(e.period || "").trim() || "الفترة الأولى",
+      time: String(e.time || "").trim() || "08:00",
+      durationMinutes: Number(e.durationMinutes) || 120,
+      roomsCount: rooms < 1 ? 1 : rooms,
+    };
+  }
+
   function startAdd() {
     setAdding(true);
     setEditingId(null);
@@ -757,7 +842,7 @@ export default function Exams() {
     const msg = validateExam(row);
     if (msg) return alert(msg);
 
-    const fixed = fixExam({ ...row, dayLabel: row.dayLabel.trim() || dayFromISO(row.dateISO) });
+    const fixed = fixExam({ ...row, dayLabel: row.dayLabel.trim() || dayFromISO(row.dateISO, lang) });
 
     const dups = findSubjectDuplicates(fixed.subject, null);
     if (dups.length) {
@@ -783,7 +868,7 @@ export default function Exams() {
     const msg = validateExam(edit);
     if (msg) return alert(msg);
 
-    const fixed = fixExam({ ...edit, id: editingId, dayLabel: edit.dayLabel.trim() || dayFromISO(edit.dateISO) });
+    const fixed = fixExam({ ...edit, id: editingId, dayLabel: edit.dayLabel.trim() || dayFromISO(edit.dateISO, lang) });
 
     const dups = findSubjectDuplicates(fixed.subject, editingId);
     if (dups.length) {
@@ -796,17 +881,52 @@ export default function Exams() {
   }
 
   function removeExamById(id: string) {
-    if (!confirm("هل تريد حذف هذا الامتحان؟")) return;
+    if (!confirm(tr("هل تريد حذف هذا الامتحان؟", "Do you want to delete this exam?"))) return;
     setExams((prev) => prev.filter((x) => x.id !== id));
     setExamRoomAssignments((prev) => prev.filter((row) => row.examId !== id));
   }
 
   function deleteAll() {
     if (!exams.length) return;
-    const ok = confirm("⚠️ هل أنت متأكد من حذف جدول الامتحانات كاملًا؟ لا يمكن التراجع.");
+    const ok = confirm(tr("⚠️ هل أنت متأكد من حذف جدول الامتحانات كاملًا؟ لا يمكن التراجع.", "⚠️ Are you sure you want to delete the entire exams table? This cannot be undone."));
     if (!ok) return;
     setExams([]);
     setExamRoomAssignments([]);
+  }
+
+  function toCSV(rows: Exam[]) {
+    const header =
+      lang === "ar"
+        ? ["المادة", "التاريخ", "اليوم", "الوقت", "المدة", "الفترة", "القاعات"]
+        : ["Subject", "Date", "Day", "Time", "Duration", "Period", "Rooms"];
+    const escape = (s: string) => {
+      const v = (s ?? "").replace(/\r?\n/g, " ").trim();
+      if (/[",]/.test(v)) return `"${v.replace(/"/g, '""')}"`;
+      return v;
+    };
+    const lines = [
+      header.join(","),
+      ...rows.map((e) =>
+        [
+          lang === "ar" ? e.subject : translateSubject(e.subject),
+          e.dateISO,
+          e.dayLabel,
+          e.time,
+          String(e.durationMinutes),
+          lang === "ar"
+            ? e.period
+            : e.period === "الفترة الأولى"
+            ? "First Period"
+            : e.period === "الفترة الثانية"
+            ? "Second Period"
+            : e.period,
+          String(e.roomsCount),
+        ]
+          .map(escape)
+          .join(",")
+      ),
+    ];
+    return lines.join("\n");
   }
 
   function exportCSV() {
@@ -816,28 +936,40 @@ export default function Exams() {
   async function exportExcel() {
     try {
       const XLSX = await import("xlsx");
-      const rows = exams.map((e) => ({
-        المادة: e.subject,
-        التاريخ: e.dateISO,
-        اليوم: e.dayLabel,
-        الوقت: e.time,
-        المدة: e.durationMinutes,
-        الفترة: e.period,
-        القاعات: e.roomsCount,
-      }));
+      const rows = exams.map((e) =>
+        lang === "ar"
+          ? {
+              المادة: e.subject,
+              التاريخ: e.dateISO,
+              اليوم: e.dayLabel,
+              الوقت: e.time,
+              المدة: e.durationMinutes,
+              الفترة: e.period,
+              القاعات: e.roomsCount,
+            }
+          : {
+              Subject: translateSubject(e.subject),
+              Date: e.dateISO,
+              Day: e.dayLabel,
+              Time: e.time,
+              Duration: e.durationMinutes,
+              Period: e.period === "الفترة الأولى" ? "First Period" : e.period === "الفترة الثانية" ? "Second Period" : e.period,
+              Rooms: e.roomsCount,
+            }
+      );
       const ws = XLSX.utils.json_to_sheet(rows);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Exams");
       XLSX.writeFile(wb, "exams.xlsx");
     } catch {
-      alert("مكتبة xlsx غير متوفرة. استخدم تصدير CSV أو ثبّت xlsx.");
+      alert(tr("مكتبة xlsx غير متوفرة. استخدم تصدير CSV أو ثبّت xlsx.", "xlsx library is not available. Use CSV export or install xlsx."));
     }
   }
 
   async function importExcel(file: File) {
     const json = await tryReadExcel(file);
     if (!json) {
-      alert("تعذر قراءة Excel. تأكد من وجود مكتبة xlsx أو استخدم CSV.");
+      alert(tr("تعذر قراءة Excel. تأكد من وجود مكتبة xlsx أو استخدم CSV.", "Unable to read Excel. Make sure xlsx is installed or use CSV."));
       return;
     }
     const incoming = parseExamsFromObjects(json).map(fixExam);
@@ -851,7 +983,7 @@ export default function Exams() {
     }
 
     setExams((prev) => [...incoming, ...prev].sort(sortExams));
-    alert("✅ تم استيراد البيانات.");
+    alert(tr("✅ تم استيراد البيانات.", "✅ Data imported successfully."));
   }
 
   async function importCSV(file: File) {
@@ -868,7 +1000,7 @@ export default function Exams() {
     }
 
     setExams((prev) => [...incoming, ...prev].sort(sortExams));
-    alert("✅ تم استيراد البيانات.");
+    alert(tr("✅ تم استيراد البيانات.", "✅ Data imported successfully."));
   }
 
   function resolveDuplicate(action: "change" | "overwrite", selectedId?: string) {
@@ -917,7 +1049,7 @@ export default function Exams() {
     const selectedSet = new Set(roomManager.selectedRoomIds);
 
     if (selectedSet.size > required) {
-      alert(`لا يمكن ربط أكثر من ${required} قاعات لهذا الامتحان.`);
+      alert(tr(`لا يمكن ربط أكثر من ${required} قاعات لهذا الامتحان.`, `You cannot assign more than ${required} rooms to this exam.`));
       return;
     }
 
@@ -925,7 +1057,7 @@ export default function Exams() {
       (room) => selectedSet.has(room.id) && (room.blocked || room.inactive)
     );
     if (invalidBlockedOrInactive) {
-      alert(`القاعات المحظورة أو الموقوفة لا يمكن ربطها: ${invalidBlockedOrInactive.roomName}`);
+      alert(tr(`القاعات المحظورة أو الموقوفة لا يمكن ربطها: ${invalidBlockedOrInactive.roomName}`, `Blocked or inactive rooms cannot be assigned: ${invalidBlockedOrInactive.roomName}`));
       return;
     }
 
@@ -934,7 +1066,10 @@ export default function Exams() {
     );
     if (sameDateConflictRoom) {
       alert(
-        `لا يمكن اختيار القاعة ${sameDateConflictRoom.roomName} لأنها مرتبطة بالفعل في نفس التاريخ ونفس الفترة بـ ${sameDateConflictRoom.sameDateConflictLabel}.`
+        tr(
+          `لا يمكن اختيار القاعة ${sameDateConflictRoom.roomName} لأنها مرتبطة بالفعل في نفس التاريخ ونفس الفترة بـ ${sameDateConflictRoom.sameDateConflictLabel}.`,
+          `You cannot select room ${sameDateConflictRoom.roomName} because it is already assigned on the same date and period to ${sameDateConflictRoom.sameDateConflictLabel}.`
+        )
       );
       return;
     }
@@ -962,7 +1097,7 @@ export default function Exams() {
       await persistExamRoomAssignmentsNow(next as any);
     } catch (error) {
       console.error("persistExamRoomAssignmentsNow error:", error);
-      alert("تم تحديث القاعات في الصفحة ولكن تعذر حفظها بشكل دائم.");
+      alert(tr("تم تحديث القاعات في الصفحة ولكن تعذر حفظها بشكل دائم.", "Rooms were updated on the page but could not be saved permanently."));
       return;
     }
 
@@ -977,6 +1112,7 @@ export default function Exams() {
       "radial-gradient(circle at top, rgba(212,175,55,0.14), transparent 24%), radial-gradient(circle at 88% 18%, rgba(59,130,246,0.10), transparent 24%), linear-gradient(180deg, #070b12 0%, #0b1220 42%, #060a12 100%)",
     position: "relative",
     overflowX: "hidden",
+    direction: isRTL ? "rtl" : "ltr",
   };
 
   const header: React.CSSProperties = {
@@ -1048,7 +1184,7 @@ export default function Exams() {
     color: "#d4af37",
     zIndex: 2,
     padding: 10,
-    textAlign: "right",
+    textAlign: isRTL ? "right" : "left",
     fontWeight: 900,
     borderBottom: "1px solid rgba(212,175,55,0.2)",
     whiteSpace: "nowrap",
@@ -1086,6 +1222,7 @@ export default function Exams() {
     padding: 16,
     boxShadow: "0 22px 80px rgba(0,0,0,0.55)",
     color: "#e6c76a",
+    direction: isRTL ? "rtl" : "ltr",
   };
 
   return (
@@ -1107,7 +1244,8 @@ export default function Exams() {
       <div
         style={{
           position: "absolute",
-          right: -120,
+          right: isRTL ? -120 : "auto",
+          left: !isRTL ? -120 : "auto",
           top: 260,
           width: 340,
           height: 340,
@@ -1150,7 +1288,7 @@ export default function Exams() {
                   fontSize: 12,
                 }}
               >
-                إدارة مركزية لجدول الامتحانات والقاعات
+                {tr("إدارة مركزية لجدول الامتحانات والقاعات", "Central management for exams schedule and rooms")}
               </div>
 
               <div>
@@ -1168,7 +1306,7 @@ export default function Exams() {
                     textShadow: "0 8px 28px rgba(212,175,55,0.16)",
                   }}
                 >
-                  مركز إدارة الامتحانات
+                  {tr("مركز إدارة الامتحانات", "Exams Management Center")}
                 </h1>
               </div>
 
@@ -1181,15 +1319,17 @@ export default function Exams() {
                   maxWidth: 940,
                 }}
               >
-                تمنح هذه الصفحة الإدارة واجهة تنفيذية فاخرة لإدارة المواد والمواعيد والفترات وعدد القاعات، مع
-                ربط ذكي بالقاعات المتاحة والمحظورة، وتجربة إدخال واستعراض منظمة تعكس جودة منتج مؤسسي متقن.
+                {tr(
+                  "تمنح هذه الصفحة الإدارة واجهة تنفيذية فاخرة لإدارة المواد والمواعيد والفترات وعدد القاعات، مع ربط ذكي بالقاعات المتاحة والمحظورة، وتجربة إدخال واستعراض منظمة تعكس جودة منتج مؤسسي متقن.",
+                  "This page gives the administration a premium executive interface to manage subjects, dates, periods, and room counts, with smart linking to available and blocked rooms, and an organized entry and review experience that reflects the quality of a refined institutional product."
+                )}
               </p>
 
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                 {[
-                  { label: "إجمالي الامتحانات", value: exams.length },
-                  { label: "المعروض الآن", value: filtered.length },
-                  { label: "قاعات الربط", value: examRoomAssignments.length },
+                  { label: tr("إجمالي الامتحانات", "Total Exams"), value: exams.length },
+                  { label: tr("المعروض الآن", "Currently Shown"), value: filtered.length },
+                  { label: tr("قاعات الربط", "Assigned Rooms"), value: examRoomAssignments.length },
                 ].map((item) => (
                   <div
                     key={item.label}
@@ -1236,476 +1376,485 @@ export default function Exams() {
                   fontSize: 12,
                 }}
               >
-                {filtered.length ? "الجدول جاهز للإدارة والاستعراض" : "لا توجد بيانات معروضة حاليًا"}
+                {filtered.length ? tr("الجدول جاهز للإدارة والاستعراض", "The table is ready for management and review") : tr("لا توجد بيانات معروضة حاليًا", "No data is currently displayed")}
               </div>
 
               <div style={{ fontSize: 28, lineHeight: 1.5, fontWeight: 950, color: "#fff1c4" }}>
-                واجهة أكثر فخامة ووضوحًا لإدارة جدول الامتحانات وربط القاعات.
+                {tr("واجهة أكثر فخامة ووضوحًا لإدارة جدول الامتحانات وربط القاعات.", "A more premium and clearer interface for managing the exams schedule and room assignments.")}
               </div>
 
               <div style={{ fontSize: 14, lineHeight: 1.95, color: "rgba(255,241,196,0.78)" }}>
-                تم تطوير الصفحة لتمنح المستخدم انطباعًا قويًا من أول لحظة، مع تسلسل بصري أنيق بين الإدخال
-                والاستيراد والبحث والجدول وعمليات الربط.
+                {tr(
+                  "تم تطوير الصفحة لتمنح المستخدم انطباعًا قويًا من أول لحظة، مع تسلسل بصري أنيق بين الإدخال والاستيراد والبحث والجدول وعمليات الربط.",
+                  "This page was designed to give the user a strong impression from the first moment, with an elegant visual flow between entry, import, search, table display, and assignment operations."
+                )}
               </div>
             </div>
           </div>
         </div>
 
-      {dupModal.open && (
-        <div style={modalOverlay} onClick={() => resolveDuplicate("change")}>
-          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
-            <div style={{ fontWeight: 1000, fontSize: 18, marginBottom: 8, color: "#d4af37" }}>⚠️ المادة مكررة</div>
-            <div style={{ opacity: 0.95, marginBottom: 12, lineHeight: 1.8 }}>
-              المادة <b>{dupModal.subject}</b> موجودة بالفعل.
-              <br />
-              إمّا تغيّر المادة، أو تختار واحدة من المواد المكررة لاستبدالها بالبيانات الحالية.
+        {dupModal.open && (
+          <div style={modalOverlay} onClick={() => resolveDuplicate("change")}>
+            <div style={modalCard} onClick={(e) => e.stopPropagation()}>
+              <div style={{ fontWeight: 1000, fontSize: 18, marginBottom: 8, color: "#d4af37" }}>
+                {tr("⚠️ المادة مكررة", "⚠️ Duplicate subject")}
+              </div>
+              <div style={{ opacity: 0.95, marginBottom: 12, lineHeight: 1.8 }}>
+                {tr(
+                  `المادة ${dupModal.subject} موجودة بالفعل.\nإمّا تغيّر المادة، أو تختار واحدة من المواد المكررة لاستبدالها بالبيانات الحالية.`,
+                  `Subject ${dupModal.subject} already exists.\nEither change the subject, or choose one of the duplicate subjects to replace it with the current data.`
+                )}
+              </div>
+
+              <div style={{ border: "1px solid rgba(212,175,55,0.18)", borderRadius: 14, overflow: "hidden" }}>
+                <table style={{ width: "100%" }}>
+                  <thead>
+                    <tr>
+                      <th style={{ ...thStyle, position: "static" }}>{tr("المادة", "Subject")}</th>
+                      <th style={{ ...thStyle, position: "static" }}>{tr("التاريخ", "Date")}</th>
+                      <th style={{ ...thStyle, position: "static" }}>{tr("إجراء", "Action")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dupModal.candidates.map((c) => (
+                      <tr key={c.id}>
+                        <td style={tdStyle}>{lang === "ar" ? c.subject : translateSubject(c.subject)}</td>
+                        <td style={tdStyle}>{c.dateISO}</td>
+                        <td style={tdStyle}>
+                          <button style={btn("#f59e0b", "#07101f")} onClick={() => resolveDuplicate("overwrite", c.id)}>
+                            {tr("استبدال هذا السجل", "Replace this record")}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div style={{ display: "flex", gap: 10, marginTop: 12, justifyContent: "flex-end" }}>
+                <button style={btn("#1f2937", "#d4af37")} onClick={() => resolveDuplicate("change")}>
+                  {tr("تغيير المادة", "Change subject")}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {roomManager.open && selectedExam && (
+          <div style={modalOverlay} onClick={closeRoomManager}>
+            <div style={modalCard} onClick={(e) => e.stopPropagation()}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", marginBottom: 12 }}>
+                <div>
+                  <div style={{ fontWeight: 1000, fontSize: 18, color: "#d4af37" }}>{tr("إدارة قاعات الامتحان", "Exam Rooms Management")}</div>
+                  <div style={{ opacity: 0.85 }}>
+                    {lang === "ar" ? selectedExam.subject : translateSubject(selectedExam.subject)} — {selectedExam.dateISO} — {selectedExam.period === "الفترة الأولى" ? tr("الفترة الأولى", "First Period") : selectedExam.period === "الفترة الثانية" ? tr("الفترة الثانية", "Second Period") : selectedExam.period}
+                  </div>
+                </div>
+                <div
+                  style={{
+                    fontWeight: 900,
+                    color: roomManager.selectedRoomIds.length === selectedExam.roomsCount ? "#22c55e" : "#f59e0b",
+                  }}
+                >
+                  {roomManager.selectedRoomIds.length} / {selectedExam.roomsCount}
+                </div>
+              </div>
+              {!rooms.length ? (
+                <div style={{ ...card, marginBottom: 12 }}>
+                  {tr("لا توجد قاعات مسجلة في النظام. أدخل القاعات أولًا ثم ارجع لتخصيصها.", "There are no rooms registered in the system. Add rooms first, then return to assign them.")}
+                </div>
+              ) : (
+                <>
+                  <div style={{ ...card, marginBottom: 12 }}>
+                    <div style={{ fontWeight: 900, marginBottom: 8 }}>{tr("الحالة الحالية", "Current Status")}</div>
+                    <div>{tr("القاعات المطلوبة", "Required Rooms")}: {selectedExam.roomsCount}</div>
+                    <div>{tr("القاعات المربوطة فعليًا", "Actually Assigned Rooms")}: {selectedExamAssignments.length}</div>
+                    <div>
+                      {tr("القاعات المتاحة للاختيار", "Available Rooms for Selection")}:{" "}
+                      {
+                        selectedExamAvailableRooms.filter(
+                          (room) => !room.blocked && !room.inactive && !room.sameDateConflict
+                        ).length
+                      }
+                    </div>
+                  </div>
+                  <div style={tableWrap}>
+                    <table style={{ width: "100%", minWidth: 980 }}>
+                      <thead>
+                        <tr>
+                          <th style={thStyle}>{tr("اختيار", "Select")}</th>
+                          <th style={thStyle}>{tr("القاعة", "Room")}</th>
+                          <th style={thStyle}>{tr("الكود", "Code")}</th>
+                          <th style={thStyle}>{tr("المبنى", "Building")}</th>
+                          <th style={thStyle}>{tr("السعة", "Capacity")}</th>
+                          <th style={thStyle}>{tr("الحالة", "Status")}</th>
+                          <th style={thStyle}>{tr("الملاحظة", "Note")}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedExamAvailableRooms.map((room) => {
+                          const checked = roomManager.selectedRoomIds.includes(room.id);
+                          const disabled =
+                            !checked &&
+                            (
+                              room.blocked ||
+                              room.inactive ||
+                              room.sameDateConflict ||
+                              roomManager.selectedRoomIds.length >= selectedExam.roomsCount
+                            );
+
+                          return (
+                            <tr key={room.id}>
+                              <td style={tdStyle}>
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  disabled={disabled}
+                                  onChange={() => toggleRoomSelection(room.id)}
+                                />
+                              </td>
+                              <td style={tdStyle}>{room.roomName}</td>
+                              <td style={tdStyle}>{room.code || "—"}</td>
+                              <td style={tdStyle}>{room.building}</td>
+                              <td style={tdStyle}>{room.capacity}</td>
+                              <td style={tdStyle}>
+                                {room.sameDateConflict
+                                  ? tr("مرتبطة بمادة أخرى", "Assigned to another subject")
+                                  : room.blocked
+                                  ? tr("محظورة", "Blocked")
+                                  : room.inactive
+                                  ? tr("موقوفة", "Inactive")
+                                  : tr("متاحة", "Available")}
+                              </td>
+                              <td style={tdStyle}>
+                                {room.sameDateConflict
+                                  ? tr(`مرتبطة في نفس التاريخ مع: ${room.sameDateConflictLabel}`, `Assigned on the same date with: ${room.sameDateConflictLabel}`)
+                                  : room.blocked
+                                  ? tr("يوجد حظر في نفس التاريخ/الفترة", "There is a block on the same date/period")
+                                  : room.inactive
+                                  ? tr("القاعة غير نشطة", "Room is inactive")
+                                  : tr("يمكن ربطها", "Can be assigned")}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+              <div style={{ display: "flex", gap: 10, marginTop: 14, justifyContent: "flex-end" }}>
+                <button style={btn("#10b981", "#07101f")} onClick={saveRoomAssignments}>{tr("حفظ الربط", "Save Assignment")}</button>
+                <button style={btn("#1f2937", "#d4af37")} onClick={closeRoomManager}>{tr("إغلاق", "Close")}</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div style={header}>
+          <div style={{ flex: 1, textAlign: "center" }}>
+            <div style={{ fontWeight: 1000, fontSize: 18, lineHeight: 1.2 }}>{APP_NAME}</div>
+            <div style={{ fontWeight: 900, opacity: 0.75, marginTop: 4 }}>{tr("جدول الامتحانات", "Exams Schedule")}</div>
+          </div>
+
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <button style={btn("#1f2937", "#d4af37")} onClick={() => history.back()}>
+              {tr("← رجوع", "← Back")}
+            </button>
+            <button style={btn("#f59e0b", "#07101f")} onClick={startAdd}>
+              {tr("+ إضافة", "+ Add")}
+            </button>
+            <button style={btn("#ef4444", "#07101f")} onClick={deleteAll}>
+              {tr("🗑 حذف الجدول كاملًا", "🗑 Delete Entire Table")}
+            </button>
+          </div>
+        </div>
+
+        <div style={card}>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <input
+              style={{ ...inputStyle, maxWidth: 420 }}
+              placeholder={tr("بحث...", "Search...")}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+
+            <button style={btn("#10b981", "#07101f")} onClick={exportExcel}>
+              {tr("تصدير Excel", "Export Excel")}
+            </button>
+            <button style={btn("#22c55e", "#07101f")} onClick={exportCSV}>
+              {tr("تصدير CSV", "Export CSV")}
+            </button>
+
+            <label style={btn("#60a5fa", "#07101f")}>
+              {tr("استيراد CSV ⬆️", "Import CSV ⬆️")}
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) importCSV(f);
+                  e.currentTarget.value = "";
+                }}
+              />
+            </label>
+
+            <label style={btn("#93c5fd", "#07101f")}>
+              {tr("استيراد Excel ⬆️", "Import Excel ⬆️")}
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) importExcel(f);
+                  e.currentTarget.value = "";
+                }}
+              />
+            </label>
+
+            <div style={{ marginInlineStart: "auto", fontWeight: 900, color: "#d4af37" }}>
+              {tr("إجمالي", "Total")}: {exams.length} — {tr("المعروض", "Shown")}: {filtered.length}
+            </div>
+          </div>
+        </div>
+
+        {(adding || editingId != null) && (
+          <div style={card}>
+            <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(4, minmax(220px, 1fr))" }}>
+              <div>
+                <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("المادة", "Subject")}</div>
+                <GoldDropdown
+                  value={current.subject}
+                  options={SUBJECT_OPTIONS}
+                  placeholder={tr("— اختر المادة —", "— Select Subject —")}
+                  onChange={(v) => setCurrent({ subject: v })}
+                />
+              </div>
+
+              <div>
+                <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("التاريخ", "Date")}</div>
+                <input
+                  style={inputStyle}
+                  type="date"
+                  value={current.dateISO}
+                  onChange={(e) => setCurrent({ dateISO: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("اليوم", "Day")}</div>
+                <input
+                  style={inputStyle}
+                  placeholder={tr("يُحسب تلقائيًا إن تركت فارغًا", "Calculated automatically if left blank")}
+                  value={current.dayLabel}
+                  onChange={(e) => setCurrent({ dayLabel: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("الوقت", "Time")}</div>
+                <input style={inputStyle} value={current.time} onChange={(e) => setCurrent({ time: e.target.value })} />
+              </div>
+
+              <div>
+                <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("الفترة", "Period")}</div>
+                <GoldDropdown
+                  value={current.period}
+                  options={PERIOD_OPTIONS}
+                  placeholder={tr("— اختر الفترة —", "— Select Period —")}
+                  onChange={(v) => setCurrent({ period: v })}
+                />
+              </div>
+
+              <div>
+                <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("المدة (دقيقة)", "Duration (Minutes)")}</div>
+                <input
+                  style={inputStyle}
+                  type="number"
+                  value={String(current.durationMinutes)}
+                  onChange={(e) => setCurrent({ durationMinutes: Number(e.target.value) || 0 })}
+                />
+              </div>
+
+              <div>
+                <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("القاعات", "Rooms")}</div>
+                <input
+                  style={inputStyle}
+                  type="number"
+                  min={1}
+                  value={String(current.roomsCount)}
+                  onChange={(e) => setCurrent({ roomsCount: Math.max(1, Number(e.target.value) || 1) })}
+                />
+              </div>
             </div>
 
-            <div style={{ border: "1px solid rgba(212,175,55,0.18)", borderRadius: 14, overflow: "hidden" }}>
-              <table style={{ width: "100%" }}>
+            <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+              {editingId != null ? (
+                <>
+                  <button style={btn("#10b981", "#07101f")} onClick={saveEdit}>
+                    {tr("حفظ التعديل", "Save Changes")}
+                  </button>
+                  <button style={btn("#1f2937", "#d4af37")} onClick={() => setEditingId(null)}>
+                    {tr("إلغاء", "Cancel")}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button style={btn("#10b981", "#07101f")} onClick={saveAdd}>
+                    {tr("حفظ", "Save")}
+                  </button>
+                  <button style={btn("#1f2937", "#d4af37")} onClick={() => setAdding(false)}>
+                    {tr("إلغاء", "Cancel")}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div style={tableFullScreen ? fullScreenOverlay : undefined}>
+          <div
+            style={{
+              ...card,
+              height: tableFullScreen ? "100%" : undefined,
+              marginBottom: tableFullScreen ? 0 : (card.marginBottom as any),
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                marginBottom: 14,
+                padding: "6px 8px 2px 8px",
+                flexWrap: "wrap",
+              }}
+            >
+              <div>
+                <div style={{ fontWeight: 1000, fontSize: 22, color: "#f2cf63" }}>{tr("الجدول التنفيذي للامتحانات", "Executive Exams Table")}</div>
+                <div style={{ fontWeight: 800, color: "rgba(230,199,106,0.74)", marginTop: 4 }}>
+                  {tr("عرض احترافي يوضح المادة والتاريخ والفترة وربط القاعات والإجراءات بصورة مؤسسية أنيقة", "A professional view showing subject, date, period, room assignments, and actions in an elegant institutional format")}
+                </div>
+              </div>
+              <div style={{ fontWeight: 900, color: "#d4af37", opacity: 0.9 }}>
+                {tr("عدد الصفوف المعروضة", "Rows Shown")}: {filtered.length}
+              </div>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 10,
+                marginBottom: 10,
+                flexWrap: "wrap",
+              }}
+            >
+              <div style={{ fontWeight: 1000, color: "#d4af37" }}>📅 {tr("جدول الامتحانات", "Exams Schedule")}</div>
+
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button
+                  style={btn("#eab308", "#07101f")}
+                  onClick={() => setDateSortOrder((prev) => (prev === "asc" ? "desc" : "asc"))}
+                >
+                  {dateSortOrder === "asc" ? tr("ترتيب التاريخ: تصاعدي ↑", "Date Sort: Ascending ↑") : tr("ترتيب التاريخ: تنازلي ↓", "Date Sort: Descending ↓")}
+                </button>
+
+                <button
+                  style={btn(tableFullScreen ? "#334155" : "#f59e0b", tableFullScreen ? "#e6c76a" : "#0b1220")}
+                  onClick={() => setTableFullScreen((v) => !v)}
+                >
+                  {tableFullScreen ? tr("⤢ إغلاق ملء الشاشة", "⤢ Exit Fullscreen") : tr("⤢ ملء الشاشة", "⤢ Fullscreen")}
+                </button>
+              </div>
+            </div>
+
+            <div
+              className="examTable3D"
+              style={{
+                ...tableWrap,
+                maxHeight: tableFullScreen ? "calc(100vh - 140px)" : (tableWrap.maxHeight as any),
+              }}
+            >
+              <table style={{ width: "100%", minWidth: 1100 }}>
                 <thead>
                   <tr>
-                    <th style={{ ...thStyle, position: "static" }}>المادة</th>
-                    <th style={{ ...thStyle, position: "static" }}>التاريخ</th>
-                    <th style={{ ...thStyle, position: "static" }}>إجراء</th>
+                    <th style={thStyle}>{tr("المادة", "Subject")}</th>
+                    <th style={thStyle} className="col-date">
+                      {tr("التاريخ", "Date")}
+                    </th>
+                    <th style={thStyle}>{tr("اليوم", "Day")}</th>
+                    <th style={thStyle}>{tr("الوقت", "Time")}</th>
+                    <th style={thStyle}>{tr("الفترة", "Period")}</th>
+                    <th style={thStyle}>{tr("القاعات", "Rooms")}</th>
+                    <th style={thStyle}>{tr("إجراءات", "Actions")}</th>
                   </tr>
                 </thead>
+
                 <tbody>
-                  {dupModal.candidates.map((c) => (
-                    <tr key={c.id}>
-                      <td style={tdStyle}>{c.subject}</td>
-                      <td style={tdStyle}>{c.dateISO}</td>
-                      <td style={tdStyle}>
-                        <button style={btn("#f59e0b", "#07101f")} onClick={() => resolveDuplicate("overwrite", c.id)}>
-                          استبدال هذا السجل
-                        </button>
+                  {filtered.length === 0 ? (
+                    <tr>
+                      <td style={tdStyle} colSpan={7}>
+                        {tr("لا توجد بيانات.", "No data found.")}
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    filtered.map((e) => (
+                      <tr key={e.id} className={e.dateISO === todayISO ? "row-today" : undefined}>
+                        <td style={tdStyle}>{lang === "ar" ? e.subject : translateSubject(e.subject)}</td>
+                        <td style={tdStyle} className="col-date">
+                          {e.dateISO}
+                        </td>
+                        <td style={tdStyle}>{e.dayLabel || dayFromISO(e.dateISO, lang)}</td>
+                        <td style={tdStyle}>{e.time}</td>
+                        <td style={tdStyle}>
+                          {e.period === "الفترة الأولى" ? tr("الفترة الأولى", "First Period") : e.period === "الفترة الثانية" ? tr("الفترة الثانية", "Second Period") : e.period}
+                        </td>
+                        <td style={tdStyle}>
+                          {(() => {
+                            const assigned = assignmentsByExamId.get(e.id) || [];
+                            const blockedAssigned = assigned.filter((row) =>
+                              isRoomBlockedForExam(row.roomId, e, activeBlocks)
+                            ).length;
+                            const complete = assigned.length === e.roomsCount && blockedAssigned === 0;
+                            return (
+                              <button
+                                style={{
+                                  ...btn(
+                                    complete ? "#10b981" : assigned.length === 0 ? "#ef4444" : "#f59e0b",
+                                    "#07101f"
+                                  ),
+                                  padding: "8px 12px",
+                                }}
+                                onClick={() => openRoomManager(e)}
+                                title={blockedAssigned > 0 ? tr(`يوجد ${blockedAssigned} قاعات محظورة ضمن الربط الحالي`, `There are ${blockedAssigned} blocked rooms in the current assignment`) : tr("إدارة ربط القاعات", "Manage room assignments")}
+                              >
+                                {assigned.length} / {e.roomsCount}
+                              </button>
+                            );
+                          })()}
+                        </td>
+                        <td style={tdStyle}>
+                          <div style={{ display: "flex", gap: 8 }}>
+                            <button style={btn("#60a5fa", "#07101f")} onClick={() => startEditById(e.id)}>
+                              {tr("✏️ تعديل", "✏️ Edit")}
+                            </button>
+                            <button style={btn("#ef4444", "#07101f")} onClick={() => removeExamById(e.id)}>
+                              {tr("🗑 حذف", "🗑 Delete")}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
-
-            <div style={{ display: "flex", gap: 10, marginTop: 12, justifyContent: "flex-end" }}>
-              <button style={btn("#1f2937", "#d4af37")} onClick={() => resolveDuplicate("change")}>
-                تغيير المادة
-              </button>
-            </div>
           </div>
         </div>
-      )}
-
-      {roomManager.open && selectedExam && (
-        <div style={modalOverlay} onClick={closeRoomManager}>
-          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", marginBottom: 12 }}>
-              <div>
-                <div style={{ fontWeight: 1000, fontSize: 18, color: "#d4af37" }}>إدارة قاعات الامتحان</div>
-                <div style={{ opacity: 0.85 }}>
-                  {selectedExam.subject} — {selectedExam.dateISO} — {selectedExam.period}
-                </div>
-              </div>
-              <div
-                style={{
-                  fontWeight: 900,
-                  color: roomManager.selectedRoomIds.length === selectedExam.roomsCount ? "#22c55e" : "#f59e0b",
-                }}
-              >
-                {roomManager.selectedRoomIds.length} / {selectedExam.roomsCount}
-              </div>
-            </div>
-            {!rooms.length ? (
-              <div style={{ ...card, marginBottom: 12 }}>لا توجد قاعات مسجلة في النظام. أدخل القاعات أولًا ثم ارجع لتخصيصها.</div>
-            ) : (
-              <>
-                <div style={{ ...card, marginBottom: 12 }}>
-                  <div style={{ fontWeight: 900, marginBottom: 8 }}>الحالة الحالية</div>
-                  <div>القاعات المطلوبة: {selectedExam.roomsCount}</div>
-                  <div>القاعات المربوطة فعليًا: {selectedExamAssignments.length}</div>
-                  <div>
-                    القاعات المتاحة للاختيار:{" "}
-                    {
-                      selectedExamAvailableRooms.filter(
-                        (room) => !room.blocked && !room.inactive && !room.sameDateConflict
-                      ).length
-                    }
-                  </div>
-                </div>
-                <div style={tableWrap}>
-                  <table style={{ width: "100%", minWidth: 980 }}>
-                    <thead>
-                      <tr>
-                        <th style={thStyle}>اختيار</th>
-                        <th style={thStyle}>القاعة</th>
-                        <th style={thStyle}>الكود</th>
-                        <th style={thStyle}>المبنى</th>
-                        <th style={thStyle}>السعة</th>
-                        <th style={thStyle}>الحالة</th>
-                        <th style={thStyle}>الملاحظة</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {selectedExamAvailableRooms.map((room) => {
-                        const checked = roomManager.selectedRoomIds.includes(room.id);
-                        const disabled =
-                          !checked &&
-                          (
-                            room.blocked ||
-                            room.inactive ||
-                            room.sameDateConflict ||
-                            roomManager.selectedRoomIds.length >= selectedExam.roomsCount
-                          );
-
-                        return (
-                          <tr key={room.id}>
-                            <td style={tdStyle}>
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                disabled={disabled}
-                                onChange={() => toggleRoomSelection(room.id)}
-                              />
-                            </td>
-                            <td style={tdStyle}>{room.roomName}</td>
-                            <td style={tdStyle}>{room.code || "—"}</td>
-                            <td style={tdStyle}>{room.building}</td>
-                            <td style={tdStyle}>{room.capacity}</td>
-                            <td style={tdStyle}>
-                              {room.sameDateConflict
-                                ? "مرتبطة بمادة أخرى"
-                                : room.blocked
-                                ? "محظورة"
-                                : room.inactive
-                                ? "موقوفة"
-                                : "متاحة"}
-                            </td>
-                            <td style={tdStyle}>
-                              {room.sameDateConflict
-                                ? `مرتبطة في نفس التاريخ مع: ${room.sameDateConflictLabel}`
-                                : room.blocked
-                                ? "يوجد حظر في نفس التاريخ/الفترة"
-                                : room.inactive
-                                ? "القاعة غير نشطة"
-                                : "يمكن ربطها"}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </>
-            )}
-            <div style={{ display: "flex", gap: 10, marginTop: 14, justifyContent: "flex-end" }}>
-              <button style={btn("#10b981", "#07101f")} onClick={saveRoomAssignments}>حفظ الربط</button>
-              <button style={btn("#1f2937", "#d4af37")} onClick={closeRoomManager}>إغلاق</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div style={header}>
-        <div style={{ flex: 1, textAlign: "center" }}>
-          <div style={{ fontWeight: 1000, fontSize: 18, lineHeight: 1.2 }}>{APP_NAME}</div>
-          <div style={{ fontWeight: 900, opacity: 0.75, marginTop: 4 }}>جدول الامتحانات</div>
-        </div>
-
-        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          <button style={btn("#1f2937", "#d4af37")} onClick={() => history.back()}>
-            ← رجوع
-          </button>
-          <button style={btn("#f59e0b", "#07101f")} onClick={startAdd}>
-            + إضافة
-          </button>
-          <button style={btn("#ef4444", "#07101f")} onClick={deleteAll}>
-            🗑 حذف الجدول كاملًا
-          </button>
-        </div>
-      </div>
-
-      <div style={card}>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <input
-            style={{ ...inputStyle, maxWidth: 420 }}
-            placeholder="بحث..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-
-          <button style={btn("#10b981", "#07101f")} onClick={exportExcel}>
-            تصدير Excel
-          </button>
-          <button style={btn("#22c55e", "#07101f")} onClick={exportCSV}>
-            تصدير CSV
-          </button>
-
-          <label style={btn("#60a5fa", "#07101f")}>
-            استيراد CSV ⬆️
-            <input
-              type="file"
-              accept=".csv,text/csv"
-              style={{ display: "none" }}
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) importCSV(f);
-                e.currentTarget.value = "";
-              }}
-            />
-          </label>
-
-          <label style={btn("#93c5fd", "#07101f")}>
-            استيراد Excel ⬆️
-            <input
-              type="file"
-              accept=".xlsx,.xls"
-              style={{ display: "none" }}
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) importExcel(f);
-                e.currentTarget.value = "";
-              }}
-            />
-          </label>
-
-          <div style={{ marginInlineStart: "auto", fontWeight: 900, color: "#d4af37" }}>
-            إجمالي: {exams.length} — المعروض: {filtered.length}
-          </div>
-        </div>
-      </div>
-
-      {(adding || editingId != null) && (
-        <div style={card}>
-          <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(4, minmax(220px, 1fr))" }}>
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>المادة</div>
-              <GoldDropdown
-                value={current.subject}
-                options={SUBJECT_OPTIONS}
-                placeholder="— اختر المادة —"
-                onChange={(v) => setCurrent({ subject: v })}
-              />
-            </div>
-
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>التاريخ</div>
-              <input
-                style={inputStyle}
-                type="date"
-                value={current.dateISO}
-                onChange={(e) => setCurrent({ dateISO: e.target.value })}
-              />
-            </div>
-
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>اليوم</div>
-              <input
-                style={inputStyle}
-                placeholder="يُحسب تلقائيًا إن تركت فارغًا"
-                value={current.dayLabel}
-                onChange={(e) => setCurrent({ dayLabel: e.target.value })}
-              />
-            </div>
-
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>الوقت</div>
-              <input style={inputStyle} value={current.time} onChange={(e) => setCurrent({ time: e.target.value })} />
-            </div>
-
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>الفترة</div>
-              <GoldDropdown
-                value={current.period}
-                options={PERIOD_OPTIONS}
-                placeholder="— اختر الفترة —"
-                onChange={(v) => setCurrent({ period: v })}
-              />
-            </div>
-
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>المدة (دقيقة)</div>
-              <input
-                style={inputStyle}
-                type="number"
-                value={String(current.durationMinutes)}
-                onChange={(e) => setCurrent({ durationMinutes: Number(e.target.value) || 0 })}
-              />
-            </div>
-
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>القاعات</div>
-              <input
-                style={inputStyle}
-                type="number"
-                min={1}
-                value={String(current.roomsCount)}
-                onChange={(e) => setCurrent({ roomsCount: Math.max(1, Number(e.target.value) || 1) })}
-              />
-            </div>
-          </div>
-
-          <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-            {editingId != null ? (
-              <>
-                <button style={btn("#10b981", "#07101f")} onClick={saveEdit}>
-                  حفظ التعديل
-                </button>
-                <button style={btn("#1f2937", "#d4af37")} onClick={() => setEditingId(null)}>
-                  إلغاء
-                </button>
-              </>
-            ) : (
-              <>
-                <button style={btn("#10b981", "#07101f")} onClick={saveAdd}>
-                  حفظ
-                </button>
-                <button style={btn("#1f2937", "#d4af37")} onClick={() => setAdding(false)}>
-                  إلغاء
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      <div style={tableFullScreen ? fullScreenOverlay : undefined}>
-        <div
-          style={{
-            ...card,
-            height: tableFullScreen ? "100%" : undefined,
-            marginBottom: tableFullScreen ? 0 : (card.marginBottom as any),
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 12,
-              marginBottom: 14,
-              padding: "6px 8px 2px 8px",
-              flexWrap: "wrap",
-            }}
-          >
-            <div>
-              <div style={{ fontWeight: 1000, fontSize: 22, color: "#f2cf63" }}>الجدول التنفيذي للامتحانات</div>
-              <div style={{ fontWeight: 800, color: "rgba(230,199,106,0.74)", marginTop: 4 }}>
-                عرض احترافي يوضح المادة والتاريخ والفترة وربط القاعات والإجراءات بصورة مؤسسية أنيقة
-              </div>
-            </div>
-            <div style={{ fontWeight: 900, color: "#d4af37", opacity: 0.9 }}>
-              عدد الصفوف المعروضة: {filtered.length}
-            </div>
-          </div>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 10,
-              marginBottom: 10,
-              flexWrap: "wrap",
-            }}
-          >
-            <div style={{ fontWeight: 1000, color: "#d4af37" }}>📅 جدول الامتحانات</div>
-
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button
-                style={btn("#eab308", "#07101f")}
-                onClick={() => setDateSortOrder((prev) => (prev === "asc" ? "desc" : "asc"))}
-              >
-                {dateSortOrder === "asc" ? "ترتيب التاريخ: تصاعدي ↑" : "ترتيب التاريخ: تنازلي ↓"}
-              </button>
-
-              <button
-                style={btn(tableFullScreen ? "#334155" : "#f59e0b", tableFullScreen ? "#e6c76a" : "#0b1220")}
-                onClick={() => setTableFullScreen((v) => !v)}
-              >
-                {tableFullScreen ? "⤢ إغلاق ملء الشاشة" : "⤢ ملء الشاشة"}
-              </button>
-            </div>
-          </div>
-
-          <div
-            className="examTable3D"
-            style={{
-              ...tableWrap,
-              maxHeight: tableFullScreen ? "calc(100vh - 140px)" : (tableWrap.maxHeight as any),
-            }}
-          >
-            <table style={{ width: "100%", minWidth: 1100 }}>
-              <thead>
-                <tr>
-                  <th style={thStyle}>المادة</th>
-                  <th style={thStyle} className="col-date">
-                    التاريخ
-                  </th>
-                  <th style={thStyle}>اليوم</th>
-                  <th style={thStyle}>الوقت</th>
-                  <th style={thStyle}>الفترة</th>
-                  <th style={thStyle}>القاعات</th>
-                  <th style={thStyle}>إجراءات</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {filtered.length === 0 ? (
-                  <tr>
-                    <td style={tdStyle} colSpan={7}>
-                      لا توجد بيانات.
-                    </td>
-                  </tr>
-                ) : (
-                  filtered.map((e) => (
-                    <tr key={e.id} className={e.dateISO === todayISO ? "row-today" : undefined}>
-                      <td style={tdStyle}>{e.subject}</td>
-                      <td style={tdStyle} className="col-date">
-                        {e.dateISO}
-                      </td>
-                      <td style={tdStyle}>{e.dayLabel}</td>
-                      <td style={tdStyle}>{e.time}</td>
-                      <td style={tdStyle}>{e.period}</td>
-                      <td style={tdStyle}>
-                        {(() => {
-                          const assigned = assignmentsByExamId.get(e.id) || [];
-                          const blockedAssigned = assigned.filter((row) =>
-                            isRoomBlockedForExam(row.roomId, e, activeBlocks)
-                          ).length;
-                          const complete = assigned.length === e.roomsCount && blockedAssigned === 0;
-                          return (
-                            <button
-                              style={{
-                                ...btn(
-                                  complete ? "#10b981" : assigned.length === 0 ? "#ef4444" : "#f59e0b",
-                                  "#07101f"
-                                ),
-                                padding: "8px 12px",
-                              }}
-                              onClick={() => openRoomManager(e)}
-                              title={blockedAssigned > 0 ? `يوجد ${blockedAssigned} قاعات محظورة ضمن الربط الحالي` : "إدارة ربط القاعات"}
-                            >
-                              {assigned.length} / {e.roomsCount}
-                            </button>
-                          );
-                        })()}
-                      </td>
-                      <td style={tdStyle}>
-                        <div style={{ display: "flex", gap: 8 }}>
-                          <button style={btn("#60a5fa", "#07101f")} onClick={() => startEditById(e.id)}>
-                            ✏️ تعديل
-                          </button>
-                          <button style={btn("#ef4444", "#07101f")} onClick={() => removeExamById(e.id)}>
-                            🗑 حذف
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
       </div>
     </div>
   );
