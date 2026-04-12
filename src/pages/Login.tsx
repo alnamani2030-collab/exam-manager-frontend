@@ -144,7 +144,10 @@ function translateRoleLabel(label: string, lang: Lang): string {
 export default function Login() {
   const navigate = useNavigate();
   const { lang, setLang } = useI18n();
-  const t = STR[lang as Lang] || STR.ar;
+  const currentLang = (lang === "en" ? "en" : "ar") as Lang;
+  const t = STR[currentLang];
+  const nextLang = currentLang === "ar" ? "en" : "ar";
+  const nextLangLabel = currentLang === "ar" ? "English" : "العربية";
 
   const [fbUser, setFbUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<AllowlistDoc | null>(null);
@@ -390,7 +393,9 @@ export default function Login() {
   const styles: Record<string, React.CSSProperties> = {
     page: {
       minHeight: "100vh",
-      backgroundImage: 'url("https://i.imgur.com/kt5xtnx.jpeg")',
+      backgroundImage: currentLang === "ar"
+        ? 'url("https://i.imgur.com/kt5xtnx.jpeg")'
+        : 'url("https://i.imgur.com/ufdtQ51.jpeg")',
       backgroundSize: "520px auto",
       backgroundPosition: "center top",
       backgroundRepeat: "repeat",
@@ -400,7 +405,7 @@ export default function Login() {
       alignItems: "center",
       justifyContent: "center",
       padding: "20px",
-      direction: lang === "ar" ? "rtl" : "ltr",
+      direction: currentLang === "ar" ? "rtl" : "ltr",
       fontFamily: "'Cairo', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
       color: "#f7fafc",
       position: "relative",
@@ -653,7 +658,7 @@ export default function Login() {
     langSwitch: {
       position: "absolute",
       top: "25px",
-      [lang === "ar" ? "left" : "right"]: "25px",
+      [currentLang === "ar" ? "left" : "right"]: "25px",
       background: "rgba(255, 255, 255, 0.08)",
       border: "1px solid rgba(255, 255, 255, 0.2)",
       color: "#e2e8f0",
@@ -683,9 +688,9 @@ export default function Login() {
 
       <button
         style={styles.langSwitch}
-        onClick={() => setLang(lang === "ar" ? "en" : "ar")}
+        onClick={() => setLang(nextLang)}
       >
-        {lang === "ar" ? "English" : "العربية"}
+        {nextLangLabel}
       </button>
 
       <div style={styles.card}>
