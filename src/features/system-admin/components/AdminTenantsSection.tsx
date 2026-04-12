@@ -1,11 +1,8 @@
 import React from "react";
 import { DIRECTORATES } from "../../../constants/directorates";
 import { Button, Card, GOLD, Input } from "../ui";
-import { useI18n } from "../../../i18n/I18nProvider";
 
 export default function AdminTenantsSection(props: any) {
-  const { lang } = useI18n();
-  const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
   const {
     visibleTenants,
     selectedTenantId,
@@ -35,33 +32,33 @@ export default function AdminTenantsSection(props: any) {
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "minmax(280px, 420px) 1fr", gap: 14, alignItems: "start" }}>
-      <Card title={tr("إنشاء مدرسة جديدة (Tenant)", "Create New School (Tenant)")}>
+      <Card title="إنشاء مدرسة جديدة (Tenant)">
         <div style={{ display: "grid", gap: 10 }}>
           <div>
-            <div style={{ marginBottom: 6, opacity: 0.85 }}>{tr("اسم المدرسة", "School name")}</div>
-            <Input value={newTenantName} onChange={(e) => setNewTenantName(e.target.value)} placeholder={tr("مثال: أزان 9-12", "Example: Azzan 9-12")} />
+            <div style={{ marginBottom: 6, opacity: 0.85 }}>اسم المدرسة</div>
+            <Input value={newTenantName} onChange={(e) => setNewTenantName(e.target.value)} placeholder="مثال: أزان 9-12" />
           </div>
           <div>
-            <div style={{ marginBottom: 6, opacity: 0.85 }}>{tr("Tenant ID (Subdomain)", "Tenant ID (Subdomain)")}</div>
-            <Input value={newTenantIdRaw} onChange={(e) => setNewTenantIdRaw(e.target.value)} placeholder={tr("مثال: azaan-9-12", "Example: azaan-9-12")} />
+            <div style={{ marginBottom: 6, opacity: 0.85 }}>Tenant ID (Subdomain)</div>
+            <Input value={newTenantIdRaw} onChange={(e) => setNewTenantIdRaw(e.target.value)} placeholder="مثال: azaan-9-12" />
             <div style={{ marginTop: 6, fontSize: 12, opacity: 0.85 }}>
-              {tr("سيتم اعتماد:", "Will be used:")} <b style={{ color: GOLD }}>{newTenantId || "-"}</b>
-              {!newTenantId ? null : !isValidTenantId(newTenantId) ? <span style={{ color: "#fecaca" }}> {tr("— غير صالح", "— Invalid")}</span> : <span style={{ color: "#bbf7d0" }}> {tr("— صالح", "— Valid")}</span>}
+              سيتم اعتماد: <b style={{ color: GOLD }}>{newTenantId || "-"}</b>
+              {!newTenantId ? null : !isValidTenantId(newTenantId) ? <span style={{ color: "#fecaca" }}> — غير صالح</span> : <span style={{ color: "#bbf7d0" }}> — صالح</span>}
             </div>
           </div>
           <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
             <input type="checkbox" checked={newTenantEnabled} onChange={(e) => setNewTenantEnabled(e.target.checked)} />
-            <span>{tr("مُفعّل", "Enabled")}</span>
+            <span>مُفعّل</span>
           </label>
-          <Button onClick={createTenant} disabled={!canSaveTenant}>{tr("إنشاء مدرسة جديدة", "Create new school")}</Button>
+          <Button onClick={createTenant} disabled={!canSaveTenant}>إنشاء مدرسة جديدة</Button>
         </div>
       </Card>
 
       <Card
-        title={tr("إدارة المدارس (Tenants)", "School Management (Tenants)")}
+        title="إدارة المدارس (Tenants)"
         right={
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <div style={{ opacity: 0.8 }}>{tr("اختيار Tenant:", "Choose Tenant:")}</div>
+            <div style={{ opacity: 0.8 }}>اختيار Tenant:</div>
             <select
               value={selectedTenantId ?? ""}
               onChange={(e) => setSelectedTenantId(e.target.value || null)}
@@ -74,7 +71,7 @@ export default function AdminTenantsSection(props: any) {
       >
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
           <div>
-            <div style={{ fontWeight: 900, color: GOLD, marginBottom: 8 }}>{tr("قائمة المدارس", "Schools list")}</div>
+            <div style={{ fontWeight: 900, color: GOLD, marginBottom: 8 }}>قائمة المدارس</div>
             {supportError && <div style={{ marginBottom: 10, padding: "10px 12px", borderRadius: 12, border: "1px solid rgba(255,80,80,0.35)", background: "rgba(255,80,80,0.10)", color: "#ffd6d6", fontWeight: 700, fontSize: 13 }}>{supportError}</div>}
             <div style={{ display: "grid", gap: 8, maxHeight: 320, overflow: "auto", paddingInlineEnd: 6 }}>
               {visibleTenants.map((t: any) => {
@@ -98,52 +95,52 @@ export default function AdminTenantsSection(props: any) {
                             await startSupportForTenant?.(t.id, "دعم فني");
                             navigate(`/t/${t.id}`, { replace: true });
                           } catch (err: any) {
-                            console.error(tr("تعذر فتح بيانات المدرسة", "Unable to open school data"), err);
-                            setSupportError(err?.message ?? tr("تعذر فتح بيانات المدرسة", "Unable to open school data"));
+                            console.error("تعذر فتح بيانات المدرسة", err);
+                            setSupportError(err?.message ?? "تعذر فتح بيانات المدرسة");
                           }
                         }}
-                        title={tr("فتح بيانات المدرسة", "Open school data")}
+                        title="فتح بيانات المدرسة"
                         style={{ padding: "8px 10px", borderRadius: 12, border: "1px solid rgba(59,130,246,0.35)", background: "rgba(59,130,246,0.12)", color: "#bfdbfe", cursor: "pointer", fontWeight: 900 }}
                       >📂</button>
                     )}
                     {canSupport && t.id !== "system" && (
-                      <button onClick={(e) => { e.stopPropagation(); deleteTenant(t.id); }} title={tr("حذف المدرسة", "Delete school")} style={{ padding: "8px 10px", borderRadius: 12, border: "1px solid rgba(239,68,68,0.35)", background: "rgba(239,68,68,0.12)", color: "#fecaca", cursor: "pointer", fontWeight: 900 }}>🗑️</button>
+                      <button onClick={(e) => { e.stopPropagation(); deleteTenant(t.id); }} title="حذف المدرسة" style={{ padding: "8px 10px", borderRadius: 12, border: "1px solid rgba(239,68,68,0.35)", background: "rgba(239,68,68,0.12)", color: "#fecaca", cursor: "pointer", fontWeight: 900 }}>🗑️</button>
                     )}
                   </div>
                 );
               })}
-              {!visibleTenants.length ? <div style={{ opacity: 0.8 }}>{tr("لا توجد Tenants بعد.", "No tenants yet.")}</div> : null}
+              {!visibleTenants.length ? <div style={{ opacity: 0.8 }}>لا توجد Tenants بعد.</div> : null}
             </div>
           </div>
 
           <div>
-            <div style={{ fontWeight: 900, color: GOLD, marginBottom: 8 }}>{tr("إعدادات المدرسة (meta/config)", "School settings (meta/config)")}</div>
-            {loadingConfig ? <div style={{ opacity: 0.85 }}>{tr("جاري التحميل...", "Loading...")}</div> : (
+            <div style={{ fontWeight: 900, color: GOLD, marginBottom: 8 }}>إعدادات المدرسة (meta/config)</div>
+            {loadingConfig ? <div style={{ opacity: 0.85 }}>جاري التحميل...</div> : (
               <div style={{ display: "grid", gap: 10 }}>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                   <div>
-                    <div style={{ marginBottom: 6, opacity: 0.85 }}>{tr("الوزارة (عربي)", "Ministry (Arabic)")}</div>
+                    <div style={{ marginBottom: 6, opacity: 0.85 }}>الوزارة (عربي)</div>
                     <Input value={selectedTenantConfig.ministryAr || ""} onChange={(e) => setSelectedTenantConfig((p: any) => ({ ...p, ministryAr: e.target.value }))} />
                   </div>
                   <div>
-                    <div style={{ marginBottom: 6, opacity: 0.85 }}>{tr("اسم النظام (عربي)", "System name (Arabic)")}</div>
+                    <div style={{ marginBottom: 6, opacity: 0.85 }}>اسم النظام (عربي)</div>
                     <Input value={selectedTenantConfig.systemNameAr || ""} onChange={(e) => setSelectedTenantConfig((p: any) => ({ ...p, systemNameAr: e.target.value }))} />
                   </div>
                 </div>
                 <div>
-                  <div style={{ marginBottom: 6, opacity: 0.85 }}>{tr("اسم المدرسة (عربي)", "School name (Arabic)")}</div>
+                  <div style={{ marginBottom: 6, opacity: 0.85 }}>اسم المدرسة (عربي)</div>
                   <Input value={selectedTenantConfig.schoolNameAr || ""} onChange={(e) => setSelectedTenantConfig((p: any) => ({ ...p, schoolNameAr: e.target.value }))} />
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                   <div>
-                    <div style={{ marginBottom: 6, opacity: 0.85 }}>{tr("المحافظة", "Governorate")}</div>
+                    <div style={{ marginBottom: 6, opacity: 0.85 }}>المحافظة</div>
                     <select value={selectedTenantConfig.governorate || selectedTenantConfig.regionAr || ""} onChange={(e) => setSelectedTenantConfig((p: any) => ({ ...p, governorate: e.target.value, regionAr: e.target.value }))} style={{ width: "100%", padding: "10px 12px", borderRadius: 12, border: "1px solid rgba(255,215,0,0.25)", background: "rgba(0,0,0,0.35)", color: "#FFD700", outline: "none" }}>
-                      <option value="">{tr("اختر المحافظة", "Choose governorate")}</option>
+                      <option value="">اختر المحافظة</option>
                       {DIRECTORATES.map((g) => <option key={g} value={g}>{g}</option>)}
                     </select>
                   </div>
                   <div>
-                    <div style={{ marginBottom: 6, opacity: 0.85 }}>{tr("الولاية", "Wilaya")}</div>
+                    <div style={{ marginBottom: 6, opacity: 0.85 }}>الولاية</div>
                     <Input value={selectedTenantConfig.wilayatAr || ""} onChange={(e) => setSelectedTenantConfig((p: any) => ({ ...p, wilayatAr: e.target.value }))} />
                   </div>
                 </div>
@@ -151,7 +148,7 @@ export default function AdminTenantsSection(props: any) {
                   <div style={{ marginBottom: 6, opacity: 0.85 }}>Logo URL</div>
                   <Input value={selectedTenantConfig.logoUrl || ""} onChange={(e) => setSelectedTenantConfig((p: any) => ({ ...p, logoUrl: e.target.value }))} />
                 </div>
-                <Button onClick={saveTenantConfig}>{tr("حفظ إعدادات المدرسة", "Save school settings")}</Button>
+                <Button onClick={saveTenantConfig}>حفظ إعدادات المدرسة</Button>
               </div>
             )}
           </div>
