@@ -1,6 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import { useI18n } from "../i18n/I18nProvider";
 import { pageDark, container, cardDark } from "../styles/ui";
 import { GOLD_LINE, GOLD_LINE_SOFT, subjectColors, TABLE_FONT_SIZE, TABLE_TEXT } from "./taskDistributionResults/constants";
 import { ResultsPageHeader } from "./taskDistributionResults/components/ResultsPageHeader";
@@ -21,40 +22,10 @@ function normalizeSubject(subject: string) {
   return String(subject || "").replace(/\s+/g, " ").trim();
 }
 
-function formatPeriod(period?: string) {
-  const p = String(period || "AM").toUpperCase();
-  return p === "PM" || p === "BM" ? "الفترة الثانية" : "الفترة الأولى";
-}
-
-function taskLabel(taskType: any) {
-  switch (String(taskType || "")) {
-    case "INVIGILATION":
-      return "مراقبة";
-    case "RESERVE":
-      return "احتياط";
-    case "REVIEW_FREE":
-      return "مراجعة";
-    case "CORRECTION_FREE":
-      return "تصحيح";
-    default:
-      return "مهمة";
-  }
-}
-
 function getCommitteeNo(a: any) {
   const value = a?.committeeNo ?? a?.committee ?? a?.roomNo ?? a?.room;
   if (value === undefined || value === null || value === "") return undefined;
   return String(value);
-}
-
-function formatDateWithDayAr(dateISO: string) {
-  const value = String(dateISO || "").trim();
-  if (!value) return { day: "—", full: "—", line: "—" };
-  const d = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(d.getTime())) return { day: value, full: value, line: value };
-  const day = new Intl.DateTimeFormat("ar", { weekday: "long" }).format(d);
-  const full = new Intl.DateTimeFormat("ar", { year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
-  return { day, full, line: `${day} ${full}` };
 }
 
 function getSubjectBackground(subject?: string) {
@@ -73,9 +44,58 @@ function getTenantIdFromAuth(auth: any) {
 export default function TaskDistributionResults() {
   const nav = useNavigate();
   const auth = useAuth();
+  const { lang } = useI18n();
+  const tr = React.useCallback((ar: string, en: string) => (lang === "ar" ? ar : en), [lang]);
   const tenantId = React.useMemo(() => getTenantIdFromAuth(auth), [auth]);
   const printAreaRef = React.useRef<HTMLDivElement>(null);
   const [showTeacherSidebar, setShowTeacherSidebar] = React.useState(true);
+
+  const formatPeriod = React.useCallback(
+    (period?: string) => {
+      const p = String(period || "AM").toUpperCase();
+      return p === "PM" || p === "BM" ? tr("الفترة الثانية", "Second Period") : tr("الفترة الأولى", "First Period");
+    },
+    [tr],
+  );
+
+  const taskLabel = React.useCallback(
+    (taskType: any) => {
+      switch (String(taskType || "")) {
+        case "INVIGILATION":
+          return tr("مراقبة", "Invigilation");
+        case "RESERVE":
+          return tr("احتياط", "Reserve");
+        case "REVIEW_FREE":
+          return tr("مراجعة", "Review");
+        case "CORRECTION_FREE":
+          return tr("تصحيح", "Correction");
+        default:
+          return tr("مهمة", "Task");
+      }
+    },
+    [tr],
+  );
+
+  const formatDateWithDay = React.useCallback(
+    (dateISO: string) => {
+      const value = String(dateISO || "").trim();
+      if (!value) return { day: "—", full: "—", line: "—" };
+
+      const d = new Date(`${value}T00:00:00`);
+      if (Number.isNaN(d.getTime())) return { day: value, full: value, line: value };
+
+      const locale = lang === "ar" ? "ar" : "en";
+      const day = new Intl.DateTimeFormat(locale, { weekday: "long" }).format(d);
+      const full = new Intl.DateTimeFormat(locale, {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(d);
+
+      return { day, full, line: `${day} ${full}` };
+    },
+    [lang],
+  );
 
   const { run, setRun } = useResultsRunSync(tenantId);
   const interaction = useResultsInteractionState(tenantId);
@@ -227,7 +247,7 @@ export default function TaskDistributionResults() {
           onDeleteByUid={tableActions.deleteAssignmentByUid}
           onDeleteSubCol={tableActions.deleteAssignmentsBySubCol}
           styles={styles as any}
-          formatDateWithDayAr={formatDateWithDayAr}
+          formatDateWithDayAr={formatDateWithDay}
           containerMaxHeight={interaction.tableFullScreen ? "calc(100vh - 120px)" : "72vh"}
           selectedCell={interaction.selectedCell}
           onSelectCell={interaction.setSelectedCell}
