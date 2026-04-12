@@ -18,6 +18,7 @@ import { useAuth } from "../auth/AuthContext";
 import { buildAuthzSnapshot, isPlatformOwner } from "../features/authz";
 import { callFn } from "../services/functionsClient";
 import { DIRECTORATES, MINISTRY_SCOPE, normalizeText, isSameDirectorate } from "../constants/directorates";
+import { useI18n } from "../i18n/I18nProvider";
 
 type AllowlistRow = {
   email: string;
@@ -39,6 +40,8 @@ type TenantLite = {
 
 export default function SuperGovernorates() {
   const navigate = useNavigate();
+  const { lang } = useI18n();
+  const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
   const auth = useAuth() as any;
   const { user, startSupportForTenant } = auth;
   const authzSnapshot = buildAuthzSnapshot(auth);
@@ -168,14 +171,14 @@ export default function SuperGovernorates() {
           }
         } catch {
           if (alive) {
-            setMsg("تعذر تحميل المدارس.");
+            setMsg(tr("تعذر تحميل المدارس.", "Unable to load schools."));
             setLoadingTenants(false);
           }
         }
       },
       () => {
         if (alive) {
-          setMsg("تعذر تحميل المدارس.");
+          setMsg(tr("تعذر تحميل المدارس.", "Unable to load schools."));
           setLoadingTenants(false);
         }
       }
@@ -195,11 +198,11 @@ export default function SuperGovernorates() {
     setMsg("");
     const e = email.trim().toLowerCase();
     if (!e || !e.includes("@")) {
-      setMsg("أدخل بريد إلكتروني صحيح.");
+      setMsg(tr("أدخل بريد إلكتروني صحيح.", "Enter a valid email address."));
       return;
     }
     if (!governorate) {
-      setMsg("اختر المحافظة.");
+      setMsg(tr("اختر المحافظة.", "Choose the governorate."));
       return;
     }
     setBusy(true);
@@ -216,9 +219,9 @@ export default function SuperGovernorates() {
       });
       setEmail("");
       setName("");
-      setMsg("تم حفظ السوبر بنجاح ✅");
+      setMsg(tr("تم حفظ السوبر بنجاح ✅", "Super user saved successfully ✅"));
     } catch {
-      setMsg("فشل حفظ السوبر. تأكد من الصلاحيات ثم حاول مرة أخرى.");
+      setMsg(tr("فشل حفظ السوبر. تأكد من الصلاحيات ثم حاول مرة أخرى.", "Failed to save the super user. Check permissions and try again."));
     } finally {
       setBusy(false);
     }
@@ -231,7 +234,7 @@ export default function SuperGovernorates() {
       await startSupportForTenant(tenantId);
       navigate(`/t/${tenantId}`, { replace: true });
     } catch {
-      setMsg("فشل الدخول للدعم. جرّب تحديث الصلاحيات ثم أعد المحاولة.");
+      setMsg(tr("فشل الدخول للدعم. جرّب تحديث الصلاحيات ثم أعد المحاولة.", "Failed to enter support mode. Refresh permissions and try again."));
     } finally {
       setBusy(false);
     }
@@ -242,9 +245,9 @@ export default function SuperGovernorates() {
       <header className="system-header">
         <div className="system-header-inner">
           <div className="system-brand">
-            <div className="system-brand-title">إدارة السوبر للمحافظات</div>
+            <div className="system-brand-title">{tr("إدارة السوبر للمحافظات", "Governorates Super Management")}</div>
           </div>
-          <div className="system-program">لوحة السوبر أدمن</div>
+          <div className="system-program">{tr("لوحة السوبر أدمن", "Super Admin Panel")}</div>
           <div className="system-actions">
             <button
               className="btn"
@@ -259,7 +262,7 @@ export default function SuperGovernorates() {
 
       <main className="system-main">
         <div className="system-glow" style={{ borderRadius: 18, padding: 16, marginBottom: 16 }}>
-          <h3 style={{ margin: "0 0 12px 0" }}>إضافة/تحديث سوبر (مديرية)</h3>
+          <h3 style={{ margin: "0 0 12px 0" }}>{tr("إضافة/تحديث سوبر (مديرية)", "Add/Update Super (Directorate)")}</h3>
 
           <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr auto", gap: 10, alignItems: "center" }}>
             <input
@@ -268,7 +271,7 @@ export default function SuperGovernorates() {
               onChange={(e) => setEmail(e.target.value)}
             />
             <input
-              placeholder="الاسم"
+              placeholder={tr("الاسم", "Name")}
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
@@ -299,9 +302,9 @@ export default function SuperGovernorates() {
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1.2fr", gap: 16, alignItems: "start" }}>
           <div className="system-glow" style={{ borderRadius: 18, padding: 16 }}>
-            <h3 style={{ margin: "0 0 12px 0" }}>قائمة السوبر (حسب المحافظة)</h3>
+            <h3 style={{ margin: "0 0 12px 0" }}>{tr("قائمة السوبر (حسب المحافظة)", "Super list (by governorate)")}</h3>
             {supers.length === 0 ? (
-              <div style={{ opacity: 0.8 }}>لا يوجد سوبر بعد.</div>
+              <div style={{ opacity: 0.8 }}>{tr("لا يوجد سوبر بعد.", "No super users yet.")}</div>
             ) : (
               <div style={{ display: "grid", gap: 10 }}>
                 {supers.map((s) => (
@@ -318,7 +321,7 @@ export default function SuperGovernorates() {
                   >
                     <div style={{ fontWeight: 900 }}>{s.userName || s.name || s.email}</div>
                     <div style={{ opacity: 0.9, fontSize: 13 }}>
-                      {s.email} — {s.governorate || "(بدون محافظة)"}
+                      {s.email} — {s.governorate || tr("(بدون محافظة)", "(No governorate)")}
                     </div>
                   </button>
                 ))}
@@ -327,13 +330,13 @@ export default function SuperGovernorates() {
           </div>
 
           <div className="system-glow" style={{ borderRadius: 18, padding: 16 }}>
-            <h3 style={{ margin: "0 0 12px 0" }}>مدارس السوبر</h3>
+            <h3 style={{ margin: "0 0 12px 0" }}>{tr("مدارس السوبر", "Super schools")}</h3>
             {!selectedSuper ? (
-              <div style={{ opacity: 0.8 }}>اختر سوبر لعرض المدارس التابعة له.</div>
+              <div style={{ opacity: 0.8 }}>{tr("اختر سوبر لعرض المدارس التابعة له.", "Choose a super user to view their schools.")}</div>
             ) : loadingTenants ? (
-              <div style={{ opacity: 0.8 }}>جاري التحميل...</div>
+              <div style={{ opacity: 0.8 }}>{tr("جاري التحميل...", "Loading...")}</div>
             ) : tenants.length === 0 ? (
-              <div style={{ opacity: 0.8 }}>لا توجد مدارس مطابقة لمحافظة هذا السوبر.</div>
+              <div style={{ opacity: 0.8 }}>{tr("لا توجد مدارس مطابقة لمحافظة هذا السوبر.", "No schools match this super user governorate.")}</div>
             ) : (
               <div style={{ display: "grid", gap: 10 }}>
                 {tenants.map((t) => (
@@ -343,7 +346,7 @@ export default function SuperGovernorates() {
                     onClick={() => enterSupport(t.id)}
                     disabled={busy}
                     style={{ textAlign: "start", padding: 12, borderRadius: 14 }}
-                    title="الدخول للدعم"
+                    title={tr("الدخول للدعم", "Enter support")}
                   >
                     <div style={{ fontWeight: 900 }}>{t.name || t.id}</div>
                     <div style={{ opacity: 0.9, fontSize: 13 }}>
