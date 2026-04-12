@@ -5,6 +5,7 @@ import React, { useMemo, useRef, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { useTenant } from "../tenant/TenantContext";
+import { useI18n } from "../i18n/I18nProvider";
 import { query, orderBy, limit as fbLimit, getDocs } from "firebase/firestore";
 import { listCloudArchive, syncArchiveCloudState } from "../services/cloudArchive.service";
 import { callFn } from "../services/functionsClient";
@@ -263,6 +264,8 @@ function ActionCard(props: {
 export default function Sync() {
   const nav = useNavigate();
   const { user } = useAuth() as any;
+  const { lang } = useI18n();
+  const tr = React.useCallback((ar: string, en: string) => (lang === "ar" ? ar : en), [lang]);
   const { tenantId: tenantFromContext } = useTenant() as any;
   const { reloadAll } = useAppData() as any;
 
@@ -274,7 +277,7 @@ export default function Sync() {
 
   const [cloudStatus, setCloudStatus] = useState<{ ok: boolean; note: string }>({
     ok: false,
-    note: "لم يتم الفحص بعد",
+    note: tr("لم يتم الفحص بعد", "Not checked yet"),
   });
 
   const [cloudBackups, setCloudBackups] = useState<any[]>([]);
@@ -317,12 +320,12 @@ export default function Sync() {
       if (code === "FUNCTIONS_DISABLED" || m.includes("FUNCTIONS_DISABLED")) {
         setCloudStatus({
           ok: false,
-          note: "Cloud Functions معطّلة (ضع VITE_DISABLE_FUNCTIONS=false في .env)",
+          note: tr("Cloud Functions معطّلة (ضع VITE_DISABLE_FUNCTIONS=false في .env)", "Cloud Functions are disabled (set VITE_DISABLE_FUNCTIONS=false in .env)"),
         });
         return;
       }
       if (code === "unauthenticated" || m.includes("AUTH_REQUIRED")) {
-        setCloudStatus({ ok: false, note: "غير مسجل دخول (AUTH_REQUIRED)" });
+        setCloudStatus({ ok: false, note: tr("غير مسجل دخول (AUTH_REQUIRED)", "Not signed in (AUTH_REQUIRED)") });
         return;
       }
 
@@ -334,9 +337,9 @@ export default function Sync() {
       } catch (e2: any) {
         const m2 = String(e2?.message || "");
         if (m2.toLowerCase().includes("permission") || m2.toLowerCase().includes("insufficient")) {
-          setCloudStatus({ ok: false, note: "Firestore Read مرفوض (permission-denied). استخدم tenantListDocs." });
+          setCloudStatus({ ok: false, note: tr("Firestore Read مرفوض (permission-denied). استخدم tenantListDocs.", "Firestore Read denied (permission-denied). Use tenantListDocs.") });
         } else {
-          setCloudStatus({ ok: false, note: `Cloud غير متاح (${m2 || "cloud-unavailable"})` });
+          setCloudStatus({ ok: false, note: lang === "ar" ? `Cloud غير متاح (${m2 || "cloud-unavailable"})` : `Cloud unavailable (${m2 || "cloud-unavailable"})` });
         }
       }
     }
@@ -361,9 +364,9 @@ export default function Sync() {
       setMsg("");
       const payload = await exportBackupBoth(tenantId);
       downloadJson(filename, payload);
-      setMsg(`✅ تم تصدير النسخة الاحتياطية (IndexedDB + أرشيف محلي + أرشيف سحابي: ${payload.archiveCloud?.length || 0}).`);
+      setMsg(lang === "ar" ? `✅ تم تصدير النسخة الاحتياطية (IndexedDB + أرشيف محلي + أرشيف سحابي: ${payload.archiveCloud?.length || 0}).` : `✅ Backup exported successfully (IndexedDB + local archive + cloud archive: ${payload.archiveCloud?.length || 0}).`);
     } catch (e: any) {
-      setMsg(`❌ فشل التصدير: ${e?.message || "خطأ غير معروف"}`);
+      setMsg(lang === "ar" ? `❌ فشل التصدير: ${e?.message || "خطأ غير معروف"}` : `❌ Export failed: ${e?.message || "Unknown error"}`);
     } finally {
       setBusy(null);
     }
@@ -381,10 +384,10 @@ export default function Sync() {
       const res = await syncArchiveWithCloud(tenantId);
       await reloadAll();
 
-      const note = res.downloaded === 0 ? " (تنبيه: قد تكون قراءة السحابة غير متاحة بسبب الصلاحيات) " : "";
-      setMsg(`✅ تمت مزامنة الأرشيف. تم رفع: ${res.uploaded} • تم تنزيل: ${res.downloaded}${note}`);
+      const note = res.downloaded === 0 ? tr(" (تنبيه: قد تكون قراءة السحابة غير متاحة بسبب الصلاحيات) ", " (Note: cloud reading may be unavailable due to permissions) ") : "";
+      setMsg(lang === "ar" ? `✅ تمت مزامنة الأرشيف. تم رفع: ${res.uploaded} • تم تنزيل: ${res.downloaded}${note}` : `✅ Archive synced successfully. Uploaded: ${res.uploaded} • Downloaded: ${res.downloaded}${note}`);
     } catch (e: any) {
-      setMsg(`❌ فشل مزامنة الأرشيف: ${e?.message || "خطأ غير معروف"}`);
+      setMsg(lang === "ar" ? `❌ فشل مزامنة الأرشيف: ${e?.message || "خطأ غير معروف"}` : `❌ Archive sync failed: ${e?.message || "Unknown error"}`);
     } finally {
       setBusy(null);
     }
@@ -399,7 +402,7 @@ export default function Sync() {
 
     try {
       if (await hasActiveWork()) {
-        alert("⚠️ لا يمكن الاستيراد الآن: يوجد تشغيل/توزيع نشط. أوقفه أولاً ثم أعد المحاولة.");
+        alert(tr("⚠️ لا يمكن الاستيراد الآن: يوجد تشغيل/توزيع نشط. أوقفه أولاً ثم أعد المحاولة.", "⚠️ Import is not allowed now: there is an active run/distribution. Stop it first, then try again."));
         return;
       }
 
@@ -407,8 +410,8 @@ export default function Sync() {
 
       if (!isBackupV1(json)) {
         const schema = json?.meta?.schema;
-        if (schema && schema !== BACKUP_SCHEMA) throw new Error(`هذه النسخة غير مدعومة (schema=${schema}).`);
-        throw new Error("ملف النسخة غير صالح أو غير مدعوم.");
+        if (schema && schema !== BACKUP_SCHEMA) throw new Error(lang === "ar" ? `هذه النسخة غير مدعومة (schema=${schema}).` : `This backup is not supported (schema=${schema}).`);
+        throw new Error(tr("ملف النسخة غير صالح أو غير مدعوم.", "The backup file is invalid or unsupported."));
       }
 
       const d = json.data || {};
@@ -450,9 +453,9 @@ export default function Sync() {
       await mergeCloudArchive(tenantId, json.archiveCloud || []);
 
       await reloadAll();
-      setMsg("✅ تم الاستيراد بنجاح: تم استبدال بيانات البرنامج ودمج الأرشيف (محلي/سحابي). ");
+      setMsg(tr("✅ تم الاستيراد بنجاح: تم استبدال بيانات البرنامج ودمج الأرشيف (محلي/سحابي). ", "✅ Import completed successfully: program data was replaced and the archive was merged (local/cloud). "));
     } catch (e: any) {
-      setMsg(`❌ فشل الاستيراد: ${e?.message || "خطأ غير معروف"}`);
+      setMsg(lang === "ar" ? `❌ فشل الاستيراد: ${e?.message || "خطأ غير معروف"}` : `❌ Import failed: ${e?.message || "Unknown error"}`);
     } finally {
       setBusy(null);
     }
@@ -470,9 +473,9 @@ export default function Sync() {
       await resetAllData();
       await ensureDefaults();
       await reloadAll();
-      setMsg("✅ تم حذف بيانات البرنامج الأساسية وإعادة الإعدادات الافتراضية.");
+      setMsg(tr("✅ تم حذف بيانات البرنامج الأساسية وإعادة الإعدادات الافتراضية.", "✅ Core program data was deleted and default settings were restored."));
     } catch (e: any) {
-      setMsg(`❌ فشل الحذف: ${e?.message || "خطأ غير معروف"}`);
+      setMsg(lang === "ar" ? `❌ فشل الحذف: ${e?.message || "خطأ غير معروف"}` : `❌ Delete failed: ${e?.message || "Unknown error"}`);
     } finally {
       setBusy(null);
     }
@@ -483,13 +486,13 @@ export default function Sync() {
       setBusy("cloud");
       setMsg("");
 
-      if (!navigator.onLine) throw new Error("أنت غير متصل بالإنترنت.");
+      if (!navigator.onLine) throw new Error(tr("أنت غير متصل بالإنترنت.", "You are offline."));
 
       const file: DbBackupFile = buildBackupFile({
         tenantId,
         byUid: user?.uid,
         byEmail: user?.email,
-        note: "cloud-backup (localStorage snapshot)",
+        note: lang === "ar" ? "نسخة سحابية (لقطة localStorage)" : "cloud-backup (localStorage snapshot)",
         prefix: "exam-manager",
       });
 
@@ -498,9 +501,9 @@ export default function Sync() {
       const id = await uploadBackupToCloud({ tenantId, file });
       await refreshCloudBackups();
 
-      setMsg(`✅ تم رفع نسخة سحابية: ${id}`);
+      setMsg(lang === "ar" ? `✅ تم رفع نسخة سحابية: ${id}` : `✅ Cloud backup uploaded: ${id}`);
     } catch (e: any) {
-      setMsg(`❌ فشل النسخ السحابي: ${e?.message || "خطأ غير معروف"}`);
+      setMsg(lang === "ar" ? `❌ فشل النسخ السحابي: ${e?.message || "خطأ غير معروف"}` : `❌ Cloud backup failed: ${e?.message || "Unknown error"}`);
     } finally {
       setBusy(null);
     }
@@ -509,7 +512,7 @@ export default function Sync() {
   const onImportFromCloud = async (backupId: string) => {
     try {
       if (await hasActiveWork()) {
-        alert("⚠️ لا يمكن الاستيراد الآن: يوجد تشغيل/توزيع نشط. أوقفه أولاً ثم أعد المحاولة.");
+        alert(tr("⚠️ لا يمكن الاستيراد الآن: يوجد تشغيل/توزيع نشط. أوقفه أولاً ثم أعد المحاولة.", "⚠️ Import is not allowed now: there is an active run/distribution. Stop it first, then try again."));
         return;
       }
 
@@ -531,16 +534,16 @@ export default function Sync() {
 
       await reloadAll();
 
-      setMsg(`✅ تم الاستيراد من السحابة بنجاح.`);
+      setMsg(tr("✅ تم الاستيراد من السحابة بنجاح.", "✅ Imported from the cloud successfully."));
     } catch (e: any) {
-      setMsg(`❌ فشل الاستيراد من السحابة: ${e?.message || "خطأ غير معروف"}`);
+      setMsg(lang === "ar" ? `❌ فشل الاستيراد من السحابة: ${e?.message || "خطأ غير معروف"}` : `❌ Cloud import failed: ${e?.message || "Unknown error"}`);
     } finally {
       setBusy(null);
     }
   };
 
   const onDeleteCloudBackup = async (backupId: string) => {
-    const ok = window.confirm("⚠️ هل تريد حذف هذه النسخة السحابية نهائيًا؟");
+    const ok = window.confirm(tr("⚠️ هل تريد حذف هذه النسخة السحابية نهائيًا؟", "⚠️ Do you want to permanently delete this cloud backup?"));
     if (!ok) return;
 
     try {
@@ -548,16 +551,16 @@ export default function Sync() {
       setMsg("");
       await deleteCloudBackup(tenantId, backupId);
       await refreshCloudBackups();
-      setMsg("✅ تم حذف النسخة السحابية.");
+      setMsg(tr("✅ تم حذف النسخة السحابية.", "✅ Cloud backup deleted."));
     } catch (e: any) {
-      setMsg(`❌ فشل حذف النسخة: ${e?.message || "خطأ غير معروف"}`);
+      setMsg(lang === "ar" ? `❌ فشل حذف النسخة: ${e?.message || "خطأ غير معروف"}` : `❌ Delete backup failed: ${e?.message || "Unknown error"}`);
     } finally {
       setBusy(null);
     }
   };
 
   const pruneCloudBackups = async (keepLast = 10) => {
-    const ok = window.confirm(`⚠️ سيتم حذف النسخ السحابية القديمة وترك آخر ${keepLast} نسخ فقط. هل تريد المتابعة؟`);
+    const ok = window.confirm(lang === "ar" ? `⚠️ سيتم حذف النسخ السحابية القديمة وترك آخر ${keepLast} نسخ فقط. هل تريد المتابعة؟` : `⚠️ Old cloud backups will be deleted and only the last ${keepLast} backups will be kept. Do you want to continue?`);
     if (!ok) return;
 
     try {
@@ -566,13 +569,13 @@ export default function Sync() {
 
       const items = await listCloudBackups(tenantId, 200);
       if (!items.length) {
-        setMsg("لا توجد نسخ سحابية للحذف.");
+        setMsg(tr("لا توجد نسخ سحابية للحذف.", "There are no cloud backups to delete."));
         return;
       }
 
       const toDelete = items.slice(keepLast);
       if (!toDelete.length) {
-        setMsg(`✅ لا يوجد نسخ قديمة (عدد النسخ ≤ ${keepLast}).`);
+        setMsg(lang === "ar" ? `✅ لا يوجد نسخ قديمة (عدد النسخ ≤ ${keepLast}).` : `✅ There are no old backups (number of backups ≤ ${keepLast}).`);
         return;
       }
 
@@ -583,16 +586,16 @@ export default function Sync() {
       }
 
       await refreshCloudBackups();
-      setMsg(`✅ تم حذف ${deleted} نسخة قديمة وترك آخر ${keepLast} نسخ.`);
+      setMsg(lang === "ar" ? `✅ تم حذف ${deleted} نسخة قديمة وترك آخر ${keepLast} نسخ.` : `✅ Deleted ${deleted} old backups and kept the latest ${keepLast}.`);
     } catch (e: any) {
-      setMsg(`❌ فشل حذف النسخ القديمة: ${e?.message || "خطأ غير معروف"}`);
+      setMsg(lang === "ar" ? `❌ فشل حذف النسخ القديمة: ${e?.message || "خطأ غير معروف"}` : `❌ Failed to delete old backups: ${e?.message || "Unknown error"}`);
     } finally {
       setBusy(null);
     }
   };
 
   const cloudTone = statusTone(cloudStatus.ok);
-  const syncModeLabel = autoCloud.enabled ? "النسخ التلقائي مفعل" : "النسخ التلقائي متوقف";
+  const syncModeLabel = autoCloud.enabled ? tr("النسخ التلقائي مفعل", "Auto backup enabled") : tr("النسخ التلقائي متوقف", "Auto backup disabled");
   const syncModeColor = autoCloud.enabled ? GREEN : SLATE;
 
   return (
@@ -602,7 +605,7 @@ export default function Sync() {
         background:
           "radial-gradient(circle at top, rgba(245,196,81,0.14), transparent 22%), radial-gradient(circle at 85% 25%, rgba(96,165,250,0.12), transparent 18%), linear-gradient(180deg, #07101f 0%, #030712 62%, #02040a 100%)",
         color: "#f5e7b2",
-        direction: "rtl",
+        direction: lang === "ar" ? "rtl" : "ltr",
         padding: 20,
       }}
     >
@@ -627,8 +630,7 @@ export default function Sync() {
                   قاعدة البيانات / النسخ الاحتياطي / المزامنة السحابية
                 </h1>
                 <div style={{ maxWidth: 980, color: "rgba(245,231,178,0.82)", fontSize: 15, lineHeight: 1.95 }}>
-                  لوحة تنفيذية فائقة التنظيم لإدارة النسخ الاحتياطية، الاستيراد والاستعادة، مزامنة الأرشيف، وفحص جاهزية السحابة.
-                  تم تطويرها لتمنح المسؤول رؤية أوضح وتحكمًا أعلى بثقة أكبر.
+                  {tr("لوحة تنفيذية فائقة التنظيم لإدارة النسخ الاحتياطية، الاستيراد والاستعادة، مزامنة الأرشيف، وفحص جاهزية السحابة. تم تطويرها لتمنح المسؤول رؤية أوضح وتحكمًا أعلى بثقة أكبر.", "A highly organized executive dashboard for managing backups, import and restore, archive sync, and checking cloud readiness. Built to give administrators clearer visibility and more confident control.")}
                 </div>
               </div>
 
@@ -670,20 +672,20 @@ export default function Sync() {
 
             <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.3fr) minmax(300px, 0.9fr)", gap: 16 }}>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
-                <HeroBadge label="الجهة الحالية" value={tenantId || "—"} />
-                <HeroBadge label="حالة السحابة" value={<span style={{ color: cloudTone }}>{cloudStatus.ok ? "✅ متاح" : "❌ غير متاح"}</span>} />
-                <HeroBadge label="النسخ السحابية" value={cloudBackups.length} />
-                <HeroBadge label="الوضع التلقائي" value={<span style={{ color: syncModeColor }}>{syncModeLabel}</span>} />
+                <HeroBadge label={tr("الجهة الحالية", "Current Tenant")} value={tenantId || "—"} />
+                <HeroBadge label={tr("حالة السحابة", "Cloud Status")} value={<span style={{ color: cloudTone }}>{cloudStatus.ok ? tr("✅ متاح", "✅ Available") : tr("❌ غير متاح", "❌ Unavailable")}</span>} />
+                <HeroBadge label={tr("النسخ السحابية", "Cloud Backups")} value={cloudBackups.length} />
+                <HeroBadge label={tr("الوضع التلقائي", "Auto Mode")} value={<span style={{ color: syncModeColor }}>{syncModeLabel}</span>} />
               </div>
 
               <div style={{ ...glassCard("rgba(255,255,255,0.08)", "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))"), padding: 18, display: "grid", gap: 10 }}>
-                <div style={{ color: "#fff3bf", fontWeight: 900, fontSize: 16 }}>لوحة الحالة التنفيذية</div>
+                <div style={{ color: "#fff3bf", fontWeight: 900, fontSize: 16 }}>{tr("لوحة الحالة التنفيذية", "Executive Status Panel")}</div>
                 <div style={{ color: "rgba(245,231,178,0.78)", lineHeight: 1.85, fontSize: 13 }}>
                   {cloudStatus.note}
                 </div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 999, background: `${cloudTone}16`, border: `1px solid ${cloudTone}33`, color: cloudTone, fontWeight: 900, fontSize: 12 }}>
-                    {cloudStatus.ok ? "Cloud Ready" : "Cloud Needs Attention"}
+                    {cloudStatus.ok ? tr("السحابة جاهزة", "Cloud Ready") : tr("السحابة تحتاج انتباهًا", "Cloud Needs Attention")}
                   </span>
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 999, background: `${syncModeColor}16`, border: `1px solid ${syncModeColor}33`, color: syncModeColor, fontWeight: 900, fontSize: 12 }}>
                     {syncModeLabel}
@@ -696,42 +698,42 @@ export default function Sync() {
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 14 }}>
           <ActionCard
-            title="تصدير نسخة احتياطية (JSON)"
-            subtitle="إنشاء ملف احتياطي متكامل يحفظ بيانات النظام الأساسية مع الأرشيف المحلي والسحابي المتاح."
+            title={tr("تصدير نسخة احتياطية (JSON)", "Export Backup (JSON)")}
+            subtitle={tr("إنشاء ملف احتياطي متكامل يحفظ بيانات النظام الأساسية مع الأرشيف المحلي والسحابي المتاح.", "Create a complete backup file that preserves the core system data together with available local and cloud archive data.")}
             points={[
-              "يشمل بيانات البرنامج الأساسية من IndexedDB",
-              "يشمل الأرشيف المحلي من LocalStorage",
-              "يشمل الأرشيف السحابي إذا كان متاحًا",
+              tr("يشمل بيانات البرنامج الأساسية من IndexedDB", "Includes the core program data from IndexedDB"),
+              tr("يشمل الأرشيف المحلي من LocalStorage", "Includes the local archive from LocalStorage"),
+              tr("يشمل الأرشيف السحابي إذا كان متاحًا", "Includes the cloud archive if available"),
             ]}
-            buttonLabel={busy === "export" ? "جاري التصدير…" : "تصدير النسخة الاحتياطية"}
+            buttonLabel={busy === "export" ? tr("جاري التصدير…", "Exporting…") : tr("تصدير النسخة الاحتياطية", "Export Backup")}
             onClick={onExport}
             disabled={!!busy}
             accent={GOLD}
           />
 
           <ActionCard
-            title="استيراد نسخة احتياطية (JSON)"
-            subtitle="استعادة نسخة محفوظة سابقًا مع استبدال بيانات البرنامج الأساسية ودمج الأرشيف بأمان."
+            title={tr("استيراد نسخة احتياطية (JSON)", "Import Backup (JSON)")}
+            subtitle={tr("استعادة نسخة محفوظة سابقًا مع استبدال بيانات البرنامج الأساسية ودمج الأرشيف بأمان.", "Restore a previously saved backup while replacing core program data and safely merging the archive.")}
             points={[
-              "يستبدل بيانات البرنامج الأساسية",
-              "يدمج الأرشيف المحلي والسحابي دون حذف الموجود",
-              "يمنع الاستيراد أثناء وجود تشغيل أو توزيع نشط",
+              tr("يستبدل بيانات البرنامج الأساسية", "Replaces the core program data"),
+              tr("يدمج الأرشيف المحلي والسحابي دون حذف الموجود", "Merges local and cloud archive data without deleting existing items"),
+              tr("يمنع الاستيراد أثناء وجود تشغيل أو توزيع نشط", "Prevents import while an active run or distribution exists"),
             ]}
-            buttonLabel={busy === "import" ? "جاري الاستيراد…" : "استيراد نسخة احتياطية"}
+            buttonLabel={busy === "import" ? tr("جاري الاستيراد…", "Importing…") : tr("استيراد نسخة احتياطية", "Import Backup")}
             onClick={onPickImport}
             disabled={!!busy}
             accent={BLUE}
           />
 
           <ActionCard
-            title="منطقة الخطر"
-            subtitle="إعادة ضبط بيانات البرنامج الأساسية فقط مع الحفاظ على الأرشيف المحلي والسحابي دون حذف."
+            title={tr("منطقة الخطر", "Danger Zone")}
+            subtitle={tr("إعادة ضبط بيانات البرنامج الأساسية فقط مع الحفاظ على الأرشيف المحلي والسحابي دون حذف.", "Reset only the core program data while keeping local and cloud archives without deletion.")}
             points={[
-              "يحذف بيانات التشغيل الأساسية من IndexedDB",
-              "يبقي الأرشيف المحلي والسحابي كما هو",
-              "يعيد القيم الافتراضية المطلوبة للنظام",
+              tr("يحذف بيانات التشغيل الأساسية من IndexedDB", "Deletes the core operational data from IndexedDB"),
+              tr("يبقي الأرشيف المحلي والسحابي كما هو", "Keeps the local and cloud archive unchanged"),
+              tr("يعيد القيم الافتراضية المطلوبة للنظام", "Restores the default values required by the system"),
             ]}
-            buttonLabel={busy === "reset" ? "جاري الحذف…" : "حذف بيانات البرنامج الأساسية"}
+            buttonLabel={busy === "reset" ? tr("جاري الحذف…", "Deleting…") : tr("حذف بيانات البرنامج الأساسية", "Delete Core Program Data")}
             onClick={onReset}
             disabled={!!busy}
             danger
@@ -742,9 +744,9 @@ export default function Sync() {
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 18 }}>
           <div style={{ ...glassCard(), padding: 18 }}>
-            <div style={{ color: "#fff3bf", fontWeight: 900, fontSize: 19, marginBottom: 8 }}>مزامنة الأرشيف والنسخ السحابية</div>
+            <div style={{ color: "#fff3bf", fontWeight: 900, fontSize: 19, marginBottom: 8 }}>{tr("مزامنة الأرشيف والنسخ السحابية", "Archive Sync and Cloud Backups")}</div>
             <div style={{ color: "rgba(245,231,178,0.75)", lineHeight: 1.8, fontSize: 13, marginBottom: 14 }}>
-              الأقسام التالية مرتبطة مباشرة بمنطق النظام الحالي: مزامنة الأرشيف، النسخ السحابية اليدوية، الاستيراد من السحابة، والتنظيف الذكي للنسخ القديمة.
+              {tr("الأقسام التالية مرتبطة مباشرة بمنطق النظام الحالي: مزامنة الأرشيف، النسخ السحابية اليدوية، الاستيراد من السحابة، والتنظيف الذكي للنسخ القديمة.", "The following sections are directly connected to the current system logic: archive sync, manual cloud backups, cloud import, and smart cleanup of old backups.")}
             </div>
             <SyncArchiveSection card={{ ...glassCard(), padding: 14 }} btn={(kind?: "soft" | "danger" | "brand") => {
               const border = kind === "danger" ? "rgba(239,68,68,0.35)" : kind === "brand" ? "rgba(245,196,81,0.40)" : "rgba(255,255,255,0.10)";
