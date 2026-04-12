@@ -739,8 +739,8 @@ export default function SuperSystem() {
         </div>
 
         <div className="super-header-left">
-          <button className="super-btn" onClick={() => setLang(isAr ? "en" : "ar")}>
-            {isAr ? "English" : "العربية"}
+          <button className="super-btn" onClick={() => setLang(lang === "ar" ? "en" : "ar")}>
+            {lang === "ar" ? "English" : "العربية"}
           </button>
           {isOwner ? (
             <button className="super-btn" onClick={() => navigate("/system")}>
