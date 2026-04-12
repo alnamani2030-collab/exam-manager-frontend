@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { useI18n } from "../i18n/I18nProvider";
 import { db } from "../firebase/firebase";
 import { useAuth } from "../auth/AuthContext";
 
@@ -19,6 +20,8 @@ const initialForm: SuggestionForm = {
 
 export default function SuggestionsPage() {
   const { tenantId, user } = useAuth() as any;
+  const { lang, isRTL } = useI18n();
+  const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
 
   const [form, setForm] = useState<SuggestionForm>(initialForm);
   const [loading, setLoading] = useState(false);
@@ -31,16 +34,16 @@ export default function SuggestionsPage() {
   const validate = () => {
     const nextErrors: Partial<Record<keyof SuggestionForm, string>> = {};
 
-    if (!form.title.trim()) nextErrors.title = "يرجى إدخال عنوان المقترح";
-    if (!form.schoolName.trim()) nextErrors.schoolName = "يرجى إدخال اسم المدرسة";
+    if (!form.title.trim()) nextErrors.title = tr("يرجى إدخال عنوان المقترح", "Please enter the suggestion title");
+    if (!form.schoolName.trim()) nextErrors.schoolName = tr("يرجى إدخال اسم المدرسة", "Please enter the school name");
 
     if (!form.schoolEmail.trim()) {
-      nextErrors.schoolEmail = "يرجى إدخال إيميل المدرسة";
+      nextErrors.schoolEmail = tr("يرجى إدخال إيميل المدرسة", "Please enter the school email");
     } else if (!isValidEmail(form.schoolEmail)) {
-      nextErrors.schoolEmail = "يرجى إدخال بريد إلكتروني صحيح";
+      nextErrors.schoolEmail = tr("يرجى إدخال بريد إلكتروني صحيح", "Please enter a valid email address");
     }
 
-    if (!form.notes.trim()) nextErrors.notes = "يرجى كتابة الملاحظات والاقتراحات";
+    if (!form.notes.trim()) nextErrors.notes = tr("يرجى كتابة الملاحظات والاقتراحات", "Please write the notes and suggestions");
 
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
@@ -85,12 +88,12 @@ export default function SuggestionsPage() {
         createdAt: serverTimestamp(),
       });
 
-      setMessage("تم إرسال المقترح بنجاح إلى السوبر أدمن.");
+      setMessage(tr("تم إرسال المقترح بنجاح إلى السوبر أدمن.", "The suggestion was sent successfully to the super admin."));
       setMessageType("success");
       setForm(initialForm);
     } catch (error: any) {
       console.error("save suggestion error:", error);
-      setMessage(error?.message || "حدث خطأ أثناء حفظ المقترح.");
+      setMessage(error?.message || tr("حدث خطأ أثناء حفظ المقترح.", "An error occurred while saving the suggestion."));
       setMessageType("error");
     } finally {
       setLoading(false);
@@ -103,7 +106,7 @@ export default function SuggestionsPage() {
         minHeight: "100vh",
         background: "linear-gradient(180deg, #08101f, #0f172a)",
         padding: 24,
-        direction: "rtl",
+        direction: isRTL ? "rtl" : "ltr",
       }}
     >
       <div
@@ -139,15 +142,14 @@ export default function SuggestionsPage() {
               fontSize: 12,
             }}
           >
-            قناة مباشرة إلى السوبر أدمن
+            {tr("قناة مباشرة إلى السوبر أدمن", "Direct channel to the super admin")}
           </div>
 
           <h1 style={{ margin: "16px 0 0", color: "#fff", fontSize: 34, fontWeight: 900 }}>
-            صفحة الاقتراحات الذكية
+            {tr("صفحة الاقتراحات الذكية", "Smart suggestions page")}
           </h1>
           <p style={{ marginTop: 12, color: "rgba(255,255,255,0.78)", lineHeight: 1.9, fontSize: 15 }}>
-            اكتب المقترحات والملاحظات بصورة واضحة ومنظمة، وسيتم إرسالها مباشرة إلى صفحة السوبر أدمن مع ربطها
-            ببيانات الجهة الحالية والمستخدم عند التوفر.
+            {tr("اكتب المقترحات والملاحظات بصورة واضحة ومنظمة، وسيتم إرسالها مباشرة إلى صفحة السوبر أدمن مع ربطها ببيانات الجهة الحالية والمستخدم عند التوفر.", "Write suggestions and notes clearly and in an organized way. They will be sent directly to the super admin page and linked to the current tenant and user data when available.")}
           </p>
 
           <div
@@ -159,9 +161,9 @@ export default function SuggestionsPage() {
             }}
           >
             {[
-              { label: "الجهة الحالية", value: tenantId || "غير مرتبطة" },
-              { label: "المستخدم", value: user?.email || "غير معروف" },
-              { label: "نوع الرسالة", value: "اقتراح / ملاحظة" },
+              { label: tr("الجهة الحالية", "Current tenant"), value: tenantId || tr("غير مرتبطة", "Not linked") },
+              { label: tr("المستخدم", "User"), value: user?.email || tr("غير معروف", "Unknown") },
+              { label: tr("نوع الرسالة", "Message type"), value: tr("اقتراح / ملاحظة", "Suggestion / Note") },
             ].map((item) => (
               <div
                 key={item.label}
@@ -182,31 +184,31 @@ export default function SuggestionsPage() {
         <form onSubmit={handleSubmit} style={{ padding: 28 }}>
           <div style={{ display: "grid", gap: 18 }}>
             <div>
-              <label style={labelStyle}>عنوان المقترح</label>
+              <label style={labelStyle}>{tr("عنوان المقترح", "Suggestion title")}</label>
               <input
                 type="text"
                 value={form.title}
                 onChange={handleChange("title")}
-                placeholder="اكتب عنوان المقترح"
+                placeholder={tr("اكتب عنوان المقترح", "Enter the suggestion title")}
                 style={inputStyle}
               />
               {errors.title ? <div style={errorStyle}>{errors.title}</div> : null}
             </div>
 
             <div>
-              <label style={labelStyle}>اسم المدرسة</label>
+              <label style={labelStyle}>{tr("اسم المدرسة", "School name")}</label>
               <input
                 type="text"
                 value={form.schoolName}
                 onChange={handleChange("schoolName")}
-                placeholder="اكتب اسم المدرسة"
+                placeholder={tr("اكتب اسم المدرسة", "Enter the school name")}
                 style={inputStyle}
               />
               {errors.schoolName ? <div style={errorStyle}>{errors.schoolName}</div> : null}
             </div>
 
             <div>
-              <label style={labelStyle}>إيميل المدرسة</label>
+              <label style={labelStyle}>{tr("إيميل المدرسة", "School email")}</label>
               <input
                 type="email"
                 value={form.schoolEmail}
@@ -218,12 +220,12 @@ export default function SuggestionsPage() {
             </div>
 
             <div>
-              <label style={labelStyle}>الملاحظات والاقتراحات</label>
+              <label style={labelStyle}>{tr("الملاحظات والاقتراحات", "Notes and suggestions")}</label>
               <textarea
                 rows={8}
                 value={form.notes}
                 onChange={handleChange("notes")}
-                placeholder="اكتب هنا الملاحظات والاقتراحات بالتفصيل"
+                placeholder={tr("اكتب هنا الملاحظات والاقتراحات بالتفصيل", "Write the notes and suggestions here in detail")}
                 style={{ ...inputStyle, resize: "vertical", minHeight: 180 }}
               />
               {errors.notes ? <div style={errorStyle}>{errors.notes}</div> : null}
@@ -248,11 +250,11 @@ export default function SuggestionsPage() {
 
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
               <button type="submit" disabled={loading} style={sendButtonStyle}>
-                {loading ? "جارٍ الإرسال..." : "إرسال"}
+                {loading ? tr("جارٍ الإرسال...", "Sending...") : tr("إرسال", "Send")}
               </button>
 
               <button type="button" onClick={handleReset} disabled={loading} style={cancelButtonStyle}>
-                إلغاء
+                {tr("إلغاء", "Cancel")}
               </button>
             </div>
           </div>
