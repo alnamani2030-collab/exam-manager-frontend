@@ -1,6 +1,7 @@
 // src/pages/Gallery.tsx
 import React, { useEffect, useRef, useState } from "react";
 import { useCan } from "../auth/permissions";
+import { useI18n } from "../i18n/I18nProvider";
 
 const LOGO_KEY = "exam-manager:app-logo";
 const DEFAULT_LOGO_URL = "https://i.imgur.com/vdDhSMh.png";
@@ -78,6 +79,8 @@ function FeatureBadge({ text, tone = "blue" }: { text: string; tone?: "blue" | "
 export default function Gallery() {
   const fileRef = useRef<HTMLInputElement | null>(null);
   const { can } = useCan();
+  const { lang, isRTL } = useI18n();
+  const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
   const canEdit = can("SETTINGS_MANAGE");
 
   const [logo, setLogo] = useState<string>("");
@@ -96,7 +99,7 @@ export default function Gallery() {
   function persist(v: string) {
     localStorage.setItem(LOGO_KEY, v);
     setLogo(v);
-    setMessage("تم تحديث الشعار الرسمي بنجاح، ويمكن لبقية الواجهات التقاط التغيير مباشرة.");
+    setMessage(tr("تم تحديث الشعار الرسمي بنجاح، ويمكن لبقية الواجهات التقاط التغيير مباشرة.", "The official logo was updated successfully, and the rest of the interfaces can pick up the change immediately."));
     window.dispatchEvent(new Event("exam-manager:changed"));
   }
 
@@ -104,29 +107,29 @@ export default function Gallery() {
     if (!file) return;
 
     if (!file.type.startsWith("image/")) {
-      setMessage("الملف المحدد ليس صورة. يرجى اختيار ملف PNG أو JPG أو أي صورة مدعومة.");
+      setMessage(tr("الملف المحدد ليس صورة. يرجى اختيار ملف PNG أو JPG أو أي صورة مدعومة.", "The selected file is not an image. Please choose a PNG, JPG, or another supported image format."));
       return;
     }
 
     if (file.size > MAX_FILE_SIZE) {
-      setMessage(`حجم الملف أكبر من الحد المسموح. الحد الأقصى هو 2 ميجابايت، بينما الملف الحالي ${formatBytes(file.size)}.`);
+      setMessage(lang === "ar" ? `حجم الملف أكبر من الحد المسموح. الحد الأقصى هو 2 ميجابايت، بينما الملف الحالي ${formatBytes(file.size)}.` : `The file exceeds the allowed size. The maximum is 2 MB, while the current file is ${formatBytes(file.size)}.`);
       return;
     }
 
     setSelectedFileName(file.name);
     setSelectedFileSize(file.size);
-    setMessage("جاري تجهيز الشعار الجديد للمعاينة والحفظ...");
+    setMessage(tr("جاري تجهيز الشعار الجديد للمعاينة والحفظ...", "Preparing the new logo for preview and saving..."));
 
     const reader = new FileReader();
     reader.onload = () => {
       const base64 = String(reader.result || "");
       if (!base64) {
-        setMessage("تعذر قراءة الصورة المختارة. حاول مرة أخرى بصورة أخرى.");
+        setMessage(tr("تعذر قراءة الصورة المختارة. حاول مرة أخرى بصورة أخرى.", "The selected image could not be read. Please try again with another image."));
         return;
       }
       persist(base64);
     };
-    reader.onerror = () => setMessage("حدث خطأ أثناء قراءة الصورة. حاول مجددًا.");
+    reader.onerror = () => setMessage(tr("حدث خطأ أثناء قراءة الصورة. حاول مجددًا.", "An error occurred while reading the image. Please try again."));
     reader.readAsDataURL(file);
   }
 
@@ -139,12 +142,12 @@ export default function Gallery() {
     onPickFile(file);
   }
 
-  const logoStatus = !logo ? "غير محدد" : isProbablyUrl(logo) ? "رابط خارجي" : "محفوظ محلياً (Base64)";
+  const logoStatus = !logo ? tr("غير محدد", "Not set") : isProbablyUrl(logo) ? tr("رابط خارجي", "External URL") : tr("محفوظ محلياً (Base64)", "Stored locally (Base64)");
 
   return (
     <div
       style={{
-        direction: "rtl",
+        direction: isRTL ? "rtl" : "ltr",
         minHeight: "calc(100vh - 64px)",
         padding: "26px 18px 42px",
         background:
@@ -205,18 +208,18 @@ export default function Gallery() {
           <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.3fr) minmax(280px,0.8fr)", gap: 22, position: "relative" }}>
             <div style={{ display: "grid", gap: 14 }}>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                <FeatureBadge text="هوية بصرية رسمية" tone="gold" />
-                <FeatureBadge text="مرتبطة بصلاحيات الإدارة" tone="green" />
-                <FeatureBadge text="معاينة فورية للشعار" tone="blue" />
+                <FeatureBadge text={tr("هوية بصرية رسمية", "Official visual identity")} tone="gold" />
+                <FeatureBadge text={tr("مرتبطة بصلاحيات الإدارة", "Linked to admin permissions")} tone="green" />
+                <FeatureBadge text={tr("معاينة فورية للشعار", "Instant logo preview")} tone="blue" />
               </div>
 
               <div>
                 <div style={{ color: "#93c5fd", fontWeight: 800, fontSize: 14, marginBottom: 8 }}>Advanced Brand Control</div>
                 <h1 style={{ margin: 0, fontSize: "clamp(30px, 4.8vw, 56px)", lineHeight: 1.05, fontWeight: 900, color: "#f8fafc" }}>
-                  مكتبة الشعار والهوية البصرية
+                  {tr("مكتبة الشعار والهوية البصرية", "Logo and Visual Identity Library")}
                 </h1>
                 <p style={{ margin: "14px 0 0", fontSize: 15, lineHeight: 2, color: "rgba(226,232,240,0.82)", maxWidth: 860 }}>
-                  صفحة أنيقة لإدارة الشعار الرسمي للنظام والتقارير، مع تجربة رفع ومعاينة أكثر فخامة ووضوحًا، وتحديث مباشر للشعار المستخدم داخل الواجهات.
+                  {tr("صفحة أنيقة لإدارة الشعار الرسمي للنظام والتقارير، مع تجربة رفع ومعاينة أكثر فخامة ووضوحًا، وتحديث مباشر للشعار المستخدم داخل الواجهات.", "A polished page for managing the official system and report logo, with a more premium upload and preview experience and instant updates across interfaces.")}
                 </p>
               </div>
             </div>
@@ -230,24 +233,24 @@ export default function Gallery() {
                 alignContent: "start",
               }}
             >
-              <div style={{ fontSize: 17, fontWeight: 900, color: "#f8fafc" }}>لوحة الحالة السريعة</div>
+              <div style={{ fontSize: 17, fontWeight: 900, color: "#f8fafc" }}>{tr("لوحة الحالة السريعة", "Quick status panel")}</div>
               <div style={{ color: "rgba(226,232,240,0.72)", lineHeight: 1.8, fontSize: 13 }}>
-                ملخص فوري لحالة الشعار الحالي، مصدره، وصلاحية المستخدم في التعديل.
+                {tr("ملخص فوري لحالة الشعار الحالي، مصدره، وصلاحية المستخدم في التعديل.", "An instant summary of the current logo state, its source, and the user’s edit permission.")}
               </div>
               <div style={{ display: "grid", gap: 10 }}>
-                <FeatureBadge text={canEdit ? "التعديل متاح للمستخدم الحالي" : "التعديل محصور بمدير الإعدادات"} tone={canEdit ? "green" : "gold"} />
-                <FeatureBadge text={`المصدر الحالي: ${logoStatus}`} tone="violet" />
-                <FeatureBadge text={logo === DEFAULT_LOGO_URL ? "الشعار الافتراضي مفعل" : "شعار مخصص مفعل"} tone="blue" />
+                <FeatureBadge text={canEdit ? tr("التعديل متاح للمستخدم الحالي", "Editing is available for the current user") : tr("التعديل محصور بمدير الإعدادات", "Editing is restricted to the settings manager")} tone={canEdit ? "green" : "gold"} />
+                <FeatureBadge text={`${tr("المصدر الحالي", "Current source")}: ${logoStatus}`} tone="violet" />
+                <FeatureBadge text={logo === DEFAULT_LOGO_URL ? tr("الشعار الافتراضي مفعل", "Default logo is active") : tr("شعار مخصص مفعل", "Custom logo is active")} tone="blue" />
               </div>
             </div>
           </div>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
-          <StatTile label="وضع الإدارة" value={canEdit ? "Editable" : "View Only"} hint="يعتمد على صلاحية SETTINGS_MANAGE داخل النظام" />
-          <StatTile label="مصدر الشعار" value={logoStatus} hint="يحدد هل الشعار رابط خارجي أو محفوظ محليًا" />
-          <StatTile label="آخر ملف تم اختياره" value={selectedFileName || "—"} hint={selectedFileName ? `الحجم: ${formatBytes(selectedFileSize)}` : "لم يتم اختيار ملف جديد في هذه الجلسة"} />
-          <StatTile label="وضع المعاينة" value={previewMode === "light" ? "Light" : "Dark"} hint="يمكن تبديل خلفية المعاينة لاختبار وضوح الشعار" />
+          <StatTile label={tr("وضع الإدارة", "Admin mode")} value={canEdit ? tr("قابل للتعديل", "Editable") : tr("عرض فقط", "View Only")} hint={tr("يعتمد على صلاحية SETTINGS_MANAGE داخل النظام", "Depends on the SETTINGS_MANAGE permission in the system")} />
+          <StatTile label={tr("مصدر الشعار", "Logo source")} value={logoStatus} hint={tr("يحدد هل الشعار رابط خارجي أو محفوظ محليًا", "Indicates whether the logo is an external URL or stored locally")} />
+          <StatTile label={tr("آخر ملف تم اختياره", "Last selected file")} value={selectedFileName || "—"} hint={selectedFileName ? (lang === "ar" ? `الحجم: ${formatBytes(selectedFileSize)}` : `Size: ${formatBytes(selectedFileSize)}`) : tr("لم يتم اختيار ملف جديد في هذه الجلسة", "No new file has been selected in this session")} />
+          <StatTile label={tr("وضع المعاينة", "Preview mode")} value={previewMode === "light" ? tr("فاتح", "Light") : tr("داكن", "Dark")} hint={tr("يمكن تبديل خلفية المعاينة لاختبار وضوح الشعار", "You can switch the preview background to test logo clarity")} />
         </div>
 
         {message ? (
@@ -267,9 +270,9 @@ export default function Gallery() {
         <div style={{ display: "grid", gridTemplateColumns: "minmax(320px, 0.95fr) minmax(360px, 1.1fr)", gap: 20, alignItems: "start" }}>
           <div style={{ ...buildGlassCard(), padding: 28, display: "grid", gap: 24 }}>
             <div>
-              <h2 style={{ fontSize: 24, fontWeight: 900, margin: 0, color: "#f8fafc" }}>رفع الشعار الجديد</h2>
+              <h2 style={{ fontSize: 24, fontWeight: 900, margin: 0, color: "#f8fafc" }}>{tr("رفع الشعار الجديد", "Upload a new logo")}</h2>
               <p style={{ marginTop: 8, color: "rgba(226,232,240,0.72)", lineHeight: 1.9, fontSize: 14 }}>
-                ارفع شعارًا جديدًا ليتم حفظه محليًا واستخدامه في التقارير والواجهات. يفضّل استخدام صورة بخلفية شفافة للحصول على أفضل نتيجة.
+                {tr("ارفع شعارًا جديدًا ليتم حفظه محليًا واستخدامه في التقارير والواجهات. يفضّل استخدام صورة بخلفية شفافة للحصول على أفضل نتيجة.", "Upload a new logo to save it locally and use it in reports and interfaces. A transparent-background image is recommended for the best result.")}
               </p>
             </div>
 
@@ -299,10 +302,10 @@ export default function Gallery() {
             >
               <div style={{ fontSize: 46, marginBottom: 14 }}>{dragActive ? "✨" : "⬆️"}</div>
               <div style={{ fontWeight: 900, fontSize: 20, marginBottom: 8, color: "#f8fafc" }}>
-                اضغط أو اسحب صورة الشعار هنا
+                {tr("اضغط أو اسحب صورة الشعار هنا", "Click or drag the logo image here")}
               </div>
               <div style={{ fontSize: 13, opacity: 0.78, marginBottom: 18, lineHeight: 1.8 }}>
-                PNG / JPG — الحد الأقصى الفعلي 2 ميجابايت — يفضّل شعار بخلفية شفافة لنتائج أفضل في التقارير والطباعة
+                {tr("PNG / JPG — الحد الأقصى الفعلي 2 ميجابايت — يفضّل شعار بخلفية شفافة لنتائج أفضل في التقارير والطباعة", "PNG / JPG — actual maximum 2 MB — a transparent-background logo is recommended for better results in reports and printing")}
               </div>
 
               <button
@@ -321,7 +324,7 @@ export default function Gallery() {
                   boxShadow: canEdit ? "0 12px 32px rgba(59,130,246,0.28)" : "none",
                 }}
               >
-                {canEdit ? "اختيار صورة الشعار" : "التعديل للمدير فقط"}
+                {canEdit ? tr("اختيار صورة الشعار", "Choose logo image") : tr("التعديل للمدير فقط", "Editing for admin only")}
               </button>
 
               <input
@@ -338,7 +341,7 @@ export default function Gallery() {
             </div>
 
             <div style={{ display: "grid", gap: 12 }}>
-              <div style={{ color: "#f8fafc", fontWeight: 800, fontSize: 16 }}>إجراءات سريعة</div>
+              <div style={{ color: "#f8fafc", fontWeight: 800, fontSize: 16 }}>{tr("إجراءات سريعة", "Quick actions")}</div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
                 <button
                   type="button"
@@ -354,7 +357,7 @@ export default function Gallery() {
                     cursor: canEdit ? "pointer" : "not-allowed",
                   }}
                 >
-                  استعادة الشعار الافتراضي
+                  {tr("استعادة الشعار الافتراضي", "Restore default logo")}
                 </button>
 
                 <button
@@ -378,9 +381,9 @@ export default function Gallery() {
 
           <div style={{ ...buildGlassCard(), padding: 28, display: "grid", gap: 18 }}>
             <div>
-              <h2 style={{ fontSize: 24, fontWeight: 900, margin: 0, color: "#f8fafc" }}>المعاينة الحالية</h2>
+              <h2 style={{ fontSize: 24, fontWeight: 900, margin: 0, color: "#f8fafc" }}>{tr("المعاينة الحالية", "Current preview")}</h2>
               <p style={{ marginTop: 8, color: "rgba(226,232,240,0.72)", lineHeight: 1.9, fontSize: 14 }}>
-                معاينة فورية للشعار الحالي كما سيظهر بصريًا، مع إمكانية اختبار وضوحه فوق خلفية فاتحة أو داكنة.
+                {tr("معاينة فورية للشعار الحالي كما سيظهر بصريًا، مع إمكانية اختبار وضوحه فوق خلفية فاتحة أو داكنة.", "An instant preview of the current logo as it will appear visually, with the ability to test its clarity on light or dark backgrounds.")}
               </p>
             </div>
 
@@ -397,8 +400,8 @@ export default function Gallery() {
             >
               <div style={{ display: "grid", gap: 18 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                  <FeatureBadge text={previewMode === "light" ? "معاينة على خلفية فاتحة" : "معاينة على خلفية داكنة"} tone={previewMode === "light" ? "gold" : "violet"} />
-                  <FeatureBadge text={`الحالة: ${logoStatus}`} tone="blue" />
+                  <FeatureBadge text={previewMode === "light" ? tr("معاينة على خلفية فاتحة", "Preview on light background") : tr("معاينة على خلفية داكنة", "Preview on dark background")} tone={previewMode === "light" ? "gold" : "violet"} />
+                  <FeatureBadge text={`${tr("الحالة", "Status")}: ${logoStatus}`} tone="blue" />
                 </div>
 
                 <div
@@ -424,7 +427,7 @@ export default function Gallery() {
                   {logo ? (
                     <img
                       src={logo}
-                      alt="الشعار الحالي"
+                      alt={tr("الشعار الحالي", "Current logo")}
                       style={{
                         width: "100%",
                         maxWidth: 420,
@@ -435,7 +438,7 @@ export default function Gallery() {
                       }}
                     />
                   ) : (
-                    <div style={{ padding: "60px 0", opacity: 0.5, color: previewMode === "light" ? "#0f172a" : "#e2e8f0" }}>لا يوجد شعار بعد</div>
+                    <div style={{ padding: "60px 0", opacity: 0.5, color: previewMode === "light" ? "#0f172a" : "#e2e8f0" }}>{tr("لا يوجد شعار بعد", "No logo yet")}</div>
                   )}
                 </div>
               </div>
@@ -453,7 +456,7 @@ export default function Gallery() {
             lineHeight: 1.9,
           }}
         >
-          • يُفضل استخدام صور PNG بخلفية شفافة وشعار واضح الحواف للحصول على أفضل نتيجة في الواجهات والتقارير والطباعة الرسمية
+          {tr("• يُفضل استخدام صور PNG بخلفية شفافة وشعار واضح الحواف للحصول على أفضل نتيجة في الواجهات والتقارير والطباعة الرسمية", "• It is recommended to use PNG images with a transparent background and clear logo edges for the best result in interfaces, reports, and official printing.")}
         </div>
       </div>
     </div>
