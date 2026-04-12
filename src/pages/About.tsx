@@ -1,5 +1,6 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
+import { useI18n } from "../i18n/I18nProvider";
 
 const glass: React.CSSProperties = {
   background: "rgba(15, 23, 42, 0.68)",
@@ -18,54 +19,153 @@ const textMuted = "rgba(248,250,252,0.78)";
 const textSoft = "rgba(248,250,252,0.58)";
 const DESIGNER_IMAGE = "https://i.imgur.com/hxc8yi9.jpeg";
 
-const sectionTitleStyle: React.CSSProperties = {
-  fontSize: 24,
-  fontWeight: 900,
-  color: textMain,
-  marginBottom: 18,
-};
+const STR = {
+  ar: {
+    pageTitle: "مصمم البرنامج",
+    pageSubtitle: "واجهة تعريف احترافية تليق بمنظومة إدارة الامتحانات المطورة",
+    systemVersion: "إصدار النظام المتقدم",
+    currentSchool: "المدرسة الحالية",
+    employer: "جهة العمل",
+    contact: "التواصل",
+    jobTitle: "المسمى الوظيفي",
+    schoolValue: "مدرسة عزان بن تميم",
+    employerValue: "المديرية العامة للتعليم بمحافظة شمال الشرقية",
+    contactValue: "97760020",
+    jobTitleValue: "فني مختبرات مدارس",
+    developerName: "يوسف راشد النعماني",
+    developerRole: "مطور برمجيات متكامل",
+    developerBio:
+      "مطور متخصص في بناء الأنظمة المؤسسية الذكية، يركز على تحويل الإجراءات الإدارية المعقدة إلى حلول رقمية متكاملة، دقيقة، وقابلة للتوسع.",
+    back: "العودة للصفحة السابقة",
+    home: "الذهاب إلى لوحة التحكم",
+    missionTitle: "رسالة هذا العمل",
+    missionText:
+      "هذا النظام ليس مجرد صفحة لإدارة بيانات الامتحانات، بل هو منظومة تشغيل متكاملة صُممت لتقديم تجربة احترافية تبدأ من إدخال الكادر وجدول الامتحانات والقاعات، وتمر عبر التوزيع الذكي والتقارير والإحصائيات، وتنتهي بإخراج كشوفات رسمية دقيقة تليق بالعمل المؤسسي في البيئة التعليمية.",
+    professionalTitle: "البيانات المهنية",
+    advancedTitle: "نبذة متقدمة عن النظام",
+    advancedText:
+      "تم تصميم نظام إدارة الامتحانات المطور ليخدم بيئة تشغيل حقيقية تحتاج إلى سرعة، موثوقية، عدالة في التوزيع، ووضوح كامل في التقارير. وتم الاهتمام بالتفاصيل التشغيلية الدقيقة مثل توزيع المراقبين، إدارة القاعات، كشف العجز، التنبيهات، الربط الذكي بين البيانات، والطباعة الرسمية المناسبة للاعتماد الإداري.",
+    technologiesTitle: "التقنيات المستخدمة",
+    technologiesText:
+      "تم بناء النظام بأسلوب حديث يجمع بين واجهات الاستخدام المتقدمة، إدارة الحالة، التخزين السحابي، وقابلية التوسع مستقبلًا.",
+    projectValueTitle: "قيمة المشروع",
+    projectValueText:
+      "هذا العمل يمثل منتجًا مؤسسيًا فعليًا، وليس مجرد نموذج تجريبي؛ إذ يجمع بين التصميم، المنطق التشغيلي، دقة البيانات، والتقارير التنفيذية في منصة واحدة متكاملة.",
+    footerTitle: "نظام إدارة الامتحانات المطور",
+    footerSubtitle: "صفحة تعريف احترافية بمصمم المنظومة ورؤية المشروع التقنية",
+    footerBadge: "بُني برؤية ودقة وعناية",
+    achievements: [
+      { number: "100%", label: "منظومة متكاملة لإدارة الامتحانات" },
+      { number: "24/24", label: "جاهزية تشغيل ومتابعة" },
+      { number: "A4", label: "تقارير احترافية للطباعة والتسليم" },
+      { number: "متعدد الأدوار", label: "صلاحيات متعددة وإدارة مركزية" },
+    ],
+    features: [
+      "توزيع ذكي وعادل للمراقبين حسب القيود والجاهزية",
+      "إدارة كاملة للمعلمين والامتحانات والقاعات والحظر",
+      "تقارير وكشوفات رسمية للطباعة بصيغة احترافية",
+      "إحصائيات توزيع فورية واكتشاف العجز تلقائيًا",
+      "إدارة نسخ وأرشفة وتوثيق السجلات والنشاط",
+      "قابلية توسع للمدارس والإدارات والصلاحيات متعددة الأدوار",
+    ],
+    technologies: [
+      "ريأكت",
+      "تايب سكربت",
+      "فايربيس",
+      "فايرستور",
+      "الدوال السحابية",
+      "قاعدة بيانات محلية",
+      "استيراد وتصدير إكسل",
+      "تكامل الذكاء الاصطناعي",
+    ],
+  },
+  en: {
+    pageTitle: "Program Designer",
+    pageSubtitle: "A professional identity page worthy of the enhanced exam management platform",
+    systemVersion: "Advanced System Edition",
+    currentSchool: "Current School",
+    employer: "Employer",
+    contact: "Contact",
+    jobTitle: "Job Title",
+    schoolValue: "Azzan Bin Tamim School",
+    employerValue: "Directorate General of Education in North Al Sharqiyah",
+    contactValue: "97760020",
+    jobTitleValue: "School Laboratory Technician",
+    developerName: "Yousef Rashid Al-Numani",
+    developerRole: "Full Stack Developer",
+    developerBio:
+      "A developer specialized in building smart institutional systems, focused on transforming complex administrative procedures into integrated, precise, and scalable digital solutions.",
+    back: "Back to Previous Page",
+    home: "Go to Dashboard",
+    missionTitle: "Mission of This Work",
+    missionText:
+      "This system is not just a page for managing exam data. It is a fully integrated operational platform designed to deliver a professional experience that starts with staff, exams, and rooms, passes through smart distribution, reporting, and analytics, and ends with accurate official outputs suitable for institutional educational work.",
+    professionalTitle: "Professional Information",
+    advancedTitle: "Advanced Overview of the System",
+    advancedText:
+      "The enhanced exam management system was designed for a real operational environment that requires speed, reliability, fairness in distribution, and complete clarity in reporting. Great attention was given to operational details such as invigilator distribution, room management, shortage detection, alerts, smart data linkage, and official print-ready outputs.",
+    technologiesTitle: "Technologies Used",
+    technologiesText:
+      "The system was built with a modern approach that combines advanced user interfaces, state management, cloud storage, and future scalability.",
+    projectValueTitle: "Project Value",
+    projectValueText:
+      "This work represents a real institutional product, not just an experimental prototype. It combines design, operational logic, data accuracy, and executive reporting in one integrated platform.",
+    footerTitle: "Enhanced Exam Management System",
+    footerSubtitle: "A professional about page for the system designer and project vision",
+    footerBadge: "Built with vision, precision, and care",
+    achievements: [
+      { number: "100%", label: "Integrated Exam Management Platform" },
+      { number: "24/24", label: "Operational Readiness & Monitoring" },
+      { number: "A4", label: "Professional Printable Reports" },
+      { number: "Multi-Role", label: "Multi-role Access & Central Control" },
+    ],
+    features: [
+      "Smart and fair invigilator distribution based on constraints and readiness",
+      "Full management of teachers, exams, rooms, and blocking rules",
+      "Official reports and sheets in a professional printable format",
+      "Instant distribution analytics and automatic shortage detection",
+      "Archiving, backup, and activity documentation management",
+      "Scalable structure for schools, departments, and multi-role permissions",
+    ],
+    technologies: [
+      "React",
+      "TypeScript",
+      "Firebase",
+      "Firestore",
+      "Cloud Functions",
+      "IndexedDB",
+      "Excel Import / Export",
+      "AI Integration",
+    ],
+  },
+} as const;
 
 export default function About() {
   const navigate = useNavigate();
+  const { lang, isRTL } = useI18n();
+  const t = STR[lang as keyof typeof STR];
+  const isAr = isRTL;
 
   const infoCards = [
-    { icon: "🏫", title: "المدرسة الحالية", value: "مدرسة عزان بن تميم" },
-    { icon: "🏢", title: "جهة العمل", value: "المديرية العامة للتعليم بمحافظة شمال الشرقية" },
-    { icon: "📞", title: "التواصل", value: "97760020" },
-    { icon: "💼", title: "المسمى الوظيفي", value: "فني مختبرات مدارس" },
+    { icon: "🏫", title: t.currentSchool, value: t.schoolValue },
+    { icon: "🏢", title: t.employer, value: t.employerValue },
+    { icon: "📞", title: t.contact, value: t.contactValue },
+    { icon: "💼", title: t.jobTitle, value: t.jobTitleValue },
   ];
 
-  const systemFeatures = [
-    "توزيع ذكي وعادل للمراقبين حسب القيود والجاهزية",
-    "إدارة كاملة للمعلمين والامتحانات والقاعات والحظر",
-    "تقارير وكشوفات رسمية للطباعة بصيغة احترافية",
-    "إحصائيات توزيع فورية واكتشاف العجز تلقائيًا",
-    "إدارة نسخ وأرشفة وتوثيق السجلات والنشاط",
-    "قابلية توسع للمدارس والإدارات والصلاحيات متعددة الأدوار",
-  ];
+  const technologies = t.technologies;
 
-  const technologies = [
-    "React",
-    "TypeScript",
-    "Firebase",
-    "Firestore",
-    "Cloud Functions",
-    "IndexedDB",
-    "Excel Import/Export",
-    "AI Integration",
-  ];
-
-  const achievements = [
-    { number: "100%", label: "منظومة متكاملة لإدارة الامتحانات" },
-    { number: "24/24", label: "جاهزية تشغيل ومتابعة" },
-    { number: "A4", label: "تقارير احترافية للطباعة والتسليم" },
-    { number: "Multi-Role", label: "صلاحيات متعددة وإدارة مركزية" },
-  ];
+  const sectionTitleStyle: React.CSSProperties = {
+    fontSize: 24,
+    fontWeight: 900,
+    color: textMain,
+    marginBottom: 18,
+  };
 
   return (
     <div
       style={{
-        direction: "rtl",
+        direction: isAr ? "rtl" : "ltr",
         minHeight: "100vh",
         color: textMain,
         fontFamily: "'Segoe UI', system-ui, sans-serif",
@@ -126,6 +226,11 @@ export default function About() {
           background: rgba(251,191,36,0.18) !important;
           border-color: rgba(251,191,36,0.5) !important;
         }
+        @media (max-width: 1100px) {
+          .about-hero-grid, .about-bottom-grid {
+            grid-template-columns: 1fr !important;
+          }
+        }
       `}</style>
 
       <div
@@ -156,6 +261,7 @@ export default function About() {
       />
 
       <div style={{ width: "92%", maxWidth: 1500, margin: "0 auto", padding: "28px 0 42px", position: "relative", zIndex: 1 }}>
+
         <header
           style={{
             ...glass,
@@ -165,11 +271,11 @@ export default function About() {
             alignItems: "center",
             gap: 20,
             flexWrap: "wrap",
-            animation: "aboutFadeUp 0.7s ease, borderPulse 3.2s ease-in-out infinite",
             background:
               "linear-gradient(135deg, rgba(15,23,42,0.88), rgba(88,28,135,0.55), rgba(30,41,59,0.92))",
             border: "4px solid rgba(251,191,36,0.75)",
             boxShadow: glowGold,
+            animation: "aboutFadeUp 0.7s ease, borderPulse 3.2s ease-in-out infinite",
           }}
         >
           <div style={{ display: "flex", gap: 18, alignItems: "center", flexWrap: "wrap" }}>
@@ -191,10 +297,8 @@ export default function About() {
             </div>
 
             <div>
-              <div style={{ fontSize: 34, fontWeight: 900, color: "#fff" }}>مصمم البرنامج</div>
-              <div style={{ marginTop: 6, fontSize: 15, color: textMuted }}>
-                واجهة تعريف احترافية تليق بمنظومة إدارة الامتحانات المطورة
-              </div>
+              <div style={{ fontSize: 34, fontWeight: 900, color: "#fff" }}>{t.pageTitle}</div>
+              <div style={{ marginTop: 6, fontSize: 15, color: textMuted }}>{t.pageSubtitle}</div>
             </div>
           </div>
 
@@ -209,11 +313,12 @@ export default function About() {
               boxShadow: glowGold,
             }}
           >
-            إصدار النظام المتقدم
+            {t.systemVersion}
           </div>
         </header>
 
         <section
+          className="about-hero-grid"
           style={{
             marginTop: 28,
             display: "grid",
@@ -258,14 +363,14 @@ export default function About() {
               >
                 <img
                   src={DESIGNER_IMAGE}
-                  alt="مصمم البرنامج"
+                  alt={isAr ? "مصمم البرنامج" : "Program Designer"}
                   style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
                 />
               </div>
             </div>
 
             <div style={{ marginTop: 22, fontSize: 28, fontWeight: 900, color: "#fff" }}>
-              يوسف راشد النعماني
+              {t.developerName}
             </div>
 
             <div
@@ -280,12 +385,11 @@ export default function About() {
                 boxShadow: glowGold,
               }}
             >
-              Full Stack Developer
+              {t.developerRole}
             </div>
 
             <p style={{ marginTop: 18, lineHeight: 1.95, fontSize: 15, color: textMuted }}>
-              مطور متخصص في بناء الأنظمة المؤسسية الذكية، يركز على تحويل الإجراءات
-              الإدارية المعقدة إلى حلول رقمية متكاملة، دقيقة، وقابلة للتوسع.
+              {t.developerBio}
             </p>
 
             <div style={{ marginTop: 18, display: "grid", gap: 12 }}>
@@ -304,7 +408,7 @@ export default function About() {
                   boxShadow: "0 16px 28px rgba(16,185,129,0.24)",
                 }}
               >
-                العودة للصفحة السابقة
+                {t.back}
               </button>
 
               <button
@@ -322,7 +426,7 @@ export default function About() {
                   boxShadow: "0 16px 28px rgba(37,99,235,0.24)",
                 }}
               >
-                الذهاب إلى لوحة التحكم
+                {t.home}
               </button>
             </div>
           </div>
@@ -335,13 +439,10 @@ export default function About() {
             }}
             className="about-card-hover"
           >
-            <div style={sectionTitleStyle}>رسالة هذا العمل</div>
+            <div style={sectionTitleStyle}>{t.missionTitle}</div>
 
             <p style={{ lineHeight: 2, fontSize: 16, color: textMuted, margin: 0 }}>
-              هذا النظام ليس مجرد صفحة لإدارة بيانات الامتحانات، بل هو منظومة تشغيل
-              متكاملة صُممت لتقديم تجربة احترافية تبدأ من إدخال الكادر وجدول الامتحانات
-              والقاعات، وتمر عبر التوزيع الذكي والتقارير والإحصائيات، وتنتهي بإخراج
-              كشوفات رسمية دقيقة تليق بالعمل المؤسسي في البيئة التعليمية.
+              {t.missionText}
             </p>
 
             <div
@@ -352,7 +453,7 @@ export default function About() {
                 gap: 16,
               }}
             >
-              {achievements.map((item) => (
+              {t.achievements.map((item) => (
                 <div
                   key={item.label}
                   style={{
@@ -373,7 +474,7 @@ export default function About() {
         </section>
 
         <section style={{ marginTop: 30, animation: "aboutFadeUp 1.05s ease" }}>
-          <div style={sectionTitleStyle}>البيانات المهنية</div>
+          <div style={sectionTitleStyle}>{t.professionalTitle}</div>
 
           <div
             style={{
@@ -422,6 +523,7 @@ export default function About() {
         </section>
 
         <section
+          className="about-bottom-grid"
           style={{
             marginTop: 32,
             display: "grid",
@@ -438,18 +540,14 @@ export default function About() {
             }}
             className="about-card-hover"
           >
-            <div style={sectionTitleStyle}>نبذة متقدمة عن النظام</div>
+            <div style={sectionTitleStyle}>{t.advancedTitle}</div>
 
             <p style={{ lineHeight: 2, fontSize: 15.5, color: textMuted, margin: 0 }}>
-              تم تصميم نظام إدارة الامتحانات المطور ليخدم بيئة تشغيل حقيقية تحتاج إلى
-              سرعة، موثوقية، عدالة في التوزيع، ووضوح كامل في التقارير. وتم الاهتمام
-              بالتفاصيل التشغيلية الدقيقة مثل توزيع المراقبين، إدارة القاعات، كشف العجز،
-              التنبيهات، الربط الذكي بين البيانات، والطباعة الرسمية المناسبة للاعتماد
-              الإداري.
+              {t.advancedText}
             </p>
 
             <div style={{ marginTop: 22, display: "grid", gap: 12 }}>
-              {systemFeatures.map((feature, i) => (
+              {t.features.map((feature, i) => (
                 <div
                   key={feature}
                   style={{
@@ -467,7 +565,7 @@ export default function About() {
                     style={{
                       width: 28,
                       height: 28,
-                      borderRadius: 12,
+                      borderRadius: 999,
                       display: "grid",
                       placeItems: "center",
                       background: goldSoft,
@@ -492,11 +590,10 @@ export default function About() {
             }}
             className="about-card-hover"
           >
-            <div style={sectionTitleStyle}>التقنيات المستخدمة</div>
+            <div style={sectionTitleStyle}>{t.technologiesTitle}</div>
 
             <p style={{ lineHeight: 1.9, color: textMuted, fontSize: 15 }}>
-              تم بناء النظام بأسلوب حديث يجمع بين واجهات الاستخدام المتقدمة، إدارة
-              الحالة، التخزين السحابي، وقابلية التوسع مستقبلًا.
+              {t.technologiesText}
             </p>
 
             <div style={{ marginTop: 18, display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -530,12 +627,10 @@ export default function About() {
               }}
             >
               <div style={{ fontWeight: 900, fontSize: 17, color: "#fff", marginBottom: 8 }}>
-                قيمة المشروع
+                {t.projectValueTitle}
               </div>
               <div style={{ color: textMuted, lineHeight: 1.9, fontSize: 14.5 }}>
-                هذا العمل يمثل منتجًا مؤسسيًا فعليًا، وليس مجرد نموذج تجريبي؛ إذ يجمع
-                بين التصميم، المنطق التشغيلي، دقة البيانات، والتقارير التنفيذية في منصة
-                واحدة متكاملة.
+                {t.projectValueText}
               </div>
             </div>
           </div>
@@ -556,10 +651,8 @@ export default function About() {
           }}
         >
           <div>
-            <div style={{ fontWeight: 900, color: "#fff", fontSize: 18 }}>نظام إدارة الامتحانات المطور</div>
-            <div style={{ marginTop: 6, color: textSoft, fontSize: 13 }}>
-              صفحة تعريف احترافية بمصمم المنظومة ورؤية المشروع التقني
-            </div>
+            <div style={{ fontWeight: 900, color: "#fff", fontSize: 18 }}>{t.footerTitle}</div>
+            <div style={{ marginTop: 6, color: textSoft, fontSize: 13 }}>{t.footerSubtitle}</div>
           </div>
 
           <div
@@ -572,7 +665,7 @@ export default function About() {
               fontWeight: 800,
             }}
           >
-            Built with vision, precision, and care
+            {t.footerBadge}
           </div>
         </footer>
       </div>
