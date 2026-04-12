@@ -1,53 +1,98 @@
 import React from "react";
 import { useI18n } from "../../../i18n/I18nProvider";
-import { btn, cardDark, cardHeaderRow, cardSubOnDark, cardTitleOnDark } from "../../../styles/ui";
-import { GOLD_LINE_SOFT, GOLD_TEXT } from "../constants";
+import type { AddChoice } from "./ResultsEmptyTeacherCell";
 
 type Props = {
-  importError: string | null;
-  fileInputRef: React.RefObject<HTMLInputElement | null>;
-  onBack: () => void;
-  onPickImportFile: () => void;
-  onImportFileSelected: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  addChoices: AddChoice[];
+  addBtnStyle: React.CSSProperties;
+  canAdd: (taskType: string) => boolean;
+  getAddTitle?: (taskType: string) => string | undefined;
+  onAddChoice?: (taskType: string) => void;
+  onCloseAdd?: () => void;
+  showInvigilationHint: boolean;
+  invigilationHintText?: string;
 };
 
-export function ResultsEmptyRunState({
-  importError,
-  fileInputRef,
-  onBack,
-  onPickImportFile,
-  onImportFileSelected,
+export function ResultsEmptyCellAddMenu({
+  addChoices,
+  addBtnStyle,
+  canAdd,
+  getAddTitle,
+  onAddChoice,
+  onCloseAdd,
+  showInvigilationHint,
+  invigilationHintText,
 }: Props) {
   const { lang } = useI18n();
   const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
 
   return (
-    <div style={cardDark}>
-      <div style={cardHeaderRow}>
-        <div>
-          <div style={{ ...cardTitleOnDark, color: GOLD_TEXT }}>{tr("النتائج", "Results")}</div>
-          <div style={{ ...cardSubOnDark, color: GOLD_LINE_SOFT }}>{tr("لا يوجد تشغيل محفوظ بعد", "No saved run yet")}</div>
+    <div style={{ display: "grid", gap: 8 }}>
+      {addChoices.map((c) => {
+        const allowed = canAdd(c.key);
+        return (
+          <button
+            key={c.key}
+            type="button"
+            disabled={!allowed}
+            title={getAddTitle?.(c.key)}
+            style={{
+              ...addBtnStyle,
+              opacity: allowed ? 1 : 0.45,
+              cursor: allowed ? "pointer" : "not-allowed",
+              border:
+                !allowed && (c.key === "INVIGILATION" || c.key === "RESERVE")
+                  ? "1px solid rgba(251,191,36,0.35)"
+                  : addBtnStyle.border,
+              background:
+                !allowed && (c.key === "INVIGILATION" || c.key === "RESERVE")
+                  ? "rgba(251,191,36,0.08)"
+                  : addBtnStyle.background,
+            }}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (!allowed) return;
+              onAddChoice?.(c.key);
+            }}
+          >
+            + {tr("إضافة", "Add")} {c.label}
+          </button>
+        );
+      })}
+
+      {showInvigilationHint ? (
+        <div
+          style={{
+            fontSize: 12,
+            lineHeight: 1.4,
+            padding: "8px 10px",
+            borderRadius: 10,
+            border: "1px solid rgba(251,191,36,0.25)",
+            background: "rgba(251,191,36,0.08)",
+            color: "rgba(255,255,255,0.90)",
+            fontWeight: 900,
+          }}
+        >
+          {invigilationHintText}
         </div>
+      ) : null}
 
-        <button style={btn("soft")} onClick={onBack}>
-          {tr("رجوع", "Back")}
-        </button>
-      </div>
-
-      <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
-        <button style={btn("soft")} onClick={onPickImportFile}>
-          {tr("استيراد الجدول الشامل (Excel)", "Import Master Table (Excel)")}
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
-          style={{ display: "none" }}
-          onChange={onImportFileSelected}
-        />
-      </div>
-
-      {importError && <div style={{ marginTop: 10, color: "#fecaca", fontWeight: 800 }}>{importError}</div>}
+      <button
+        type="button"
+        style={{
+          ...addBtnStyle,
+          border: `1px solid rgba(239,68,68,0.45)`,
+          background: "rgba(239,68,68,0.12)",
+        }}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onCloseAdd?.();
+        }}
+      >
+        {tr("إغلاق", "Close")}
+      </button>
     </div>
   );
 }
