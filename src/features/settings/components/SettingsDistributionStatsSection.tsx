@@ -1,4 +1,5 @@
 import React from 'react';
+import { useI18n } from "../../../i18n/I18nProvider";
 import SettingsEmptyStateCard from './SettingsEmptyStateCard';
 
 type ReportRow = Record<string, any>;
@@ -35,8 +36,11 @@ export default function SettingsDistributionStatsSection({
   whatsappAdminKey,
   onCloseFullscreen,
 }: Props) {
+  const { lang } = useI18n();
+  const tr = (ar: string, en: string) => (lang === 'ar' ? ar : en);
+
   if (!hasAssignments) {
-    return <SettingsEmptyStateCard message="لا يوجد توزيع محفوظ حاليًا (لم يتم العثور على بيانات في Run أو الجدول الشامل)." />;
+    return <SettingsEmptyStateCard message={tr("لا يوجد توزيع محفوظ حاليًا (لم يتم العثور على بيانات في Run أو الجدول الشامل).", "No saved distribution currently exists (no data found in Run or master table).")} />;
   }
 
   return (
@@ -58,12 +62,12 @@ export default function SettingsDistributionStatsSection({
           flexWrap: 'wrap',
         }}
       >
-        <div>ملخص سريع</div>
+        <div>{tr('ملخص سريع', 'Quick Summary')}</div>
         <div>
-          إجمالي العجز الكلي: <span style={{ color: totalDeficit > 0 ? '#ff4d4d' : 'rgba(255,255,255,0.92)' }}>{totalDeficit}</span>
+          {tr('إجمالي العجز الكلي', 'Total Overall Deficit')}: <span style={{ color: totalDeficit > 0 ? '#ff4d4d' : 'rgba(255,255,255,0.92)' }}>{totalDeficit}</span>
         </div>
         <div>
-          نسبة التغطية:{' '}
+          {tr('نسبة التغطية', 'Coverage Percentage')}:{' '}
           <span style={{ color: totalCoveragePct < 100 ? '#ffd166' : 'rgba(255,255,255,0.92)' }}>{totalCoveragePct}%</span>
         </div>
       </div>
@@ -97,7 +101,7 @@ export default function SettingsDistributionStatsSection({
               marginBottom: 10,
             }}
           >
-            <div style={{ fontWeight: 900, color: 'rgba(255,255,255,0.95)' }}>تقرير إحصائية التوزيع</div>
+            <div style={{ fontWeight: 900, color: 'rgba(255,255,255,0.95)' }}>{tr('تقرير إحصائية التوزيع', 'Distribution Statistics Report')}</div>
             <button
               onClick={onCloseFullscreen}
               style={{
@@ -110,7 +114,7 @@ export default function SettingsDistributionStatsSection({
                 fontWeight: 900,
               }}
             >
-              إغلاق
+              {tr('إغلاق', 'Close')}
             </button>
           </div>
         )}
@@ -121,19 +125,19 @@ export default function SettingsDistributionStatsSection({
               <thead>
                 <tr>
                   {[
-                    'التاريخ',
-                    'اليوم',
-                    'المادة',
-                    'الفترة',
-                    'عدد القاعات',
-                    'مراقبين/قاعة',
-                    'المطلوب',
-                    'عدد المراقبين',
-                    'عدد الاحتياط',
-                    'التغطية %',
-                    'العجز',
-                    'عجز بدون احتياط',
-                    'المجموع (م+ا)',
+                    tr('التاريخ', 'Date'),
+                    tr('اليوم', 'Day'),
+                    tr('المادة', 'Subject'),
+                    tr('الفترة', 'Period'),
+                    tr('عدد القاعات', 'Room Count'),
+                    tr('مراقبين/قاعة', 'Invigilators/Room'),
+                    tr('المطلوب', 'Required'),
+                    tr('عدد المراقبين', 'Invigilators Count'),
+                    tr('عدد الاحتياط', 'Reserve Count'),
+                    tr('التغطية %', 'Coverage %'),
+                    tr('العجز', 'Deficit'),
+                    tr('عجز بدون احتياط', 'Deficit Without Reserve'),
+                    tr('المجموع (م+ا)', 'Total (I+R)'),
                   ].map((h) => (
                     <th
                       key={h}
@@ -195,7 +199,7 @@ export default function SettingsDistributionStatsSection({
                       background: 'rgba(255,255,255,0.06)',
                     }}
                   >
-                    <b>الإجمالي</b>
+                    <b>{tr('الإجمالي', 'Total')}</b>
                   </td>
                   <td className={'distTd'} style={{ border: '1px solid rgba(255,255,255,0.16)', padding: '10px', textAlign: 'center', background: 'rgba(255,255,255,0.06)' }}>
                     <b>{totals.committees}</b>
@@ -232,9 +236,12 @@ export default function SettingsDistributionStatsSection({
       </div>
 
       <div style={{ marginTop: 10, opacity: 0.85, fontSize: 12, color: 'rgba(255,255,255,0.85)' }}>
-        ملاحظة: العجز محسوب حسب المعادلة: (عدد القاعات × مراقبين/قاعة من الإعدادات) − (المراقبة + الاحتياط).
+        {tr(
+          'ملاحظة: العجز محسوب حسب المعادلة: (عدد القاعات × مراقبين/قاعة من الإعدادات) − (المراقبة + الاحتياط).',
+          'Note: The deficit is calculated using the formula: (Room Count × Invigilators/Room from settings) − (Invigilation + Reserve).'
+        )}
         <br />
-        تنبيه واتساب: ضع رقم المسؤول في LocalStorage key: <b>{whatsappAdminKey}</b>
+        {tr('تنبيه واتساب: ضع رقم المسؤول في LocalStorage key:', 'WhatsApp alert: Put the admin number in LocalStorage key:')} <b>{whatsappAdminKey}</b>
       </div>
     </div>
   );

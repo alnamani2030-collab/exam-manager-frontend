@@ -1,4 +1,5 @@
 import React from 'react';
+import { useI18n } from "../../../i18n/I18nProvider";
 
 type Props = {
   logo?: string;
@@ -27,6 +28,9 @@ export default function SettingsReportHeader({
   onExportPdf,
   onToggleFullscreen,
 }: Props) {
+  const { lang } = useI18n();
+  const tr = (ar: string, en: string) => (lang === 'ar' ? ar : en);
+
   return (
     <div
       style={{
@@ -82,9 +86,11 @@ export default function SettingsReportHeader({
           >
             {appName}
           </div>
-          <div style={{ fontSize: 14, fontWeight: 800, color: 'rgba(255,255,255,0.92)' }}>تقرير إحصائية التوزيع</div>
+          <div style={{ fontSize: 14, fontWeight: 800, color: 'rgba(255,255,255,0.92)' }}>
+            {tr('تقرير إحصائية التوزيع', 'Distribution Statistics Report')}
+          </div>
           <div style={{ marginTop: 2, fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.78)' }}>
-            مصدر البيانات: {sourceLabel}
+            {tr('مصدر البيانات', 'Data Source')}: {sourceLabel}
           </div>
         </div>
       </div>
@@ -102,7 +108,7 @@ export default function SettingsReportHeader({
             whiteSpace: 'nowrap',
           }}
         >
-          إجمالي العجز: <span style={{ color: totalDeficit > 0 ? '#ff4d4d' : 'rgba(255,255,255,0.92)' }}>{totalDeficit}</span>
+          {tr('إجمالي العجز', 'Total Deficit')}: <span style={{ color: totalDeficit > 0 ? '#ff4d4d' : 'rgba(255,255,255,0.92)' }}>{totalDeficit}</span>
         </div>
 
         <button
@@ -117,9 +123,9 @@ export default function SettingsReportHeader({
             fontWeight: 900,
             whiteSpace: 'nowrap',
           }}
-          title="ترتيب حسب التاريخ (الأقدم أولاً)"
+          title={tr('ترتيب حسب التاريخ (الأقدم أولاً)', 'Sort by date (oldest first)')}
         >
-          🔼 الأقدم أولاً
+          {tr('🔼 الأقدم أولاً', '🔼 Oldest First')}
         </button>
 
         <button
@@ -134,9 +140,9 @@ export default function SettingsReportHeader({
             fontWeight: 900,
             whiteSpace: 'nowrap',
           }}
-          title="ترتيب حسب التاريخ (الأحدث أولاً)"
+          title={tr('ترتيب حسب التاريخ (الأحدث أولاً)', 'Sort by date (newest first)')}
         >
-          🔽 الأحدث أولاً
+          {tr('🔽 الأحدث أولاً', '🔽 Newest First')}
         </button>
 
         <button
@@ -151,7 +157,7 @@ export default function SettingsReportHeader({
             fontWeight: 900,
           }}
         >
-          تصدير PDF
+          {tr('تصدير PDF', 'Export PDF')}
         </button>
 
         <button
@@ -167,16 +173,16 @@ export default function SettingsReportHeader({
             whiteSpace: 'nowrap',
           }}
         >
-          {isStatsFull ? 'إغلاق ملء الشاشة' : 'ملء الشاشة'}
+          {isStatsFull ? tr('إغلاق ملء الشاشة', 'Close Fullscreen') : tr('ملء الشاشة', 'Fullscreen')}
         </button>
 
         <div style={{ textAlign: 'left', opacity: 0.85, fontSize: 12, whiteSpace: 'nowrap' }}>
           {lastRunLabel ? (
             <>
-              آخر تشغيل: <b>{lastRunLabel}</b>
+              {tr('آخر تشغيل', 'Last Run')}: <b>{lastRunLabel}</b>
             </>
           ) : (
-            <>لا يوجد تشغيل محفوظ</>
+            <>{tr('لا يوجد تشغيل محفوظ', 'No saved run')}</>
           )}
         </div>
       </div>
