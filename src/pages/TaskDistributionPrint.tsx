@@ -94,6 +94,69 @@ function normalizeSubjectText(value: any) {
   return String(value || "").replace(/\s+/g, " ").trim();
 }
 
+const SUBJECT_TRANSLATIONS: Record<string, string> = {
+  "الرياضيات": "Mathematics",
+  "الرياضيات 10": "Mathematics 10",
+  "الرياضيات 11": "Mathematics 11",
+  "الرياضيات 12": "Mathematics 12",
+  "الرياضيات المدرسية": "School Sports",
+  "الرياضيات المدرسية 11": "School Sports 11",
+  "الرياضيات المدرسية 12": "School Sports 12",
+  "اللغة العربية": "Arabic Language",
+  "اللغة العربية 10": "Arabic Language 10",
+  "اللغة العربية 11": "Arabic Language 11",
+  "اللغة العربية 12": "Arabic Language 12",
+  "اللغة الإنجليزية": "English Language",
+  "اللغة الإنجليزية 10": "English Language 10",
+  "اللغة الإنجليزية 11": "English Language 11",
+  "اللغة الإنجليزية 12": "English Language 12",
+  "التربية الإسلامية": "Islamic Education",
+  "التربية الإسلامية 10": "Islamic Education 10",
+  "التربية الإسلامية 11": "Islamic Education 11",
+  "التربية الإسلامية 12": "Islamic Education 12",
+  "الجغرافيا البشرية": "Human Geography",
+  "الجغرافيا البشرية 11": "Human Geography 11",
+  "الدراسات الاجتماعية": "Social Studies",
+  "الدراسات الاجتماعية 10": "Social Studies 10",
+  "الدراسات الاجتماعية 11": "Social Studies 11",
+  "العلوم البيئية": "Environmental Science",
+  "العلوم البيئية 11": "Environmental Science 11",
+  "العلوم البيئية 12": "Environmental Science 12",
+  "الفنون التشكيلية": "Fine Arts",
+  "الفنون التشكيلية 10": "Fine Arts 10",
+  "الفنون التشكيلية 11": "Fine Arts 11",
+  "الفنون التشكيلية 12": "Fine Arts 12",
+  "المهارات الموسيقية": "Musical Skills",
+  "المهارات الموسيقية 10": "Musical Skills 10",
+  "المهارات الموسيقية 11": "Musical Skills 11",
+  "المهارات الموسيقية 12": "Musical Skills 12",
+  "الكيمياء": "Chemistry",
+  "الكيمياء 10": "Chemistry 10",
+  "الكيمياء 11": "Chemistry 11",
+  "الكيمياء 12": "Chemistry 12",
+  "الفيزياء": "Physics",
+  "الفيزياء 10": "Physics 10",
+  "الفيزياء 11": "Physics 11",
+  "الفيزياء 12": "Physics 12",
+  "الأحياء": "Biology",
+  "الأحياء 10": "Biology 10",
+  "الأحياء 11": "Biology 11",
+  "الأحياء 12": "Biology 12",
+  "التاريخ والحضارة الإسلامية": "Islamic History and Civilization",
+  "التاريخ والحضارة الإسلامية 11": "Islamic History and Civilization 11",
+  "تقنية المعلومات": "Information Technology",
+  "تقنية المعلومات 10": "Information Technology 10",
+  "تقنية المعلومات 11": "Information Technology 11",
+  "تقنية المعلومات 12": "Information Technology 12",
+};
+
+function translateSubject(subject: string, lang: "ar" | "en") {
+  const value = normalizeSubjectText(subject || "");
+  if (!value) return value;
+  if (lang === "ar") return value;
+  return SUBJECT_TRANSLATIONS[value] || value;
+}
+
 function getRowSubject(row: any) {
   return normalizeSubjectText(
     row?.subject ??
@@ -807,7 +870,7 @@ export default function TaskDistributionPrint() {
       const s = (getExamSubject(r) || "").trim();
       if (!s) continue;
       const n = normalizeText(s);
-      if (!set.has(n)) set.set(n, s);
+      if (!set.has(n)) set.set(n, translateSubject(s, lang));
     }
     return Array.from(set.values()).sort((a, b) => a.localeCompare(b, lang === "ar" ? "ar" : "en"));
   }, [masterTableRows, lang]);
@@ -992,7 +1055,7 @@ export default function TaskDistributionPrint() {
 ` : "";
     const empLine = teacherNameFilter ? `${tr("الرقم الوظيفي", "Employee No")}: ${getTeacherEmployeeNoByName(teacherNameFilter) || "—"}
 ` : "";
-    const subjectLine = subjectFilter ? `${tr("المادة", "Subject")}: ${subjectFilter}
+    const subjectLine = subjectFilter ? `${tr("المادة", "Subject")}: ${translateSubject(subjectFilter, lang)}
 ` : "";
     const dateLine = dateISO ? `${tr("التاريخ", "Date")}: ${dateISO}
 ` : "";
@@ -1079,7 +1142,7 @@ export default function TaskDistributionPrint() {
             </div>
 
             <div style={styles.examBarWideItem}>
-              <span style={styles.examLabel}>{tr("المادة", "Subject")}:</span> <span style={styles.examValue}>{props.subject || "—"}</span>
+              <span style={styles.examLabel}>{tr("المادة", "Subject")}:</span> <span style={styles.examValue}>{translateSubject(props.subject, lang) || "—"}</span>
             </div>
 
             <div style={styles.examBarWideItem}>
@@ -1272,7 +1335,7 @@ export default function TaskDistributionPrint() {
                     </td>
                     <td style={styles.td}>{formatPeriod(per, lang)}</td>
                     <td style={styles.td}>{taskLabel(getTaskType(r), lang)}</td>
-                    <td style={{ ...styles.td, wordBreak: "break-word", overflowWrap: "anywhere" }}>{sub || "—"}</td>
+                    <td style={{ ...styles.td, wordBreak: "break-word", overflowWrap: "anywhere" }}>{translateSubject(sub, lang) || "—"}</td>
                     <td style={styles.td}>{getRoomNumber(r) || "—"}</td>
                   </tr>
                 );
