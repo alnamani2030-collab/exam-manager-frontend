@@ -37,6 +37,7 @@ import DistributionVersions from "./pages/DistributionVersions";
 import AdminSystem from "./pages/AdminSystem";
 import SuperSystem from "./pages/SuperSystem";
 import SuperGovernorates from "./pages/SuperGovernorates";
+import AdminSupersPage from "./pages/AdminSupersPage";
 import Migrate from "./pages/Migrate";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import Analytics1Page from "./pages/Analytics1Page";
@@ -135,6 +136,15 @@ export default function App() {
         element={
           <SuperAdminRoute>
             <SuperGovernorates />
+          </SuperAdminRoute>
+        }
+      />
+
+      <Route
+        path="/system/add-supers"
+        element={
+          <SuperAdminRoute>
+            <AdminSupersPage />
           </SuperAdminRoute>
         }
       />
