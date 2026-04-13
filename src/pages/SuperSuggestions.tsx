@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, updateDoc } from "firebase/firestore";
 import { db } from "../firebase/firebase";
-import { useI18n } from "../i18n/I18nProvider";
 
 type SuggestionRow = {
   id: string;
@@ -27,7 +26,7 @@ const PANEL = "#0f172a";
 const TEXT = "#f8fafc";
 const MUTED = "rgba(255,255,255,0.72)";
 
-function formatDateTime(value: any, lang: "ar" | "en") {
+function formatDateTime(value: any) {
   try {
     const date =
       typeof value?.toDate === "function"
@@ -38,7 +37,7 @@ function formatDateTime(value: any, lang: "ar" | "en") {
 
     if (!date) return "-";
 
-    return new Intl.DateTimeFormat(lang === "ar" ? "ar" : "en", {
+    return new Intl.DateTimeFormat("ar", {
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
@@ -50,14 +49,14 @@ function formatDateTime(value: any, lang: "ar" | "en") {
   }
 }
 
-function statusLabel(status: string | undefined, lang: "ar" | "en") {
+function statusLabel(status?: string) {
   switch (status) {
     case "new":
-      return lang === "ar" ? "جديدة" : "New";
+      return "جديدة";
     case "read":
-      return lang === "ar" ? "تمت القراءة" : "Read";
+      return "تمت القراءة";
     case "done":
-      return lang === "ar" ? "تمت المعالجة" : "Done";
+      return "تمت المعالجة";
     default:
       return status || "-";
   }
@@ -78,8 +77,6 @@ function statusColor(status?: string) {
 
 export default function SuperSuggestions() {
   const navigate = useNavigate();
-  const { lang } = useI18n();
-  const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
 
   const [rows, setRows] = useState<SuggestionRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -151,7 +148,7 @@ export default function SuperSuggestions() {
       });
     } catch (error) {
       console.error("changeStatus error:", error);
-      alert(tr("تعذر تحديث الحالة.", "Unable to update status."));
+      alert("تعذر تحديث الحالة.");
     } finally {
       setBusyId("");
     }
@@ -164,17 +161,17 @@ export default function SuperSuggestions() {
         adminNote: String(draftNotes[id] || "").trim(),
         updatedAt: serverTimestamp(),
       });
-      alert(tr("تم حفظ ملاحظة المشرف.", "Admin note saved."));
+      alert("تم حفظ ملاحظة المشرف.");
     } catch (error) {
       console.error("saveAdminNote error:", error);
-      alert(tr("تعذر حفظ ملاحظة المشرف.", "Unable to save admin note."));
+      alert("تعذر حفظ ملاحظة المشرف.");
     } finally {
       setBusyId("");
     }
   };
 
   const removeSuggestion = async (id: string) => {
-    const ok = window.confirm(tr("هل تريد حذف هذه الرسالة نهائيًا؟", "Do you want to permanently delete this message?"));
+    const ok = window.confirm("هل تريد حذف هذه الرسالة نهائيًا؟");
     if (!ok) return;
 
     try {
@@ -182,7 +179,7 @@ export default function SuperSuggestions() {
       await deleteDoc(doc(db, "systemSuggestions", id));
     } catch (error) {
       console.error("delete suggestion error:", error);
-      alert(tr("تعذر حذف الرسالة.", "Unable to delete the message."));
+      alert("تعذر حذف الرسالة.");
     } finally {
       setBusyId("");
     }
@@ -194,7 +191,7 @@ export default function SuperSuggestions() {
         minHeight: "100vh",
         background: `linear-gradient(180deg, ${BG}, #020617)`,
         padding: 24,
-        direction: lang === "ar" ? "rtl" : "ltr",
+        direction: "rtl",
       }}
     >
       <div
@@ -232,7 +229,7 @@ export default function SuperSuggestions() {
                 fontWeight: 900,
               }}
             >
-              {tr("رسائل تطوير البرنامج", "Program development messages")}
+              رسائل تطوير البرنامج
             </h1>
 
             <button
@@ -248,7 +245,7 @@ export default function SuperSuggestions() {
                 boxShadow: "0 0 12px rgba(212,175,55,0.22)",
               }}
             >
-              {tr("العودة إلى صفحة system", "Back to system page")}
+              العودة إلى صفحة system
             </button>
           </div>
 
@@ -260,7 +257,7 @@ export default function SuperSuggestions() {
               fontSize: 15,
             }}
           >
-{tr("جميع المقترحات المرسلة من المدارس تظهر هنا مباشرة، ويمكنك فرزها وتحديث حالتها وإضافة ملاحظة إدارية.", "All suggestions sent from schools appear here مباشرة, and you can filter them, update their status, and add an admin note.").replace("مباشرة", "directly")}
+            جميع المقترحات المرسلة من المدارس تظهر هنا مباشرة، ويمكنك فرزها وتحديث حالتها وإضافة ملاحظة إدارية.
           </div>
         </div>
 
@@ -273,10 +270,10 @@ export default function SuperSuggestions() {
               marginBottom: 16,
             }}
           >
-            <StatCard label={tr("إجمالي الرسائل", "Total messages")} value={stats.total} />
-            <StatCard label={tr("الجديدة", "New")} value={stats.newCount} color="#ef4444" />
-            <StatCard label={tr("تمت القراءة", "Read")} value={stats.readCount} color="#3b82f6" />
-            <StatCard label={tr("تمت المعالجة", "Done")} value={stats.doneCount} color="#22c55e" />
+            <StatCard label="إجمالي الرسائل" value={stats.total} />
+            <StatCard label="الجديدة" value={stats.newCount} color="#ef4444" />
+            <StatCard label="تمت القراءة" value={stats.readCount} color="#3b82f6" />
+            <StatCard label="تمت المعالجة" value={stats.doneCount} color="#22c55e" />
           </div>
 
           <div
@@ -290,7 +287,7 @@ export default function SuperSuggestions() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder={tr("ابحث بعنوان المقترح أو المدرسة أو البريد أو المحتوى", "Search by title, school, email, or content")}
+              placeholder="ابحث بعنوان المقترح أو المدرسة أو البريد أو المحتوى"
               style={searchInputStyle}
             />
 
@@ -302,24 +299,24 @@ export default function SuperSuggestions() {
               }}
             >
               <FilterButton active={filter === "all"} onClick={() => setFilter("all")}>
-                {tr("الكل", "All")}
+                الكل
               </FilterButton>
               <FilterButton active={filter === "new"} onClick={() => setFilter("new")}>
-                {tr("جديدة", "New")}
+                جديدة
               </FilterButton>
               <FilterButton active={filter === "read"} onClick={() => setFilter("read")}>
-                {tr("تمت القراءة", "Read")}
+                تمت القراءة
               </FilterButton>
               <FilterButton active={filter === "done"} onClick={() => setFilter("done")}>
-                {tr("تمت المعالجة", "Done")}
+                تمت المعالجة
               </FilterButton>
             </div>
           </div>
 
           {loading ? (
-            <div style={emptyBoxStyle}>{tr("جارٍ تحميل الرسائل...", "Loading messages...")}</div>
+            <div style={emptyBoxStyle}>جارٍ تحميل الرسائل...</div>
           ) : filteredRows.length === 0 ? (
-            <div style={emptyBoxStyle}>{tr("لا توجد رسائل مطابقة حاليًا.", "No matching messages currently.")}</div>
+            <div style={emptyBoxStyle}>لا توجد رسائل مطابقة حاليًا.</div>
           ) : (
             <div style={{ display: "grid", gap: 16 }}>
               {filteredRows.map((row) => {
@@ -358,34 +355,34 @@ export default function SuperSuggestions() {
                         </div>
 
                         <div style={metaRowStyle}>
-                          <strong>{tr("اسم المدرسة", "School name")}:</strong> <span>{row.schoolName || "-"}</span>
+                          <strong>اسم المدرسة:</strong> <span>{row.schoolName || "-"}</span>
                         </div>
 
                         <div style={metaRowStyle}>
-                          <strong>{tr("إيميل المدرسة", "School email")}:</strong> <span>{row.schoolEmail || "-"}</span>
+                          <strong>إيميل المدرسة:</strong> <span>{row.schoolEmail || "-"}</span>
                         </div>
 
                         <div style={metaRowStyle}>
-                          <strong>{tr("Tenant ID", "Tenant ID")}:</strong> <span>{row.tenantId || "-"}</span>
+                          <strong>Tenant ID:</strong> <span>{row.tenantId || "-"}</span>
                         </div>
 
                         <div style={metaRowStyle}>
-                          <strong>{tr("إيميل المرسل", "Sender email")}:</strong> <span>{row.senderEmail || "-"}</span>
+                          <strong>إيميل المرسل:</strong> <span>{row.senderEmail || "-"}</span>
                         </div>
 
                         <div style={metaRowStyle}>
-                          <strong>{tr("وقت الإرسال", "Sent at")}:</strong> <span>{formatDateTime(row.createdAt, lang === "ar" ? "ar" : "en")}</span>
+                          <strong>وقت الإرسال:</strong> <span>{formatDateTime(row.createdAt)}</span>
                         </div>
 
                         <div style={metaRowStyle}>
-                          <strong>{tr("الحالة", "Status")}:</strong>{" "}
+                          <strong>الحالة:</strong>{" "}
                           <span
                             style={{
                               color: statusColor(currentStatus),
                               fontWeight: 900,
                             }}
                           >
-                            {statusLabel(currentStatus, lang === "ar" ? "ar" : "en")}
+                            {statusLabel(currentStatus)}
                           </span>
                         </div>
                       </div>
@@ -403,7 +400,7 @@ export default function SuperSuggestions() {
                           disabled={busyId === row.id}
                           color="#ef4444"
                         >
-                          {tr("جديدة", "New")}
+                          جديدة
                         </SmallBtn>
 
                         <SmallBtn
@@ -411,7 +408,7 @@ export default function SuperSuggestions() {
                           disabled={busyId === row.id}
                           color="#3b82f6"
                         >
-                          {tr("تمت القراءة", "Read")}
+                          تمت القراءة
                         </SmallBtn>
 
                         <SmallBtn
@@ -419,7 +416,7 @@ export default function SuperSuggestions() {
                           disabled={busyId === row.id}
                           color="#22c55e"
                         >
-                          {tr("تمت المعالجة", "Done")}
+                          تمت المعالجة
                         </SmallBtn>
 
                         <SmallBtn
@@ -427,7 +424,7 @@ export default function SuperSuggestions() {
                           disabled={busyId === row.id}
                           color="#b91c1c"
                         >
-                          {tr("حذف", "Delete")}
+                          حذف
                         </SmallBtn>
                       </div>
                     </div>
@@ -455,7 +452,7 @@ export default function SuperSuggestions() {
                           marginBottom: 8,
                         }}
                       >
-                        {tr("ملاحظة المشرف", "Admin note")}
+                        ملاحظة المشرف
                       </div>
 
                       <textarea
@@ -466,7 +463,7 @@ export default function SuperSuggestions() {
                             [row.id]: e.target.value,
                           }))
                         }
-                        placeholder={tr("اكتب هنا ملاحظة داخلية خاصة بالسوبر أدمن", "Write an internal note for the super admin here")}
+                        placeholder="اكتب هنا ملاحظة داخلية خاصة بالسوبر أدمن"
                         rows={4}
                         style={noteTextareaStyle}
                       />
@@ -477,7 +474,7 @@ export default function SuperSuggestions() {
                           disabled={busyId === row.id}
                           style={saveNoteButtonStyle}
                         >
-                          {busyId === row.id ? tr("جارٍ الحفظ...", "Saving...") : tr("حفظ الملاحظة", "Save note")}
+                          {busyId === row.id ? "جارٍ الحفظ..." : "حفظ الملاحظة"}
                         </button>
                       </div>
                     </div>

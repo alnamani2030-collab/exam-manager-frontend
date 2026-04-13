@@ -6,12 +6,9 @@ import { useAuth } from "../auth/AuthContext";
 import { canAccessCapability, isPlatformOwner } from "../features/authz";
 import type { SuperProgramTenantRow as TenantRow } from "../features/super-admin/types";
 import { buildProgramEnterState } from "../features/super-admin/services/superProgramEnterService";
-import { useI18n } from "../i18n/I18nProvider";
 
 export default function SuperProgramEnter() {
   const navigate = useNavigate();
-  const { lang } = useI18n();
-  const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
   const { profile, authzSnapshot, startSupportForTenant, primaryRoleLabel } = useAuth() as any;
   const owner = isPlatformOwner(authzSnapshot);
   const canAccessSystem = canAccessCapability(authzSnapshot, "SYSTEM_ADMIN");
@@ -52,7 +49,7 @@ export default function SuperProgramEnter() {
         setTenants(state.visibleTenants);
       } catch (e: any) {
         if (!alive) return;
-        setError(e?.message || tr("تعذر تحميل قائمة المدارس", "Unable to load the schools list"));
+        setError(e?.message || "تعذر تحميل قائمة المدارس");
       } finally {
         if (!alive) return;
         setLoading(false);
@@ -82,10 +79,10 @@ export default function SuperProgramEnter() {
     try {
       setBusyTenant(tenantId);
       setError("");
-      await startSupportForTenant?.(tenantId, tr("الدخول للبرنامج", "Enter program"));
+      await startSupportForTenant?.(tenantId, "الدخول للبرنامج");
       navigate(`/t/${tenantId}`, { replace: true });
     } catch (e: any) {
-      setError(e?.message || tr("فشل تفعيل وضع الدعم", "Failed to activate support mode"));
+      setError(e?.message || "فشل تفعيل وضع الدعم");
     } finally {
       setBusyTenant("");
     }
@@ -93,7 +90,7 @@ export default function SuperProgramEnter() {
 
   return (
     <div
-      dir={lang === "ar" ? "rtl" : "ltr"}
+      dir="rtl"
       style={{
         minHeight: "100vh",
         padding: 24,
@@ -117,9 +114,9 @@ export default function SuperProgramEnter() {
       >
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
           <div>
-            <div style={{ color: "#d4af37", fontWeight: 900, fontSize: 26 }}>{tr("اختر مدرسة للدخول", "Choose a school to enter")}</div>
+            <div style={{ color: "#d4af37", fontWeight: 900, fontSize: 26 }}>اختر مدرسة للدخول</div>
             <div style={{ color: "rgba(255,255,255,0.80)", marginTop: 6, lineHeight: 1.7 }}>
-              {tr("سيتم تفعيل وضع الدعم لهذه المدرسة ثم فتح البرنامج.", "Support mode will be activated for this school, then the program will open.")} {accessDescription}
+              سيتم تفعيل وضع الدعم لهذه المدرسة ثم فتح البرنامج. {accessDescription}
             </div>
           </div>
 
@@ -135,7 +132,7 @@ export default function SuperProgramEnter() {
               cursor: "pointer",
             }}
           >
-            {tr("رجوع", "Back")}
+            رجوع
           </button>
         </div>
 
@@ -157,9 +154,9 @@ export default function SuperProgramEnter() {
 
         <div style={{ marginTop: 14, display: "grid", gap: 12 }}>
           {loading ? (
-            <div style={{ color: "rgba(255,255,255,0.75)", padding: 10 }}>{tr("جاري تحميل المدارس…", "Loading schools…")}</div>
+            <div style={{ color: "rgba(255,255,255,0.75)", padding: 10 }}>جاري تحميل المدارس…</div>
           ) : enabledTenants.length === 0 ? (
-            <div style={{ color: "rgba(255,255,255,0.75)", padding: 10 }}>{tr("لا توجد مدارس بعد.", "No schools yet.")}</div>
+            <div style={{ color: "rgba(255,255,255,0.75)", padding: 10 }}>لا توجد مدارس بعد.</div>
           ) : (
             enabledTenants.map((tenant) => {
               const title = tenant.schoolName || tenant.name || tenant.id;
@@ -189,7 +186,7 @@ export default function SuperProgramEnter() {
                       <div style={{ color: "#fff", fontWeight: 900, fontSize: 22, lineHeight: 1.2 }}>{title}</div>
                       <div style={{ color: "#d4af37", marginTop: 4, fontWeight: 800 }}>{sub}</div>
                     </div>
-                    <div style={{ color: "rgba(255,255,255,0.82)", fontWeight: 900 }}>{busy ? tr("جارٍ فتح…", "Opening…") : ""}</div>
+                    <div style={{ color: "rgba(255,255,255,0.82)", fontWeight: 900 }}>{busy ? "جارٍ فتح…" : ""}</div>
                   </div>
                 </button>
               );
@@ -210,7 +207,7 @@ export default function SuperProgramEnter() {
               cursor: "pointer",
             }}
           >
-            {tr("فتح لوحة السوبر", "Open super panel")}
+            فتح لوحة السوبر
           </button>
 
           <button
@@ -225,7 +222,7 @@ export default function SuperProgramEnter() {
               cursor: "pointer",
             }}
           >
-            {tr("إلغاء", "Cancel")}
+            إلغاء
           </button>
         </div>
       </div>

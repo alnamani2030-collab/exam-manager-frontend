@@ -4,7 +4,6 @@ import { useTenant } from "../tenant/TenantContext";
 import { useSuperAdminCenter } from "../features/super-admin/hooks/useSuperAdminCenter";
 import SuperAdminCenterAllowlistSection from "../features/super-admin/components/SuperAdminCenterAllowlistSection";
 import SuperAdminCenterBackupSection from "../features/super-admin/components/SuperAdminCenterBackupSection";
-import { useI18n } from "../i18n/I18nProvider";
 
 const page: React.CSSProperties = {
   minHeight: "100vh",
@@ -24,8 +23,6 @@ const card: React.CSSProperties = {
 
 export default function SuperAdminCenter() {
   const { user } = useAuth() as any;
-  const { lang } = useI18n();
-  const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
   const { tenantId: tenantFromContext } = useTenant() as any;
   const tenantId = String(tenantFromContext || user?.tenantId || "default").trim() || "default";
 
@@ -41,9 +38,9 @@ export default function SuperAdminCenter() {
     <div style={page}>
       <div style={{ maxWidth: 1100, margin: "0 auto", display: "grid", gap: 12 }}>
         <div style={card}>
-          <div style={{ fontWeight: 950, fontSize: 18 }}>{tr("مركز تحكم Super Admin", "Super Admin Control Center")}</div>
+          <div style={{ fontWeight: 950, fontSize: 18 }}>مركز تحكم Super Admin</div>
           <div style={{ marginTop: 6, opacity: 0.85, fontWeight: 800, fontSize: 13 }}>
-            {tr("Tenant الحالي", "Current tenant")}: <b>{tenantId}</b> • {tr("نسخ سحابية", "Cloud backups")}: <b>{cloudCount}</b>
+            Tenant الحالي: <b>{tenantId}</b> • نسخ سحابية: <b>{cloudCount}</b>
           </div>
           {msg && <div style={{ marginTop: 10, fontWeight: 900 }}>{msg}</div>}
         </div>
