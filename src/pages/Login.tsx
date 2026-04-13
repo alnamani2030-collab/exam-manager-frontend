@@ -132,11 +132,17 @@ function resolveAllowlistHomePath(user: User | null, allow: AllowlistDoc | null)
 function translateRoleLabel(label: string, lang: Lang): string {
   const map: Record<string, { ar: string; en: string }> = {
     "مالك المنصة": { ar: "مالك المنصة", en: "Platform Owner" },
-    "مشرف نطاق": { ar: "مشرف نطاق", en: "Domain Supervisor" },
-    "مدير جهة": { ar: "مدير جهة", en: "Tenant Admin" },
-    "مدير": { ar: "مدير", en: "Manager" },
-    "مستخدم تشغيلي": { ar: "مستخدم تشغيلي", en: "Operational User" },
-    "مستخدم": { ar: "مستخدم", en: "User" },
+    "سوبر الوزارة": { ar: "سوبر الوزارة", en: "Ministry Super" },
+    "سوبر المحافظات": { ar: "سوبر المحافظات", en: "Governorates Super" },
+    "أدمن المدرسة": { ar: "أدمن المدرسة", en: "School Admin" },
+
+    "مشرف نطاق": { ar: "سوبر المحافظات", en: "Governorates Super" },
+    "مدير جهة": { ar: "أدمن المدرسة", en: "School Admin" },
+
+    "Platform Owner": { ar: "مالك المنصة", en: "Platform Owner" },
+    "Ministry Super": { ar: "سوبر الوزارة", en: "Ministry Super" },
+    "Governorates Super": { ar: "سوبر المحافظات", en: "Governorates Super" },
+    "School Admin": { ar: "أدمن المدرسة", en: "School Admin" },
   };
   return map[label]?.[lang] || label;
 }
@@ -144,10 +150,7 @@ function translateRoleLabel(label: string, lang: Lang): string {
 export default function Login() {
   const navigate = useNavigate();
   const { lang, setLang } = useI18n();
-  const currentLang = (lang === "en" ? "en" : "ar") as Lang;
-  const t = STR[currentLang];
-  const nextLang = currentLang === "ar" ? "en" : "ar";
-  const nextLangLabel = currentLang === "ar" ? "English" : "العربية";
+  const t = STR[lang as Lang] || STR.ar;
 
   const [fbUser, setFbUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<AllowlistDoc | null>(null);
@@ -393,9 +396,7 @@ export default function Login() {
   const styles: Record<string, React.CSSProperties> = {
     page: {
       minHeight: "100vh",
-      backgroundImage: currentLang === "ar"
-        ? 'url("https://i.imgur.com/kt5xtnx.jpeg")'
-        : 'url("https://i.imgur.com/ufdtQ51.jpeg")',
+      backgroundImage: 'url("https://i.imgur.com/kt5xtnx.jpeg")',
       backgroundSize: "520px auto",
       backgroundPosition: "center top",
       backgroundRepeat: "repeat",
@@ -405,7 +406,7 @@ export default function Login() {
       alignItems: "center",
       justifyContent: "center",
       padding: "20px",
-      direction: currentLang === "ar" ? "rtl" : "ltr",
+      direction: lang === "ar" ? "rtl" : "ltr",
       fontFamily: "'Cairo', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
       color: "#f7fafc",
       position: "relative",
@@ -658,7 +659,7 @@ export default function Login() {
     langSwitch: {
       position: "absolute",
       top: "25px",
-      [currentLang === "ar" ? "left" : "right"]: "25px",
+      [lang === "ar" ? "left" : "right"]: "25px",
       background: "rgba(255, 255, 255, 0.08)",
       border: "1px solid rgba(255, 255, 255, 0.2)",
       color: "#e2e8f0",
@@ -688,9 +689,9 @@ export default function Login() {
 
       <button
         style={styles.langSwitch}
-        onClick={() => setLang(nextLang)}
+        onClick={() => setLang(lang === "ar" ? "en" : "ar")}
       >
-        {nextLangLabel}
+        {lang === "ar" ? "English" : "العربية"}
       </button>
 
       <div style={styles.card}>

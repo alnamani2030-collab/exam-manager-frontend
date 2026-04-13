@@ -305,7 +305,14 @@ export default function AdminSystem() {
   };
 
   return (
-    <div className="system-shell">
+    <div
+      className="system-shell"
+      style={{
+        minHeight: "100vh",
+        background:
+          "radial-gradient(1200px 520px at 50% 0%, rgba(16,185,129,0.18), transparent 55%), radial-gradient(900px 420px at 12% 18%, rgba(212,175,55,0.12), transparent 48%), radial-gradient(900px 420px at 88% 18%, rgba(59,130,246,0.10), transparent 45%), linear-gradient(180deg, #02060a 0%, #010307 100%)",
+      }}
+    >
       <style>{`
         @keyframes bellPulseGlow {
           0% {
@@ -328,25 +335,143 @@ export default function AdminSystem() {
         .new-suggestions-bell {
           animation: bellPulseGlow 1s infinite;
         }
+
+        @keyframes adminHeaderPulse {
+          0% { box-shadow: 0 0 0 rgba(16,185,129,0), 0 0 0 rgba(212,175,55,0); }
+          50% { box-shadow: 0 0 34px rgba(16,185,129,0.18), 0 0 44px rgba(212,175,55,0.10); }
+          100% { box-shadow: 0 0 0 rgba(16,185,129,0), 0 0 0 rgba(212,175,55,0); }
+        }
+
+        .admin-header-luxury {
+          position: relative;
+          overflow: hidden;
+          border-radius: 30px;
+          border: 1px solid rgba(212,175,55,0.28);
+          background:
+            linear-gradient(135deg, rgba(4,56,45,0.97) 0%, rgba(10,148,118,0.9) 35%, rgba(16,185,129,0.88) 55%, rgba(5,74,58,0.96) 100%);
+          box-shadow:
+            0 20px 56px rgba(0,0,0,0.42),
+            inset 0 1px 0 rgba(255,255,255,0.10),
+            0 0 42px rgba(16,185,129,0.16);
+          animation: adminHeaderPulse 4s ease-in-out infinite;
+          margin: 10px 10px 0;
+          padding: 8px;
+        }
+
+        .admin-header-luxury::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background:
+            radial-gradient(circle at 16% 20%, rgba(255,255,255,0.15), transparent 25%),
+            radial-gradient(circle at 84% 15%, rgba(255,255,255,0.10), transparent 18%),
+            linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.08) 48%, transparent 100%);
+          pointer-events: none;
+        }
+
+        .admin-panel-luxury {
+          position: relative;
+          overflow: hidden;
+          border-radius: 28px;
+          border: 1px solid rgba(212,175,55,0.22);
+          background:
+            linear-gradient(180deg, rgba(2,6,12,0.92), rgba(0,0,0,0.84)),
+            repeating-linear-gradient(135deg, rgba(212,175,55,0.08) 0px, rgba(212,175,55,0.08) 1px, transparent 1px, transparent 24px);
+          box-shadow:
+            0 24px 62px rgba(0,0,0,0.48),
+            inset 0 1px 0 rgba(255,255,255,0.06),
+            0 0 46px rgba(212,175,55,0.06);
+        }
+
+        .admin-title-premium {
+          color: #ffffff;
+          text-shadow:
+            0 4px 18px rgba(0,0,0,0.36),
+            0 0 18px rgba(255,255,255,0.08);
+          letter-spacing: 0.4px;
+        }
+
+        .admin-brand-premium {
+          color: #fff7d1;
+          text-shadow: 0 4px 15px rgba(0,0,0,0.32);
+        }
+
+        .admin-chip {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 12px;
+          border-radius: 999px;
+          background: rgba(255,255,255,0.08);
+          border: 1px solid rgba(255,255,255,0.12);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+          backdrop-filter: blur(8px);
+        }
+
+        .btn-luxury-green {
+          background: linear-gradient(135deg, rgba(16,185,129,0.32), rgba(5,150,105,0.22)) !important;
+          border: 1px solid rgba(16,185,129,0.38) !important;
+          color: #ecfdf5 !important;
+          box-shadow: 0 10px 24px rgba(16,185,129,0.12);
+        }
+
+        .btn-luxury-gold {
+          background: linear-gradient(135deg, rgba(212,175,55,0.30), rgba(161,98,7,0.22)) !important;
+          border: 1px solid rgba(212,175,55,0.42) !important;
+          color: #fff7d1 !important;
+          box-shadow: 0 10px 24px rgba(212,175,55,0.14);
+        }
+
+        .btn-luxury-blue {
+          background: linear-gradient(135deg, rgba(59,130,246,0.30), rgba(29,78,216,0.22)) !important;
+          border: 1px solid rgba(96,165,250,0.38) !important;
+          color: #eff6ff !important;
+          box-shadow: 0 10px 24px rgba(59,130,246,0.14);
+        }
+
+        .btn-luxury-purple {
+          background: linear-gradient(135deg, rgba(168,85,247,0.30), rgba(126,34,206,0.22)) !important;
+          border: 1px solid rgba(192,132,252,0.38) !important;
+          color: #faf5ff !important;
+          box-shadow: 0 10px 24px rgba(168,85,247,0.14);
+        }
+
+        .btn-luxury-red {
+          background: linear-gradient(135deg, rgba(239,68,68,0.28), rgba(153,27,27,0.20)) !important;
+          border: 1px solid rgba(248,113,113,0.38) !important;
+          color: #fff1f2 !important;
+          box-shadow: 0 10px 24px rgba(239,68,68,0.12);
+        }
+
+        .admin-hero-card {
+          border-radius: 24px;
+          border: 1px solid rgba(212,175,55,0.18);
+          background:
+            linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)),
+            radial-gradient(circle at top left, rgba(16,185,129,0.08), transparent 35%);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+          padding: 6px;
+        }
+
       `}</style>
 
-      <header className="system-header">
+      <header className="system-header admin-header-luxury">
         <div className="system-header-inner">
           <div className="system-brand">
-            <img src={MINISTRY_LOGO_URL} alt="logo" />
-            <div className="system-brand-title">وزارة التعليم</div>
+            <img src={MINISTRY_LOGO_URL} alt="logo" style={{ width: 92, height: 92, objectFit: "contain", filter: "drop-shadow(0 10px 22px rgba(212,175,55,0.30))" }} />
+            <div className="system-brand-title admin-brand-premium" style={{ fontSize: 28, fontWeight: 900 }}>وزارة التعليم</div>
           </div>
 
-          <div className="system-program">نظام إدارة الامتحانات المطور</div>
+          <div className="system-program admin-title-premium" style={{ fontSize: 52, fontWeight: 1000, lineHeight: 1.1 }}>نظام إدارة الامتحانات المطور</div>
 
           <div className="system-actions">
-            <span style={{ opacity: 0.85 }}>{roleLabel}</span>
-            {user?.email ? <span style={{ opacity: 0.75 }}>({String(user.email)})</span> : null}
+            <span className="admin-chip" style={{ opacity: 1, color: "#fff7d1", fontWeight: 900 }}>{roleLabel}</span>
+            {user?.email ? <span className="admin-chip" style={{ opacity: 0.95, color: "#f8fafc" }}>({String(user.email)})</span> : null}
 
             <Button
               variant="ghost"
               onClick={() => navigate("/super/suggestions")}
-              className={hasNewSuggestions ? "new-suggestions-bell" : ""}
+              className={`btn-luxury-gold ${hasNewSuggestions ? "new-suggestions-bell" : ""}`}
               style={{
                 padding: "8px 10px",
                 position: "relative",
@@ -358,19 +483,23 @@ export default function AdminSystem() {
               {hasNewSuggestions ? "🔔 رسائل جديدة" : "🔔 رسائل التطوير"}
             </Button>
 
-            <Button variant="ghost" onClick={() => navigate("/system/supers")} style={{ padding: "8px 10px" }}>
+            <Button variant="ghost" className="btn-luxury-blue" onClick={() => navigate("/system/supers")} style={{ padding: "8px 10px" }}>
               إدارة سوبر المحافظات
             </Button>
 
-            <Button variant="ghost" onClick={() => navigate("/super-system")} style={{ padding: "8px 10px" }}>
+            <Button variant="ghost" className="btn-luxury-purple" onClick={() => navigate("/system/add-supers")} style={{ padding: "8px 10px" }}>
+              إضافة السوبرات
+            </Button>
+
+            <Button variant="ghost" className="btn-luxury-green" onClick={() => navigate("/super-system")} style={{ padding: "8px 10px" }}>
               صفحة السوبر (المحافظات)
             </Button>
 
-            <Button variant="ghost" onClick={() => navigate("/super")} style={{ padding: "8px 10px" }}>
+            <Button variant="ghost" className="btn-luxury-gold" onClick={() => navigate("/super")} style={{ padding: "8px 10px" }}>
               العودة إلى صفحة Super
             </Button>
 
-            <Button variant="ghost" onClick={logout} style={{ padding: "8px 10px" }}>
+            <Button variant="ghost" className="btn-luxury-red" onClick={logout} style={{ padding: "8px 10px" }}>
               تسجيل خروج
             </Button>
           </div>
@@ -379,20 +508,19 @@ export default function AdminSystem() {
 
       <main className="system-main">
         <div
-          className="system-glow"
+          className="system-glow admin-panel-luxury"
           style={{
-            borderRadius: 22,
-            padding: 18,
-            background:
-              "linear-gradient(180deg, rgba(0,0,0,0.62), rgba(0,0,0,0.35)), repeating-linear-gradient(135deg, rgba(212,175,55,0.14) 0px, rgba(212,175,55,0.14) 1px, transparent 1px, transparent 22px)",
+            borderRadius: 28,
+            padding: 20,
             border: `1px solid ${LINE}`,
           }}
         >
           <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 14 }}>
+            <div className="admin-hero-card">
             <Card
               title="لوحة مالك المنصة - إدارة المدارس والمستخدمين"
               right={
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   <div style={{ opacity: 0.85 }}>
                     {isPlatformOwner ? "صلاحيات المالك الكاملة مفعلة" : roleLabel}
                   </div>
@@ -402,18 +530,19 @@ export default function AdminSystem() {
                 </div>
               }
             >
-              <div style={{ color: "#e5e7eb", lineHeight: 1.9 }}>
+              <div style={{ color: "#e5e7eb", lineHeight: 2.0, fontSize: 16 }}>
                 {isPlatformOwner ? (
                   <>
-                    أنت الآن داخل <b style={{ color: GOLD }}>لوحة مالك المنصة</b>، لذلك يمكنك إدارة جميع المدارس وجميع المستخدمين والصلاحيات العليا عبر النظام بالكامل.
+                    أنت الآن داخل <b style={{ color: GOLD }}>لوحة مالك المنصة</b>، لذلك يمكنك إدارة جميع المدارس وجميع المستخدمين والصلاحيات العليا عبر النظام بالكامل ضمن واجهة أكثر أناقة ووضوحًا.
                     <br />
                   </>
                 ) : null}
-                هنا تستطيع إنشاء مدارس جديدة (Tenants) وربط المستخدمين بها بشكل صحيح.
+                هنا تستطيع إنشاء مدارس جديدة (Tenants)، وربط المستخدمين بها بشكل صحيح، ومتابعة الصلاحيات العليا بثقة وتنظيم.
                 <br />
                 <b style={{ color: GOLD }}>مهم:</b> tenantId يجب أن يكون إنجليزي صغير + أرقام + "-" فقط.
               </div>
             </Card>
+            </div>
 
             <AdminTenantsSection
               visibleTenants={visibleTenants}
