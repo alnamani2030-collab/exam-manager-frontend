@@ -1639,7 +1639,13 @@ export default function Exams() {
                   style={inputStyle}
                   type="date"
                   value={current.dateISO}
-                  onChange={(e) => setCurrent({ dateISO: e.target.value })}
+                  onChange={(e) => {
+                    const nextDateISO = e.target.value;
+                    setCurrent({
+                      dateISO: nextDateISO,
+                      dayLabel: nextDateISO ? dayFromISO(nextDateISO, lang) : "",
+                    });
+                  }}
                 />
               </div>
 
