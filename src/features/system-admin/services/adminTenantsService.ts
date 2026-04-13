@@ -30,6 +30,7 @@ export async function createTenantAction(args: { user: any; tenantId: string; te
   await logActivity(tenantId, { actorUid: user.uid, actorEmail: user.email || "", action: "TENANT_CREATED", entity: "tenant", entityId: tenantId, meta: { name: tenantName.trim(), enabled: !!enabled } });
   await setDoc(doc(db, "tenants", tenantId, "meta", "config"), { ministryAr: "سلطنة عمان - وزارة التعليم", schoolNameAr: tenantName.trim(), systemNameAr: "نظام إدارة الامتحانات الذكي", governorate: "", regionAr: "", wilayatAr: "", logoUrl: MINISTRY_LOGO_URL, updatedAt: serverTimestamp(), updatedBy: user.email || "" }, { merge: true });
   await setDoc(tenantRef, { governorate: "", updatedAt: serverTimestamp(), updatedBy: user.email || "" }, { merge: true });
+  await writeSecurityAudit({ type: "TENANT_CREATE", tenantId, actorUid: user.uid, actorEmail: user.email || "", details: { step: "config_init", governorate: "", schoolNameAr: tenantName.trim() } });
 }
 
 export async function saveTenantConfigAction(args: { user: any; tenantId: string; config: TenantConfig }) {
@@ -37,6 +38,8 @@ export async function saveTenantConfigAction(args: { user: any; tenantId: string
   const normalizedGov = (config as any).governorate || (config as any).regionAr || "";
   await setDoc(doc(db, "tenants", tenantId, "meta", "config"), { ...config, governorate: normalizedGov, regionAr: (config as any).regionAr || normalizedGov, updatedAt: serverTimestamp(), updatedBy: user.email || "" }, { merge: true });
   await setDoc(doc(db, "tenants", tenantId), { governorate: normalizedGov, updatedAt: serverTimestamp(), updatedBy: user.email || "" }, { merge: true });
+  await writeSecurityAudit({ type: "TENANT_UPDATE", tenantId, actorUid: user.uid, actorEmail: user.email || "", details: { governorate: normalizedGov, schoolNameAr: (config as any)?.schoolNameAr || "", step: "config_update" } });
+  await logActivity(tenantId, { actorUid: user.uid, actorEmail: user.email || "", action: "TENANT_CONFIG_UPDATED", entity: "tenant-config", entityId: tenantId, meta: { governorate: normalizedGov } });
 }
 
 export async function toggleTenantEnabledAction(args: { user: any; tenantId: string; enabled: boolean }) {
