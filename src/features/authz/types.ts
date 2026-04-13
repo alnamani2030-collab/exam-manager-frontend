@@ -1,6 +1,6 @@
-export type PlatformRole = "super_admin" | "super";
+export type PlatformRole = "super_admin" | "ministry_super" | "super";
 
-export type TenantRole = "tenant_admin" | "manager" | "staff" | "viewer";
+export type TenantRole = "tenant_admin";
 
 export type SaaSRole = PlatformRole | TenantRole;
 

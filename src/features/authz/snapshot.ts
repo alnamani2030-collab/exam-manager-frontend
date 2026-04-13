@@ -4,12 +4,9 @@ function normalizeRoleLike(raw: unknown): SaaSRole | null {
   const role = String(raw ?? "").trim().toLowerCase();
   if (!role) return null;
   if (["super_admin", "superadmin", "super admin", "super-admin"].includes(role)) return "super_admin";
+  if (["ministry_super", "ministry super", "ministry-super", "super_ministry"].includes(role)) return "ministry_super";
   if (role === "super") return "super";
-  if (["admin", "tenant_admin", "tenant admin"].includes(role)) return "tenant_admin";
-  if (["manager", "tenant_manager", "tenant manager"].includes(role)) return "manager";
-  if (["staff", "operator", "tenant_operator"].includes(role)) return "staff";
-  if (["viewer", "read_only", "readonly"].includes(role)) return "viewer";
-  if (role === "user") return "staff";
+  if (["admin", "tenant_admin", "tenant admin", "tenant-admin"].includes(role)) return "tenant_admin";
   return null;
 }
 
@@ -26,8 +23,8 @@ export function buildAuthzSnapshot(input: any): AuthzSnapshot {
   const explicitRoles = normalizeRolesArray(profile?.roles || []);
   const singleRole = normalizeRoleLike(profile?.role);
   const roles = explicitRoles.length ? explicitRoles : singleRole ? [singleRole] : [];
-  const isSuperAdmin = !!input?.isSuperAdmin || singleRole === "super_admin";
-  const isSuper = !!input?.isSuper || singleRole === "super";
+  const isSuperAdmin = !!input?.isSuperAdmin || roles.includes("super_admin");
+  const isSuper = !!input?.isSuper || roles.includes("super");
 
   return {
     isAuthenticated: !!user,

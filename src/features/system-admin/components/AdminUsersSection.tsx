@@ -1,5 +1,5 @@
 import React from "react";
-import { DIRECTORATES, MINISTRY_SCOPE, PRIMARY_SUPER_ADMIN_EMAIL } from "../../../constants/directorates";
+import { PRIMARY_SUPER_ADMIN_EMAIL } from "../../../constants/directorates";
 import { canManageAdminSystemRole } from "../../authz";
 import { Button, Card, GOLD, Input } from "../ui";
 
@@ -54,25 +54,21 @@ export default function AdminUsersSection(props: any) {
             <div>
               <div style={{ marginBottom: 6, opacity: 0.85 }}>الدور</div>
               <select value={newUserRole} onChange={(e) => setNewUserRole(e.target.value)} style={{ width: "100%", padding: "10px 12px", borderRadius: 12, background: "rgba(2,6,23,0.55)", border: "1px solid rgba(255,255,255,0.14)", color: "#e5e7eb" }}>
-                <option value="admin">الأدمن (مدرسة)</option>
-                {canManageAdminSystemRole(authzSnapshot, "super_admin") && <option value="super_admin">مالك المنصة (super_admin)</option>}
-                {canManageAdminSystemRole(authzSnapshot, "super") && <option value="super">مشرف نطاق (super)</option>}
+                <option value="tenant_admin">أدمن المدرسة</option>
+                <option value="admin">أدمن المدرسة (legacy)</option>
               </select>
             </div>
-            {String(newUserRole) === "super" && (
-              <div>
-                <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 6 }}>مديرية السوبر</div>
-                <select value={newUserGovernorate} onChange={(e) => setNewUserGovernorate(e.target.value)} style={{ width: 260, padding: "10px 12px", borderRadius: 12, border: "1px solid rgba(255,215,0,0.25)", background: "rgba(0,0,0,0.35)", color: "#FFD700", outline: "none" }}>
-                  <option value="">اختر المديرية</option>
-                  <option value={MINISTRY_SCOPE}>سوبر الوزارة</option>
-                  {DIRECTORATES.map((g) => <option key={g} value={g}>{g}</option>)}
-                </select>
+            <div style={{ display: "flex", alignItems: "center" }}>
+              <div style={{ fontSize: 12, opacity: 0.8, lineHeight: 1.8 }}>
+                هذه الخانة مخصصة لإدارة <b style={{ color: GOLD }}>أدمن المدرسة</b> فقط.
+                <br />
+                إدارة سوبر الوزارة وسوبر المحافظات أصبحت في القسم المخصص داخل لوحة مالك المنصة.
               </div>
-            )}
+            </div>
             <label style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 26 }}><input type="checkbox" checked={newUserEnabled} onChange={(e) => setNewUserEnabled(e.target.checked)} /><span>مُفعّل</span></label>
           </div>
           <Button onClick={createAllowUser} disabled={!canCreateUser || !canAssignNewUserRole}>حفظ المستخدم</Button>
-          <div style={{ fontSize: 12, opacity: 0.85, lineHeight: 1.7 }}><b style={{ color: GOLD }}>قاعدة ثابتة بدون أخطاء:</b><br />1) أنشئ Tenant أولاً (ID صحيح). <br />2) أنشئ/حدّث مستخدم في allowlist بنفس البريد. <br />3) ضع tenantId = Tenant ID بالإنجليزي. <br />4) فعّل enabled = true.</div>
+          <div style={{ fontSize: 12, opacity: 0.85, lineHeight: 1.7 }}><b style={{ color: GOLD }}>قاعدة ثابتة بدون أخطاء:</b><br />1) أنشئ Tenant أولاً (ID صحيح). <br />2) أضف/حدّث أدمن المدرسة في allowlist بنفس البريد. <br />3) ضع tenantId = Tenant ID بالإنجليزي. <br />4) اجعل الدور = tenant_admin أو admin (legacy). <br />5) فعّل enabled = true.</div>
         </div>
       </Card>
 
@@ -92,7 +88,7 @@ export default function AdminUsersSection(props: any) {
                   <tr key={u.email} style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.10)" }}>
                     <td style={{ padding: "12px 10px", borderTopLeftRadius: 14, borderBottomLeftRadius: 14 }}><div style={{ fontWeight: 900, color: "#e5e7eb" }}>{u.email}</div><div style={{ fontSize: 12, opacity: 0.8 }}>{u.name || ""}</div></td>
                     <td style={{ padding: "12px 10px" }}><select value={view.tenantId || ""} disabled={isPrimaryRow} onChange={(e) => { if (isPrimaryRow) return; setDraft(u.email, { tenantId: e.target.value }); }} style={{ padding: "10px 12px", borderRadius: 12, background: "rgba(2,6,23,0.55)", border: "1px solid rgba(255,255,255,0.14)", color: "#e5e7eb", minWidth: 240 }}>{visibleTenants.map((t: any) => <option key={t.id} value={t.id}>{t.id}</option>)}</select></td>
-                    <td style={{ padding: "12px 10px" }}><select value={view.role} disabled={isPrimaryRow} onChange={(e) => { if (isPrimaryRow) return; setDraft(u.email, { role: e.target.value }); }} style={{ padding: "10px 12px", borderRadius: 12, background: "rgba(2,6,23,0.55)", border: "1px solid rgba(255,255,255,0.14)", color: "#e5e7eb" }}><option value="admin">admin</option>{canManageAdminSystemRole(authzSnapshot, "super") && <option value="super">super</option>}{canManageAdminSystemRole(authzSnapshot, "super_admin") && <option value="super_admin">super admin</option>}</select></td>
+                    <td style={{ padding: "12px 10px" }}><select value={view.role} disabled={isPrimaryRow} onChange={(e) => { if (isPrimaryRow) return; setDraft(u.email, { role: e.target.value }); }} style={{ padding: "10px 12px", borderRadius: 12, background: "rgba(2,6,23,0.55)", border: "1px solid rgba(255,255,255,0.14)", color: "#e5e7eb" }}><option value="tenant_admin">tenant_admin</option><option value="admin">admin (legacy)</option></select></td>
                     <td style={{ padding: "12px 10px" }}><label style={{ display: "flex", gap: 8, alignItems: "center" }}><input type="checkbox" checked={!!view.enabled} disabled={isPrimaryRow} onChange={(e) => { if (isPrimaryRow) return; setDraft(u.email, { enabled: e.target.checked }); }} /><span style={{ fontSize: 12, opacity: 0.9 }}>{view.enabled ? "Yes" : "No"}</span></label></td>
                     <td style={{ padding: "12px 10px", borderTopRightRadius: 14, borderBottomRightRadius: 14 }}><div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><Button variant="ghost" disabled={!dirty || isPrimaryRow} onClick={async () => { const patch = editDrafts[key] || {}; if (!Object.keys(patch).length) return; await updateUser(u.email, patch); clearDraft(u.email); }} title={dirty ? "تطبيق التعديل" : "لا يوجد تعديل"}>تعديل</Button><Button variant="danger" disabled={isPrimaryRow} onClick={() => { if (isPrimaryRow) return; removeUser(u.email); }}>حذف</Button></div></td>
                   </tr>

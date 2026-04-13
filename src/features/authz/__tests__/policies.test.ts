@@ -20,7 +20,7 @@ function baseSnapshot(overrides: Partial<AuthzSnapshot> = {}): AuthzSnapshot {
     isSuperAdmin: false,
     isSuper: false,
     tenantId: "tenant-a",
-    roles: ["staff"],
+    roles: ["tenant_admin"],
     supportTenantId: null,
     supportUntil: null,
     isSupportMode: false,
@@ -31,19 +31,19 @@ function baseSnapshot(overrides: Partial<AuthzSnapshot> = {}): AuthzSnapshot {
 
 describe("authz policies", () => {
   it("filters unknown roles", () => {
-    expect(normalizeRoles(["staff", "unknown", 1, null])).toEqual(["staff"]);
+    expect(normalizeRoles(["tenant_admin", "unknown", 1, null])).toEqual(["tenant_admin"]);
   });
 
   it("gives super admin precedence over other roles", () => {
-    expect(resolveEffectiveRoles(baseSnapshot({ isSuperAdmin: true, roles: ["viewer"] }))).toEqual(["super_admin"]);
+    expect(resolveEffectiveRoles(baseSnapshot({ isSuperAdmin: true, roles: ["tenant_admin"] }))).toEqual(["super_admin"]);
   });
 
   it("preserves super role for regional users", () => {
-    expect(resolveEffectiveRoles(baseSnapshot({ isSuper: true, roles: ["viewer"] }))).toEqual(["super", "viewer"]);
+    expect(resolveEffectiveRoles(baseSnapshot({ isSuper: true, roles: ["tenant_admin"] }))).toEqual(["super", "viewer"]);
   });
 
   it("treats super admin as platform owner with all capabilities", () => {
-    const snapshot = baseSnapshot({ isSuperAdmin: true, roles: ["viewer"] });
+    const snapshot = baseSnapshot({ isSuperAdmin: true, roles: ["tenant_admin"] });
     expect(isPlatformOwner(snapshot)).toBe(true);
     expect(resolvePrimaryRoleLabel(snapshot)).toBe("مالك المنصة");
     expect(canAccessCapability(snapshot, "PLATFORM_OWNER")).toBe(true);
@@ -52,7 +52,7 @@ describe("authz policies", () => {
   });
 
   it("distinguishes regional super users from the platform owner", () => {
-    expect(resolvePrimaryRoleLabel(baseSnapshot({ isSuper: true }))).toBe("مشرف نطاق");
+    expect(resolvePrimaryRoleLabel(baseSnapshot({ isSuper: true, roles: ["super"] }))).toBe("سوبر المحافظات");
   });
 
   it("does not give platform owner capability to regional super users", () => {
@@ -63,6 +63,17 @@ describe("authz policies", () => {
     expect(canAccessCapability(snapshot, "TENANTS_MANAGE")).toBe(true);
   });
 
+  it("keeps ministry super as read-only ministry role", () => {
+    const snapshot = baseSnapshot({ roles: ["ministry_super"] as any });
+    expect(isPlatformOwner(snapshot)).toBe(false);
+    expect(resolvePrimaryRoleLabel(snapshot)).toBe("سوبر الوزارة");
+    expect(canAccessCapability(snapshot, "REPORTS_VIEW")).toBe(true);
+    expect(canAccessCapability(snapshot, "AUDIT_VIEW")).toBe(true);
+    expect(canAccessCapability(snapshot, "TENANTS_MANAGE")).toBe(false);
+    expect(canManageAdminSystemRole(snapshot, "tenant_admin")).toBe(false);
+  });
+
+
 
 
   it("lets the platform owner manage every admin-system role", () => {
@@ -72,15 +83,18 @@ describe("authz policies", () => {
     expect(canManageAdminSystemRole(snapshot, "super_admin")).toBe(true);
   });
 
-  it("limits regional super users to admin/user roles inside admin-system role management", () => {
+  it("limits regional super users to school admin role management only", () => {
     const snapshot = baseSnapshot({ isSuper: true, roles: ["super"] });
+    expect(canManageAdminSystemRole(snapshot, "tenant_admin")).toBe(true);
     expect(canManageAdminSystemRole(snapshot, "admin")).toBe(true);
     expect(canManageAdminSystemRole(snapshot, "super")).toBe(false);
+    expect(canManageAdminSystemRole(snapshot, "ministry_super")).toBe(false);
     expect(canManageAdminSystemRole(snapshot, "super_admin")).toBe(false);
   });
 
-  it("allows capability from tenant role", () => {
+  it("allows capability from tenant admin role", () => {
     expect(canAccessCapability(baseSnapshot({ roles: ["tenant_admin"] }), "SETTINGS_MANAGE")).toBe(true);
+    expect(canAccessCapability(baseSnapshot({ roles: ["tenant_admin"] }), "EXAMS_MANAGE")).toBe(true);
   });
 
   it("forces onboarding when regular user has no display name", () => {
@@ -115,17 +129,35 @@ describe("authz policies", () => {
     ).toEqual({ allowed: false, redirectTo: "/t/tenant-a" });
   });
 
-  it("redirects regular user to own tenant when route tenant mismatches", () => {
-    expect(canAccessTenantRoute(baseSnapshot({ tenantId: "tenant-a" }), "tenant-b")).toEqual({
+  it("prevents ministry super from entering tenant pages", () => {
+    expect(canAccessTenantRoute(baseSnapshot({ roles: ["ministry_super"] as any }), "tenant-a")).toEqual({
+      allowed: false,
+      redirectTo: "/super",
+    });
+  });
+
+  it("prevents regional super from entering tenant pages", () => {
+    expect(canAccessTenantRoute(baseSnapshot({ isSuper: true, roles: ["super"] }), "tenant-a")).toEqual({
+      allowed: false,
+      redirectTo: "/super-system",
+    });
+  });
+
+  it("allows tenant admin to enter only their own tenant", () => {
+    expect(canAccessTenantRoute(baseSnapshot({ tenantId: "tenant-a", roles: ["tenant_admin"] }), "tenant-a")).toEqual({
+      allowed: true,
+    });
+    expect(canAccessTenantRoute(baseSnapshot({ tenantId: "tenant-a", roles: ["tenant_admin"] }), "tenant-b")).toEqual({
       allowed: false,
       redirectTo: "/t/tenant-a",
     });
   });
 
   it("resolves home path by role and auth state", () => {
-    expect(resolveHomePath(baseSnapshot({ isSuperAdmin: true }))).toBe("/super");
-    expect(resolveHomePath(baseSnapshot({ isSuper: true }))).toBe("/super-system");
-    expect(resolveHomePath(baseSnapshot({ tenantId: "tenant-a" }))).toBe("/t/tenant-a");
+    expect(resolveHomePath(baseSnapshot({ isSuperAdmin: true, roles: ["super_admin"] as any }))).toBe("/super");
+    expect(resolveHomePath(baseSnapshot({ roles: ["ministry_super"] as any }))).toBe("/super");
+    expect(resolveHomePath(baseSnapshot({ isSuper: true, roles: ["super"] }))).toBe("/super-system");
+    expect(resolveHomePath(baseSnapshot({ tenantId: "tenant-a", roles: ["tenant_admin"] }))).toBe("/t/tenant-a");
     expect(resolveHomePath(baseSnapshot({ isAuthenticated: false }))).toBe("/login");
   });
 });

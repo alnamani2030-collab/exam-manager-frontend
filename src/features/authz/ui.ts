@@ -10,9 +10,17 @@ export function resolveRoleBadgeStyle(snapshot: AuthzSnapshot): { label: string;
       border: "1px solid rgba(251,191,36,0.32)",
     };
   }
-  if (snapshot.isSuper) {
+  if (snapshot.roles.includes("ministry_super")) {
     return {
-      label: "مشرف نطاق",
+      label: "سوبر الوزارة",
+      color: "#c4b5fd",
+      background: "rgba(196,181,253,0.14)",
+      border: "1px solid rgba(196,181,253,0.30)",
+    };
+  }
+  if (snapshot.isSuper || snapshot.roles.includes("super")) {
+    return {
+      label: "سوبر المحافظات",
       color: "#93c5fd",
       background: "rgba(147,197,253,0.12)",
       border: "1px solid rgba(147,197,253,0.28)",

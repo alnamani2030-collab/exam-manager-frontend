@@ -32,7 +32,7 @@ export default function AdminTenantsSection(props: any) {
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "minmax(280px, 420px) 1fr", gap: 14, alignItems: "start" }}>
-      <Card title="إنشاء مدرسة جديدة (Tenant)">
+      <Card title="إنشاء مدرسة جديدة (Tenant) / إدارة المدارس حسب الصلاحية">
         <div style={{ display: "grid", gap: 10 }}>
           <div>
             <div style={{ marginBottom: 6, opacity: 0.85 }}>اسم المدرسة</div>
@@ -58,7 +58,7 @@ export default function AdminTenantsSection(props: any) {
         title="إدارة المدارس (Tenants)"
         right={
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <div style={{ opacity: 0.8 }}>اختيار Tenant:</div>
+            <div style={{ opacity: 0.8 }}>اختيار المدرسة:</div>
             <select
               value={selectedTenantId ?? ""}
               onChange={(e) => setSelectedTenantId(e.target.value || null)}
@@ -69,9 +69,18 @@ export default function AdminTenantsSection(props: any) {
           </div>
         }
       >
+        <div style={{ marginBottom: 12, fontSize: 12, opacity: 0.85, lineHeight: 1.8 }}>
+          <b style={{ color: GOLD }}>تنبيه صلاحيات:</b>
+          <br />
+          مالك المنصة يمكنه إدارة جميع المدارس والدخول إلى بياناتها الداخلية حسب الصلاحيات العليا.
+          <br />
+          سوبر الوزارة للمشاهدة فقط ولا يدخل إلى البيانات الداخلية للمدارس.
+          <br />
+          سوبر المحافظات يدير المدارس داخل محافظته فقط، ولا يدخل إلى البيانات الداخلية للمدرسة.
+        </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
           <div>
-            <div style={{ fontWeight: 900, color: GOLD, marginBottom: 8 }}>قائمة المدارس</div>
+            <div style={{ fontWeight: 900, color: GOLD, marginBottom: 8 }}>قائمة المدارس حسب الصلاحية</div>
             {supportError && <div style={{ marginBottom: 10, padding: "10px 12px", borderRadius: 12, border: "1px solid rgba(255,80,80,0.35)", background: "rgba(255,80,80,0.10)", color: "#ffd6d6", fontWeight: 700, fontSize: 13 }}>{supportError}</div>}
             <div style={{ display: "grid", gap: 8, maxHeight: 320, overflow: "auto", paddingInlineEnd: 6 }}>
               {visibleTenants.map((t: any) => {
@@ -99,7 +108,7 @@ export default function AdminTenantsSection(props: any) {
                             setSupportError(err?.message ?? "تعذر فتح بيانات المدرسة");
                           }
                         }}
-                        title="فتح بيانات المدرسة"
+                        title="فتح بيانات المدرسة (لمالك المنصة فقط)"
                         style={{ padding: "8px 10px", borderRadius: 12, border: "1px solid rgba(59,130,246,0.35)", background: "rgba(59,130,246,0.12)", color: "#bfdbfe", cursor: "pointer", fontWeight: 900 }}
                       >📂</button>
                     )}
@@ -114,7 +123,7 @@ export default function AdminTenantsSection(props: any) {
           </div>
 
           <div>
-            <div style={{ fontWeight: 900, color: GOLD, marginBottom: 8 }}>إعدادات المدرسة (meta/config)</div>
+            <div style={{ fontWeight: 900, color: GOLD, marginBottom: 8 }}>إعدادات المدرسة الأساسية (meta/config)</div>
             {loadingConfig ? <div style={{ opacity: 0.85 }}>جاري التحميل...</div> : (
               <div style={{ display: "grid", gap: 10 }}>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
