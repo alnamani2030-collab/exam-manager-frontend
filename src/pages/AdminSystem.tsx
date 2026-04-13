@@ -310,7 +310,7 @@ export default function AdminSystem() {
       style={{
         minHeight: "100vh",
         background:
-          "radial-gradient(1200px 520px at 50% 0%, rgba(16,185,129,0.18), transparent 55%), radial-gradient(900px 420px at 12% 18%, rgba(212,175,55,0.12), transparent 48%), radial-gradient(900px 420px at 88% 18%, rgba(59,130,246,0.10), transparent 45%), linear-gradient(180deg, #02060a 0%, #010307 100%)",
+          "radial-gradient(1200px 520px at 50% 0%, rgba(16,185,129,0.08), transparent 55%), radial-gradient(900px 420px at 12% 18%, rgba(212,175,55,0.10), transparent 48%), radial-gradient(900px 420px at 88% 18%, rgba(59,130,246,0.06), transparent 45%), linear-gradient(180deg, #02060a 0%, #010307 100%)",
       }}
     >
       <style>{`
@@ -337,25 +337,25 @@ export default function AdminSystem() {
         }
 
         @keyframes adminHeaderPulse {
-          0% { box-shadow: 0 0 0 rgba(16,185,129,0), 0 0 0 rgba(212,175,55,0); }
-          50% { box-shadow: 0 0 34px rgba(16,185,129,0.18), 0 0 44px rgba(212,175,55,0.10); }
-          100% { box-shadow: 0 0 0 rgba(16,185,129,0), 0 0 0 rgba(212,175,55,0); }
+          0% { box-shadow: 0 0 0 rgba(212,175,55,0), 0 0 0 rgba(212,175,55,0); }
+          50% { box-shadow: 0 0 34px rgba(212,175,55,0.16), 0 0 46px rgba(212,175,55,0.10); }
+          100% { box-shadow: 0 0 0 rgba(212,175,55,0), 0 0 0 rgba(212,175,55,0); }
         }
 
         .admin-header-luxury {
           position: relative;
           overflow: hidden;
           border-radius: 30px;
-          border: 1px solid rgba(212,175,55,0.28);
+          border: 4px solid rgba(212,175,55,0.95);
           background:
-            linear-gradient(135deg, rgba(4,56,45,0.97) 0%, rgba(10,148,118,0.9) 35%, rgba(16,185,129,0.88) 55%, rgba(5,74,58,0.96) 100%);
+            linear-gradient(180deg, rgba(5,5,5,0.98) 0%, rgba(0,0,0,0.96) 100%);
           box-shadow:
-            0 20px 56px rgba(0,0,0,0.42),
-            inset 0 1px 0 rgba(255,255,255,0.10),
-            0 0 42px rgba(16,185,129,0.16);
+            0 22px 58px rgba(0,0,0,0.52),
+            inset 0 1px 0 rgba(255,255,255,0.04),
+            0 0 40px rgba(212,175,55,0.14);
           animation: adminHeaderPulse 4s ease-in-out infinite;
           margin: 10px 10px 0;
-          padding: 8px;
+          padding: 10px;
         }
 
         .admin-header-luxury::before {
@@ -363,9 +363,9 @@ export default function AdminSystem() {
           position: absolute;
           inset: 0;
           background:
-            radial-gradient(circle at 16% 20%, rgba(255,255,255,0.15), transparent 25%),
-            radial-gradient(circle at 84% 15%, rgba(255,255,255,0.10), transparent 18%),
-            linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.08) 48%, transparent 100%);
+            radial-gradient(circle at 14% 18%, rgba(212,175,55,0.12), transparent 22%),
+            radial-gradient(circle at 86% 16%, rgba(212,175,55,0.10), transparent 18%),
+            linear-gradient(90deg, transparent 0%, rgba(212,175,55,0.07) 50%, transparent 100%);
           pointer-events: none;
         }
 
@@ -384,16 +384,16 @@ export default function AdminSystem() {
         }
 
         .admin-title-premium {
-          color: #ffffff;
+          color: #f4d06f;
           text-shadow:
-            0 4px 18px rgba(0,0,0,0.36),
-            0 0 18px rgba(255,255,255,0.08);
+            0 4px 18px rgba(0,0,0,0.42),
+            0 0 18px rgba(212,175,55,0.14);
           letter-spacing: 0.4px;
         }
 
         .admin-brand-premium {
-          color: #fff7d1;
-          text-shadow: 0 4px 15px rgba(0,0,0,0.32);
+          color: #f4d06f;
+          text-shadow: 0 4px 15px rgba(0,0,0,0.36);
         }
 
         .admin-chip {
@@ -402,9 +402,9 @@ export default function AdminSystem() {
           gap: 8px;
           padding: 8px 12px;
           border-radius: 999px;
-          background: rgba(255,255,255,0.08);
-          border: 1px solid rgba(255,255,255,0.12);
-          box-shadow: inset 0 1px 0 rgba(255,255,255,0.08);
+          background: rgba(212,175,55,0.10);
+          border: 1px solid rgba(212,175,55,0.22);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
           backdrop-filter: blur(8px);
         }
 
@@ -458,14 +458,14 @@ export default function AdminSystem() {
       <header className="system-header admin-header-luxury">
         <div className="system-header-inner">
           <div className="system-brand">
-            <img src={MINISTRY_LOGO_URL} alt="logo" style={{ width: 92, height: 92, objectFit: "contain", filter: "drop-shadow(0 10px 22px rgba(212,175,55,0.30))" }} />
-            <div className="system-brand-title admin-brand-premium" style={{ fontSize: 28, fontWeight: 900 }}>وزارة التعليم</div>
+            <img src={MINISTRY_LOGO_URL} alt="logo" style={{ width: 108, height: 108, objectFit: "contain", filter: "drop-shadow(0 10px 22px rgba(212,175,55,0.34))" }} />
+            <div className="system-brand-title admin-brand-premium" style={{ fontSize: 30, fontWeight: 900 }}>وزارة التعليم</div>
           </div>
 
-          <div className="system-program admin-title-premium" style={{ fontSize: 52, fontWeight: 1000, lineHeight: 1.1 }}>نظام إدارة الامتحانات المطور</div>
+          <div className="system-program admin-title-premium" style={{ fontSize: 54, fontWeight: 1000, lineHeight: 1.08 }}>نظام إدارة الامتحانات المطور</div>
 
           <div className="system-actions">
-            <span className="admin-chip" style={{ opacity: 1, color: "#fff7d1", fontWeight: 900 }}>{roleLabel}</span>
+            <span className="admin-chip" style={{ opacity: 1, color: "#f4d06f", fontWeight: 900 }}>{roleLabel}</span>
             {user?.email ? <span className="admin-chip" style={{ opacity: 0.95, color: "#f8fafc" }}>({String(user.email)})</span> : null}
 
             <Button
