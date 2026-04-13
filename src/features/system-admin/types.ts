@@ -23,7 +23,7 @@ export type TenantConfig = {
 export type AllowUser = {
   email: string;
   enabled: boolean;
-  role: "user" | "admin" | "super" | "super_admin";
+  role: "user" | "admin" | "tenant_admin" | "super" | "ministry_super" | "super_admin";
   tenantId: string;
   name?: string;
   schoolName?: string;
