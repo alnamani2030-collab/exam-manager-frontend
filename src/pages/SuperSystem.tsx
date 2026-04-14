@@ -117,6 +117,26 @@ export default function SuperSystem() {
     return existingTenantId !== tenantId;
   };
 
+  const isTenantAlreadyLinkedToAnotherEmail = async (tenantIdValue: string, emailValue: string) => {
+    const tenantId = String(tenantIdValue || "").trim();
+    const email = String(emailValue || "").trim().toLowerCase();
+    if (!tenantId) return false;
+
+    const snap = await getDocs(
+      query(collection(db, "allowlist"), where("tenantId", "==", tenantId))
+    );
+
+    if (snap.empty) return false;
+
+    return snap.docs.some((d) => {
+      const data = d.data() as any;
+      const role = String(data?.role || "").trim().toLowerCase();
+      const docEmail = String(data?.email || d.id || "").trim().toLowerCase();
+      const isTenantAdminRole = role === "tenant_admin" || role === "admin";
+      return isTenantAdminRole && docEmail !== email;
+    });
+  };
+
 
   const exportTenantAdminLinksToExcel = () => {
     const rows = [...tenantAdminRows];
@@ -236,6 +256,11 @@ export default function SuperSystem() {
           continue;
         }
 
+        const tenantAlreadyLinked = await isTenantAlreadyLinkedToAnotherEmail(tenantId, email);
+        if (tenantAlreadyLinked) {
+          continue;
+        }
+
         await setDoc(
           doc(db, "allowlist", email),
           {
@@ -243,7 +268,9 @@ export default function SuperSystem() {
             enabled: true,
             role: "tenant_admin",
             tenantId,
+            schoolName: row.tenantName || tenantDocData?.name || tenantId,
             tenantName: row.tenantName || tenantDocData?.name || tenantId,
+            governorate: tenantGovernorate,
             tenantGovernorate,
           },
           { merge: true }
@@ -328,34 +355,50 @@ export default function SuperSystem() {
         const snap = await getDocs(q);
 
         const rows: TenantAdminLinkRow[] = [];
+        const seen = new Set<string>();
 
         for (const docSnap of snap.docs as QueryDocumentSnapshot<DocumentData>[]) {
           const data = docSnap.data() as any;
           const tenantId = String(data?.tenantId || "").trim();
-          if (!tenantId) continue;
+          const email = String(data?.email || docSnap.id || "").trim().toLowerCase();
+          if (!tenantId || !email) continue;
 
           const tenantMeta = tenantsMap.get(tenantId);
-          if (!tenantMeta) continue;
+
+          const tenantDocRef = doc(db, "tenants", tenantId);
+          const tenantDocSnap = await getDoc(tenantDocRef);
+          if (!tenantDocSnap.exists()) continue;
+
+          const tenantDocData = tenantDocSnap.data() as any;
+          const effectiveGovernorate = String(
+            tenantDocData?.governorate ||
+              tenantMeta?.governorate ||
+              data?.governorate ||
+              data?.tenantGovernorate ||
+              ""
+          ).trim();
 
           if (
             !canSeeAllGovs &&
-            String(tenantMeta.governorate || "") !== String(myGov || "")
+            String(effectiveGovernorate || "").trim().toLowerCase() !== String(myGov || "").trim().toLowerCase()
           ) {
             continue;
           }
 
-          const tenantDocRef = doc(db, "tenants", tenantId);
-          const tenantDocSnap = await getDoc(tenantDocRef);
-          const tenantDocData = tenantDocSnap.exists()
-            ? (tenantDocSnap.data() as any)
-            : {};
+          const key = `${tenantId}__${email}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
 
           rows.push({
             tenantId,
             tenantName: String(
-              tenantDocData?.name || tenantMeta.tenantName || tenantId
+              tenantDocData?.name ||
+                data?.schoolName ||
+                data?.tenantName ||
+                tenantMeta?.tenantName ||
+                tenantId
             ),
-            email: String(data?.email || docSnap.id || ""),
+            email,
           });
         }
 
@@ -509,6 +552,12 @@ export default function SuperSystem() {
       const alreadyLinked = await isEmailAlreadyLinkedToAnotherSchool(userEmail, tenantId);
       if (alreadyLinked) {
         alert("لا يمكن ربط نفس البريد الإلكتروني بأكثر من مدرسة. البريد الإلكتروني يربط بمدرسة واحدة فقط.");
+        return;
+      }
+
+      const tenantAlreadyLinked = await isTenantAlreadyLinkedToAnotherEmail(tenantId, userEmail);
+      if (tenantAlreadyLinked) {
+        alert("لا يمكن ربط المدرسة بأكثر من بريد إلكتروني. لكل مدرسة بريد إلكتروني واحد فقط.");
         return;
       }
 
@@ -891,7 +940,7 @@ export default function SuperSystem() {
               ملاحظة: هذه الصفحة تسمح لسوبر المحافظات أو مالك المنصة بإضافة <b>أدمن المدرسة</b> فقط، بينما سوبر الوزارة للمشاهدة فقط.
             </div>
             <div>
-              لا يمكن ربط نفس البريد الإلكتروني بأكثر من مدرسة، والبريد الإلكتروني يربط بمدرسة واحدة فقط.
+              لا يمكن ربط نفس البريد الإلكتروني بأكثر من مدرسة، ولا يمكن ربط المدرسة نفسها بأكثر من بريد إلكتروني.
             </div>
           </div>
 
