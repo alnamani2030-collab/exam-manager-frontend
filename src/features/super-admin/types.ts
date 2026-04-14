@@ -6,7 +6,7 @@ export type SuperSystemTenant = {
   updatedAt?: unknown;
 };
 
-export type SuperSystemAllowRole = "super_admin" | "super" | "admin" | "user";
+export type SuperSystemAllowRole = "super_admin" | "ministry_super" | "super" | "tenant_admin" | "admin" | "user";
 
 export type SuperSystemAllowDoc = {
   email: string;
