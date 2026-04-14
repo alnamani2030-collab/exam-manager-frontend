@@ -62,24 +62,35 @@ export default function SuperGovernorates() {
   const [msg, setMsg] = useState<string>("");
 
   const GOV_OPTIONS = useMemo<string[]>(() => {
-    // DIRECTORATES is exported as a readonly tuple (as const). Spreading creates a mutable array.
-    const list = [...(DIRECTORATES as readonly string[])].map((x) => String(x));
-    const m = String(MINISTRY_SCOPE);
-    if (!list.includes(m)) list.unshift(m);
-    return list;
+    // صفحة سوبر المحافظات مخصصة للمحافظات فقط، وليس لنطاق الوزارة.
+    return [...(DIRECTORATES as readonly string[])].map((x) => String(x)).filter(Boolean);
   }, []);
+
+  const isValidGovernorateSuper = (gov: string) => {
+    const normalized = normalizeText(String(gov || ""));
+    return (
+      !!normalized &&
+      normalized !== normalizeText(String(MINISTRY_SCOPE || "")) &&
+      GOV_OPTIONS.some((x) => normalizeText(x) === normalized)
+    );
+  };
 
   useEffect(() => {
     const qy = query(
       collection(db, "allowlist"),
-      where("role", "in", ["super", "super_regional", "regional_super"]),
+      where("role", "==", "super"),
       orderBy("email")
     );
     return onSnapshot(
       qy,
       (snap) => {
         const rows: AllowlistRow[] = [];
-        snap.forEach((d) => rows.push(d.data() as AllowlistRow));
+        snap.forEach((d) => {
+          const row = d.data() as AllowlistRow;
+          if (String(row.role || "") === "super" && isValidGovernorateSuper(String(row.governorate || ""))) {
+            rows.push(row);
+          }
+        });
         setSupers(rows);
       },
       () => {
@@ -97,7 +108,12 @@ export default function SuperGovernorates() {
       qy,
       (snap) => {
         const rows: AllowlistRow[] = [];
-        snap.forEach((d) => rows.push(d.data() as AllowlistRow));
+        snap.forEach((d) => {
+          const row = d.data() as AllowlistRow;
+          if (String(row.role || "") === "super" && isValidGovernorateSuper(String(row.governorate || ""))) {
+            rows.push(row);
+          }
+        });
         setSupers(rows);
       },
       () => {}
@@ -198,8 +214,8 @@ export default function SuperGovernorates() {
       setMsg("أدخل بريد إلكتروني صحيح.");
       return;
     }
-    if (!governorate) {
-      setMsg("اختر المحافظة.");
+    if (!governorate || !isValidGovernorateSuper(governorate)) {
+      setMsg("اختر محافظة صحيحة. هذه الصفحة مخصصة لسوبر المحافظات فقط.");
       return;
     }
     setBusy(true);
@@ -210,15 +226,15 @@ export default function SuperGovernorates() {
         email: e,
         enabled,
         role: "super",
-        tenantId: "default",
+        tenantId: "system",
         name: name.trim() || e,
-        governorate,
+        governorate: String(governorate).trim(),
       });
       setEmail("");
       setName("");
       setMsg("تم حفظ السوبر بنجاح ✅");
     } catch {
-      setMsg("فشل حفظ السوبر. تأكد من الصلاحيات ثم حاول مرة أخرى.");
+      setMsg("فشل حفظ سوبر المحافظات. تأكد من الصلاحيات وصحة المحافظة ثم حاول مرة أخرى.");
     } finally {
       setBusy(false);
     }
@@ -259,7 +275,7 @@ export default function SuperGovernorates() {
 
       <main className="system-main">
         <div className="system-glow" style={{ borderRadius: 18, padding: 16, marginBottom: 16 }}>
-          <h3 style={{ margin: "0 0 12px 0" }}>إضافة/تحديث سوبر (مديرية)</h3>
+          <h3 style={{ margin: "0 0 12px 0" }}>إضافة/تحديث سوبر المحافظات</h3>
 
           <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr auto", gap: 10, alignItems: "center" }}>
             <input
@@ -299,7 +315,7 @@ export default function SuperGovernorates() {
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1.2fr", gap: 16, alignItems: "start" }}>
           <div className="system-glow" style={{ borderRadius: 18, padding: 16 }}>
-            <h3 style={{ margin: "0 0 12px 0" }}>قائمة السوبر (حسب المحافظة)</h3>
+            <h3 style={{ margin: "0 0 12px 0" }}>قائمة سوبر المحافظات</h3>
             {supers.length === 0 ? (
               <div style={{ opacity: 0.8 }}>لا يوجد سوبر بعد.</div>
             ) : (
@@ -327,7 +343,7 @@ export default function SuperGovernorates() {
           </div>
 
           <div className="system-glow" style={{ borderRadius: 18, padding: 16 }}>
-            <h3 style={{ margin: "0 0 12px 0" }}>مدارس السوبر</h3>
+            <h3 style={{ margin: "0 0 12px 0" }}>مدارس سوبر المحافظات</h3>
             {!selectedSuper ? (
               <div style={{ opacity: 0.8 }}>اختر سوبر لعرض المدارس التابعة له.</div>
             ) : loadingTenants ? (
