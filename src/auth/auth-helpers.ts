@@ -18,10 +18,12 @@ export function normalizeAllowlistRole(raw: any, email: string, governorate?: an
   const e = String(email ?? "").toLowerCase().trim();
   if (e === PRIMARY_SUPER_ADMIN_EMAIL.toLowerCase()) return "super_admin";
 
-  const r = String(raw ?? "admin").trim().toLowerCase();
+  const r = String(raw ?? "tenant_admin").trim().toLowerCase();
   if (r === "super_admin" || r === "superadmin" || r === "super admin" || r === "super-admin") return "super_admin";
+  if (r === "ministry_super" || r === "ministry super" || r === "ministry-super" || r === "super_ministry") return "ministry_super";
   if (r === "super") return "super";
-  if (r === "admin" || r === "tenant_admin" || r === "tenant admin" || r === "tenant-admin") return "admin";
+  if (r === "tenant_admin" || r === "tenant admin" || r === "tenant-admin") return "tenant_admin";
+  if (r === "admin") return "admin"; // legacy compatibility
   return "user";
 }
 
@@ -61,28 +63,25 @@ export function normalizeStoredSaaSRoles(input: unknown): SaaSRole[] {
   const out: SaaSRole[] = [];
   for (const item of raw) {
     const role = String(item ?? "").trim().toLowerCase();
+
     if (["super_admin", "superadmin", "super admin", "super-admin"].includes(role)) {
       out.push("super_admin");
       continue;
     }
-    if (role === "super") {
-      out.push("manager");
+
+    if (["ministry_super", "ministry super", "ministry-super", "super_ministry"].includes(role)) {
+      out.push("ministry_super");
       continue;
     }
+
+    if (role === "super") {
+      out.push("super");
+      continue;
+    }
+
     if (["admin", "tenant_admin", "tenant admin", "tenant-admin"].includes(role)) {
       out.push("tenant_admin");
       continue;
-    }
-    if (["manager", "tenant_manager", "tenant manager"].includes(role)) {
-      out.push("manager");
-      continue;
-    }
-    if (["staff", "operator", "tenant_operator", "user"].includes(role)) {
-      out.push("staff");
-      continue;
-    }
-    if (["viewer", "read_only", "readonly"].includes(role)) {
-      out.push("viewer");
     }
   }
   return Array.from(new Set(out));
@@ -92,9 +91,10 @@ export function mapAllowRoleToSaaSRoles(params: { allowRole: Role; email: string
   const { allowRole, email, governorate } = params;
   const r = normalizeAllowlistRole(allowRole, email, governorate);
   if (r === "super_admin") return ["super_admin"];
-  if (r === "super") return ["manager"];
-  if (r === "admin") return ["tenant_admin"];
-  return ["staff"];
+  if (r === "ministry_super") return ["ministry_super"];
+  if (r === "super") return ["super"];
+  if (r === "tenant_admin" || r === "admin") return ["tenant_admin"];
+  return [];
 }
 
 export async function ensureTenantOwnerDoc(params: { tenantId: string; uid: string; email: string }) {
@@ -133,7 +133,7 @@ export async function syncUserProfileFromAllowlist(params: {
   const roles = normalizeStoredSaaSRoles((allow as any)?.roles).length
     ? normalizeStoredSaaSRoles((allow as any)?.roles)
     : mapAllowRoleToSaaSRoles({ allowRole: roleNorm, email, governorate: (allow as any)?.governorate });
-  const isGlobal = roleNorm === "super_admin" || roleNorm === "super";
+  const isGlobal = roleNorm === "super_admin" || roleNorm === "ministry_super" || roleNorm === "super";
   const tenantId = isGlobal ? SUPER_ADMIN_TENANT_ID : String(allow.tenantId ?? "").trim();
 
   const profile: UserProfile = {
