@@ -1,37 +1,43 @@
-export type PlatformRole = "super_admin" | "super";
+export type SuperSystemTenant = {
+  id: string;
+  name?: string;
+  enabled?: boolean;
+  governorate?: string;
+  updatedAt?: unknown;
+};
 
-export type TenantRole = "tenant_admin" | "manager" | "staff" | "viewer";
+export type SuperSystemAllowRole =
+  | "super_admin"
+  | "ministry_super"
+  | "super"
+  | "tenant_admin"
+  | "admin" // legacy compatibility
+  | "user";
 
-export type SaaSRole = PlatformRole | TenantRole;
+export type SuperSystemAllowDoc = {
+  email: string;
+  enabled: boolean;
+  role: SuperSystemAllowRole;
+  tenantId: string;
+  governorate?: string;
+  userName?: string;
+  schoolName?: string;
+  name?: string;
+  updatedAt?: unknown;
+};
 
-export type Capability =
-  | "PLATFORM_OWNER"
-  | "SYSTEM_ADMIN"
-  | "TENANTS_MANAGE"
-  | "SUPER_USERS_MANAGE"
-  | "USERS_MANAGE"
-  | "TENANT_READ"
-  | "TENANT_WRITE"
-  | "TEACHERS_MANAGE"
-  | "EXAMS_MANAGE"
-  | "ROOMS_MANAGE"
-  | "DISTRIBUTION_RUN"
-  | "REPORTS_VIEW"
-  | "ARCHIVE_MANAGE"
-  | "AUDIT_VIEW"
-  | "SYNC_ADMIN"
-  | "SETTINGS_MANAGE"
-  | "SUPPORT_MODE";
+export type SuperPortalActionCard = {
+  key: string;
+  title: string;
+  description: string;
+  cta: string;
+  onClick: () => void;
+};
 
-export interface AuthzSnapshot {
-  isAuthenticated: boolean;
-  isEnabled: boolean;
-  isSuperAdmin: boolean;
-  isSuper: boolean;
-  tenantId?: string | null;
-  roles: SaaSRole[];
-  supportTenantId?: string | null;
-  supportUntil?: number | null;
-  isSupportMode?: boolean;
-  displayName?: string | null;
-}
+export type SuperProgramTenantRow = {
+  id: string;
+  name?: string;
+  schoolName?: string;
+  enabled?: boolean;
+  governorate?: string;
+};
