@@ -30,7 +30,7 @@ const DISABLE_FUNCTIONS =
 type AllowlistDoc = {
   email: string;
   enabled: boolean;
-  role: "super_admin" | "super" | "admin" | "user";
+  role: "super_admin" | "ministry_super" | "super" | "tenant_admin" | "admin" | "user";
   tenantId: string;
 };
 
@@ -104,10 +104,14 @@ async function fetchAllowlist(email: string): Promise<AllowlistDoc | null> {
     (data as any).enabled = true;
   } else if (r === "super_admin" || r === "super admin" || r === "superadmin") {
     (data as any).role = "super_admin";
+  } else if (r === "ministry_super" || r === "ministry super" || r === "ministry-super") {
+    (data as any).role = "ministry_super";
   } else if (r === "super") {
     (data as any).role = "super";
-  } else if (r === "admin" || r === "tenant_admin" || r === "tenant admin") {
-    (data as any).role = "admin";
+  } else if (r === "tenant_admin" || r === "tenant admin" || r === "tenant-admin") {
+    (data as any).role = "tenant_admin";
+  } else if (r === "admin") {
+    (data as any).role = "admin"; // legacy
   } else {
     (data as any).role = "user";
   }
@@ -134,15 +138,11 @@ function translateRoleLabel(label: string, lang: Lang): string {
     "مالك المنصة": { ar: "مالك المنصة", en: "Platform Owner" },
     "سوبر الوزارة": { ar: "سوبر الوزارة", en: "Ministry Super" },
     "سوبر المحافظات": { ar: "سوبر المحافظات", en: "Governorates Super" },
-    "أدمن المدرسة": { ar: "أدمن المدرسة", en: "School Admin" },
-
     "مشرف نطاق": { ar: "سوبر المحافظات", en: "Governorates Super" },
     "مدير جهة": { ar: "أدمن المدرسة", en: "School Admin" },
-
-    "Platform Owner": { ar: "مالك المنصة", en: "Platform Owner" },
-    "Ministry Super": { ar: "سوبر الوزارة", en: "Ministry Super" },
-    "Governorates Super": { ar: "سوبر المحافظات", en: "Governorates Super" },
-    "School Admin": { ar: "أدمن المدرسة", en: "School Admin" },
+    "مدير": { ar: "أدمن المدرسة", en: "School Admin" },
+    "مستخدم تشغيلي": { ar: "مستخدم تشغيلي", en: "Operational User" },
+    "مستخدم": { ar: "مستخدم", en: "User" },
   };
   return map[label]?.[lang] || label;
 }
