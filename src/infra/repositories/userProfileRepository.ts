@@ -4,9 +4,9 @@ import { db } from "../../firebase/firebase";
 import type { SaaSRole, UserProfile } from "../../auth/types";
 
 
-function normalizeRoles(input: unknown, fallback: SaaSRole[] = ["staff"]): SaaSRole[] {
+function normalizeRoles(input: unknown, fallback: SaaSRole[] = []): SaaSRole[] {
   const roles = Array.isArray(input) ? input : fallback;
-  const allowed: SaaSRole[] = ["super_admin", "tenant_admin", "manager", "staff", "viewer"];
+  const allowed: SaaSRole[] = ["super_admin", "ministry_super", "super", "tenant_admin"];
   const normalized = roles
     .map((x) => String(x ?? "").trim().toLowerCase())
     .map((x) => (x === "admin" ? "tenant_admin" : x))
@@ -49,7 +49,7 @@ export async function loadUserProfileUiModel(params: {
   if (!data && !params.fallback) return null;
   return {
     tenantId: (data?.tenantId ?? params.fallback?.tenantId ?? null) as string | null,
-    roles: normalizeRoles(data?.roles, (params.fallback?.roles ?? ["staff"]) as UserProfile["roles"]),
+    roles: normalizeRoles(data?.roles, (params.fallback?.roles ?? []) as UserProfile["roles"]),
     status: ((data?.status as UserProfile["status"]) || params.fallback?.status || "active") as UserProfile["status"],
     email: (params.fallback?.email || data?.email || "") as string,
     displayName: (data?.displayName || params.fallback?.displayName || undefined) as string | undefined,
