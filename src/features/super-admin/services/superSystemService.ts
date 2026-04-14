@@ -16,44 +16,11 @@ import {
 } from "firebase/firestore";
 import { db } from "../../../firebase/firebase";
 import type { SuperSystemAllowDoc, SuperSystemTenant } from "../types";
-import { MINISTRY_SCOPE, normalizeText, isSameDirectorate } from "../../../constants/directorates";
+import { MINISTRY_SCOPE } from "../../../constants/directorates";
 import { safeTenantId } from "./superSystemShared";
 
 const MINISTRY_LOGO_URL = "https://i.imgur.com/vdDhSMh.png";
 
-
-async function getTenantGovernorate(tenantId: string): Promise<string> {
-  const id = String(tenantId || "").trim();
-  if (!id) return "";
-
-  try {
-    const cfgSnap = await getDoc(doc(db, "tenants", id, "meta", "config"));
-    const cfgGov = String((cfgSnap.data() as Record<string, unknown> | undefined)?.governorate ?? "").trim();
-    if (cfgGov) return cfgGov;
-  } catch {
-    // ignore
-  }
-
-  try {
-    const tSnap = await getDoc(doc(db, "tenants", id));
-    return String((tSnap.data() as Record<string, unknown> | undefined)?.governorate ?? "").trim();
-  } catch {
-    return "";
-  }
-}
-
-function assertRegionalScope(myGov: string, tenantGov: string) {
-  const mine = normalizeText(String(myGov || ""));
-  const theirs = normalizeText(String(tenantGov || ""));
-  if (!mine) throw new Error("MISSING_GOVERNORATE");
-  if (!theirs) throw new Error("TENANT_GOVERNORATE_MISSING");
-  if (mine === normalizeText(String(MINISTRY_SCOPE))) {
-    throw new Error("MINISTRY_VIEWER_READ_ONLY");
-  }
-  if (!isSameDirectorate(theirs, mine)) {
-    throw new Error("OUT_OF_SCOPE_GOVERNORATE");
-  }
-}
 
 export function subscribeSuperTenants(
   onData: (rows: SuperSystemTenant[]) => void,
@@ -115,30 +82,12 @@ export async function createTenantForScope(input: {
   const name = String(input.name || "").trim();
   if (!id || !name) throw new Error("INVALID_TENANT_INPUT");
 
-  const requestedGov = String(input.governorate || "").trim();
-  const myGov = String(input.myGov || "").trim();
-  const isMinistryViewer = normalizeText(myGov) === normalizeText(String(MINISTRY_SCOPE));
-
-  if (input.canSeeAllGovs && isMinistryViewer) {
-    throw new Error("MINISTRY_VIEWER_READ_ONLY");
-  }
-
-  const gov = input.canSeeAllGovs
-    ? String(requestedGov || myGov || "").trim()
-    : String(myGov || "").trim();
-
+  const gov = input.canSeeAllGovs ? String(input.myGov || MINISTRY_SCOPE) : String(input.myGov || "").trim();
   if (!gov) throw new Error("MISSING_GOVERNORATE");
-  if (normalizeText(gov) === normalizeText(String(MINISTRY_SCOPE))) {
-    throw new Error("INVALID_TENANT_GOVERNORATE");
-  }
 
   const tRef = doc(db, "tenants", id);
   const existing = await getDoc(tRef);
   if (existing.exists()) throw new Error("TENANT_EXISTS");
-
-  if (!input.canSeeAllGovs) {
-    assertRegionalScope(myGov, gov);
-  }
 
   const batch = writeBatch(db);
   batch.set(tRef, {
@@ -171,30 +120,17 @@ export async function saveTenantForScope(input: {
   canSeeAllGovs: boolean;
   myGov: string;
 }) {
-  const tenantId = String(input.tenantId || "").trim();
-  const myGov = String(input.myGov || "").trim();
-  const isMinistryViewer = normalizeText(myGov) === normalizeText(String(MINISTRY_SCOPE));
+  const gov = input.canSeeAllGovs ? String(input.myGov || MINISTRY_SCOPE) : String(input.myGov || "").trim();
+  if (!input.canSeeAllGovs && !gov) throw new Error("MISSING_GOVERNORATE");
 
-  if (input.canSeeAllGovs && isMinistryViewer) {
-    throw new Error("MINISTRY_VIEWER_READ_ONLY");
-  }
-
-  const currentGov = await getTenantGovernorate(tenantId);
-  const gov = input.canSeeAllGovs ? String(currentGov || myGov || "").trim() : String(myGov || "").trim();
-
-  if (!gov) throw new Error("MISSING_GOVERNORATE");
-  if (!input.canSeeAllGovs) {
-    assertRegionalScope(myGov, currentGov || gov);
-  }
-
-  await setDoc(doc(db, "tenants", tenantId), {
+  await setDoc(doc(db, "tenants", input.tenantId), {
     name: String(input.name || "").trim(),
     enabled: !!input.enabled,
     governorate: gov,
     updatedAt: serverTimestamp(),
   }, { merge: true });
 
-  await setDoc(doc(db, "tenants", tenantId, "meta", "config"), {
+  await setDoc(doc(db, "tenants", input.tenantId, "meta", "config"), {
     governorate: gov,
     regionAr: gov,
     schoolNameAr: String(input.name || "").trim(),
@@ -204,20 +140,9 @@ export async function saveTenantForScope(input: {
   }, { merge: true });
 }
 
-export async function archiveAndDeleteTenant(input: { tenantId: string; deletedBy?: string; canSeeAllGovs?: boolean; myGov?: string }) {
+export async function archiveAndDeleteTenant(input: { tenantId: string; deletedBy?: string }) {
   const id = String(input.tenantId || "").trim();
   if (!id) throw new Error("MISSING_TENANT_ID");
-
-  const myGov = String(input.myGov || "").trim();
-  const isMinistryViewer = normalizeText(myGov) === normalizeText(String(MINISTRY_SCOPE));
-  if (input.canSeeAllGovs && isMinistryViewer) {
-    throw new Error("MINISTRY_VIEWER_READ_ONLY");
-  }
-
-  const currentGov = await getTenantGovernorate(id);
-  if (!input.canSeeAllGovs) {
-    assertRegionalScope(myGov, currentGov);
-  }
 
   const tRef = doc(db, "tenants", id);
   const tSnap = await getDoc(tRef);
@@ -251,24 +176,16 @@ export async function saveTenantAdminAssignment(input: {
   const tenantId = String(input.tenantId || "").trim();
   if (!tenantId) throw new Error("MISSING_TENANT_ID");
 
-  const myGov = String(input.myGov || "").trim();
-  const isMinistryViewer = normalizeText(myGov) === normalizeText(String(MINISTRY_SCOPE));
-  if (input.canSeeAllGovs && isMinistryViewer) {
-    throw new Error("MINISTRY_VIEWER_READ_ONLY");
-  }
-
-  const tenantGov = String(input.tenantGovernorate || (await getTenantGovernorate(tenantId)) || "").trim();
-  if (!tenantGov) throw new Error("TENANT_GOVERNORATE_MISSING");
-  if (!input.canSeeAllGovs) {
-    assertRegionalScope(myGov, tenantGov);
-  }
+  const governorate = input.canSeeAllGovs
+    ? String(input.tenantGovernorate || input.myGov || MINISTRY_SCOPE)
+    : String(input.myGov || "").trim();
 
   const payload: SuperSystemAllowDoc = {
     email,
     enabled: !!input.enabled,
     role: "tenant_admin" as any,
     tenantId,
-    governorate: tenantGov,
+    governorate,
     userName: String(input.userName || "").trim() || undefined,
     schoolName: String(input.tenantName || "").trim() || undefined,
     updatedAt: serverTimestamp(),
@@ -278,20 +195,7 @@ export async function saveTenantAdminAssignment(input: {
   return { email };
 }
 
-export async function disableAllowlistForTenant(tenantId: string, scope?: { canSeeAllGovs?: boolean; myGov?: string }) {
-  const id = String(tenantId || "").trim();
-  const myGov = String(scope?.myGov || "").trim();
-  const isMinistryViewer = normalizeText(myGov) === normalizeText(String(MINISTRY_SCOPE));
-
-  if (scope?.canSeeAllGovs && isMinistryViewer) {
-    throw new Error("MINISTRY_VIEWER_READ_ONLY");
-  }
-
-  const currentGov = await getTenantGovernorate(id);
-  if (scope && !scope.canSeeAllGovs) {
-    assertRegionalScope(myGov, currentGov);
-  }
-
-  const qs = await getDocs(query(collection(db, "allowlist"), where("tenantId", "==", id)));
+export async function disableAllowlistForTenant(tenantId: string) {
+  const qs = await getDocs(query(collection(db, "allowlist"), where("tenantId", "==", tenantId)));
   await Promise.all(qs.docs.map((d) => updateDoc(d.ref, { enabled: false, updatedAt: serverTimestamp() })));
 }
