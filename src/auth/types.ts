@@ -1,8 +1,19 @@
 import type { User } from "firebase/auth";
 import type { AuthzSnapshot, Capability } from "../features/authz";
 
-export type Role = "super_admin" | "super" | "admin" | "user";
-export type SaaSRole = "super_admin" | "tenant_admin" | "manager" | "staff" | "viewer";
+export type Role =
+  | "super_admin"
+  | "ministry_super"
+  | "super"
+  | "tenant_admin"
+  | "admin" // legacy compatibility
+  | "user";
+
+export type SaaSRole =
+  | "super_admin"
+  | "ministry_super"
+  | "super"
+  | "tenant_admin";
 
 export type AllowDoc = {
   email: string;
