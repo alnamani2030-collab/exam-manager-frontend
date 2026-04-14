@@ -11,9 +11,16 @@ import { normalizeRoleClient, resolveTenantGovernorate, stripUndefined } from ".
 
 const USE_FUNCTIONS = !Boolean((import.meta as any).env?.DEV);
 
-export async function buildGovernorateForUserRole(roleNorm: AllowUser["role"], tenantId: string, governorateInput: string): Promise<string | undefined> {
+export async function buildGovernorateForUserRole(
+  roleNorm: AllowUser["role"] | "tenant_admin" | "ministry_super",
+  tenantId: string,
+  governorateInput: string
+): Promise<string | undefined> {
   if (roleNorm === "super") return normalizeText(String(governorateInput ?? "")) || undefined;
-  if (roleNorm === "admin") return normalizeText(await resolveTenantGovernorate(tenantId)) || undefined;
+  if (roleNorm === "ministry_super") return normalizeText(String(MINISTRY_SCOPE)) || undefined;
+  if (roleNorm === "tenant_admin" || String(roleNorm) === "admin") {
+    return normalizeText(await resolveTenantGovernorate(tenantId)) || undefined;
+  }
   return undefined;
 }
 
@@ -28,7 +35,9 @@ export async function createAllowUserAction(args: any) {
   const emailLower = email.toLowerCase().trim();
   const isProtectedOwnerEmail = emailLower === PRIMARY_SUPER_ADMIN_EMAIL.toLowerCase();
 
-  if (isSuper && roleNorm !== "admin") throw new Error("السوبر (المديرية) لا يستطيع إنشاء إلا (الأدمن) فقط.");
+  if (isSuper && roleNorm !== "tenant_admin" && String(roleNorm) !== "admin") {
+    throw new Error("سوبر المحافظات لا يستطيع إنشاء إلا (أدمن المدرسة) فقط.");
+  }
   if (isProtectedOwnerEmail) throw new Error("لا يمكن تعديل/حذف/تعطيل مالك المنصة الرئيسي.");
   if (!canManageAdminSystemRole(authzSnapshot, roleNorm)) throw new Error("ليست لديك صلاحية لإنشاء هذا النوع من المستخدمين.");
 
@@ -48,7 +57,9 @@ export async function createAllowUserAction(args: any) {
   if (isSuper) {
     const myG = normalizeText(String((profile as any)?.governorate ?? ""));
     const tenantGov = normalizeText(String((selectedTenantConfig as any)?.governorate ?? (tSnap.data() as any)?.governorate ?? ""));
-    if (myG && myG !== normalizeText(MINISTRY_SCOPE) && tenantGov && !isSameDirectorate(tenantGov, myG)) throw new Error("لا يمكنك إضافة أدمن خارج نطاق مديريتك.");
+    if (myG && myG !== normalizeText(MINISTRY_SCOPE) && tenantGov && !isSameDirectorate(tenantGov, myG)) {
+      throw new Error("لا يمكنك إضافة أدمن مدرسة خارج نطاق محافظتك.");
+    }
   }
 
   const governorateFinal = await buildGovernorateForUserRole(roleNorm, tenantId, newUserGovernorate);
@@ -72,13 +83,20 @@ export async function updateAllowUserAction(args: any) {
   const emailLower = String(merged.email || "").toLowerCase().trim();
   if (emailLower === PRIMARY_SUPER_ADMIN_EMAIL.toLowerCase()) throw new Error("لا يمكن تعديل/حذف/تعطيل مالك المنصة الرئيسي.");
   if (!canManageAdminSystemRole(authzSnapshot, roleNorm)) throw new Error("ليست لديك صلاحية لتعديل هذا النوع من المستخدمين.");
-  if (isSuper && roleNorm !== "admin") throw new Error("السوبر (المديرية) لا يستطيع تعديل إلا (الأدمن) فقط.");
+  if (isSuper && roleNorm !== "tenant_admin" && String(roleNorm) !== "admin") {
+    throw new Error("سوبر المحافظات لا يستطيع تعديل إلا (أدمن المدرسة) فقط.");
+  }
 
   let governorateFinal: string | undefined;
   if (roleNorm === "super") {
     governorateFinal = normalizeText(String((merged as any).governorate ?? "")) || undefined;
-    if (!governorateFinal) throw new Error("يجب تحديد المديرية للسوبر.");
-  } else if (roleNorm === "admin") {
+    if (!governorateFinal) throw new Error("يجب تحديد المحافظة لسوبر المحافظات.");
+    if (governorateFinal === normalizeText(MINISTRY_SCOPE)) {
+      throw new Error("سوبر المحافظات لا يمكن أن يكون على نطاق الوزارة.");
+    }
+  } else if (roleNorm === "ministry_super") {
+    governorateFinal = normalizeText(String(MINISTRY_SCOPE)) || undefined;
+  } else if (roleNorm === "tenant_admin" || String(roleNorm) === "admin") {
     governorateFinal = normalizeText(await resolveTenantGovernorate(String(merged.tenantId || ""))) || undefined;
   }
 
@@ -121,5 +139,5 @@ export async function inviteSingleOwnerAction(args: any) {
   const tid = String(ownerTenantId || "").trim();
   const em = String(ownerEmail || "").trim().toLowerCase();
   if (!tid || !em.includes("@")) throw new Error("أدخل tenantId صحيح وبريد صحيح.");
-  await setDoc(doc(db, "allowlist", em), { email: em, enabled: true, role: "admin", tenantId: tid, createdAt: serverTimestamp(), createdBy: user.email || "", updatedAt: serverTimestamp(), updatedBy: user.email || "" }, { merge: true });
+  await setDoc(doc(db, "allowlist", em), { email: em, enabled: true, role: "tenant_admin", tenantId: tid, createdAt: serverTimestamp(), createdBy: user.email || "", updatedAt: serverTimestamp(), updatedBy: user.email || "" }, { merge: true });
 }
