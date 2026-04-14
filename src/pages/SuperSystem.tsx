@@ -461,6 +461,8 @@ export default function SuperSystem() {
       await archiveAndDeleteTenant({
         tenantId: id,
         deletedBy: String(user?.email || ""),
+        canSeeAllGovs,
+        myGov,
       });
       setTenants((prev) => prev.filter((t) => t.id !== id));
       if (selectedTenantId === id) setSelectedTenantId("");
@@ -494,7 +496,10 @@ export default function SuperSystem() {
       return;
     }
 
-    if (!canSeeAllGovs && String(tenant.governorate || "") !== myGov) {
+    if (
+      isRegionalSuper &&
+      String(tenant.governorate || "").trim().toLowerCase() !== String(myGov || "").trim().toLowerCase()
+    ) {
       alert("لا يمكنك إضافة مستخدم لمدرسة خارج محافظتك.");
       return;
     }
@@ -593,6 +598,7 @@ export default function SuperSystem() {
 
         <button
           className="super-card"
+          disabled={isMinistryViewer}
           onClick={() =>
             document.getElementById("section-edit")?.scrollIntoView({
               behavior: "smooth",
@@ -607,6 +613,7 @@ export default function SuperSystem() {
 
         <button
           className="super-card"
+          disabled={isMinistryViewer}
           onClick={() =>
             document.getElementById("section-create")?.scrollIntoView({
               behavior: "smooth",
@@ -619,6 +626,7 @@ export default function SuperSystem() {
 
         <button
           className="super-card"
+          disabled={isMinistryViewer}
           onClick={() =>
             document.getElementById("section-admin")?.scrollIntoView({
               behavior: "smooth",
@@ -836,6 +844,11 @@ export default function SuperSystem() {
           <div style={{ marginBottom: 10, opacity: 0.85 }}>
             المدرسة المحددة: <b>{selectedTenant?.name || selectedTenantId || "—"}</b>
           </div>
+          {isMinistryViewer ? (
+            <div style={{ marginBottom: 10, opacity: 0.82, color: "#fbbf24" }}>
+              هذه الصفحة في وضع مشاهدة فقط لسوبر الوزارة.
+            </div>
+          ) : null}
 
           <div className="form-grid">
             <label className="label">البريد الإلكتروني (مفتاح الوثيقة)</label>
