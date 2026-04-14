@@ -19,14 +19,36 @@ export function filterProgramTenants(input: {
 }) {
   const myGov = normalizeText(String(input.userGovernorate || ""));
   if (input.owner) return input.tenants;
-  if (input.canAccessSystem && myGov && myGov !== normalizeText(MINISTRY_SCOPE)) {
-    return input.tenants.filter((tenant) => isSameDirectorate(String(tenant.governorate || ""), myGov));
+
+  // سوبر الوزارة يشاهد جميع المدارس على مستوى الوزارة
+  if (input.canAccessSystem && myGov === normalizeText(MINISTRY_SCOPE)) {
+    return input.tenants;
   }
+
+  // سوبر المحافظات يشاهد فقط مدارس محافظته
+  if (input.canAccessSystem && myGov && myGov !== normalizeText(MINISTRY_SCOPE)) {
+    return input.tenants.filter((tenant) =>
+      isSameDirectorate(String(tenant.governorate || ""), myGov)
+    );
+  }
+
   return [];
 }
 
 export function describeProgramAccess(input: { owner: boolean; primaryRoleLabel?: string | null }) {
-  return input.owner
-    ? "أنت تعمل الآن بصفة مالك المنصة بصلاحيات كاملة."
-    : `صلاحيتك الحالية: ${input.primaryRoleLabel ?? "مشرف نطاق"}.`;
+  if (input.owner) {
+    return "أنت تعمل الآن بصفة مالك المنصة بصلاحيات كاملة.";
+  }
+
+  const label = String(input.primaryRoleLabel || "").trim();
+
+  if (label === "سوبر الوزارة") {
+    return "أنت تعمل الآن بصفة سوبر الوزارة بصلاحية مشاهدة على مستوى الوزارة.";
+  }
+
+  if (label === "سوبر المحافظات" || label === "مشرف نطاق") {
+    return "أنت تعمل الآن بصفة سوبر المحافظات داخل نطاق محافظتك.";
+  }
+
+  return `صلاحيتك الحالية: ${label || "مستخدم"}.`;
 }
