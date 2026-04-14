@@ -4,46 +4,25 @@ import { useAuth } from "../auth/AuthContext";
 import { canAccessCapability, isPlatformOwner, resolvePrimaryRoleLabel, resolveRoleBadgeStyle } from "../features/authz";
 import { buildSuperPortalCards } from "../features/super-admin/services/superPortalService";
 import SuperPortalCard from "../features/super-admin/components/SuperPortalCard";
-import { useI18n } from "../i18n/I18nProvider";
 
 const MINISTRY_LOGO_URL = "https://i.imgur.com/vdDhSMh.png";
 
-
-type PortalRoleLang = "ar" | "en";
-
-function translateRoleLabel(label: string, lang: PortalRoleLang): string {
-  const map: Record<string, { ar: string; en: string }> = {
-    "مالك المنصة": { ar: "مالك المنصة", en: "Platform Owner" },
-    "سوبر الوزارة": { ar: "سوبر الوزارة", en: "Ministry Super" },
-    "سوبر المحافظات": { ar: "سوبر المحافظات", en: "Governorates Super" },
-    "أدمن المدرسة": { ar: "أدمن المدرسة", en: "School Admin" },
-    "مشرف نطاق": { ar: "سوبر المحافظات", en: "Governorates Super" },
-    "مدير جهة": { ar: "أدمن المدرسة", en: "School Admin" },
-    "Platform Owner": { ar: "مالك المنصة", en: "Platform Owner" },
-    "Ministry Super": { ar: "سوبر الوزارة", en: "Ministry Super" },
-    "Governorates Super": { ar: "سوبر المحافظات", en: "Governorates Super" },
-    "School Admin": { ar: "أدمن المدرسة", en: "School Admin" },
-  };
-  return map[label]?.[lang] || label;
-}
-
-
 export default function SuperPortal() {
   const navigate = useNavigate();
-  const { lang } = useI18n();
-  const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
   const { profile, authzSnapshot, logout, primaryRoleLabel } = useAuth() as any;
 
   const displayName = useMemo(() => {
     return profile?.userName || profile?.name || profile?.email || "";
   }, [profile]);
 
-  const roleLabel = translateRoleLabel(primaryRoleLabel || resolvePrimaryRoleLabel(authzSnapshot), (lang === "en" ? "en" : "ar") as PortalRoleLang);
-  const roleBadgeBase = resolveRoleBadgeStyle(authzSnapshot);
-  const roleBadge = { ...roleBadgeBase, label: translateRoleLabel(roleBadgeBase.label, (lang === "en" ? "en" : "ar") as PortalRoleLang) };
+  const roleLabel = primaryRoleLabel || resolvePrimaryRoleLabel(authzSnapshot);
+  const roleBadge = resolveRoleBadgeStyle(authzSnapshot);
   const owner = isPlatformOwner(authzSnapshot);
   const canAccessSystem = canAccessCapability(authzSnapshot, "SYSTEM_ADMIN");
-  const isScopeAdmin = Boolean(profile?.role === "super" || profile?.role === "super_admin");
+  const normalizedRole = String(profile?.role || "").trim().toLowerCase();
+  const isMinistrySuper = normalizedRole === "ministry_super";
+  const isGovernoratesSuper = normalizedRole === "super";
+  const isScopeAdmin = Boolean(owner || isMinistrySuper || isGovernoratesSuper);
 
   const cards = useMemo(
     () => buildSuperPortalCards({ owner, isScopeAdmin, navigate }),
@@ -67,7 +46,7 @@ export default function SuperPortal() {
         alignItems: "center",
         justifyContent: "center",
         padding: "32px 16px",
-        direction: lang === "ar" ? "rtl" : "ltr",
+        direction: "rtl",
       }}
     >
       <div
@@ -92,17 +71,11 @@ export default function SuperPortal() {
           }}
         >
           <div>
-            <div style={{ color: "#d4af37", fontWeight: 800, fontSize: 26, lineHeight: 1.2 }}>{tr("وزارة التعليم", "Ministry of Education")}</div>
-            <div style={{ color: "#fff", fontWeight: 800, fontSize: 34, lineHeight: 1.2 }}>{tr("نظام إدارة الامتحانات المطور", "Advanced Exam Management System")}</div>
+            <div style={{ color: "#d4af37", fontWeight: 800, fontSize: 26, lineHeight: 1.2 }}>وزارة التعليم</div>
+            <div style={{ color: "#fff", fontWeight: 800, fontSize: 34, lineHeight: 1.2 }}>نظام إدارة الامتحانات المطور</div>
             <div style={{ color: "rgba(255,255,255,0.82)", marginTop: 8, fontSize: 16 }}>
-              {tr("تم تسجيل الدخول بصلاحيات", "Signed in with role")} <b style={{ color: "#d4af37" }}>{roleBadge.label}</b>.
-              {owner
-                ? tr(" لديك وصول كامل بصفة مالك المنصة.", " You have full access as the platform owner.")
-                : roleBadge.label === tr("سوبر الوزارة", "Ministry Super")
-                ? tr(" لديك صلاحية مشاهدة فقط على مستوى الوزارة بدون دخول إلى بيانات المدارس الداخلية.", " You have ministry-level read-only access without entering internal school data.")
-                : roleBadge.label === tr("سوبر المحافظات", "Governorates Super")
-                ? tr(" لديك صلاحية إدارة المدارس وأدمنات المدارس داخل محافظتك فقط بدون دخول إلى البيانات الداخلية للمدرسة.", " You can manage schools and school admins inside your governorate only, without entering internal school data.")
-                : tr(" يمكنك الدخول إلى مدرستك وإدارة بياناتها حسب الصلاحيات الممنوحة لك.", " You can enter your school and manage its data according to your granted permissions.")}
+              تم تسجيل الدخول بصلاحيات <b style={{ color: "#d4af37" }}>{roleBadge.label}</b>.
+              {owner ? " لديك وصول كامل بصفة مالك المنصة." : " اختر طريقة الدخول المتاحة لك ضمن نطاقك."}
             </div>
           </div>
 
@@ -140,12 +113,12 @@ export default function SuperPortal() {
               boxShadow: "0 10px 24px rgba(0,0,0,0.45)",
             }}
           >
-            {tr("تسجيل الخروج", "Log out")}
+            تسجيل الخروج
           </button>
         </div>
 
         <div style={{ marginTop: 18, color: "rgba(255,255,255,0.70)", fontSize: 14 }}>
-          {tr("مرحبًا", "Welcome")} <span style={{ color: "#d4af37", fontWeight: 800 }}>{displayName}</span>.
+          مرحبًا <span style={{ color: "#d4af37", fontWeight: 800 }}>{displayName}</span>.
           <span style={{ marginInlineStart: 8 }}>{roleLabel}</span>
         </div>
       </div>
