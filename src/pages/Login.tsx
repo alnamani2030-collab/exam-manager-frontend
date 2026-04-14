@@ -111,7 +111,7 @@ async function fetchAllowlist(email: string): Promise<AllowlistDoc | null> {
   } else if (r === "tenant_admin" || r === "tenant admin" || r === "tenant-admin") {
     (data as any).role = "tenant_admin";
   } else if (r === "admin") {
-    (data as any).role = "admin"; // legacy
+    (data as any).role = "admin"; // legacy compatibility
   } else {
     (data as any).role = "user";
   }
