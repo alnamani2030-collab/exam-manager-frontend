@@ -34,6 +34,10 @@ import {
   saveTenantAdminAssignment,
   saveTenantForScope,
 } from "../features/super-admin/services/superSystemService";
+import {
+  migrateAllowlistSchoolAdminLinks,
+  type AllowlistSchoolAdminMigrationReport,
+} from "../features/super-admin/services/migrateAllowlistSchoolAdminLinks";
 
 const safeId = (value: string) =>
   String(value || "")
@@ -99,42 +103,124 @@ export default function SuperSystem() {
   const [tenantAdminRows, setTenantAdminRows] = useState<TenantAdminLinkRow[]>([]);
   const [tenantAdminBusy, setTenantAdminBusy] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
+  const [migrationBusy, setMigrationBusy] = useState(false);
 
   const excelInputRef = useRef<HTMLInputElement | null>(null);
+
+  const getTenantDisplayName = async (tenantIdValue: string, fallbackName?: string) => {
+    const tenantId = String(tenantIdValue || "").trim();
+    if (!tenantId) return String(fallbackName || "").trim() || "مدرسة غير معروفة";
+
+    try {
+      const tenantSnap = await getDoc(doc(db, "tenants", tenantId));
+      if (tenantSnap.exists()) {
+        const data = tenantSnap.data() as any;
+        return String(data?.name || fallbackName || tenantId).trim();
+      }
+    } catch {}
+
+    return String(fallbackName || tenantId).trim();
+  };
+
+  const getExistingLinkByEmail = async (emailValue: string) => {
+    const email = String(emailValue || "").trim().toLowerCase();
+    if (!email) return null;
+
+    const existingSnap = await getDoc(doc(db, "allowlist", email));
+    if (!existingSnap.exists()) return null;
+
+    const existingData = existingSnap.data() as any;
+    const tenantId = String(existingData?.tenantId || "").trim();
+    const role = String(existingData?.role || "").trim().toLowerCase();
+    if (!tenantId || !["tenant_admin", "admin"].includes(role)) return null;
+
+    const schoolName = await getTenantDisplayName(
+      tenantId,
+      String(existingData?.schoolName || existingData?.tenantName || "").trim()
+    );
+
+    return { email, tenantId, schoolName };
+  };
+
+  const getExistingLinkByTenant = async (tenantIdValue: string) => {
+    const tenantId = String(tenantIdValue || "").trim();
+    if (!tenantId) return null;
+
+    const snap = await getDocs(
+      query(collection(db, "allowlist"), where("tenantId", "==", tenantId))
+    );
+
+    const match = snap.docs.find((d) => {
+      const data = d.data() as any;
+      const role = String(data?.role || "").trim().toLowerCase();
+      return role === "tenant_admin" || role === "admin";
+    });
+
+    if (!match) return null;
+
+    const data = match.data() as any;
+    const email = String(data?.email || match.id || "").trim().toLowerCase();
+    const schoolName = await getTenantDisplayName(
+      tenantId,
+      String(data?.schoolName || data?.tenantName || "").trim()
+    );
+
+    return { tenantId, email, schoolName };
+  };
 
   const isEmailAlreadyLinkedToAnotherSchool = async (emailValue: string, tenantIdValue: string) => {
     const email = String(emailValue || "").trim().toLowerCase();
     const tenantId = String(tenantIdValue || "").trim();
     if (!email || !tenantId) return false;
 
-    const existingSnap = await getDoc(doc(db, "allowlist", email));
-    if (!existingSnap.exists()) return false;
-
-    const existingData = existingSnap.data() as any;
-    const existingTenantId = String(existingData?.tenantId || "").trim();
-
-    if (!existingTenantId) return false;
-    return existingTenantId !== tenantId;
+    const existing = await getExistingLinkByEmail(email);
+    if (!existing) return false;
+    return existing.tenantId !== tenantId;
   };
 
   const isTenantAlreadyLinkedToAnotherEmail = async (tenantIdValue: string, emailValue: string) => {
     const tenantId = String(tenantIdValue || "").trim();
     const email = String(emailValue || "").trim().toLowerCase();
-    if (!tenantId) return false;
+    if (!tenantId || !email) return false;
 
-    const snap = await getDocs(
-      query(collection(db, "allowlist"), where("tenantId", "==", tenantId))
-    );
+    const existing = await getExistingLinkByTenant(tenantId);
+    if (!existing) return false;
+    return existing.email !== email;
+  };
 
-    if (snap.empty) return false;
+  const runAllowlistMigration = async () => {
+    if (!isOwner) {
+      alert("هذه الأداة متاحة لمالك المنصة فقط.");
+      return;
+    }
 
-    return snap.docs.some((d) => {
-      const data = d.data() as any;
-      const role = String(data?.role || "").trim().toLowerCase();
-      const docEmail = String(data?.email || d.id || "").trim().toLowerCase();
-      const isTenantAdminRole = role === "tenant_admin" || role === "admin";
-      return isTenantAdminRole && docEmail !== email;
-    });
+    const ok = confirm("سيتم تنظيف روابط الأدمن القديمة داخل allowlist وتوحيدها إلى tenant_admin مع تعبئة Tenant ID والمحافظة واسم المدرسة. هل تريد المتابعة؟");
+    if (!ok) return;
+
+    setMigrationBusy(true);
+    try {
+      const report: AllowlistSchoolAdminMigrationReport = await migrateAllowlistSchoolAdminLinks({
+        apply: true,
+      });
+
+      setEditReloadTick((x: number) => x + 1);
+
+      alert(
+        [
+          "تم تنفيذ أداة التنظيف بنجاح.",
+          `إجمالي السجلات المفحوصة: ${report.scanned}`,
+          `تم تحديثها: ${report.updated}`,
+          `تم حذف السجلات المكررة: ${report.deleted}`,
+          `السجلات المتجاهلة: ${report.skipped}`,
+          report.conflicts.length ? `تعارضات تحتاج مراجعة: ${report.conflicts.length}` : "لا توجد تعارضات متبقية.",
+        ].join("\n")
+      );
+    } catch (e) {
+      console.error(e);
+      alert("تعذر تنفيذ أداة التنظيف. تأكد من الصلاحيات ثم جرّب مرة أخرى.");
+    } finally {
+      setMigrationBusy(false);
+    }
   };
 
 
@@ -364,9 +450,7 @@ export default function SuperSystem() {
           if (!tenantId || !email) continue;
 
           const tenantMeta = tenantsMap.get(tenantId);
-
-          const tenantDocRef = doc(db, "tenants", tenantId);
-          const tenantDocSnap = await getDoc(tenantDocRef);
+          const tenantDocSnap = await getDoc(doc(db, "tenants", tenantId));
           if (!tenantDocSnap.exists()) continue;
 
           const tenantDocData = tenantDocSnap.data() as any;
@@ -549,15 +633,19 @@ export default function SuperSystem() {
 
     setSaveBusy(true);
     try {
-      const alreadyLinked = await isEmailAlreadyLinkedToAnotherSchool(userEmail, tenantId);
-      if (alreadyLinked) {
-        alert("لا يمكن ربط نفس البريد الإلكتروني بأكثر من مدرسة. البريد الإلكتروني يربط بمدرسة واحدة فقط.");
+      const existingByEmail = await getExistingLinkByEmail(userEmail);
+      if (existingByEmail && existingByEmail.tenantId !== tenantId) {
+        alert(
+          `هذا البريد الإلكتروني مرتبط مسبقًا بمدرسة: ${existingByEmail.schoolName} (Tenant ID: ${existingByEmail.tenantId}). لا يمكن ربط بريد واحد بأكثر من مدرسة.`
+        );
         return;
       }
 
-      const tenantAlreadyLinked = await isTenantAlreadyLinkedToAnotherEmail(tenantId, userEmail);
-      if (tenantAlreadyLinked) {
-        alert("لا يمكن ربط المدرسة بأكثر من بريد إلكتروني. لكل مدرسة بريد إلكتروني واحد فقط.");
+      const existingByTenant = await getExistingLinkByTenant(tenantId);
+      if (existingByTenant && existingByTenant.email !== String(userEmail || "").trim().toLowerCase()) {
+        alert(
+          `هذه المدرسة مرتبطة مسبقًا بالبريد الإلكتروني: ${existingByTenant.email} لمدرسة ${existingByTenant.schoolName} (Tenant ID: ${existingByTenant.tenantId}). لا يمكن ربط مدرسة واحدة بأكثر من بريد إلكتروني.`
+        );
         return;
       }
 
@@ -995,6 +1083,16 @@ export default function SuperSystem() {
                 >
                   تصدير Excel
                 </button>
+
+                {isOwner ? (
+                  <button
+                    className="btn"
+                    onClick={runAllowlistMigration}
+                    disabled={migrationBusy}
+                  >
+                    {migrationBusy ? "جارٍ التنظيف..." : "تنظيف الروابط القديمة"}
+                  </button>
+                ) : null}
               </div>
             </div>
 
