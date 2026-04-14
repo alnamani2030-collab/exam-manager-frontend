@@ -21,7 +21,7 @@ export async function loadUiUserProfile(params: {
             email,
             governorate: (effectiveAllow as any)?.governorate,
           }))
-    : ["staff"];
+    : [];
 
   const fallbackProfile: UserProfile | null = effectiveAllow || email
     ? {
