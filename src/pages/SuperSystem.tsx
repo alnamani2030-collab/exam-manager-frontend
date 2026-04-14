@@ -65,7 +65,9 @@ export default function SuperSystem() {
   if (!canManageSystem) return <Navigate to="/" replace />;
 
   const myGov = String(allow?.governorate ?? "").trim();
-  const canSeeAllGovs = isOwner || myGov === MINISTRY_SCOPE;
+  const isMinistryViewer = !isOwner && myGov === MINISTRY_SCOPE;
+  const isRegionalSuper = !isOwner && !isMinistryViewer;
+  const canSeeAllGovs = isOwner || isMinistryViewer;
 
   const {
     tenants,
@@ -200,6 +202,10 @@ export default function SuperSystem() {
   };
 
   const importTenantAdminLinksFromExcel = async (file: File) => {
+    if (isMinistryViewer) {
+      alert("سوبر الوزارة للمشاهدة فقط ولا يمكنه استيراد روابط الأدمن.");
+      return;
+    }
     setImportBusy(true);
     try {
       const importedRows = await parseExcelLikeFile(file);
@@ -235,7 +241,7 @@ export default function SuperSystem() {
           {
             email,
             enabled: true,
-            role: "admin",
+            role: "tenant_admin",
             tenantId,
             tenantName: row.tenantName || tenantDocData?.name || tenantId,
             tenantGovernorate,
@@ -256,6 +262,10 @@ export default function SuperSystem() {
   };
 
   const deleteTenantAdminLink = async (row: TenantAdminLinkRow) => {
+    if (isMinistryViewer) {
+      alert("سوبر الوزارة للمشاهدة فقط ولا يمكنه حذف الربط.");
+      return;
+    }
     const email = String(row.email || "").trim().toLowerCase();
     if (!email) return;
 
@@ -314,7 +324,7 @@ export default function SuperSystem() {
           ])
         );
 
-        const q = query(allowRef, where("role", "==", "admin"));
+        const q = query(allowRef, where("role", "in", ["tenant_admin", "admin"]));
         const snap = await getDocs(q);
 
         const rows: TenantAdminLinkRow[] = [];
@@ -361,6 +371,10 @@ export default function SuperSystem() {
   }, [tenants, canSeeAllGovs, myGov, editReloadTick, selectedTenantId]);
 
   const createTenant = async () => {
+    if (isMinistryViewer) {
+      alert("سوبر الوزارة للمشاهدة فقط ولا يمكنه إنشاء المدارس.");
+      return;
+    }
     try {
       const result = await createTenantForScope({
         tenantId: newTenantId,
@@ -393,6 +407,10 @@ export default function SuperSystem() {
   };
 
   const saveSelectedTenant = async () => {
+    if (isMinistryViewer) {
+      alert("سوبر الوزارة للمشاهدة فقط ولا يمكنه تعديل بيانات المدرسة.");
+      return;
+    }
     if (!selectedTenantId) {
       alert("اختر مدرسة أولاً.");
       return;
@@ -431,6 +449,10 @@ export default function SuperSystem() {
   };
 
   const deleteTenant = async (tenantId: string) => {
+    if (isMinistryViewer) {
+      alert("سوبر الوزارة للمشاهدة فقط ولا يمكنه حذف المدارس.");
+      return;
+    }
     const id = String(tenantId || "").trim();
     if (!id) return;
     if (!confirm(`تأكيد حذف المدرسة (${id})؟`)) return;
@@ -456,6 +478,10 @@ export default function SuperSystem() {
   };
 
   const saveAdminUser = async () => {
+    if (isMinistryViewer) {
+      alert("سوبر الوزارة للمشاهدة فقط ولا يمكنه إضافة أو تعديل أدمن المدرسة.");
+      return;
+    }
     const tenantId = String(selectedTenantId || "").trim();
     if (!tenantId) {
       alert("اختر مدرسة أولاً.");
@@ -531,9 +557,9 @@ export default function SuperSystem() {
           <div className="super-subtitle">
             {isOwner
               ? "مالك المنصة داخل نطاق المحافظات"
-              : canSeeAllGovs
-              ? "عرض جميع المحافظات"
-              : "مدير المحافظة - إدارة المدارس والمستخدمين"}
+              : isMinistryViewer
+              ? "سوبر الوزارة - مشاهدة فقط"
+              : "سوبر المحافظات - إدارة المدارس وأدمنات المدارس داخل النطاق"}
           </div>
         </div>
 
@@ -627,7 +653,7 @@ export default function SuperSystem() {
         <div style={{ lineHeight: 1.8, opacity: 0.92 }}>
           {isOwner
             ? "أنت مالك المنصة، ويمكنك من هذه الشاشة إدارة المحافظات والسوبرات والمدارس والمستخدمين والدخول إلى جميع البيانات حسب الصلاحيات العليا."
-            : canSeeAllGovs
+            : isMinistryViewer
             ? "أنت سوبر الوزارة، وصلاحيتك هنا مشاهدة المحافظات والمدارس فقط بدون إضافة أو تعديل أو حذف، وبدون دخول إلى البيانات الداخلية للمدارس."
             : "أنت سوبر المحافظات، ويمكنك إدارة المدارس وأدمنات المدارس داخل محافظتك فقط، بدون دخول إلى البيانات الداخلية للمدرسة."}
         </div>
@@ -651,7 +677,7 @@ export default function SuperSystem() {
                 key={t.id}
                 className={`tenant-row ${selectedTenantId === t.id ? "active" : ""}`}
               >
-                <button className="icon-btn" title="حذف" onClick={() => deleteTenant(t.id)}>
+                <button className="icon-btn" title="حذف" onClick={() => deleteTenant(t.id)} disabled={isMinistryViewer}>
                   🗑️
                 </button>
                 <button
@@ -701,6 +727,7 @@ export default function SuperSystem() {
                 className="input"
                 value={editTenantName}
                 onChange={(e) => setEditTenantName(e.target.value)}
+                disabled={isMinistryViewer}
               />
 
               <label className="label">الحالة</label>
@@ -709,6 +736,7 @@ export default function SuperSystem() {
                   type="checkbox"
                   checked={editTenantEnabled !== false}
                   onChange={(e) => setEditTenantEnabled(e.target.checked)}
+                  disabled={isMinistryViewer}
                 />
                 <span style={{ opacity: 0.9 }}>
                   {editTenantEnabled ? "مفعل" : "غير مفعل"}
@@ -720,6 +748,7 @@ export default function SuperSystem() {
                 className="input"
                 value={editWilayatAr}
                 onChange={(e) => setEditWilayatAr(e.target.value)}
+                disabled={isMinistryViewer}
                 placeholder="مثال: بوشر"
               />
 
@@ -728,12 +757,13 @@ export default function SuperSystem() {
                 className="input"
                 value={editLogoUrl}
                 onChange={(e) => setEditLogoUrl(e.target.value)}
+                disabled={isMinistryViewer}
                 placeholder={MINISTRY_LOGO_URL}
               />
 
               <div />
               <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                <button className="btn" disabled={editBusy} onClick={saveSelectedTenant}>
+                <button className="btn" disabled={editBusy || isMinistryViewer} onClick={saveSelectedTenant}>
                   {editBusy ? "جاري الحفظ..." : "حفظ التغييرات"}
                 </button>
                 <button
@@ -757,6 +787,7 @@ export default function SuperSystem() {
               className="input"
               value={newTenantName}
               onChange={(e) => setNewTenantName(e.target.value)}
+              disabled={isMinistryViewer}
               placeholder="مثال: أزان 12-9"
             />
 
@@ -765,6 +796,7 @@ export default function SuperSystem() {
               className="input"
               value={newTenantId}
               onChange={(e) => setNewTenantId(safeId(e.target.value))}
+              disabled={isMinistryViewer}
               placeholder="مثال: azaan-9-12"
             />
 
@@ -775,18 +807,21 @@ export default function SuperSystem() {
                 type="checkbox"
                 checked={newTenantEnabled}
                 onChange={(e) => setNewTenantEnabled(e.target.checked)}
+                disabled={isMinistryViewer}
               />
             </div>
 
             <div />
-            <button className="btn primary" onClick={createTenant}>
+            <button className="btn primary" onClick={createTenant} disabled={isMinistryViewer}>
               إنشاء مدرسة جديدة
             </button>
           </div>
 
           <div style={{ marginTop: 10, opacity: 0.8, lineHeight: 1.9 }}>
-            {canSeeAllGovs ? (
-              <div>مالك المنصة يمكنه إنشاء مدارس لأي محافظة، بينما سوبر الوزارة للمشاهدة فقط.</div>
+            {isOwner ? (
+              <div>مالك المنصة يمكنه إنشاء مدارس لأي محافظة.</div>
+            ) : isMinistryViewer ? (
+              <div>سوبر الوزارة للمشاهدة فقط، ولا يمكنه إنشاء المدارس أو تعديلها أو حذفها.</div>
             ) : (
               <div>
                 سيتم تثبيت محافظة المدرسة تلقائيًا على: <b>{myGov || "غير محددة"}</b>
@@ -808,6 +843,7 @@ export default function SuperSystem() {
               className="input"
               value={userEmail}
               onChange={(e) => setUserEmail(e.target.value)}
+              disabled={isMinistryViewer}
               placeholder="name@example.com"
             />
 
@@ -816,6 +852,7 @@ export default function SuperSystem() {
               className="input"
               value={userName}
               onChange={(e) => setUserName(e.target.value)}
+              disabled={isMinistryViewer}
               placeholder="اسم المستخدم"
             />
 
@@ -826,18 +863,19 @@ export default function SuperSystem() {
                 type="checkbox"
                 checked={userEnabled}
                 onChange={(e) => setUserEnabled(e.target.checked)}
+                disabled={isMinistryViewer}
               />
             </div>
 
             <div />
-            <button className="btn primary" onClick={saveAdminUser} disabled={saveBusy}>
+            <button className="btn primary" onClick={saveAdminUser} disabled={saveBusy || isMinistryViewer}>
               {saveBusy ? "جارٍ الحفظ..." : "حفظ المستخدم"}
             </button>
           </div>
 
           <div style={{ marginTop: 10, opacity: 0.8, lineHeight: 1.9 }}>
             <div>
-              ملاحظة: هذه الصفحة تسمح للسوبر بإضافة <b>Admin</b> فقط.
+              ملاحظة: هذه الصفحة تسمح لسوبر المحافظات أو مالك المنصة بإضافة <b>أدمن المدرسة</b> فقط، بينما سوبر الوزارة للمشاهدة فقط.
             </div>
             <div>
               لا يمكن ربط نفس البريد الإلكتروني بأكثر من مدرسة، والبريد الإلكتروني يربط بمدرسة واحدة فقط.
@@ -875,7 +913,7 @@ export default function SuperSystem() {
                 <button
                   className="btn btn-ghost"
                   onClick={() => excelInputRef.current?.click()}
-                  disabled={importBusy}
+                  disabled={importBusy || isMinistryViewer}
                 >
                   {importBusy ? "جارٍ الاستيراد..." : "استيراد Excel"}
                 </button>
@@ -985,6 +1023,7 @@ export default function SuperSystem() {
                           <button
                             className="btn danger"
                             onClick={() => deleteTenantAdminLink(row)}
+                            disabled={isMinistryViewer}
                           >
                             حذف الربط
                           </button>
