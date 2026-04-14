@@ -21,8 +21,8 @@ const ROLE_CAPS: Record<SaaSRole, Capability[]> = {
     "SUPPORT_MODE",
   ],
   ministry_super: [
+    "SYSTEM_ADMIN",
     "REPORTS_VIEW",
-    "AUDIT_VIEW",
   ],
   super: [
     "SYSTEM_ADMIN",
@@ -65,9 +65,13 @@ export function isPlatformOwner(snapshot: AuthzSnapshot): boolean {
 
 export function resolveEffectiveRoles(snapshot: AuthzSnapshot): SaaSRole[] {
   if (isPlatformOwner(snapshot)) return ["super_admin"];
+
   const normalized = normalizeRoles(snapshot.roles);
-  if (normalized.includes("ministry_super")) return normalized;
-  if (snapshot.isSuper) return normalized.includes("super") ? normalized : ["super", ...normalized];
+
+  if (snapshot.isSuper) {
+    return normalized.includes("super") ? normalized : ["super", ...normalized];
+  }
+
   return normalized;
 }
 
@@ -77,20 +81,30 @@ export function canAccessCapability(snapshot: AuthzSnapshot, capability: Capabil
 }
 
 export function shouldForceOnboarding(snapshot: AuthzSnapshot): boolean {
-  if (isPlatformOwner(snapshot) || snapshot.isSuper) return false;
+  if (isPlatformOwner(snapshot) || canAccessCapability(snapshot, "SYSTEM_ADMIN")) return false;
   return !String(snapshot.displayName || "").trim();
 }
 
-export function canAccessTenantRoute(snapshot: AuthzSnapshot, routeTenantId: string): { allowed: boolean; redirectTo?: string } {
+export function canAccessTenantRoute(
+  snapshot: AuthzSnapshot,
+  routeTenantId: string
+): { allowed: boolean; redirectTo?: string } {
   if (!routeTenantId) return { allowed: false, redirectTo: "/" };
 
   if (isPlatformOwner(snapshot)) {
     if (snapshot.isSupportMode && snapshot.supportTenantId) {
       const supportTenantId = String(snapshot.supportTenantId || "").trim();
       const supportUntil = typeof snapshot.supportUntil === "number" ? snapshot.supportUntil : null;
-      if (supportUntil && Date.now() >= supportUntil) return { allowed: false, redirectTo: "/super" };
-      if (supportTenantId && supportTenantId !== routeTenantId) return { allowed: false, redirectTo: `/t/${supportTenantId}` };
+
+      if (supportUntil && Date.now() >= supportUntil) {
+        return { allowed: false, redirectTo: "/super" };
+      }
+
+      if (supportTenantId && supportTenantId !== routeTenantId) {
+        return { allowed: false, redirectTo: `/t/${supportTenantId}` };
+      }
     }
+
     return { allowed: true };
   }
 
@@ -104,53 +118,72 @@ export function canAccessTenantRoute(snapshot: AuthzSnapshot, routeTenantId: str
     return { allowed: false, redirectTo: "/super-system" };
   }
 
-  if (!roles.includes("tenant_admin")) {
-    return { allowed: false, redirectTo: "/" };
-  }
-
   const tenantId = String(snapshot.tenantId || "").trim();
   if (!tenantId) return { allowed: false, redirectTo: "/" };
   if (tenantId !== routeTenantId) return { allowed: false, redirectTo: `/t/${tenantId}` };
+
   return { allowed: true };
 }
 
 export function resolveHomePath(snapshot: AuthzSnapshot): string {
   if (!snapshot.isAuthenticated || !snapshot.isEnabled) return "/login";
   if (isPlatformOwner(snapshot)) return "/super";
+
   const roles = resolveEffectiveRoles(snapshot);
+
   if (roles.includes("ministry_super")) return "/super";
-  if (snapshot.isSuper || roles.includes("super")) return "/super-system";
-  if (roles.includes("tenant_admin")) {
-    const tenantId = String(snapshot.tenantId || "").trim();
-    if (tenantId) return `/t/${tenantId}`;
-  }
+  if (roles.includes("super")) return "/super-system";
+
+  const tenantId = String(snapshot.tenantId || "").trim();
+  if (tenantId) return `/t/${tenantId}`;
+
   return "/login";
 }
 
-
-
 export function canManageAdminSystemRole(snapshot: AuthzSnapshot, role: string): boolean {
   const normalizedRole = String(role || "").trim().toLowerCase();
-  if (isPlatformOwner(snapshot)) return ["tenant_admin", "super", "ministry_super", "super_admin", "admin"].includes(normalizedRole);
-  if (normalizeRoles(snapshot.roles).includes("ministry_super")) return false;
-  if (normalizeRoles(snapshot.roles).includes("super")) return ["tenant_admin", "admin"].includes(normalizedRole);
+
+  if (isPlatformOwner(snapshot)) {
+    return [
+      "user",
+      "tenant_admin",
+      "admin", // legacy
+      "super",
+      "ministry_super",
+      "super_admin",
+    ].includes(normalizedRole);
+  }
+
+  if (canAccessCapability(snapshot, "SUPER_USERS_MANAGE")) {
+    return ["user", "tenant_admin", "admin", "super", "ministry_super"].includes(normalizedRole);
+  }
+
+  if (canAccessCapability(snapshot, "USERS_MANAGE")) {
+    return ["user", "tenant_admin", "admin"].includes(normalizedRole);
+  }
+
   return false;
 }
 
 export function listAdminSystemAssignableRoles(snapshot: AuthzSnapshot): SaaSRole[] {
   const roles: SaaSRole[] = [];
+
   if (canManageAdminSystemRole(snapshot, "tenant_admin")) roles.push("tenant_admin");
   if (canManageAdminSystemRole(snapshot, "super")) roles.push("super");
   if (canManageAdminSystemRole(snapshot, "ministry_super")) roles.push("ministry_super");
   if (canManageAdminSystemRole(snapshot, "super_admin")) roles.push("super_admin");
+
   return roles;
 }
 
 export function resolvePrimaryRoleLabel(snapshot: AuthzSnapshot): string {
   if (isPlatformOwner(snapshot)) return "مالك المنصة";
+
   const roles = resolveEffectiveRoles(snapshot);
+
   if (roles.includes("ministry_super")) return "سوبر الوزارة";
-  if (snapshot.isSuper || roles.includes("super")) return "سوبر المحافظات";
+  if (roles.includes("super")) return "سوبر المحافظات";
   if (roles.includes("tenant_admin")) return "أدمن المدرسة";
+
   return "مستخدم";
 }
