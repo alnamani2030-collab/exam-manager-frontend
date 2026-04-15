@@ -14,7 +14,7 @@ import {
 const GOLD = "#d4af37";
 const LINE = "rgba(212,175,55,0.22)";
 const PANEL_BG = "rgba(255,255,255,0.03)";
-const HEADER_LOGO_URL = "https://i.imgur.com/hxc8yi9.jpeg";
+const HEADER_LOGO_URL = "https://i.imgur.com/vdDhSMh.png";
 
 const page: React.CSSProperties = {
   minHeight: "100vh",
