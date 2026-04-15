@@ -15,6 +15,8 @@ export default function AdminTenantsSection(props: any) {
     deleteTenant,
     selectedTenantConfig,
     setSelectedTenantConfig,
+    selectedTenantLinkedEmail,
+    selectedTenantResolvedId,
     loadingConfig,
     saveTenantConfig,
     newTenantName,
@@ -127,6 +129,25 @@ export default function AdminTenantsSection(props: any) {
             {loadingConfig ? <div style={{ opacity: 0.85 }}>جاري التحميل...</div> : (
               <div style={{ display: "grid", gap: 10 }}>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div>
+                  <div style={{ marginBottom: 6, opacity: 0.85 }}>البريد المربوط بالمدرسة</div>
+                  <Input
+                    value={selectedTenantLinkedEmail || ""}
+                    readOnly
+                    placeholder="لا يوجد بريد مربوط"
+                  />
+                </div>
+                <div>
+                  <div style={{ marginBottom: 6, opacity: 0.85 }}>Tenant ID الخاص بالمدرسة</div>
+                  <Input
+                    value={selectedTenantResolvedId || ""}
+                    readOnly
+                    placeholder="لا يوجد Tenant محدد"
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                   <div>
                     <div style={{ marginBottom: 6, opacity: 0.85 }}>الوزارة (عربي)</div>
                     <Input value={selectedTenantConfig.ministryAr || ""} onChange={(e) => setSelectedTenantConfig((p: any) => ({ ...p, ministryAr: e.target.value }))} />
