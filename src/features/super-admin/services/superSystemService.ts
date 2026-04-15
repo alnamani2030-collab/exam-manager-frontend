@@ -1,5 +1,6 @@
 import {
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -7,7 +8,6 @@ import {
   onSnapshot,
   orderBy,
   query,
-  runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -21,14 +21,6 @@ import { MINISTRY_SCOPE } from "../../../constants/directorates";
 import { safeTenantId } from "./superSystemShared";
 
 const MINISTRY_LOGO_URL = "https://i.imgur.com/vdDhSMh.png";
-
-type TenantAdminLinkDoc = {
-  tenantId: string;
-  email: string;
-  governorate?: string;
-  schoolName?: string;
-  updatedAt?: unknown;
-};
 
 export function subscribeSuperTenants(
   onData: (rows: SuperSystemTenant[]) => void,
@@ -44,17 +36,14 @@ export function subscribeSuperTenants(
           const base = (d.data() as Record<string, unknown>) || {};
           const id = d.id;
 
-          let governorate = String(base?.governorate ?? "").trim();
-
-          if (!governorate) {
-            try {
-              const cfg = await getDoc(doc(db, "tenants", id, "meta", "config"));
-              governorate = String(
-                (cfg.data() as Record<string, unknown> | undefined)?.governorate ?? "",
-              ).trim();
-            } catch {
-              governorate = "";
-            }
+          let governorate = "";
+          try {
+            const cfg = await getDoc(doc(db, "tenants", id, "meta", "config"));
+            governorate = String(
+              (cfg.data() as Record<string, unknown> | undefined)?.governorate ?? "",
+            ).trim();
+          } catch {
+            governorate = "";
           }
 
           return {
@@ -86,6 +75,24 @@ export async function loadTenantEditState(selectedTenantId: string) {
     wilayatAr: String(cfg?.wilayatAr || ""),
     logoUrl: String(cfg?.logoUrl || MINISTRY_LOGO_URL),
   };
+}
+
+
+async function getTenantAdminAllowlistDocs(
+  tenantId: string,
+  governorate?: string,
+  restrictGovernorate: boolean = false,
+) {
+  const constraints: any[] = [
+    where("tenantId", "==", tenantId),
+    where("role", "in", ["tenant_admin", "admin"]),
+  ];
+
+  if (restrictGovernorate && governorate) {
+    constraints.push(where("governorate", "==", governorate));
+  }
+
+  return getDocs(query(collection(db, "allowlist"), ...constraints));
 }
 
 export async function createTenantForScope(input: {
@@ -149,16 +156,22 @@ export async function saveTenantForScope(input: {
   canSeeAllGovs: boolean;
   myGov: string;
 }) {
+  const tenantId = String(input.tenantId || "").trim();
+  const schoolName = String(input.name || "").trim();
+
   const gov = input.canSeeAllGovs
     ? String(input.myGov || MINISTRY_SCOPE).trim()
     : String(input.myGov || "").trim();
 
+  if (!tenantId || !schoolName) throw new Error("INVALID_TENANT_INPUT");
   if (!input.canSeeAllGovs && !gov) throw new Error("MISSING_GOVERNORATE");
 
-  await setDoc(
-    doc(db, "tenants", input.tenantId),
+  const batch = writeBatch(db);
+
+  batch.set(
+    doc(db, "tenants", tenantId),
     {
-      name: String(input.name || "").trim(),
+      name: schoolName,
       enabled: !!input.enabled,
       governorate: gov,
       updatedAt: serverTimestamp(),
@@ -166,26 +179,50 @@ export async function saveTenantForScope(input: {
     { merge: true },
   );
 
-  await setDoc(
-    doc(db, "tenants", input.tenantId, "meta", "config"),
+  batch.set(
+    doc(db, "tenants", tenantId, "meta", "config"),
     {
       governorate: gov,
       regionAr: gov,
-      schoolNameAr: String(input.name || "").trim(),
+      schoolNameAr: schoolName,
       wilayatAr: String(input.wilayatAr || "").trim(),
       logoUrl: String(input.logoUrl || "").trim() || MINISTRY_LOGO_URL,
       updatedAt: serverTimestamp(),
     },
     { merge: true },
   );
+
+  const allowlistSnap = await getTenantAdminAllowlistDocs(
+    tenantId,
+    gov,
+    !input.canSeeAllGovs,
+  );
+
+  for (const allowDoc of allowlistSnap.docs) {
+    const allowData = (allowDoc.data() as Record<string, unknown>) || {};
+    const existingUserName = String(allowData.userName || "").trim();
+    const existingSchoolName = String(allowData.schoolName || allowData.tenantName || "").trim();
+
+    const payload: Record<string, unknown> = {
+      schoolName,
+      tenantName: schoolName,
+      governorate: gov,
+      tenantGovernorate: gov,
+      enabled: !!input.enabled,
+      updatedAt: serverTimestamp(),
+    };
+
+    if (!existingUserName || existingUserName === existingSchoolName) {
+      payload.userName = schoolName;
+    }
+
+    batch.set(allowDoc.ref, payload, { merge: true });
+  }
+
+  await batch.commit();
 }
 
-export async function archiveAndDeleteTenant(input: {
-  tenantId: string;
-  deletedBy?: string;
-  canSeeAllGovs?: boolean;
-  myGov?: string;
-}) {
+export async function archiveAndDeleteTenant(input: { tenantId: string; deletedBy?: string }) {
   const id = String(input.tenantId || "").trim();
   if (!id) throw new Error("MISSING_TENANT_ID");
 
@@ -193,12 +230,7 @@ export async function archiveAndDeleteTenant(input: {
   const tSnap = await getDoc(tRef);
   const data = tSnap.exists() ? (tSnap.data() as Record<string, unknown>) : {};
 
-  const allowQs = await getDocs(query(collection(db, "allowlist"), where("tenantId", "==", id)));
-  const tenantLinkRef = doc(db, "tenantAdminLinks", id);
-
-  const batch = writeBatch(db);
-
-  batch.set(
+  await setDoc(
     doc(db, "archiveTenants", id),
     {
       ...data,
@@ -209,14 +241,9 @@ export async function archiveAndDeleteTenant(input: {
     { merge: true },
   );
 
-  for (const allowDoc of allowQs.docs) {
-    batch.delete(allowDoc.ref);
-  }
-
-  batch.delete(tenantLinkRef);
+  const batch = writeBatch(db);
   batch.delete(doc(db, "tenants", id, "meta", "config"));
   batch.delete(tRef);
-
   await batch.commit();
 }
 
@@ -236,75 +263,74 @@ export async function saveTenantAdminAssignment(input: {
   const tenantId = String(input.tenantId || "").trim();
   if (!tenantId) throw new Error("MISSING_TENANT_ID");
 
+  const tenantSnap = await getDoc(doc(db, "tenants", tenantId));
+  if (!tenantSnap.exists()) throw new Error("TENANT_NOT_FOUND");
+
+  const tenantData = (tenantSnap.data() as Record<string, unknown>) || {};
+  const tenantEnabled = tenantData.enabled !== false;
+  if (!tenantEnabled) throw new Error("TENANT_DISABLED");
+
   const governorate = input.canSeeAllGovs
     ? String(input.tenantGovernorate || input.myGov || MINISTRY_SCOPE).trim()
     : String(input.myGov || "").trim();
 
-  const schoolName = String(input.tenantName || "").trim() || tenantId;
-  const linkRef = doc(db, "allowlist", email);
-  const tenantLinkRef = doc(db, "tenantAdminLinks", tenantId);
+  const schoolName = String(input.tenantName || tenantData.name || "").trim() || tenantId;
 
-  await runTransaction(db, async (tx) => {
-    const tenantRef = doc(db, "tenants", tenantId);
-    const [tenantSnap, linkSnap, tenantLinkSnap] = await Promise.all([
-      tx.get(tenantRef),
-      tx.get(linkRef),
-      tx.get(tenantLinkRef),
-    ]);
-
-    if (!tenantSnap.exists()) {
-      throw new Error("TENANT_NOT_FOUND");
-    }
-
-    const existingEmailData = linkSnap.exists()
-      ? (linkSnap.data() as Record<string, unknown>)
-      : null;
-    const existingEmailRole = String(existingEmailData?.role || "").trim().toLowerCase();
-    const existingEmailTenantId = String(existingEmailData?.tenantId || "").trim();
+  const existingLinkSnap = await getDoc(doc(db, "allowlist", email));
+  if (existingLinkSnap.exists()) {
+    const existingData = (existingLinkSnap.data() as Record<string, unknown>) || {};
+    const existingTenantId = String(existingData.tenantId || "").trim();
+    const existingRole = String(existingData.role || "").trim().toLowerCase();
 
     if (
-      linkSnap.exists() &&
-      (existingEmailRole === "tenant_admin" || existingEmailRole === "admin") &&
-      existingEmailTenantId &&
-      existingEmailTenantId !== tenantId
+      existingTenantId &&
+      existingTenantId !== tenantId &&
+      (existingRole === "tenant_admin" || existingRole === "admin")
     ) {
+      const existingTenantSnap = await getDoc(doc(db, "tenants", existingTenantId));
+      const existingTenantData = existingTenantSnap.exists()
+        ? ((existingTenantSnap.data() as Record<string, unknown>) || {})
+        : {};
+      const existingTenantEnabled = existingTenantData.enabled !== false;
+
+      if (!existingTenantEnabled) {
+        throw new Error("DISABLED_TENANT_LINK_LOCKED");
+      }
+
       throw new Error("EMAIL_ALREADY_LINKED_TO_ANOTHER_TENANT");
     }
+  }
 
-    const existingTenantLinkData = tenantLinkSnap.exists()
-      ? (tenantLinkSnap.data() as Record<string, unknown>)
-      : null;
-    const existingTenantEmail = String(existingTenantLinkData?.email || "").trim().toLowerCase();
+  const existingTenantLinks = await getTenantAdminAllowlistDocs(
+    tenantId,
+    governorate,
+    !input.canSeeAllGovs,
+  );
 
-    if (tenantLinkSnap.exists() && existingTenantEmail && existingTenantEmail !== email) {
-      throw new Error("TENANT_ALREADY_LINKED_TO_ANOTHER_EMAIL");
-    }
-
-    const payload: SuperSystemAllowDoc = {
-      email,
-      enabled: !!input.enabled,
-      role: "tenant_admin" as any,
-      tenantId,
-      governorate,
-      schoolName,
-      tenantName: schoolName,
-      tenantGovernorate: governorate || undefined,
-      userName: String(input.userName || "").trim() || undefined,
-      updatedAt: serverTimestamp(),
-    } as SuperSystemAllowDoc;
-
-    const tenantLinkPayload: TenantAdminLinkDoc = {
-      tenantId,
-      email,
-      governorate: governorate || undefined,
-      schoolName,
-      updatedAt: serverTimestamp(),
-    };
-
-    tx.set(linkRef, payload, { merge: true });
-    tx.set(tenantLinkRef, tenantLinkPayload, { merge: true });
+  const linkedToOtherEmail = existingTenantLinks.docs.find((d) => {
+    const data = (d.data() as Record<string, unknown>) || {};
+    const docEmail = String(data.email || d.id || "").trim().toLowerCase();
+    return docEmail && docEmail !== email;
   });
 
+  if (linkedToOtherEmail) {
+    throw new Error("TENANT_ALREADY_LINKED_TO_ANOTHER_EMAIL");
+  }
+
+  const payload: SuperSystemAllowDoc = {
+    email,
+    enabled: !!input.enabled && tenantEnabled,
+    role: "tenant_admin" as any,
+    tenantId,
+    governorate,
+    schoolName,
+    tenantName: schoolName,
+    tenantGovernorate: governorate || undefined,
+    userName: String(input.userName || "").trim() || undefined,
+    updatedAt: serverTimestamp(),
+  } as SuperSystemAllowDoc;
+
+  await setDoc(doc(db, "allowlist", email), payload, { merge: true });
   return { email };
 }
 
@@ -318,37 +344,31 @@ export async function deleteTenantAdminAssignment(input: {
   if (!email) throw new Error("MISSING_EMAIL");
   if (!tenantId) throw new Error("MISSING_TENANT_ID");
 
+  const tenantSnap = await getDoc(doc(db, "tenants", tenantId));
+  if (!tenantSnap.exists()) throw new Error("TENANT_NOT_FOUND");
+
+  const tenantData = (tenantSnap.data() as Record<string, unknown>) || {};
+  if (tenantData.enabled === false) {
+    throw new Error("TENANT_DISABLED_LINK_CHANGE_BLOCKED");
+  }
+
   const linkRef = doc(db, "allowlist", email);
-  const tenantLinkRef = doc(db, "tenantAdminLinks", tenantId);
+  const linkSnap = await getDoc(linkRef);
+  if (!linkSnap.exists()) return;
 
-  await runTransaction(db, async (tx) => {
-    const [linkSnap, tenantLinkSnap] = await Promise.all([tx.get(linkRef), tx.get(tenantLinkRef)]);
+  const linkData = (linkSnap.data() as Record<string, unknown>) || {};
+  const linkedTenantId = String(linkData.tenantId || "").trim();
+  const linkRole = String(linkData.role || "").trim().toLowerCase();
 
-    if (linkSnap.exists()) {
-      const linkData = (linkSnap.data() as Record<string, unknown>) || {};
-      const linkedTenantId = String(linkData?.tenantId || "").trim();
-      const linkRole = String(linkData?.role || "").trim().toLowerCase();
+  if (
+    linkedTenantId &&
+    linkedTenantId !== tenantId &&
+    (linkRole === "tenant_admin" || linkRole === "admin")
+  ) {
+    throw new Error("EMAIL_LINKED_TO_ANOTHER_TENANT");
+  }
 
-      if (
-        linkedTenantId &&
-        linkedTenantId !== tenantId &&
-        (linkRole === "tenant_admin" || linkRole === "admin")
-      ) {
-        throw new Error("EMAIL_LINKED_TO_ANOTHER_TENANT");
-      }
-
-      tx.delete(linkRef);
-    }
-
-    if (tenantLinkSnap.exists()) {
-      const tenantLinkData = (tenantLinkSnap.data() as Record<string, unknown>) || {};
-      const linkedEmail = String(tenantLinkData?.email || "").trim().toLowerCase();
-
-      if (!linkedEmail || linkedEmail === email) {
-        tx.delete(tenantLinkRef);
-      }
-    }
-  });
+  await deleteDoc(linkRef);
 }
 
 export async function disableAllowlistForTenant(tenantId: string) {
