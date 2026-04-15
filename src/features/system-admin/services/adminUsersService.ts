@@ -34,34 +34,138 @@ import {
 
 const USE_FUNCTIONS = !Boolean((import.meta as any).env?.DEV);
 
-function isSchoolAdminRole(role: unknown) {
-  const value = String(role || "").trim().toLowerCase();
-  return value === "tenant_admin" || value === "admin";
+function isSchoolAdminRole(role: string) {
+  const r = String(role || "").trim().toLowerCase();
+  return r === "tenant_admin" || r === "admin";
 }
 
-async function getTenantState(tenantId: string) {
-  const tenantRef = doc(db, "tenants", tenantId);
-  const cfgRef = doc(db, "tenants", tenantId, "meta", "config");
-  const [tenantSnap, cfgSnap] = await Promise.all([getDoc(tenantRef), getDoc(cfgRef)]);
-
-  if (!tenantSnap.exists()) {
-    throw new Error("هذا الـ Tenant غير موجود. أنشئ المدرسة أولاً.");
+async function resolveTenantSchoolName(tenantId: string) {
+  const cfgSnap = await getDoc(doc(db, "tenants", tenantId, "meta", "config"));
+  if (cfgSnap.exists()) {
+    const data = cfgSnap.data() as any;
+    const v = String(data?.schoolNameAr || "").trim();
+    if (v) return v;
   }
 
-  const tenantData = (tenantSnap.data() as Record<string, unknown>) || {};
-  const cfgData = cfgSnap.exists()
-    ? ((cfgSnap.data() as Record<string, unknown>) || {})
-    : {};
+  const tSnap = await getDoc(doc(db, "tenants", tenantId));
+  if (tSnap.exists()) {
+    const data = tSnap.data() as any;
+    const v = String(data?.name || "").trim();
+    if (v) return v;
+  }
 
-  return {
-    enabled: tenantData?.enabled !== false,
-    schoolName: String(
-      tenantData?.name || cfgData?.schoolNameAr || tenantId,
-    ).trim(),
-    governorate: normalizeText(
-      String(cfgData?.governorate || cfgData?.regionAr || tenantData?.governorate || ""),
-    ) || "",
-  };
+  return tenantId;
+}
+
+async function assertTenantCanChangeAdminBinding(tenantId: string) {
+  const tSnap = await getDoc(doc(db, "tenants", tenantId));
+  if (!tSnap.exists()) throw new Error("هذا الـ Tenant غير موجود. أنشئ المدرسة أولاً.");
+  const data = tSnap.data() as any;
+  if (data?.enabled === false) {
+    throw new Error("المدرسة غير مفعلة. فعّل المدرسة أولاً قبل تعديل أو نقل أو فك ربط الأدمن.");
+  }
+  return data;
+}
+
+async function upsertSchoolAdminBinding(input: {
+  email: string;
+  tenantId: string;
+  enabled: boolean;
+  roleNorm: "tenant_admin";
+  governorateFinal?: string;
+  userName?: string;
+  schoolName?: string;
+  actorEmail?: string;
+}) {
+  const {
+    email,
+    tenantId,
+    enabled,
+    roleNorm,
+    governorateFinal,
+    userName,
+    schoolName,
+    actorEmail,
+  } = input;
+
+  const effectiveSchoolName = String(schoolName || "").trim() || (await resolveTenantSchoolName(tenantId));
+  const linkRef = doc(db, "allowlist", email);
+  const tenantLinkRef = doc(db, "tenantAdminLinks", tenantId);
+
+  await runTransaction(db, async (tx) => {
+    const [linkSnap, tenantLinkSnap, tenantSnap] = await Promise.all([
+      tx.get(linkRef),
+      tx.get(tenantLinkRef),
+      tx.get(doc(db, "tenants", tenantId)),
+    ]);
+
+    if (!tenantSnap.exists()) {
+      throw new Error("هذا الـ Tenant غير موجود. أنشئ المدرسة أولاً.");
+    }
+
+    const tenantData = tenantSnap.data() as any;
+    if (tenantData?.enabled === false) {
+      throw new Error("المدرسة غير مفعلة. فعّل المدرسة أولاً قبل تعديل أو نقل أو فك ربط الأدمن.");
+    }
+
+    const existingEmailData = linkSnap.exists()
+      ? (linkSnap.data() as Record<string, unknown>)
+      : {};
+    const existingEmailRole = String(existingEmailData?.role || "").trim().toLowerCase();
+    const existingEmailTenantId = String(existingEmailData?.tenantId || "").trim();
+
+    if (
+      linkSnap.exists() &&
+      isSchoolAdminRole(existingEmailRole) &&
+      existingEmailTenantId &&
+      existingEmailTenantId !== tenantId
+    ) {
+      const oldTenantSnap = await tx.get(doc(db, "tenants", existingEmailTenantId));
+      const oldTenantData = oldTenantSnap.exists() ? (oldTenantSnap.data() as any) : {};
+      if (oldTenantData?.enabled === false) {
+        throw new Error("هذا البريد مرتبط بمدرسة غير مفعلة. فعّل المدرسة الحالية أولاً قبل نقله.");
+      }
+      throw new Error("EMAIL_ALREADY_LINKED_TO_ANOTHER_TENANT");
+    }
+
+    const existingTenantLinkData = tenantLinkSnap.exists()
+      ? (tenantLinkSnap.data() as Record<string, unknown>)
+      : {};
+    const existingTenantEmail = String(existingTenantLinkData?.email || "").trim().toLowerCase();
+
+    if (tenantLinkSnap.exists() && existingTenantEmail && existingTenantEmail !== email) {
+      throw new Error("TENANT_ALREADY_LINKED_TO_ANOTHER_EMAIL");
+    }
+
+    const payload = stripUndefined({
+      email,
+      enabled: !!enabled,
+      role: roleNorm,
+      tenantId,
+      governorate: governorateFinal,
+      schoolName: effectiveSchoolName,
+      tenantName: effectiveSchoolName,
+      tenantGovernorate: governorateFinal,
+      userName: String(userName || "").trim() || effectiveSchoolName,
+      name: String(userName || "").trim() || effectiveSchoolName,
+      updatedAt: serverTimestamp(),
+      updatedBy: actorEmail || "",
+    });
+
+    tx.set(linkRef, payload, { merge: true });
+    tx.set(
+      tenantLinkRef,
+      {
+        tenantId,
+        email,
+        schoolName: effectiveSchoolName,
+        governorate: governorateFinal,
+        updatedAt: serverTimestamp(),
+        updatedBy: actorEmail || "",
+      },
+      { merge: true },
+    );
+  });
 }
 
 export async function buildGovernorateForUserRole(
@@ -69,12 +173,8 @@ export async function buildGovernorateForUserRole(
   tenantId: string,
   governorateInput: string,
 ): Promise<string | undefined> {
-  if (roleNorm === "super") {
-    return normalizeText(String(governorateInput ?? "")) || undefined;
-  }
-  if (roleNorm === "ministry_super") {
-    return normalizeText(String(MINISTRY_SCOPE)) || undefined;
-  }
+  if (roleNorm === "super") return normalizeText(String(governorateInput ?? "")) || undefined;
+  if (roleNorm === "ministry_super") return normalizeText(String(MINISTRY_SCOPE)) || undefined;
   if (roleNorm === "tenant_admin" || String(roleNorm) === "admin") {
     return normalizeText(await resolveTenantGovernorate(tenantId)) || undefined;
   }
@@ -100,19 +200,17 @@ export async function createAllowUserAction(args: any) {
 
   const email = String(newUserEmail || "").trim().toLowerCase();
   const tenantId = String(newUserTenantId || "").trim();
-  const tenantState = await getTenantState(tenantId);
+  const tSnap = await getDoc(doc(db, "tenants", tenantId));
+  if (!tSnap.exists()) throw new Error("هذا الـ Tenant غير موجود. أنشئ المدرسة أولاً.");
 
   const roleNorm = normalizeRoleClient(newUserRole, newUserGovernorate);
   const emailLower = email.toLowerCase().trim();
-  const isProtectedOwnerEmail =
-    emailLower === PRIMARY_SUPER_ADMIN_EMAIL.toLowerCase();
+  const isProtectedOwnerEmail = emailLower === PRIMARY_SUPER_ADMIN_EMAIL.toLowerCase();
 
   if (isSuper && roleNorm !== "tenant_admin" && String(roleNorm) !== "admin") {
     throw new Error("سوبر المحافظات لا يستطيع إنشاء إلا (أدمن المدرسة) فقط.");
   }
-  if (isProtectedOwnerEmail) {
-    throw new Error("لا يمكن تعديل/حذف/تعطيل مالك المنصة الرئيسي.");
-  }
+  if (isProtectedOwnerEmail) throw new Error("لا يمكن تعديل/حذف/تعطيل مالك المنصة الرئيسي.");
   if (!canManageAdminSystemRole(authzSnapshot, roleNorm)) {
     throw new Error("ليست لديك صلاحية لإنشاء هذا النوع من المستخدمين.");
   }
@@ -122,6 +220,7 @@ export async function createAllowUserAction(args: any) {
     const em = String((u as any).email ?? "").toLowerCase().trim();
     return r === "super_admin" || em === PRIMARY_SUPER_ADMIN_EMAIL.toLowerCase();
   }).length;
+
   const superCount = users.filter(
     (u: any) => normalizeRoleClient((u as any).role, (u as any).governorate) === "super",
   ).length;
@@ -133,6 +232,7 @@ export async function createAllowUserAction(args: any) {
   ) {
     throw new Error("الحد الأقصى للسوبر أدمن هو 2 فقط.");
   }
+
   if (roleNorm === "super") {
     if (superCount >= 12) throw new Error("الحد الأقصى للسوبر (المديرية) هو 12 فقط.");
     if (!normalizeText(String(newUserGovernorate ?? ""))) {
@@ -143,137 +243,47 @@ export async function createAllowUserAction(args: any) {
   if (isSuper) {
     const myG = normalizeText(String((profile as any)?.governorate ?? ""));
     const tenantGov = normalizeText(
-      String(
-        (selectedTenantConfig as any)?.governorate ??
-          (selectedTenantConfig as any)?.regionAr ??
-          tenantState.governorate ??
-          "",
-      ),
+      String((selectedTenantConfig as any)?.governorate ?? (tSnap.data() as any)?.governorate ?? ""),
     );
-    if (
-      myG &&
-      myG !== normalizeText(MINISTRY_SCOPE) &&
-      tenantGov &&
-      !isSameDirectorate(tenantGov, myG)
-    ) {
+    if (myG && myG !== normalizeText(MINISTRY_SCOPE) && tenantGov && !isSameDirectorate(tenantGov, myG)) {
       throw new Error("لا يمكنك إضافة أدمن مدرسة خارج نطاق محافظتك.");
     }
   }
 
-  if (isSchoolAdminRole(roleNorm) && !tenantState.enabled) {
-    throw new Error(
-      "هذه المدرسة غير مفعلة. يجب تفعيل المدرسة أولاً قبل ربط الأدمن بها أو استبداله.",
-    );
-  }
+  const governorateFinal = await buildGovernorateForUserRole(roleNorm, tenantId, newUserGovernorate);
 
-  const governorateFinal = await buildGovernorateForUserRole(
-    roleNorm,
-    tenantId,
-    newUserGovernorate,
-  );
-  const schoolName =
-    String(newUserSchoolName || "").trim() || tenantState.schoolName || tenantId;
-  const displayName =
-    String(newUserName || "").trim() || schoolName || tenantId;
+  if (roleNorm === "tenant_admin" || String(roleNorm) === "admin") {
+    await assertTenantCanChangeAdminBinding(tenantId);
 
-  try {
-    if (USE_FUNCTIONS) {
-      await callFn<any, any>("adminUpsertAllowlist")({
-        email,
-        enabled: isSchoolAdminRole(roleNorm) ? tenantState.enabled : !!newUserEnabled,
-        role: roleNorm,
-        tenantId,
-        governorate: governorateFinal,
-        name: displayName,
-        userName: displayName,
-        schoolName,
-        tenantName: schoolName,
-        tenantGovernorate: governorateFinal,
-      });
-    } else {
-      throw new Error("skip");
-    }
-  } catch (error) {
-    if (USE_FUNCTIONS && isStrictCloudRuntimeFunction("adminUpsertAllowlist")) {
-      throw toCloudRuntimeActionError(
-        error,
-        "adminUpsertAllowlist",
-        "إنشاء/تحديث المستخدم",
-      );
-    }
-
-    if (isSchoolAdminRole(roleNorm)) {
-      const linkRef = doc(db, "allowlist", email);
-      const tenantLinkRef = doc(db, "tenantAdminLinks", tenantId);
-
-      await runTransaction(db, async (tx) => {
-        const [linkSnap, tenantLinkSnap] = await Promise.all([
-          tx.get(linkRef),
-          tx.get(tenantLinkRef),
-        ]);
-
-        const existingEmailData = linkSnap.exists()
-          ? ((linkSnap.data() as Record<string, unknown>) || {})
-          : {};
-        const existingEmailRole = String(existingEmailData?.role || "")
-          .trim()
-          .toLowerCase();
-        const existingEmailTenantId = String(existingEmailData?.tenantId || "").trim();
-
-        if (
-          linkSnap.exists() &&
-          isSchoolAdminRole(existingEmailRole) &&
-          existingEmailTenantId &&
-          existingEmailTenantId !== tenantId
-        ) {
-          throw new Error("هذا البريد الإلكتروني مرتبط مسبقًا بمدرسة أخرى.");
-        }
-
-        const existingTenantLinkData = tenantLinkSnap.exists()
-          ? ((tenantLinkSnap.data() as Record<string, unknown>) || {})
-          : {};
-        const existingTenantEmail = String(existingTenantLinkData?.email || "")
-          .trim()
-          .toLowerCase();
-
-        if (tenantLinkSnap.exists() && existingTenantEmail && existingTenantEmail !== email) {
-          throw new Error("هذه المدرسة مرتبطة مسبقًا ببريد إلكتروني آخر.");
-        }
-
-        tx.set(
-          linkRef,
-          stripUndefined({
-            email,
-            enabled: tenantState.enabled,
-            role: "tenant_admin",
-            tenantId,
-            governorate: governorateFinal,
-            tenantGovernorate: governorateFinal,
-            name: displayName,
-            userName: displayName,
-            schoolName,
-            tenantName: schoolName,
-            createdAt: serverTimestamp(),
-            createdBy: user.email || "",
-            updatedAt: serverTimestamp(),
-            updatedBy: user.email || "",
-          }),
-          { merge: true },
-        );
-
-        tx.set(
-          tenantLinkRef,
-          {
-            tenantId,
-            email,
-            governorate: governorateFinal,
-            schoolName,
-            updatedAt: serverTimestamp(),
-          },
-          { merge: true },
-        );
-      });
-    } else {
+    await upsertSchoolAdminBinding({
+      email,
+      tenantId,
+      enabled: !!newUserEnabled,
+      roleNorm: "tenant_admin",
+      governorateFinal,
+      userName: String(newUserName || "").trim(),
+      schoolName: String(newUserSchoolName || "").trim(),
+      actorEmail: user.email || "",
+    });
+  } else {
+    try {
+      if (USE_FUNCTIONS) {
+        await callFn<any, any>("adminUpsertAllowlist")({
+          email,
+          enabled: !!newUserEnabled,
+          role: roleNorm,
+          tenantId,
+          governorate: governorateFinal,
+          name: String(newUserName || "").trim(),
+          schoolName: String(newUserSchoolName || "").trim(),
+        });
+      } else {
+        throw new Error("skip");
+      }
+    } catch (error) {
+      if (USE_FUNCTIONS && isStrictCloudRuntimeFunction("adminUpsertAllowlist")) {
+        throw toCloudRuntimeActionError(error, "adminUpsertAllowlist", "إنشاء/تحديث المستخدم");
+      }
       await setDoc(
         doc(db, "allowlist", email),
         stripUndefined({
@@ -282,11 +292,8 @@ export async function createAllowUserAction(args: any) {
           role: roleNorm,
           tenantId,
           governorate: governorateFinal,
-          name: displayName,
-          userName: displayName,
-          schoolName,
-          tenantName: schoolName,
-          tenantGovernorate: governorateFinal,
+          name: String(newUserName || "").trim(),
+          schoolName: String(newUserSchoolName || "").trim(),
           createdAt: serverTimestamp(),
           createdBy: user.email || "",
           updatedAt: serverTimestamp(),
@@ -306,9 +313,9 @@ export async function createAllowUserAction(args: any) {
     details: {
       role: roleNorm,
       governorate: governorateFinal,
-      enabled: isSchoolAdminRole(roleNorm) ? tenantState.enabled : !!newUserEnabled,
-      name: displayName,
-      schoolName,
+      enabled: !!newUserEnabled,
+      name: String(newUserName || "").trim(),
+      schoolName: String(newUserSchoolName || "").trim(),
     },
   });
 
@@ -321,18 +328,17 @@ export async function createAllowUserAction(args: any) {
     meta: {
       role: roleNorm,
       governorate: governorateFinal,
-      enabled: isSchoolAdminRole(roleNorm) ? tenantState.enabled : !!newUserEnabled,
-      name: displayName,
-      schoolName,
+      enabled: !!newUserEnabled,
+      name: String(newUserName || "").trim(),
+      schoolName: String(newUserSchoolName || "").trim(),
     },
   });
 }
 
 export async function updateAllowUserAction(args: any) {
   const { user, users, authzSnapshot, isSuper, resolveTenantGovernorate, email, patch } = args;
-  const current = users.find(
-    (u: any) => u.email.toLowerCase() === String(email).toLowerCase(),
-  );
+  const current = users.find((u: any) => u.email.toLowerCase() === String(email).toLowerCase());
+
   const merged: AllowUser = {
     email: String(email).toLowerCase(),
     tenantId: current?.tenantId || "",
@@ -346,7 +352,6 @@ export async function updateAllowUserAction(args: any) {
 
   const roleNorm = normalizeRoleClient(merged.role, (merged as any).governorate);
   const emailLower = String(merged.email || "").toLowerCase().trim();
-
   if (emailLower === PRIMARY_SUPER_ADMIN_EMAIL.toLowerCase()) {
     throw new Error("لا يمكن تعديل/حذف/تعطيل مالك المنصة الرئيسي.");
   }
@@ -359,11 +364,8 @@ export async function updateAllowUserAction(args: any) {
 
   let governorateFinal: string | undefined;
   if (roleNorm === "super") {
-    governorateFinal =
-      normalizeText(String((merged as any).governorate ?? "")) || undefined;
-    if (!governorateFinal) {
-      throw new Error("يجب تحديد المحافظة لسوبر المحافظات.");
-    }
+    governorateFinal = normalizeText(String((merged as any).governorate ?? "")) || undefined;
+    if (!governorateFinal) throw new Error("يجب تحديد المحافظة لسوبر المحافظات.");
     if (governorateFinal === normalizeText(MINISTRY_SCOPE)) {
       throw new Error("سوبر المحافظات لا يمكن أن يكون على نطاق الوزارة.");
     }
@@ -371,27 +373,42 @@ export async function updateAllowUserAction(args: any) {
     governorateFinal = normalizeText(String(MINISTRY_SCOPE)) || undefined;
   } else if (roleNorm === "tenant_admin" || String(roleNorm) === "admin") {
     governorateFinal =
-      normalizeText(await resolveTenantGovernorate(String(merged.tenantId || ""))) ||
-      undefined;
+      normalizeText(await resolveTenantGovernorate(String(merged.tenantId || ""))) || undefined;
   }
 
-  const tenantState = merged.tenantId
-    ? await getTenantState(String(merged.tenantId || "").trim())
-    : null;
+  if (roleNorm === "tenant_admin" || String(roleNorm) === "admin") {
+    const oldTenantId = String((current as any)?.tenantId || "").trim();
+    const newTenantId = String(merged.tenantId || "").trim();
 
-  if (isSchoolAdminRole(roleNorm) && tenantState && !tenantState.enabled) {
-    throw new Error(
-      "هذه المدرسة غير مفعلة. لا يمكن تعديل ربط الأدمن أو نقله أو إلغاؤه حتى يتم تفعيل المدرسة أولاً.",
-    );
+    if (oldTenantId && oldTenantId !== newTenantId) {
+      await assertTenantCanChangeAdminBinding(oldTenantId);
+    }
+    await assertTenantCanChangeAdminBinding(newTenantId);
+
+    await upsertSchoolAdminBinding({
+      email: merged.email,
+      tenantId: newTenantId,
+      enabled: !!merged.enabled,
+      roleNorm: "tenant_admin",
+      governorateFinal,
+      userName: String((merged as any).name || "").trim(),
+      schoolName: String((merged as any).schoolName || "").trim(),
+      actorEmail: user.email || "",
+    });
+
+    if (oldTenantId && oldTenantId !== newTenantId) {
+      const oldTenantLinkRef = doc(db, "tenantAdminLinks", oldTenantId);
+      const oldTenantLinkSnap = await getDoc(oldTenantLinkRef);
+      if (oldTenantLinkSnap.exists()) {
+        const oldTenantLinkData = oldTenantLinkSnap.data() as any;
+        const oldLinkedEmail = String(oldTenantLinkData?.email || "").trim().toLowerCase();
+        if (oldLinkedEmail === merged.email) {
+          await deleteDoc(oldTenantLinkRef);
+        }
+      }
+    }
+    return;
   }
-
-  const schoolName =
-    String((merged as any).schoolName || "").trim() ||
-    tenantState?.schoolName ||
-    String(merged.tenantId || "").trim();
-
-  const displayName =
-    String((merged.name || (merged as any).userName || "")).trim() || schoolName;
 
   try {
     if (USE_FUNCTIONS) {
@@ -399,15 +416,10 @@ export async function updateAllowUserAction(args: any) {
         email: merged.email,
         tenantId: merged.tenantId,
         governorate: governorateFinal,
-        enabled: isSchoolAdminRole(roleNorm)
-          ? tenantState?.enabled ?? !!merged.enabled
-          : !!merged.enabled,
+        enabled: !!merged.enabled,
         role: roleNorm,
-        name: displayName,
-        userName: displayName,
-        schoolName,
-        tenantName: schoolName,
-        tenantGovernorate: governorateFinal,
+        name: (merged.name || "").trim(),
+        schoolName: String((merged as any).schoolName || "").trim(),
       });
     } else {
       throw new Error("skip");
@@ -416,101 +428,21 @@ export async function updateAllowUserAction(args: any) {
     if (USE_FUNCTIONS && isStrictCloudRuntimeFunction("adminUpsertAllowlist")) {
       throw toCloudRuntimeActionError(error, "adminUpsertAllowlist", "تعديل المستخدم");
     }
-
-    if (isSchoolAdminRole(roleNorm)) {
-      const linkRef = doc(db, "allowlist", merged.email);
-      const tenantLinkRef = doc(db, "tenantAdminLinks", String(merged.tenantId || "").trim());
-
-      await runTransaction(db, async (tx) => {
-        const [linkSnap, tenantLinkSnap] = await Promise.all([
-          tx.get(linkRef),
-          tx.get(tenantLinkRef),
-        ]);
-
-        const existingTenantLinkData = tenantLinkSnap.exists()
-          ? ((tenantLinkSnap.data() as Record<string, unknown>) || {})
-          : {};
-        const existingTenantEmail = String(existingTenantLinkData?.email || "")
-          .trim()
-          .toLowerCase();
-
-        if (tenantLinkSnap.exists() && existingTenantEmail && existingTenantEmail !== merged.email) {
-          throw new Error("هذه المدرسة مرتبطة مسبقًا ببريد إلكتروني آخر.");
-        }
-
-        tx.set(
-          linkRef,
-          stripUndefined({
-            email: merged.email,
-            tenantId: merged.tenantId,
-            governorate: governorateFinal,
-            tenantGovernorate: governorateFinal,
-            enabled: tenantState?.enabled ?? !!merged.enabled,
-            role: "tenant_admin",
-            name: displayName,
-            userName: displayName,
-            schoolName,
-            tenantName: schoolName,
-            updatedAt: serverTimestamp(),
-            updatedBy: user.email || "",
-          }),
-          { merge: true },
-        );
-
-        tx.set(
-          tenantLinkRef,
-          {
-            tenantId: String(merged.tenantId || "").trim(),
-            email: merged.email,
-            governorate: governorateFinal,
-            schoolName,
-            updatedAt: serverTimestamp(),
-          },
-          { merge: true },
-        );
-
-        if (linkSnap.exists()) {
-          const oldData = (linkSnap.data() as Record<string, unknown>) || {};
-          const oldTenantId = String(oldData?.tenantId || "").trim();
-          if (
-            oldTenantId &&
-            oldTenantId !== String(merged.tenantId || "").trim()
-          ) {
-            const oldTenantLinkRef = doc(db, "tenantAdminLinks", oldTenantId);
-            const oldTenantLinkSnap = await tx.get(oldTenantLinkRef);
-            if (oldTenantLinkSnap.exists()) {
-              const oldTenantLinkData =
-                (oldTenantLinkSnap.data() as Record<string, unknown>) || {};
-              const oldLinkedEmail = String(oldTenantLinkData?.email || "")
-                .trim()
-                .toLowerCase();
-              if (!oldLinkedEmail || oldLinkedEmail === merged.email) {
-                tx.delete(oldTenantLinkRef);
-              }
-            }
-          }
-        }
-      });
-    } else {
-      await setDoc(
-        doc(db, "allowlist", merged.email),
-        stripUndefined({
-          email: merged.email,
-          tenantId: merged.tenantId,
-          governorate: governorateFinal,
-          enabled: !!merged.enabled,
-          role: roleNorm,
-          name: displayName,
-          userName: displayName,
-          schoolName,
-          tenantName: schoolName,
-          tenantGovernorate: governorateFinal,
-          updatedAt: serverTimestamp(),
-          updatedBy: user.email || "",
-        }),
-        { merge: true },
-      );
-    }
+    await setDoc(
+      doc(db, "allowlist", merged.email),
+      stripUndefined({
+        email: merged.email,
+        tenantId: merged.tenantId,
+        governorate: governorateFinal,
+        enabled: !!merged.enabled,
+        role: roleNorm,
+        name: (merged.name || "").trim(),
+        schoolName: String((merged as any).schoolName || "").trim(),
+        updatedAt: serverTimestamp(),
+        updatedBy: user.email || "",
+      }),
+      { merge: true },
+    );
   }
 }
 
@@ -529,46 +461,36 @@ export async function removeAllowUserAction(args: any) {
     throw new Error("ليست لديك صلاحية لحذف هذا النوع من المستخدمين.");
   }
 
-  const tenantId = String((item as any)?.tenantId || "").trim();
-  if (tenantId && isSchoolAdminRole((item as any)?.role)) {
-    const tenantState = await getTenantState(tenantId);
-    if (!tenantState.enabled) {
-      throw new Error(
-        "هذه المدرسة غير مفعلة. لا يمكن إلغاء ربط الأدمن عنها حتى يتم تفعيلها أولاً.",
-      );
-    }
-
-    const tenantLinkRef = doc(db, "tenantAdminLinks", tenantId);
-    await runTransaction(db, async (tx) => {
-      const tenantLinkSnap = await tx.get(tenantLinkRef);
+  if (isSchoolAdminRole(roleNorm)) {
+    const tenantId = String(item?.tenantId || "").trim();
+    if (tenantId) {
+      await assertTenantCanChangeAdminBinding(tenantId);
+      const tenantLinkRef = doc(db, "tenantAdminLinks", tenantId);
+      const tenantLinkSnap = await getDoc(tenantLinkRef);
       if (tenantLinkSnap.exists()) {
-        const tenantLinkData = (tenantLinkSnap.data() as Record<string, unknown>) || {};
+        const tenantLinkData = tenantLinkSnap.data() as any;
         const linkedEmail = String(tenantLinkData?.email || "").trim().toLowerCase();
-        if (!linkedEmail || linkedEmail === emailLower) {
-          tx.delete(tenantLinkRef);
+        if (linkedEmail === emailLower) {
+          await deleteDoc(tenantLinkRef);
         }
       }
-      tx.delete(doc(db, "allowlist", emailLower));
-    });
-  } else {
-    try {
-      if (USE_FUNCTIONS) {
-        await callFn<any, any>("adminDeleteAllowlist")({ email: emailLower });
-      } else {
-        throw new Error("skip");
-      }
-    } catch (error) {
-      if (USE_FUNCTIONS && isStrictCloudRuntimeFunction("adminDeleteAllowlist")) {
-        throw toCloudRuntimeActionError(error, "adminDeleteAllowlist", "حذف المستخدم");
-      }
-      await deleteDoc(doc(db, "allowlist", emailLower));
     }
   }
 
-  if (tenantId) {
+  try {
+    if (USE_FUNCTIONS) await callFn<any, any>("adminDeleteAllowlist")({ email: emailLower });
+    else throw new Error("skip");
+  } catch (error) {
+    if (USE_FUNCTIONS && isStrictCloudRuntimeFunction("adminDeleteAllowlist")) {
+      throw toCloudRuntimeActionError(error, "adminDeleteAllowlist", "حذف المستخدم");
+    }
+    await deleteDoc(doc(db, "allowlist", emailLower));
+  }
+
+  if (item?.tenantId) {
     await writeSecurityAudit({
       type: "ALLOWLIST_DELETE",
-      tenantId,
+      tenantId: item.tenantId,
       actorUid: user.uid,
       actorEmail: user.email || "",
       targetEmail: emailLower,
@@ -588,74 +510,40 @@ export async function inviteSingleOwnerAction(args: any) {
   const em = String(ownerEmail || "").trim().toLowerCase();
   if (!tid || !em.includes("@")) throw new Error("أدخل tenantId صحيح وبريد صحيح.");
 
-  const tenantState = await getTenantState(tid);
+  await assertTenantCanChangeAdminBinding(tid);
 
-  await runTransaction(db, async (tx) => {
-    const linkRef = doc(db, "allowlist", em);
-    const tenantLinkRef = doc(db, "tenantAdminLinks", tid);
+  const governorate = normalizeText(await resolveTenantGovernorate(tid)) || undefined;
+  const schoolName = await resolveTenantSchoolName(tid);
 
-    const [linkSnap, tenantLinkSnap] = await Promise.all([
-      tx.get(linkRef),
-      tx.get(tenantLinkRef),
-    ]);
-
-    const existingEmailData = linkSnap.exists()
-      ? ((linkSnap.data() as Record<string, unknown>) || {})
-      : {};
-    const existingEmailRole = String(existingEmailData?.role || "").trim().toLowerCase();
-    const existingEmailTenantId = String(existingEmailData?.tenantId || "").trim();
-
-    if (
-      linkSnap.exists() &&
-      isSchoolAdminRole(existingEmailRole) &&
-      existingEmailTenantId &&
-      existingEmailTenantId !== tid
-    ) {
-      throw new Error("هذا البريد الإلكتروني مرتبط مسبقًا بمدرسة أخرى.");
-    }
-
-    const existingTenantLinkData = tenantLinkSnap.exists()
-      ? ((tenantLinkSnap.data() as Record<string, unknown>) || {})
-      : {};
-    const existingTenantEmail = String(existingTenantLinkData?.email || "")
-      .trim()
-      .toLowerCase();
-
-    if (tenantLinkSnap.exists() && existingTenantEmail && existingTenantEmail !== em) {
-      throw new Error("هذه المدرسة مرتبطة مسبقًا ببريد إلكتروني آخر.");
-    }
-
-    tx.set(
-      linkRef,
-      {
-        email: em,
-        enabled: tenantState.enabled,
-        role: "tenant_admin",
-        tenantId: tid,
-        governorate: tenantState.governorate || undefined,
-        tenantGovernorate: tenantState.governorate || undefined,
-        name: tenantState.schoolName,
-        userName: tenantState.schoolName,
-        schoolName: tenantState.schoolName,
-        tenantName: tenantState.schoolName,
-        createdAt: serverTimestamp(),
-        createdBy: user.email || "",
-        updatedAt: serverTimestamp(),
-        updatedBy: user.email || "",
-      },
-      { merge: true },
-    );
-
-    tx.set(
-      tenantLinkRef,
-      {
-        tenantId: tid,
-        email: em,
-        governorate: tenantState.governorate || undefined,
-        schoolName: tenantState.schoolName,
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true },
-    );
+  await upsertSchoolAdminBinding({
+    email: em,
+    tenantId: tid,
+    enabled: true,
+    roleNorm: "tenant_admin",
+    governorateFinal: governorate,
+    userName: schoolName,
+    schoolName,
+    actorEmail: user.email || "",
   });
+
+  await setDoc(
+    doc(db, "allowlist", em),
+    {
+      email: em,
+      enabled: true,
+      role: "tenant_admin",
+      tenantId: tid,
+      governorate,
+      schoolName,
+      tenantName: schoolName,
+      tenantGovernorate: governorate,
+      userName: schoolName,
+      name: schoolName,
+      createdAt: serverTimestamp(),
+      createdBy: user.email || "",
+      updatedAt: serverTimestamp(),
+      updatedBy: user.email || "",
+    },
+    { merge: true },
+  );
 }
