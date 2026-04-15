@@ -206,6 +206,7 @@ export default function SuperSystem() {
   const [userName, setUserName] = useState("");
   const [userEnabled, setUserEnabled] = useState(true);
   const [saveBusy, setSaveBusy] = useState(false);
+  const [linkedTenantAdminEmail, setLinkedTenantAdminEmail] = useState("");
 
   const [tenantAdminRows, setTenantAdminRows] = useState<TenantAdminLinkRow[]>([]);
   const [tenantAdminBusy, setTenantAdminBusy] = useState(false);
@@ -258,26 +259,131 @@ export default function SuperSystem() {
     const tenantId = String(tenantIdValue || "").trim();
     if (!tenantId) return null;
 
-    const snap = await getDocs(
-      query(collection(db, "allowlist"), where("tenantId", "==", tenantId)),
+    try {
+      const tenantLinkSnap = await getDoc(doc(db, "tenantAdminLinks", tenantId));
+      if (tenantLinkSnap.exists()) {
+        const tenantLinkData = tenantLinkSnap.data() as any;
+        const linkedEmail = String(tenantLinkData?.email || "").trim().toLowerCase();
+
+        if (linkedEmail) {
+          const allowSnap = await getDoc(doc(db, "allowlist", linkedEmail));
+          if (allowSnap.exists()) {
+            const allowData = allowSnap.data() as any;
+            const role = String(allowData?.role || "").trim().toLowerCase();
+
+            if (role === "tenant_admin" || role === "admin") {
+              const schoolName = await getTenantDisplayName(
+                tenantId,
+                String(
+                  allowData?.schoolName ||
+                    allowData?.tenantName ||
+                    tenantLinkData?.schoolName ||
+                    "",
+                ).trim(),
+              );
+
+              return {
+                tenantId,
+                email: linkedEmail,
+                schoolName,
+                userName: String(allowData?.userName || "").trim(),
+                enabled: allowData?.enabled !== false,
+              };
+            }
+          }
+
+          const schoolName = await getTenantDisplayName(
+            tenantId,
+            String(tenantLinkData?.schoolName || "").trim(),
+          );
+
+          return {
+            tenantId,
+            email: linkedEmail,
+            schoolName,
+            userName: "",
+            enabled: true,
+          };
+        }
+      }
+    } catch (error) {
+      console.error(error);
+    }
+
+    const rowFromState = tenantAdminRows.find(
+      (row) => String(row.tenantId || "").trim() === tenantId,
     );
 
-    const match = snap.docs.find((d) => {
-      const data = d.data() as any;
-      const role = String(data?.role || "").trim().toLowerCase();
-      return role === "tenant_admin" || role === "admin";
-    });
+    if (rowFromState?.email) {
+      try {
+        const allowSnap = await getDoc(
+          doc(db, "allowlist", String(rowFromState.email || "").trim().toLowerCase()),
+        );
 
-    if (!match) return null;
+        if (allowSnap.exists()) {
+          const allowData = allowSnap.data() as any;
+          const role = String(allowData?.role || "").trim().toLowerCase();
 
-    const data = match.data() as any;
-    const email = String(data?.email || match.id || "").trim().toLowerCase();
-    const schoolName = await getTenantDisplayName(
-      tenantId,
-      String(data?.schoolName || data?.tenantName || "").trim(),
-    );
+          if (role === "tenant_admin" || role === "admin") {
+            const schoolName = await getTenantDisplayName(
+              tenantId,
+              String(
+                allowData?.schoolName || allowData?.tenantName || rowFromState.tenantName || "",
+              ).trim(),
+            );
 
-    return { tenantId, email, schoolName };
+            return {
+              tenantId,
+              email: String(rowFromState.email || "").trim().toLowerCase(),
+              schoolName,
+              userName: String(allowData?.userName || "").trim(),
+              enabled: allowData?.enabled !== false,
+            };
+          }
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }
+
+    try {
+      const baseFilters: any[] = [
+        where("tenantId", "==", tenantId),
+        where("role", "in", ["tenant_admin", "admin"]),
+      ];
+
+      if (!canSeeAllGovs) {
+        baseFilters.push(where("governorate", "==", String(myGov || "").trim()));
+      }
+
+      const snap = await getDocs(query(collection(db, "allowlist"), ...baseFilters));
+
+      const match = snap.docs.find((d) => {
+        const data = d.data() as any;
+        const role = String(data?.role || "").trim().toLowerCase();
+        return role === "tenant_admin" || role === "admin";
+      });
+
+      if (!match) return null;
+
+      const data = match.data() as any;
+      const email = String(data?.email || match.id || "").trim().toLowerCase();
+      const schoolName = await getTenantDisplayName(
+        tenantId,
+        String(data?.schoolName || data?.tenantName || "").trim(),
+      );
+
+      return {
+        tenantId,
+        email,
+        schoolName,
+        userName: String(data?.userName || "").trim(),
+        enabled: data?.enabled !== false,
+      };
+    } catch (error) {
+      console.error(error);
+      return null;
+    }
   };
 
   const isEmailAlreadyLinkedToAnotherSchool = async (emailValue: string, tenantIdValue: string) => {
@@ -510,6 +616,12 @@ export default function SuperSystem() {
         ),
       );
       setPendingAdminLinkDelete(null);
+      if (selectedTenantId && String(row.tenantId || "").trim() === String(selectedTenantId || "").trim()) {
+        setLinkedTenantAdminEmail("");
+        setUserEmail("");
+        setUserName("");
+        setUserEnabled(true);
+      }
       alert("تم حذف الربط من الجدول بنجاح.");
     } catch (e) {
       console.error(e);
@@ -519,7 +631,10 @@ export default function SuperSystem() {
 
   useEffect(() => {
     const run = async () => {
-      if (!selectedTenantId) return;
+      if (!selectedTenantId) {
+        setLinkedTenantAdminEmail("");
+        return;
+      }
       try {
         const state = await loadTenantEditState(selectedTenantId);
         setEditTenantName(state.name);
@@ -528,6 +643,43 @@ export default function SuperSystem() {
         setEditLogoUrl(state.logoUrl);
       } catch (e) {
         console.error(e);
+      }
+    };
+
+    void run();
+  }, [selectedTenantId, editReloadTick]);
+
+  useEffect(() => {
+    const run = async () => {
+      if (!selectedTenantId) {
+        setUserEmail("");
+        setUserName("");
+        setUserEnabled(true);
+        setLinkedTenantAdminEmail("");
+        return;
+      }
+
+      try {
+        const existingAdmin = await getExistingLinkByTenant(selectedTenantId);
+        if (!existingAdmin) {
+          setUserEmail("");
+          setUserName("");
+          setUserEnabled(true);
+          setLinkedTenantAdminEmail("");
+          return;
+        }
+
+        const existingEmail = String(existingAdmin.email || "").trim().toLowerCase();
+        setLinkedTenantAdminEmail(existingEmail);
+        setUserEmail(existingEmail);
+        setUserName(String(existingAdmin.userName || ""));
+        setUserEnabled(existingAdmin.enabled !== false);
+      } catch (e) {
+        console.error(e);
+        setUserEmail("");
+        setUserName("");
+        setUserEnabled(true);
+        setLinkedTenantAdminEmail("");
       }
     };
 
@@ -550,7 +702,13 @@ export default function SuperSystem() {
           ]),
         );
 
-        const q = query(allowRef, where("role", "in", ["tenant_admin", "admin"]));
+        const q = !canSeeAllGovs
+          ? query(
+              allowRef,
+              where("role", "in", ["tenant_admin", "admin"]),
+              where("governorate", "==", String(myGov || "").trim()),
+            )
+          : query(allowRef, where("role", "in", ["tenant_admin", "admin"]));
         const snap = await getDocs(q);
 
         const rows: TenantAdminLinkRow[] = [];
@@ -954,7 +1112,15 @@ export default function SuperSystem() {
                 <label className="label">Tenant ID</label>
                 <input className="input" value={selectedTenantId} readOnly />
 
-                <label className="label">اسم المدرسة</label>
+                <label className="label">الإيميل المرتبط بالمدرسة</label>
+              <input
+                className="input"
+                value={linkedTenantAdminEmail}
+                readOnly
+                placeholder="لا يوجد ربط حالياً"
+              />
+
+              <label className="label">اسم المدرسة</label>
                 <input
                   className="input"
                   value={editTenantName}
