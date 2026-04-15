@@ -76,6 +76,7 @@ async function upsertSchoolAdminBinding(input: {
   userName?: string;
   schoolName?: string;
   actorEmail?: string;
+  forceTransfer?: boolean;
 }) {
   const {
     email,
@@ -86,6 +87,7 @@ async function upsertSchoolAdminBinding(input: {
     userName,
     schoolName,
     actorEmail,
+    forceTransfer,
   } = input;
 
   const effectiveSchoolName = String(schoolName || "").trim() || (await resolveTenantSchoolName(tenantId));
@@ -120,12 +122,16 @@ async function upsertSchoolAdminBinding(input: {
       existingEmailTenantId &&
       existingEmailTenantId !== tenantId
     ) {
-      const oldTenantSnap = await tx.get(doc(db, "tenants", existingEmailTenantId));
+      const oldTenantRef = doc(db, "tenants", existingEmailTenantId);
+      const oldTenantSnap = await tx.get(oldTenantRef);
       const oldTenantData = oldTenantSnap.exists() ? (oldTenantSnap.data() as any) : {};
       if (oldTenantData?.enabled === false) {
         throw new Error("هذا البريد مرتبط بمدرسة غير مفعلة. فعّل المدرسة الحالية أولاً قبل نقله.");
       }
-      throw new Error("EMAIL_ALREADY_LINKED_TO_ANOTHER_TENANT");
+      if (!forceTransfer) {
+        throw new Error("EMAIL_ALREADY_LINKED_TO_ANOTHER_TENANT");
+      }
+      tx.delete(doc(db, "tenantAdminLinks", existingEmailTenantId));
     }
 
     const existingTenantLinkData = tenantLinkSnap.exists()
@@ -264,6 +270,7 @@ export async function createAllowUserAction(args: any) {
       userName: String(newUserName || "").trim(),
       schoolName: String(newUserSchoolName || "").trim(),
       actorEmail: user.email || "",
+      forceTransfer: false,
     });
   } else {
     try {
@@ -336,7 +343,7 @@ export async function createAllowUserAction(args: any) {
 }
 
 export async function updateAllowUserAction(args: any) {
-  const { user, users, authzSnapshot, isSuper, resolveTenantGovernorate, email, patch } = args;
+  const { user, users, authzSnapshot, isSuper, resolveTenantGovernorate, email, patch, forceTransfer } = args;
   const current = users.find((u: any) => u.email.toLowerCase() === String(email).toLowerCase());
 
   const merged: AllowUser = {
