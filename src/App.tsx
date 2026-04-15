@@ -47,6 +47,7 @@ import { useI18n } from "./i18n/I18nProvider";
 import LegacyTenantRedirect from "./pages/LegacyTenantRedirect";
 import { LEGACY_TENANT_PATHS } from "./config/tenantRoutes";
 import SuperSuggestions from "./pages/SuperSuggestions";
+import GovernorateTenantsManager from "./pages/GovernorateTenantsManager";
 
 // Root redirect (split: SuperAdmin vs Super)
 import RootRedirect from "./pages/RootRedirect";
@@ -154,6 +155,15 @@ export default function App() {
         element={
           <SuperAdminRoute>
             <Migrate />
+          </SuperAdminRoute>
+        }
+      />
+
+      <Route
+        path="/system/governorate-tenants"
+        element={
+          <SuperAdminRoute>
+            <GovernorateTenantsManager />
           </SuperAdminRoute>
         }
       />
