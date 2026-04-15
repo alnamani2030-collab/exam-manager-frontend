@@ -5,7 +5,6 @@ import "./superSystem.theme.css";
 
 import {
   collection,
-  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -30,6 +29,7 @@ import { useSuperSystemTenants } from "../features/super-admin/hooks/useSuperSys
 import {
   archiveAndDeleteTenant,
   createTenantForScope,
+  deleteTenantAdminAssignment,
   loadTenantEditState,
   saveTenantAdminAssignment,
   saveTenantForScope,
@@ -610,30 +610,43 @@ export default function SuperSystem() {
       return;
     }
 
+    const tenantId = String(row.tenantId || "").trim();
+    const tenant = tenants.find((t) => String(t.id || "").trim() === tenantId);
+
+    if (tenant && tenant.enabled === false) {
+      alert("لا يمكن إلغاء ربط الأدمن من مدرسة غير مفعلة. قم بتفعيل المدرسة أولاً ثم ألغِ الربط.");
+      return;
+    }
+
     const email = String(row.email || "").trim().toLowerCase();
     if (!email) return;
 
     try {
-      await deleteDoc(doc(db, "allowlist", email));
+      await deleteTenantAdminAssignment({ email, tenantId });
       setTenantAdminRows((prev) =>
         prev.filter(
           (item) =>
             !(
-              String(item.tenantId || "") === String(row.tenantId || "") &&
+              String(item.tenantId || "") === tenantId &&
               String(item.email || "").toLowerCase() === email
             ),
         ),
       );
       setPendingAdminLinkDelete(null);
-      if (selectedTenantId && String(row.tenantId || "").trim() === String(selectedTenantId || "").trim()) {
+      if (selectedTenantId && tenantId === String(selectedTenantId || "").trim()) {
         setLinkedTenantAdminEmail("");
         setUserEmail("");
         setUserName("");
         setUserEnabled(true);
       }
       alert("تم حذف الربط من الجدول بنجاح.");
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      const message = String(e?.message || "");
+      if (message === "TENANT_DISABLED_LINK_CHANGE_BLOCKED") {
+        alert("لا يمكن إلغاء ربط الأدمن من مدرسة غير مفعلة. قم بتفعيل المدرسة أولاً ثم ألغِ الربط.");
+        return;
+      }
       alert("تعذر حذف الربط. تأكد من الصلاحيات ثم جرّب مرة أخرى.");
     }
   };
@@ -943,6 +956,11 @@ export default function SuperSystem() {
       return;
     }
 
+    if (tenant.enabled === false) {
+      alert("لا يمكن تعديل ربط الأدمن لمدرسة غير مفعلة. قم بتفعيل المدرسة أولاً.");
+      return;
+    }
+
     setSaveBusy(true);
     try {
       const normalizedEmail = String(userEmail || "").trim().toLowerCase();
@@ -985,11 +1003,18 @@ export default function SuperSystem() {
       alert("تم حفظ المستخدم بنجاح.");
     } catch (e: any) {
       console.error(e);
-      alert(
-        String(e?.message || "") === "INVALID_EMAIL"
-          ? "يرجى إدخال بريد صحيح."
-          : getActionErrorMessage(e, "تعذر حفظ المستخدم. تأكد من الصلاحيات ثم جرّب مرة أخرى."),
-      );
+      const message = String(e?.message || "");
+      if (message === "INVALID_EMAIL") {
+        alert("يرجى إدخال بريد صحيح.");
+      } else if (message === "TENANT_DISABLED") {
+        alert("لا يمكن تعديل ربط الأدمن لمدرسة غير مفعلة. قم بتفعيل المدرسة أولاً.");
+      } else if (message === "DISABLED_TENANT_LINK_LOCKED") {
+        alert("هذا البريد مرتبط بمدرسة غير مفعلة، ولا يمكن نقله أو إعادة ربطه حتى يتم تفعيل تلك المدرسة أولاً.");
+      } else if (message === "TENANT_ALREADY_LINKED_TO_ANOTHER_EMAIL") {
+        alert("هذه المدرسة مرتبطة مسبقًا بإيميل آخر، ولا يمكن ربطها بإيميل مختلف.");
+      } else {
+        alert(getActionErrorMessage(e, "تعذر حفظ المستخدم. تأكد من الصلاحيات ثم جرّب مرة أخرى."));
+      }
     } finally {
       setSaveBusy(false);
     }
