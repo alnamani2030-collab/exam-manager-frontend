@@ -14,7 +14,7 @@ import {
 const GOLD = "#d4af37";
 const LINE = "rgba(212,175,55,0.22)";
 const PANEL_BG = "rgba(255,255,255,0.03)";
-const HEADER_LOGO_URL = "https://i.imgur.com/vdDhSMh.png";
+const HEADER_LOGO_URL = "https://i.imgur.com/hxc8yi9.jpeg";
 
 const page: React.CSSProperties = {
   minHeight: "100vh",
@@ -85,6 +85,14 @@ const selectStyle: React.CSSProperties = {
   color: "#d4af37",
   outline: "none",
   boxSizing: "border-box",
+  appearance: "none" as any,
+  WebkitAppearance: "none" as any,
+  MozAppearance: "none" as any,
+};
+
+const optionStyle: React.CSSProperties = {
+  background: "#000000",
+  color: "#d4af37",
 };
 
 export default function GovernorateTenantsManager() {
@@ -399,9 +407,9 @@ export default function GovernorateTenantsManager() {
                       style={selectStyle}
                       disabled={busy}
                     >
-                      <option value="">اختر المحافظة</option>
+                      <option value="" style={optionStyle}>اختر المحافظة</option>
                       {DIRECTORATES.map((g) => (
-                        <option key={g} value={g}>
+                        <option key={g} value={g} style={optionStyle}>
                           {g}
                         </option>
                       ))}
@@ -425,9 +433,9 @@ export default function GovernorateTenantsManager() {
               onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedGovernorate(e.target.value)}
               style={selectStyle}
             >
-              <option value="">كل المحافظات</option>
+              <option value="" style={optionStyle}>كل المحافظات</option>
               {DIRECTORATES.map((g) => (
-                <option key={g} value={g}>
+                <option key={g} value={g} style={optionStyle}>
                   {g}
                 </option>
               ))}
