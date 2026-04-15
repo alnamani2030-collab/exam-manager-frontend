@@ -20,8 +20,10 @@ export type SuperSystemAllowDoc = {
   role: SuperSystemAllowRole;
   tenantId: string;
   governorate?: string;
+  tenantGovernorate?: string;
   userName?: string;
   schoolName?: string;
+  tenantName?: string;
   name?: string;
   updatedAt?: unknown;
 };
