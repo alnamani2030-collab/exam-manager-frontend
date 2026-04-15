@@ -17,7 +17,10 @@ export function useAdminTenants(params: { isPlatformOwner: boolean; isSuper: boo
   const tenantsSnapSeqRef = useRef(0);
 
   const newTenantId = useMemo(() => slugifyTenantId(newTenantIdRaw), [newTenantIdRaw]);
-  const canSaveTenant = useMemo(() => !!newTenantId && isValidTenantId(newTenantId) && !!newTenantName.trim(), [newTenantId, newTenantName]);
+  const canSaveTenant = useMemo(
+    () => !!newTenantId && isValidTenantId(newTenantId) && !!newTenantName.trim(),
+    [newTenantId, newTenantName],
+  );
   const myGov = normalizeText(String((profile as any)?.governorate ?? ""));
 
   const visibleTenants = useMemo(() => {
@@ -28,40 +31,69 @@ export function useAdminTenants(params: { isPlatformOwner: boolean; isSuper: boo
   }, [tenants, isPlatformOwner, isSuper, myGov, profile]);
 
   useEffect(() => {
-    const qTenants = query(collection(db, "tenants"), orderBy("createdAt", "desc"), limit(200));
+    const qTenants = query(collection(db, "tenants"), orderBy("updatedAt", "desc"), limit(500));
+
     const unsub = onSnapshot(
       qTenants,
       (snap) => {
         const seq = ++tenantsSnapSeqRef.current;
-        const listAll: TenantDoc[] = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+
+        const listAll: TenantDoc[] = snap.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as any),
+        }));
+
         const list: TenantDoc[] = listAll.filter((t: any) => t?.deleted !== true);
 
         Promise.all(
           list.map(async (t) => {
             try {
               const cfgSnap = await getDoc(doc(db, "tenants", t.id, "meta", "config"));
-              const g = cfgSnap.exists() ? String(((cfgSnap.data() as any)?.governorate ?? (cfgSnap.data() as any)?.regionAr ?? "")).trim() : "";
-              return { ...t, governorate: g || (t as any).governorate } as TenantDoc;
+              const cfg = cfgSnap.exists() ? ((cfgSnap.data() as any) || {}) : {};
+              const governorate = String(
+                cfg?.governorate ?? cfg?.regionAr ?? (t as any)?.governorate ?? "",
+              ).trim();
+              const schoolNameAr = String(cfg?.schoolNameAr ?? "").trim();
+              const displayName = schoolNameAr || String((t as any)?.name || t.id || "").trim();
+
+              return {
+                ...t,
+                governorate,
+                schoolNameAr,
+                displayName,
+                name: displayName,
+              } as TenantDoc & { displayName?: string; schoolNameAr?: string };
             } catch {
-              return t;
+              const displayName = String((t as any)?.name || t.id || "").trim();
+              return {
+                ...t,
+                displayName,
+                name: displayName,
+              } as TenantDoc & { displayName?: string };
             }
-          })
+          }),
         ).then((withGovAll) => {
           if (seq !== tenantsSnapSeqRef.current) return;
+
           const withGov = withGovAll.filter((t: any) => t?.deleted !== true);
           setTenants(withGov);
+
           const stillExists = selectedTenantId && withGov.some((x) => x.id === selectedTenantId);
-          if (!stillExists) setSelectedTenantId(withGov.length ? withGov[0].id : null);
+          if (!stillExists) {
+            setSelectedTenantId(withGov.length ? withGov[0].id : null);
+          }
         });
       },
-      () => setTenants([])
+      () => setTenants([]),
     );
+
     return () => unsub();
   }, [selectedTenantId]);
 
   useEffect(() => {
     if (!selectedTenantId) return;
     let alive = true;
+
     (async () => {
       setLoadingConfig(true);
       try {
@@ -75,6 +107,7 @@ export function useAdminTenants(params: { isPlatformOwner: boolean; isSuper: boo
         if (alive) setLoadingConfig(false);
       }
     })();
+
     return () => {
       alive = false;
     };
@@ -99,3 +132,5 @@ export function useAdminTenants(params: { isPlatformOwner: boolean; isSuper: boo
     isValidTenantId,
   };
 }
+
+export default useAdminTenants;
