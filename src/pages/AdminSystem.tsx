@@ -253,8 +253,19 @@ export default function AdminSystem() {
     }
   };
 
-  const updateUser = async (email: string, patch: Partial<AllowUser>) => {
+  const updateUser = async (email: string, patch: Partial<AllowUser>, forceTransfer = false) => {
     if (!user) return;
+
+    const current = users.find((u: any) => String(u.email || "").toLowerCase() === String(email || "").toLowerCase());
+    const targetTenantId = String((patch as any)?.tenantId || (current as any)?.tenantId || "").trim();
+    const targetTenant = visibleTenants.find((t: any) => String(t.id || "").trim() === targetTenantId);
+    const currentTenantId = String((current as any)?.tenantId || "").trim();
+    const currentTenant = visibleTenants.find((t: any) => String(t.id || "").trim() === currentTenantId);
+    const currentSchoolName =
+      String((current as any)?.schoolName || (current as any)?.tenantName || currentTenant?.name || currentTenantId || "").trim();
+    const targetSchoolName =
+      String((patch as any)?.schoolName || targetTenant?.name || targetTenantId || "").trim();
+
     try {
       await updateAllowUserAction({
         user,
@@ -264,8 +275,25 @@ export default function AdminSystem() {
         resolveTenantGovernorate,
         email,
         patch,
+        forceTransfer,
       });
     } catch (e: any) {
+      const code = String(e?.message || "").trim();
+
+      if (code === "EMAIL_ALREADY_LINKED_TO_ANOTHER_TENANT" && !forceTransfer) {
+        const ok = window.confirm(
+          `هذا البريد مرتبط حاليًا بالمدرسة: "${currentSchoolName}".\n\nهل تريد نقل الربط إلى المدرسة الجديدة: "${targetSchoolName}"؟`
+        );
+        if (!ok) return;
+        await updateUser(email, patch, true);
+        return;
+      }
+
+      if (code === "TENANT_ALREADY_LINKED_TO_ANOTHER_EMAIL") {
+        alert("هذه المدرسة مرتبطة حاليًا ببريد آخر. يجب فك الربط الحالي أولًا أو اختيار مدرسة أخرى.");
+        return;
+      }
+
       alert(getActionErrorMessage(e, "تعذر تعديل المستخدم."));
     }
   };
