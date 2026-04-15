@@ -106,6 +106,24 @@ export default function AdminSystem() {
 
   const [supportError, setSupportError] = useState<string>("");
 
+  const selectedTenantLinkedEmail = useMemo(() => {
+    const tid = String(selectedTenantId || "").trim();
+    if (!tid) return "";
+
+    const row = (users || []).find((u: any) => {
+      const role = String(u?.role || "").trim().toLowerCase();
+      const tenantId = String(u?.tenantId || "").trim();
+      return tenantId === tid && (role === "tenant_admin" || role === "admin");
+    });
+
+    return String(row?.email || "").trim();
+  }, [users, selectedTenantId]);
+
+  const selectedTenantResolvedId = useMemo(
+    () => String(selectedTenantId || "").trim(),
+    [selectedTenantId]
+  );
+
   useEffect(() => {
     const q = query(collection(db, "systemSuggestions"), where("status", "==", "new"));
 
@@ -560,6 +578,8 @@ export default function AdminSystem() {
               deleteTenant={deleteTenant}
               selectedTenantConfig={selectedTenantConfig}
               setSelectedTenantConfig={setSelectedTenantConfig}
+              selectedTenantLinkedEmail={selectedTenantLinkedEmail}
+              selectedTenantResolvedId={selectedTenantResolvedId}
               loadingConfig={loadingConfig}
               saveTenantConfig={saveTenantConfig}
               newTenantName={newTenantName}
