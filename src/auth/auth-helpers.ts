@@ -19,11 +19,12 @@ export function normalizeAllowlistRole(raw: any, email: string, governorate?: an
   if (e === PRIMARY_SUPER_ADMIN_EMAIL.toLowerCase()) return "super_admin";
 
   const r = String(raw ?? "tenant_admin").trim().toLowerCase();
-  if (r === "super_admin" || r === "superadmin" || r === "super admin" || r === "super-admin") return "super_admin";
-  if (r === "ministry_super" || r === "ministry super" || r === "ministry-super" || r === "super_ministry") return "ministry_super";
+
+  if (["super_admin", "superadmin", "super admin", "super-admin"].includes(r)) return "super_admin";
+  if (["ministry_super", "ministry super", "ministry-super", "super_ministry"].includes(r)) return "ministry_super";
   if (r === "super") return "super";
-  if (r === "tenant_admin" || r === "tenant admin" || r === "tenant-admin") return "tenant_admin";
-  if (r === "admin") return "admin"; // legacy compatibility
+  if (["tenant_admin", "tenant admin", "tenant-admin"].includes(r)) return "tenant_admin";
+  if (r === "admin") return "admin";
   return "user";
 }
 
@@ -53,14 +54,15 @@ export function allowFromClaims(email: string, claims: TokenClaims): AllowDoc | 
   if (role === "super_admin" || claims.isOwner) {
     return { email, enabled: true, role: "super_admin", tenantId: SUPER_ADMIN_TENANT_ID } as AllowDoc;
   }
-  if (!tenantId) return null;
-  return { email, enabled: true, role, tenantId } as AllowDoc;
-}
 
+  if (!tenantId && role !== "ministry_super" && role !== "super") return null;
+  return { email, enabled: true, role, tenantId: tenantId || SUPER_ADMIN_TENANT_ID } as AllowDoc;
+}
 
 export function normalizeStoredSaaSRoles(input: unknown): SaaSRole[] {
   const raw = Array.isArray(input) ? input : [];
   const out: SaaSRole[] = [];
+
   for (const item of raw) {
     const role = String(item ?? "").trim().toLowerCase();
 
@@ -84,6 +86,7 @@ export function normalizeStoredSaaSRoles(input: unknown): SaaSRole[] {
       continue;
     }
   }
+
   return Array.from(new Set(out));
 }
 
@@ -100,6 +103,7 @@ export function mapAllowRoleToSaaSRoles(params: { allowRole: Role; email: string
 export async function ensureTenantOwnerDoc(params: { tenantId: string; uid: string; email: string }) {
   const { tenantId, uid, email } = params;
   if (!tenantId) return;
+
   const ownerRef = doc(db, "tenants", tenantId, "meta", "owner");
   try {
     const snap = await getDoc(ownerRef);
@@ -111,6 +115,7 @@ export async function ensureTenantOwnerDoc(params: { tenantId: string; uid: stri
 export async function isTenantOwner(params: { tenantId: string; uid: string }): Promise<boolean> {
   const { tenantId, uid } = params;
   if (!tenantId) return false;
+
   try {
     const ownerRef = doc(db, "tenants", tenantId, "meta", "owner");
     const snap = await getDoc(ownerRef);
@@ -129,10 +134,17 @@ export async function syncUserProfileFromAllowlist(params: {
   authDisplayName?: string | null;
 }): Promise<UserProfile> {
   const { uid, email, allow, authDisplayName } = params;
+
   const roleNorm = normalizeAllowlistRole(allow.role, email, (allow as any)?.governorate);
-  const roles = normalizeStoredSaaSRoles((allow as any)?.roles).length
-    ? normalizeStoredSaaSRoles((allow as any)?.roles)
-    : mapAllowRoleToSaaSRoles({ allowRole: roleNorm, email, governorate: (allow as any)?.governorate });
+  const storedRoles = normalizeStoredSaaSRoles((allow as any)?.roles);
+  const roles = storedRoles.length
+    ? storedRoles
+    : mapAllowRoleToSaaSRoles({
+        allowRole: roleNorm,
+        email,
+        governorate: (allow as any)?.governorate,
+      });
+
   const isGlobal = roleNorm === "super_admin" || roleNorm === "ministry_super" || roleNorm === "super";
   const tenantId = isGlobal ? SUPER_ADMIN_TENANT_ID : String(allow.tenantId ?? "").trim();
 
@@ -148,11 +160,14 @@ export async function syncUserProfileFromAllowlist(params: {
   };
 
   if (isGlobal) return profile;
+
   if (tenantId) await ensureTenantOwnerDoc({ tenantId, uid, email });
   const ownerOk = tenantId ? await isTenantOwner({ tenantId, uid }) : false;
   if (!ownerOk) return profile;
+
   try {
     await setDoc(doc(db, "users", uid), profile, { merge: true });
   } catch {}
+
   return profile;
 }
