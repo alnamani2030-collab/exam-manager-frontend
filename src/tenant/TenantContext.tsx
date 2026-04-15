@@ -8,6 +8,7 @@ import { initAutoArchiveCloudSync } from "../services/autoCloudSync";
 export type TenantConfig = {
   tenantId: string;
   enabled?: boolean;
+  deleted?: boolean;
   schoolName?: string;
   authority?: string;
   academicYear?: string;
@@ -40,9 +41,6 @@ function resolveTenantIdForApp(opts: {
 }): string {
   const envTenant = ((import.meta as any).env?.VITE_TENANT_ID as string | undefined) || "";
   const fromHost = getTenantIdFromHost();
-
-  // If signed in, always prefer the tenant that comes from allowlist/profile.
-  // This fixes the common local-dev case where VITE_TENANT_ID is set to a different tenant.
   const fromProfile = (opts.authedUser ? String(opts.effectiveTenantId || "") : "").trim();
 
   return (
@@ -69,7 +67,6 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
 
     (async () => {
-      // While auth is still initializing, don't call Firestore.
       if (authLoading) {
         setState((s) => ({ ...s, loading: true, error: null }));
         return;
@@ -77,7 +74,6 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
 
       const tenantId = resolveTenantIdForApp({ authedUser, effectiveTenantId });
 
-      // Not signed in yet: don't call Firestore (rules will block). Just keep tenantId for UI hints.
       if (!authedUser) {
         setState({ tenantId: tenantId || null, config: null, loading: false, error: null });
         return;
@@ -91,27 +87,68 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
       setState((s) => ({ ...s, loading: true, error: null }));
 
       try {
-        const configRef = doc(db, `tenants/${tenantId}/meta/config`);
-        const configSnap = await getDoc(configRef);
+        const tenantRef = doc(db, "tenants", tenantId);
+        const configRef = doc(db, "tenants", tenantId, "meta", "config");
+
+        const [tenantSnap, configSnap] = await Promise.all([
+          getDoc(tenantRef),
+          getDoc(configRef),
+        ]);
+
+        if (!tenantSnap.exists()) {
+          throw new Error(`Missing tenants/${tenantId}`);
+        }
 
         if (!configSnap.exists()) {
           throw new Error(`Missing tenants/${tenantId}/meta/config`);
         }
 
+        const tenantData = (tenantSnap.data() as any) || {};
+        const configData = (configSnap.data() as any) || {};
+
+        const tenantDeleted = tenantData?.deleted === true;
+        const configDeleted = configData?.deleted === true;
+        const tenantEnabled = tenantData?.enabled !== false;
+        const configEnabled = configData?.enabled !== false;
+
+        if (tenantDeleted || configDeleted) {
+          throw new Error("TENANT_DELETED");
+        }
+
+        if (!tenantEnabled || !configEnabled) {
+          throw new Error("TENANT_DISABLED");
+        }
+
         if (cancelled) return;
+
         setState({
           tenantId,
-          config: { tenantId, ...(configSnap.data() as any) },
+          config: {
+            tenantId,
+            ...tenantData,
+            ...configData,
+            enabled: tenantEnabled && configEnabled,
+            deleted: tenantDeleted || configDeleted,
+          },
           loading: false,
           error: null,
         });
       } catch (e: any) {
         if (cancelled) return;
+
+        const raw = String(e?.message || e || "").trim();
+        const normalizedError =
+          raw === "TENANT_DELETED"
+            ? "هذه المدرسة محذوفة ولا يمكن الدخول إليها."
+            : raw === "TENANT_DISABLED"
+            ? "هذه المدرسة غير مفعلة حاليًا ولا يمكن الدخول إليها."
+            : raw || "تعذر تحميل بيانات المدرسة.";
+
         setState({
           tenantId: null,
           config: null,
           loading: false,
-          error: e?.message || String(e),
+          error: normalizedError,
         });
       }
     })();
@@ -121,7 +158,6 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     };
   }, [authLoading, authedUser, effectiveTenantId]);
 
-  // ✅ Auto cloud sync (Archive) for every signed-in user
   useEffect(() => {
     if (!authedUser) return;
     const tid = String(state.tenantId || "").trim();
@@ -130,7 +166,7 @@ export function TenantProvider({ children }: { children: React.ReactNode }) {
     const cleanup = initAutoArchiveCloudSync({
       tenantId: tid,
       enabled: true,
-      intervalMs: 5 * 60 * 1000, // 5 minutes
+      intervalMs: 5 * 60 * 1000,
       maxUpsert: 200,
       maxFetch: 500,
     });
