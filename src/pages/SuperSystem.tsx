@@ -70,6 +70,12 @@ type ExistingEmailReplaceState = {
   newSchoolName: string;
 };
 
+type PendingSchoolRenameConfirm = {
+  tenantId: string;
+  oldName: string;
+  newName: string;
+};
+
 function ConfirmModal(props: {
   open: boolean;
   title: string;
@@ -217,6 +223,9 @@ export default function SuperSystem() {
   const [pendingAdminLinkDelete, setPendingAdminLinkDelete] = useState<PendingAdminLinkDelete>(null);
   const [existingEmailReplaceState, setExistingEmailReplaceState] =
     useState<ExistingEmailReplaceState | null>(null);
+  const [originalEditTenantName, setOriginalEditTenantName] = useState("");
+  const [pendingSchoolRenameConfirm, setPendingSchoolRenameConfirm] =
+    useState<PendingSchoolRenameConfirm | null>(null);
 
   const excelInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -633,11 +642,13 @@ export default function SuperSystem() {
     const run = async () => {
       if (!selectedTenantId) {
         setLinkedTenantAdminEmail("");
+        setOriginalEditTenantName("");
         return;
       }
       try {
         const state = await loadTenantEditState(selectedTenantId);
         setEditTenantName(state.name);
+        setOriginalEditTenantName(state.name);
         setEditTenantEnabled(state.enabled);
         setEditWilayatAr(state.wilayatAr);
         setEditLogoUrl(state.logoUrl);
@@ -795,6 +806,54 @@ export default function SuperSystem() {
     }
   };
 
+  const commitSaveSelectedTenant = async (tenantId: string, name: string) => {
+    setEditBusy(true);
+    try {
+      await saveTenantForScope({
+        tenantId,
+        name,
+        enabled: editTenantEnabled,
+        wilayatAr: editWilayatAr,
+        logoUrl: editLogoUrl,
+        canSeeAllGovs,
+        myGov,
+      });
+
+      setOriginalEditTenantName(name);
+      setTenants((prev) =>
+        prev.map((tenant) =>
+          tenant.id === tenantId
+            ? {
+                ...tenant,
+                name,
+                enabled: editTenantEnabled,
+              }
+            : tenant,
+        ),
+      );
+
+      if (linkedTenantAdminEmail) {
+        setLinkedTenantAdminEmail(String(linkedTenantAdminEmail || "").trim().toLowerCase());
+      }
+
+      if (
+        !String(userName || "").trim() ||
+        String(userName || "").trim() === String(originalEditTenantName || "").trim()
+      ) {
+        setUserName(name);
+      }
+
+      setEditReloadTick((x: number) => x + 1);
+      alert("تم حفظ بيانات المدرسة بنجاح.");
+    } catch (e: any) {
+      console.error(e);
+      alert(getActionErrorMessage(e, "تعذر حفظ بيانات المدرسة. تأكد من الصلاحيات ثم جرّب مرة أخرى."));
+    } finally {
+      setEditBusy(false);
+      setPendingSchoolRenameConfirm(null);
+    }
+  };
+
   const saveSelectedTenant = async () => {
     if (isMinistryViewer) {
       alert("سوبر الوزارة للمشاهدة فقط ولا يمكنه تعديل بيانات المدرسة.");
@@ -811,25 +870,25 @@ export default function SuperSystem() {
       return;
     }
 
-    setEditBusy(true);
-    try {
-      await saveTenantForScope({
+    const oldName = String(originalEditTenantName || "").trim();
+    if (oldName && oldName !== name) {
+      setPendingSchoolRenameConfirm({
         tenantId: selectedTenantId,
-        name,
-        enabled: editTenantEnabled,
-        wilayatAr: editWilayatAr,
-        logoUrl: editLogoUrl,
-        canSeeAllGovs,
-        myGov,
+        oldName,
+        newName: name,
       });
-      setEditReloadTick((x: number) => x + 1);
-      alert("تم حفظ بيانات المدرسة بنجاح.");
-    } catch (e: any) {
-      console.error(e);
-      alert(getActionErrorMessage(e, "تعذر حفظ بيانات المدرسة. تأكد من الصلاحيات ثم جرّب مرة أخرى."));
-    } finally {
-      setEditBusy(false);
+      return;
     }
+
+    await commitSaveSelectedTenant(selectedTenantId, name);
+  };
+
+  const confirmSchoolRenameAndSave = async () => {
+    if (!pendingSchoolRenameConfirm) return;
+    await commitSaveSelectedTenant(
+      pendingSchoolRenameConfirm.tenantId,
+      pendingSchoolRenameConfirm.newName,
+    );
   };
 
   const deleteTenant = async (tenantId: string) => {
@@ -1479,6 +1538,28 @@ export default function SuperSystem() {
           }
         }}
         onClose={() => setPendingAdminLinkDelete(null)}
+      />
+
+      <ConfirmModal
+        open={!!pendingSchoolRenameConfirm}
+        title="تأكيد تغيير اسم المدرسة"
+        confirmVariant="primary"
+        busy={editBusy}
+        message={
+          pendingSchoolRenameConfirm ? (
+            <div>
+              <div>هل تريد تغير الاسم من اسم "{pendingSchoolRenameConfirm.oldName}" إلى الاسم الجديد "{pendingSchoolRenameConfirm.newName}"؟</div>
+            </div>
+          ) : null
+        }
+        onConfirm={() => {
+          void confirmSchoolRenameAndSave();
+        }}
+        onClose={() => {
+          if (!editBusy) {
+            setPendingSchoolRenameConfirm(null);
+          }
+        }}
       />
 
       <ConfirmModal
