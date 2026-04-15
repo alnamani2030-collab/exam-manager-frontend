@@ -1,9 +1,9 @@
 import {
+  collection,
   doc,
   getDoc,
   getDocs,
   query,
-  collection,
   serverTimestamp,
   setDoc,
   where,
@@ -22,9 +22,69 @@ import type { TenantConfig } from "../types";
 const MINISTRY_LOGO_URL = "https://i.imgur.com/vdDhSMh.png";
 const USE_FUNCTIONS = !Boolean((import.meta as any).env?.DEV);
 
-function isSchoolAdminRole(role: unknown) {
-  const value = String(role || "").trim().toLowerCase();
-  return value === "tenant_admin" || value === "admin";
+function normalizeTenantSchoolName(config: TenantConfig, fallbackName = "") {
+  return String((config as any)?.schoolNameAr || fallbackName || "").trim();
+}
+
+async function syncTenantAdminBindings(args: {
+  tenantId: string;
+  schoolName: string;
+  governorate: string;
+  enabled?: boolean;
+  actorEmail?: string;
+}) {
+  const { tenantId, schoolName, governorate, enabled, actorEmail } = args;
+  const qs = await getDocs(query(collection(db, "allowlist"), where("tenantId", "==", tenantId)));
+  const batch = writeBatch(db);
+
+  let linkedEmail = "";
+  for (const d of qs.docs) {
+    const data = (d.data() as Record<string, unknown>) || {};
+    const role = String(data?.role || "").trim().toLowerCase();
+    if (role !== "tenant_admin" && role !== "admin") continue;
+
+    const currentSchoolName = String(data?.schoolName || data?.tenantName || "").trim();
+    const currentUserName = String(data?.userName || data?.name || "").trim();
+    const email = String(data?.email || d.id || "").trim().toLowerCase();
+    if (email && !linkedEmail) linkedEmail = email;
+
+    const payload: Record<string, unknown> = {
+      schoolName,
+      tenantName: schoolName,
+      governorate,
+      tenantGovernorate: governorate,
+      updatedAt: serverTimestamp(),
+      updatedBy: actorEmail || "",
+    };
+
+    if (typeof enabled === "boolean") {
+      payload.enabled = enabled;
+    }
+
+    if (!currentUserName || currentUserName === currentSchoolName) {
+      payload.userName = schoolName;
+      payload.name = schoolName;
+    }
+
+    batch.set(d.ref, payload, { merge: true });
+  }
+
+  if (linkedEmail) {
+    batch.set(
+      doc(db, "tenantAdminLinks", tenantId),
+      {
+        tenantId,
+        email: linkedEmail,
+        schoolName,
+        governorate,
+        updatedAt: serverTimestamp(),
+        updatedBy: actorEmail || "",
+      },
+      { merge: true },
+    );
+  }
+
+  await batch.commit();
 }
 
 export async function createTenantAction(args: {
@@ -34,7 +94,6 @@ export async function createTenantAction(args: {
   enabled: boolean;
 }) {
   const { user, tenantId, tenantName, enabled } = args;
-  const schoolName = String(tenantName || "").trim();
   const tenantRef = doc(db, "tenants", tenantId);
   const exist = await getDoc(tenantRef);
   if (exist.exists()) throw new Error("Tenant بهذا الـ ID موجود مسبقاً.");
@@ -43,7 +102,7 @@ export async function createTenantAction(args: {
     try {
       await callFn<any, any>("adminUpsertTenant")({
         tenantId,
-        name: schoolName,
+        name: tenantName.trim(),
         enabled: !!enabled,
       });
     } catch (error) {
@@ -53,7 +112,7 @@ export async function createTenantAction(args: {
       await setDoc(
         tenantRef,
         {
-          name: schoolName,
+          name: tenantName.trim(),
           enabled: !!enabled,
           deleted: false,
           createdAt: serverTimestamp(),
@@ -68,7 +127,7 @@ export async function createTenantAction(args: {
     await setDoc(
       tenantRef,
       {
-        name: schoolName,
+        name: tenantName.trim(),
         enabled: !!enabled,
         deleted: false,
         createdAt: serverTimestamp(),
@@ -80,11 +139,28 @@ export async function createTenantAction(args: {
     );
   }
 
+  await writeSecurityAudit({
+    type: "TENANT_CREATE",
+    tenantId,
+    actorUid: user.uid,
+    actorEmail: user.email || "",
+    details: { name: tenantName.trim(), enabled: !!enabled },
+  });
+
+  await logActivity(tenantId, {
+    actorUid: user.uid,
+    actorEmail: user.email || "",
+    action: "TENANT_CREATED",
+    entity: "tenant",
+    entityId: tenantId,
+    meta: { name: tenantName.trim(), enabled: !!enabled },
+  });
+
   await setDoc(
     doc(db, "tenants", tenantId, "meta", "config"),
     {
       ministryAr: "سلطنة عمان - وزارة التعليم",
-      schoolNameAr: schoolName,
+      schoolNameAr: tenantName.trim(),
       systemNameAr: "نظام إدارة الامتحانات الذكي",
       governorate: "",
       regionAr: "",
@@ -111,16 +187,7 @@ export async function createTenantAction(args: {
     tenantId,
     actorUid: user.uid,
     actorEmail: user.email || "",
-    details: { name: schoolName, enabled: !!enabled },
-  });
-
-  await logActivity(tenantId, {
-    actorUid: user.uid,
-    actorEmail: user.email || "",
-    action: "TENANT_CREATED",
-    entity: "tenant",
-    entityId: tenantId,
-    meta: { name: schoolName, enabled: !!enabled },
+    details: { step: "config_init", governorate: "", schoolNameAr: tenantName.trim() },
   });
 }
 
@@ -130,23 +197,15 @@ export async function saveTenantConfigAction(args: {
   config: TenantConfig;
 }) {
   const { user, tenantId, config } = args;
+  const normalizedGov = String((config as any).governorate || (config as any).regionAr || "").trim();
+
   const tenantRef = doc(db, "tenants", tenantId);
   const tenantSnap = await getDoc(tenantRef);
-  const tenantData = tenantSnap.exists()
-    ? ((tenantSnap.data() as Record<string, unknown>) || {})
-    : {};
+  const tenantData = tenantSnap.exists() ? (tenantSnap.data() as any) : {};
+  const fallbackSchoolName = String(tenantData?.name || "").trim();
+  const schoolName = normalizeTenantSchoolName(config, fallbackSchoolName);
 
-  const previousSchoolName = String(tenantData?.name || "").trim();
-  const normalizedGov = String(
-    (config as any).governorate || (config as any).regionAr || "",
-  ).trim();
-  const schoolName = String(
-    (config as any)?.schoolNameAr || previousSchoolName || tenantId,
-  ).trim();
-
-  const batch = writeBatch(db);
-
-  batch.set(
+  await setDoc(
     doc(db, "tenants", tenantId, "meta", "config"),
     {
       ...config,
@@ -159,10 +218,10 @@ export async function saveTenantConfigAction(args: {
     { merge: true },
   );
 
-  batch.set(
+  await setDoc(
     tenantRef,
     {
-      name: schoolName,
+      name: schoolName || fallbackSchoolName,
       governorate: normalizedGov,
       updatedAt: serverTimestamp(),
       updatedBy: user.email || "",
@@ -170,72 +229,14 @@ export async function saveTenantConfigAction(args: {
     { merge: true },
   );
 
-  const allowlistSnap = await getDocs(
-    query(collection(db, "allowlist"), where("tenantId", "==", tenantId)),
-  );
-
-  let linkedEmail = "";
-  for (const allowDoc of allowlistSnap.docs) {
-    const allowData = ((allowDoc.data() as Record<string, unknown>) || {});
-    if (!isSchoolAdminRole(allowData?.role)) continue;
-
-    const email = String(allowData?.email || allowDoc.id || "").trim().toLowerCase();
-    const existingUserName = String(
-      allowData?.userName || allowData?.name || "",
-    ).trim();
-    const existingSchoolName = String(
-      allowData?.schoolName || allowData?.tenantName || previousSchoolName || "",
-    ).trim();
-
-    const payload: Record<string, unknown> = {
-      schoolName,
-      tenantName: schoolName,
-      governorate: normalizedGov,
-      tenantGovernorate: normalizedGov,
-      updatedAt: serverTimestamp(),
-      updatedBy: user.email || "",
-    };
-
-    if (
-      !existingUserName ||
-      existingUserName === existingSchoolName ||
-      (previousSchoolName && existingUserName === previousSchoolName)
-    ) {
-      payload.userName = schoolName;
-      payload.name = schoolName;
-    }
-
-    batch.set(allowDoc.ref, payload, { merge: true });
-
-    if (!linkedEmail && email) {
-      linkedEmail = email;
-    }
-  }
-
-  const tenantLinkRef = doc(db, "tenantAdminLinks", tenantId);
-  const tenantLinkSnap = await getDoc(tenantLinkRef);
-  const tenantLinkData = tenantLinkSnap.exists()
-    ? ((tenantLinkSnap.data() as Record<string, unknown>) || {})
-    : {};
-  const linkEmail = String(tenantLinkData?.email || linkedEmail || "")
-    .trim()
-    .toLowerCase();
-
-  if (linkEmail) {
-    batch.set(
-      tenantLinkRef,
-      {
-        tenantId,
-        email: linkEmail,
-        schoolName,
-        governorate: normalizedGov,
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true },
-    );
-  }
-
-  await batch.commit();
+  const effectiveEnabled = tenantData?.enabled !== false;
+  await syncTenantAdminBindings({
+    tenantId,
+    schoolName: schoolName || fallbackSchoolName,
+    governorate: normalizedGov,
+    enabled: effectiveEnabled,
+    actorEmail: user.email || "",
+  });
 
   await writeSecurityAudit({
     type: "TENANT_UPDATE",
@@ -265,64 +266,42 @@ export async function toggleTenantEnabledAction(args: {
   enabled: boolean;
 }) {
   const { user, tenantId, enabled } = args;
-  const tenantRef = doc(db, "tenants", tenantId);
 
   if (USE_FUNCTIONS) {
     try {
       await callFn<any, any>("adminUpsertTenant")({ tenantId, enabled });
     } catch (error) {
       if (isStrictCloudRuntimeFunction("adminUpsertTenant")) {
-        throw toCloudRuntimeActionError(
-          error,
-          "adminUpsertTenant",
-          "تحديث حالة المدرسة",
-        );
+        throw toCloudRuntimeActionError(error, "adminUpsertTenant", "تحديث حالة المدرسة");
       }
       await setDoc(
-        tenantRef,
-        {
-          enabled,
-          updatedAt: serverTimestamp(),
-          updatedBy: user.email || "",
-        },
+        doc(db, "tenants", tenantId),
+        { enabled, updatedAt: serverTimestamp(), updatedBy: user.email || "" },
         { merge: true },
       );
     }
   } else {
     await setDoc(
-      tenantRef,
-      {
-        enabled,
-        updatedAt: serverTimestamp(),
-        updatedBy: user.email || "",
-      },
+      doc(db, "tenants", tenantId),
+      { enabled, updatedAt: serverTimestamp(), updatedBy: user.email || "" },
       { merge: true },
     );
   }
 
-  const allowlistSnap = await getDocs(
-    query(collection(db, "allowlist"), where("tenantId", "==", tenantId)),
-  );
+  const tenantSnap = await getDoc(doc(db, "tenants", tenantId));
+  const tenantData = tenantSnap.exists() ? (tenantSnap.data() as any) : {};
+  const cfgSnap = await getDoc(doc(db, "tenants", tenantId, "meta", "config"));
+  const cfgData = cfgSnap.exists() ? (cfgSnap.data() as any) : {};
+  const schoolName = String(cfgData?.schoolNameAr || tenantData?.name || tenantId).trim();
+  const governorate = String(cfgData?.governorate || cfgData?.regionAr || tenantData?.governorate || "").trim();
 
-  const batch = writeBatch(db);
-  for (const allowDoc of allowlistSnap.docs) {
-    const allowData = ((allowDoc.data() as Record<string, unknown>) || {});
-    if (!isSchoolAdminRole(allowData?.role)) continue;
-
-    batch.set(
-      allowDoc.ref,
-      {
-        enabled: !!enabled,
-        updatedAt: serverTimestamp(),
-        updatedBy: user.email || "",
-      },
-      { merge: true },
-    );
-  }
-
-  if (!allowlistSnap.empty) {
-    await batch.commit();
-  }
+  await syncTenantAdminBindings({
+    tenantId,
+    schoolName,
+    governorate,
+    enabled,
+    actorEmail: user.email || "",
+  });
 
   await writeSecurityAudit({
     type: "TENANT_UPDATE",
@@ -339,8 +318,6 @@ export async function deleteTenantAction(args: {
   alsoDeleteUsers: boolean;
 }) {
   const { user, tenantId, alsoDeleteUsers } = args;
-  const tenantLinkRef = doc(db, "tenantAdminLinks", tenantId);
-
   try {
     await callFn<any, any>("adminDeleteTenant")({ tenantId, alsoDeleteUsers });
     try {
@@ -364,14 +341,6 @@ export async function deleteTenantAction(args: {
         },
         { merge: true },
       );
-      await setDoc(
-        tenantLinkRef,
-        {
-          deleted: true,
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true },
-      );
     } catch {
       // ignore
     }
@@ -380,9 +349,7 @@ export async function deleteTenantAction(args: {
       throw toCloudRuntimeActionError(error, "adminDeleteTenant", "حذف المدرسة");
     }
 
-    const batch = writeBatch(db);
-
-    batch.set(
+    await setDoc(
       doc(db, "tenants", tenantId),
       {
         deleted: true,
@@ -392,8 +359,7 @@ export async function deleteTenantAction(args: {
       },
       { merge: true },
     );
-
-    batch.set(
+    await setDoc(
       doc(db, "tenants", tenantId, "meta", "config"),
       {
         deleted: true,
@@ -404,17 +370,26 @@ export async function deleteTenantAction(args: {
       { merge: true },
     );
 
-    batch.delete(tenantLinkRef);
-
+    const batch = writeBatch(db);
     if (alsoDeleteUsers) {
-      const qs = await getDocs(
-        query(collection(db, "allowlist"), where("tenantId", "==", tenantId)),
+      const qs = await getDocs(query(collection(db, "allowlist"), where("tenantId", "==", tenantId)));
+      qs.forEach((d) => batch.delete(d.ref));
+    } else {
+      const qs = await getDocs(query(collection(db, "allowlist"), where("tenantId", "==", tenantId)));
+      qs.forEach((d) =>
+        batch.set(
+          d.ref,
+          {
+            enabled: false,
+            updatedAt: serverTimestamp(),
+            updatedBy: user.email || "",
+          },
+          { merge: true },
+        ),
       );
-      qs.forEach((d) => {
-        batch.delete(d.ref);
-      });
     }
 
+    batch.delete(doc(db, "tenantAdminLinks", tenantId));
     await batch.commit();
   }
 
