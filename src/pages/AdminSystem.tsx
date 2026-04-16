@@ -105,6 +105,17 @@ export default function AdminSystem() {
   } = useAdminUsers();
 
   const [supportError, setSupportError] = useState<string>("");
+  const [deleteTenantModal, setDeleteTenantModal] = useState<{
+    open: boolean;
+    tenantId: string;
+    alsoDeleteUsers: boolean;
+    busy: boolean;
+  }>({
+    open: false,
+    tenantId: "",
+    alsoDeleteUsers: true,
+    busy: false,
+  });
 
   const selectedTenantLinkedEmail = useMemo(() => {
     const tid = String(selectedTenantId || "").trim();
@@ -221,22 +232,48 @@ export default function AdminSystem() {
       alert("لا يمكن حذف Tenant النظام.");
       return;
     }
-    const ok = window.confirm(`هل أنت متأكد أنك تريد حذف المدرسة (Tenant): ${tenantId}؟
+    setDeleteTenantModal({
+      open: true,
+      tenantId,
+      alsoDeleteUsers: true,
+      busy: false,
+    });
+  };
 
-سيتم حذف بيانات المدرسة بالكامل.`);
-    if (!ok) return;
-    const alsoDeleteUsers = window.confirm(`هل تريد أيضاً حذف المستخدمين المرتبطين بهذه المدرسة من allowlist؟
-(ينصح بنعم حتى لا يبقى مستخدمون مع Tenant غير موجود)`);
+  const confirmDeleteTenant = async () => {
+    if (!user || !deleteTenantModal.tenantId || deleteTenantModal.busy) return;
     try {
       setSupportError("");
-      await deleteTenantAction({ user, tenantId, alsoDeleteUsers });
-      setSelectedTenantId((prev) => (prev === tenantId ? "" : prev));
+      setDeleteTenantModal((prev) => ({ ...prev, busy: true }));
+      await deleteTenantAction({
+        user,
+        tenantId: deleteTenantModal.tenantId,
+        alsoDeleteUsers: deleteTenantModal.alsoDeleteUsers,
+      });
+      setSelectedTenantId((prev) => (prev === deleteTenantModal.tenantId ? "" : prev));
+      setDeleteTenantModal({
+        open: false,
+        tenantId: "",
+        alsoDeleteUsers: true,
+        busy: false,
+      });
       alert("تم حذف المدرسة بنجاح.");
     } catch (e: any) {
       console.error(e);
       setSupportError(getActionErrorMessage(e, "تعذر حذف المدرسة"));
+      setDeleteTenantModal((prev) => ({ ...prev, busy: false }));
       alert("تعذر حذف المدرسة. تأكد من صلاحياتك ثم جرّب مرة أخرى.");
     }
+  };
+
+  const closeDeleteTenantModal = () => {
+    if (deleteTenantModal.busy) return;
+    setDeleteTenantModal({
+      open: false,
+      tenantId: "",
+      alsoDeleteUsers: true,
+      busy: false,
+    });
   };
 
   const createAllowUser = async () => {
@@ -668,6 +705,154 @@ export default function AdminSystem() {
             />
           </div>
         </div>
+
+      {deleteTenantModal.open && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.72)",
+            backdropFilter: "blur(6px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+            padding: 20,
+          }}
+        >
+          <div
+            style={{
+              width: "min(560px, 92vw)",
+              background:
+                "linear-gradient(180deg, rgba(8,8,8,0.98) 0%, rgba(18,18,18,0.98) 100%)",
+              color: GOLD,
+              border: "1px solid rgba(212,175,55,0.45)",
+              borderRadius: 24,
+              padding: 24,
+              boxShadow:
+                "0 32px 80px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,255,255,0.05), inset 0 -12px 24px rgba(212,175,55,0.06), 0 0 24px rgba(212,175,55,0.18)",
+              transform: "perspective(1200px) rotateX(2deg)",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 28,
+                fontWeight: 900,
+                marginBottom: 12,
+                textAlign: "center",
+                textShadow: "0 2px 12px rgba(212,175,55,0.25)",
+              }}
+            >
+              تأكيد حذف المدرسة
+            </div>
+
+            <div
+              style={{
+                background: "rgba(212,175,55,0.08)",
+                border: "1px solid rgba(212,175,55,0.22)",
+                borderRadius: 18,
+                padding: "14px 16px",
+                marginBottom: 16,
+                textAlign: "center",
+                color: "#f5df92",
+                fontWeight: 800,
+              }}
+            >
+              Tenant: {deleteTenantModal.tenantId}
+            </div>
+
+            <div
+              style={{
+                color: "#f3e7b2",
+                textAlign: "center",
+                lineHeight: 1.9,
+                marginBottom: 16,
+                fontSize: 18,
+              }}
+            >
+              هل أنت متأكد أنك تريد حذف هذه المدرسة؟
+              <br />
+              سيتم حذف بيانات المدرسة بالكامل.
+            </div>
+
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 10,
+                marginBottom: 22,
+                color: "#f3e7b2",
+                fontWeight: 700,
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={deleteTenantModal.alsoDeleteUsers}
+                onChange={(e) =>
+                  setDeleteTenantModal((prev) => ({
+                    ...prev,
+                    alsoDeleteUsers: e.target.checked,
+                  }))
+                }
+                disabled={deleteTenantModal.busy}
+              />
+              حذف المستخدمين المرتبطين بهذه المدرسة أيضًا
+            </label>
+
+            <div
+              style={{
+                display: "flex",
+                gap: 12,
+                justifyContent: "center",
+                flexWrap: "wrap",
+              }}
+            >
+              <button
+                type="button"
+                onClick={closeDeleteTenantModal}
+                disabled={deleteTenantModal.busy}
+                style={{
+                  minWidth: 140,
+                  borderRadius: 16,
+                  padding: "12px 22px",
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  background:
+                    "linear-gradient(180deg, #2a2a2a 0%, #171717 100%)",
+                  color: "#ffffff",
+                  fontWeight: 800,
+                  boxShadow:
+                    "0 10px 18px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.08)",
+                  cursor: "pointer",
+                }}
+              >
+                إلغاء
+              </button>
+
+              <button
+                type="button"
+                onClick={confirmDeleteTenant}
+                disabled={deleteTenantModal.busy}
+                style={{
+                  minWidth: 160,
+                  borderRadius: 16,
+                  padding: "12px 22px",
+                  border: "1px solid rgba(239,68,68,0.35)",
+                  background:
+                    "linear-gradient(180deg, #ef4444 0%, #991b1b 100%)",
+                  color: "#fff",
+                  fontWeight: 900,
+                  boxShadow:
+                    "0 14px 24px rgba(127,29,29,0.38), inset 0 1px 0 rgba(255,255,255,0.2)",
+                  cursor: "pointer",
+                }}
+              >
+                {deleteTenantModal.busy ? "جارٍ الحذف..." : "حذف المدرسة"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       </main>
     </div>
   );
