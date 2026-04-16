@@ -5,7 +5,6 @@ import "./superSystem.theme.css";
 
 import {
   collection,
-  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -30,6 +29,7 @@ import { useSuperSystemTenants } from "../features/super-admin/hooks/useSuperSys
 import {
   archiveAndDeleteTenant,
   createTenantForScope,
+  deleteTenantAdminAssignment,
   loadTenantEditState,
   saveTenantAdminAssignment,
   saveTenantForScope,
@@ -54,6 +54,119 @@ type TenantAdminLinkRow = {
   tenantName: string;
   email: string;
 };
+
+type PendingTenantDelete = {
+  tenantId: string;
+  tenantName: string;
+};
+
+type PendingAdminLinkDelete = TenantAdminLinkRow | null;
+
+type ExistingEmailReplaceState = {
+  email: string;
+  currentTenantId: string;
+  currentSchoolName: string;
+  newTenantId: string;
+  newSchoolName: string;
+};
+
+type PendingSchoolRenameConfirm = {
+  tenantId: string;
+  oldName: string;
+  newName: string;
+};
+
+function ConfirmModal(props: {
+  open: boolean;
+  title: string;
+  message: React.ReactNode;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  confirmVariant?: "danger" | "primary";
+  busy?: boolean;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  const {
+    open,
+    title,
+    message,
+    confirmLabel = "نعم",
+    cancelLabel = "إغلاق",
+    confirmVariant = "primary",
+    busy = false,
+    onConfirm,
+    onClose,
+  } = props;
+
+  if (!open) return null;
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.58)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 9999,
+        padding: 16,
+      }}
+      onClick={onClose}
+    >
+      <div
+        dir="rtl"
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: "100%",
+          maxWidth: 540,
+          borderRadius: 18,
+          border: "1px solid rgba(212,175,55,0.28)",
+          background: "#101010",
+          boxShadow: "0 24px 80px rgba(0,0,0,0.45)",
+          color: "#f8fafc",
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            padding: "18px 20px 12px",
+            borderBottom: "1px solid rgba(212,175,55,0.18)",
+            fontWeight: 900,
+            color: "#d4af37",
+            fontSize: 20,
+          }}
+        >
+          {title}
+        </div>
+
+        <div style={{ padding: 20, lineHeight: 1.9 }}>{message}</div>
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "flex-start",
+            gap: 10,
+            padding: 20,
+            borderTop: "1px solid rgba(212,175,55,0.18)",
+          }}
+        >
+          <button
+            className={`btn ${confirmVariant === "danger" ? "danger" : "primary"}`}
+            disabled={busy}
+            onClick={onConfirm}
+          >
+            {busy ? "جارٍ التنفيذ..." : confirmLabel}
+          </button>
+          <button className="btn btn-ghost" disabled={busy} onClick={onClose}>
+            {cancelLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function SuperSystem() {
   const navigate = useNavigate();
@@ -99,11 +212,20 @@ export default function SuperSystem() {
   const [userName, setUserName] = useState("");
   const [userEnabled, setUserEnabled] = useState(true);
   const [saveBusy, setSaveBusy] = useState(false);
+  const [linkedTenantAdminEmail, setLinkedTenantAdminEmail] = useState("");
 
   const [tenantAdminRows, setTenantAdminRows] = useState<TenantAdminLinkRow[]>([]);
   const [tenantAdminBusy, setTenantAdminBusy] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
   const [migrationBusy, setMigrationBusy] = useState(false);
+
+  const [pendingTenantDelete, setPendingTenantDelete] = useState<PendingTenantDelete | null>(null);
+  const [pendingAdminLinkDelete, setPendingAdminLinkDelete] = useState<PendingAdminLinkDelete>(null);
+  const [existingEmailReplaceState, setExistingEmailReplaceState] =
+    useState<ExistingEmailReplaceState | null>(null);
+  const [originalEditTenantName, setOriginalEditTenantName] = useState("");
+  const [pendingSchoolRenameConfirm, setPendingSchoolRenameConfirm] =
+    useState<PendingSchoolRenameConfirm | null>(null);
 
   const excelInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -136,7 +258,7 @@ export default function SuperSystem() {
 
     const schoolName = await getTenantDisplayName(
       tenantId,
-      String(existingData?.schoolName || existingData?.tenantName || "").trim()
+      String(existingData?.schoolName || existingData?.tenantName || "").trim(),
     );
 
     return { email, tenantId, schoolName };
@@ -146,26 +268,131 @@ export default function SuperSystem() {
     const tenantId = String(tenantIdValue || "").trim();
     if (!tenantId) return null;
 
-    const snap = await getDocs(
-      query(collection(db, "allowlist"), where("tenantId", "==", tenantId))
+    try {
+      const tenantLinkSnap = await getDoc(doc(db, "tenantAdminLinks", tenantId));
+      if (tenantLinkSnap.exists()) {
+        const tenantLinkData = tenantLinkSnap.data() as any;
+        const linkedEmail = String(tenantLinkData?.email || "").trim().toLowerCase();
+
+        if (linkedEmail) {
+          const allowSnap = await getDoc(doc(db, "allowlist", linkedEmail));
+          if (allowSnap.exists()) {
+            const allowData = allowSnap.data() as any;
+            const role = String(allowData?.role || "").trim().toLowerCase();
+
+            if (role === "tenant_admin" || role === "admin") {
+              const schoolName = await getTenantDisplayName(
+                tenantId,
+                String(
+                  allowData?.schoolName ||
+                    allowData?.tenantName ||
+                    tenantLinkData?.schoolName ||
+                    "",
+                ).trim(),
+              );
+
+              return {
+                tenantId,
+                email: linkedEmail,
+                schoolName,
+                userName: String(allowData?.userName || "").trim(),
+                enabled: allowData?.enabled !== false,
+              };
+            }
+          }
+
+          const schoolName = await getTenantDisplayName(
+            tenantId,
+            String(tenantLinkData?.schoolName || "").trim(),
+          );
+
+          return {
+            tenantId,
+            email: linkedEmail,
+            schoolName,
+            userName: "",
+            enabled: true,
+          };
+        }
+      }
+    } catch (error) {
+      console.error(error);
+    }
+
+    const rowFromState = tenantAdminRows.find(
+      (row) => String(row.tenantId || "").trim() === tenantId,
     );
 
-    const match = snap.docs.find((d) => {
-      const data = d.data() as any;
-      const role = String(data?.role || "").trim().toLowerCase();
-      return role === "tenant_admin" || role === "admin";
-    });
+    if (rowFromState?.email) {
+      try {
+        const allowSnap = await getDoc(
+          doc(db, "allowlist", String(rowFromState.email || "").trim().toLowerCase()),
+        );
 
-    if (!match) return null;
+        if (allowSnap.exists()) {
+          const allowData = allowSnap.data() as any;
+          const role = String(allowData?.role || "").trim().toLowerCase();
 
-    const data = match.data() as any;
-    const email = String(data?.email || match.id || "").trim().toLowerCase();
-    const schoolName = await getTenantDisplayName(
-      tenantId,
-      String(data?.schoolName || data?.tenantName || "").trim()
-    );
+          if (role === "tenant_admin" || role === "admin") {
+            const schoolName = await getTenantDisplayName(
+              tenantId,
+              String(
+                allowData?.schoolName || allowData?.tenantName || rowFromState.tenantName || "",
+              ).trim(),
+            );
 
-    return { tenantId, email, schoolName };
+            return {
+              tenantId,
+              email: String(rowFromState.email || "").trim().toLowerCase(),
+              schoolName,
+              userName: String(allowData?.userName || "").trim(),
+              enabled: allowData?.enabled !== false,
+            };
+          }
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }
+
+    try {
+      const baseFilters: any[] = [
+        where("tenantId", "==", tenantId),
+        where("role", "in", ["tenant_admin", "admin"]),
+      ];
+
+      if (!canSeeAllGovs) {
+        baseFilters.push(where("governorate", "==", String(myGov || "").trim()));
+      }
+
+      const snap = await getDocs(query(collection(db, "allowlist"), ...baseFilters));
+
+      const match = snap.docs.find((d) => {
+        const data = d.data() as any;
+        const role = String(data?.role || "").trim().toLowerCase();
+        return role === "tenant_admin" || role === "admin";
+      });
+
+      if (!match) return null;
+
+      const data = match.data() as any;
+      const email = String(data?.email || match.id || "").trim().toLowerCase();
+      const schoolName = await getTenantDisplayName(
+        tenantId,
+        String(data?.schoolName || data?.tenantName || "").trim(),
+      );
+
+      return {
+        tenantId,
+        email,
+        schoolName,
+        userName: String(data?.userName || "").trim(),
+        enabled: data?.enabled !== false,
+      };
+    } catch (error) {
+      console.error(error);
+      return null;
+    }
   };
 
   const isEmailAlreadyLinkedToAnotherSchool = async (emailValue: string, tenantIdValue: string) => {
@@ -194,7 +421,9 @@ export default function SuperSystem() {
       return;
     }
 
-    const ok = confirm("سيتم تنظيف روابط الأدمن القديمة داخل allowlist وتوحيدها إلى tenant_admin مع تعبئة Tenant ID والمحافظة واسم المدرسة. هل تريد المتابعة؟");
+    const ok = confirm(
+      "سيتم تنظيف روابط الأدمن القديمة داخل allowlist وتوحيدها إلى tenant_admin مع تعبئة Tenant ID والمحافظة واسم المدرسة. هل تريد المتابعة؟",
+    );
     if (!ok) return;
 
     setMigrationBusy(true);
@@ -212,8 +441,10 @@ export default function SuperSystem() {
           `تم تحديثها: ${report.updated}`,
           `تم حذف السجلات المكررة: ${report.deleted}`,
           `السجلات المتجاهلة: ${report.skipped}`,
-          report.conflicts.length ? `تعارضات تحتاج مراجعة: ${report.conflicts.length}` : "لا توجد تعارضات متبقية.",
-        ].join("\n")
+          report.conflicts.length
+            ? `تعارضات تحتاج مراجعة: ${report.conflicts.length}`
+            : "لا توجد تعارضات متبقية.",
+        ].join("\n"),
       );
     } catch (e) {
       console.error(e);
@@ -222,7 +453,6 @@ export default function SuperSystem() {
       setMigrationBusy(false);
     }
   };
-
 
   const exportTenantAdminLinksToExcel = () => {
     const rows = [...tenantAdminRows];
@@ -249,7 +479,7 @@ export default function SuperSystem() {
                 <td>${String(r.tenantName || "")}</td>
                 <td>${String(r.email || "")}</td>
               </tr>
-            `
+            `,
               )
               .join("")}
           </table>
@@ -289,8 +519,7 @@ export default function SuperSystem() {
     const tenantNameIndex = header.findIndex((h) => h.includes("اسم المدرسة") || h.includes("school"));
     const emailIndex = header.findIndex((h) => h.includes("البريد") || h.includes("email"));
 
-    const startAt =
-      tenantIdIndex >= 0 || tenantNameIndex >= 0 || emailIndex >= 0 ? 1 : 0;
+    const startAt = tenantIdIndex >= 0 || tenantNameIndex >= 0 || emailIndex >= 0 ? 1 : 0;
 
     for (let i = startAt; i < rawRows.length; i++) {
       const cols = rawRows[i];
@@ -312,6 +541,7 @@ export default function SuperSystem() {
       alert("سوبر الوزارة للمشاهدة فقط ولا يمكنه استيراد روابط الأدمن.");
       return;
     }
+
     setImportBusy(true);
     try {
       const importedRows = await parseExcelLikeFile(file);
@@ -332,8 +562,8 @@ export default function SuperSystem() {
 
         if (!tenantDocData) continue;
 
-        const tenantGovernorate = String(tenantDocData?.governorate || "");
-        if (!canSeeAllGovs && tenantGovernorate !== String(myGov || "")) {
+        const tenantGovernorate = String(tenantDocData?.governorate || "").trim();
+        if (!canSeeAllGovs && tenantGovernorate !== String(myGov || "").trim()) {
           continue;
         }
 
@@ -359,7 +589,7 @@ export default function SuperSystem() {
             governorate: tenantGovernorate,
             tenantGovernorate,
           },
-          { merge: true }
+          { merge: true },
         );
       }
 
@@ -379,38 +609,59 @@ export default function SuperSystem() {
       alert("سوبر الوزارة للمشاهدة فقط ولا يمكنه حذف الربط.");
       return;
     }
+
+    const tenantId = String(row.tenantId || "").trim();
+    const tenant = tenants.find((t) => String(t.id || "").trim() === tenantId);
+
+    if (tenant && tenant.enabled === false) {
+      alert("لا يمكن إلغاء ربط الأدمن من مدرسة غير مفعلة. قم بتفعيل المدرسة أولاً ثم ألغِ الربط.");
+      return;
+    }
+
     const email = String(row.email || "").trim().toLowerCase();
     if (!email) return;
 
-    const ok = confirm(
-      `تأكيد حذف ربط المدرسة (${row.tenantName || row.tenantId}) مع البريد (${email})؟`
-    );
-    if (!ok) return;
-
     try {
-      await deleteDoc(doc(db, "allowlist", email));
+      await deleteTenantAdminAssignment({ email, tenantId });
       setTenantAdminRows((prev) =>
         prev.filter(
           (item) =>
             !(
-              String(item.tenantId || "") === String(row.tenantId || "") &&
+              String(item.tenantId || "") === tenantId &&
               String(item.email || "").toLowerCase() === email
-            )
-        )
+            ),
+        ),
       );
+      setPendingAdminLinkDelete(null);
+      if (selectedTenantId && tenantId === String(selectedTenantId || "").trim()) {
+        setLinkedTenantAdminEmail("");
+        setUserEmail("");
+        setUserName("");
+        setUserEnabled(true);
+      }
       alert("تم حذف الربط من الجدول بنجاح.");
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      const message = String(e?.message || "");
+      if (message === "TENANT_DISABLED_LINK_CHANGE_BLOCKED") {
+        alert("لا يمكن إلغاء ربط الأدمن من مدرسة غير مفعلة. قم بتفعيل المدرسة أولاً ثم ألغِ الربط.");
+        return;
+      }
       alert("تعذر حذف الربط. تأكد من الصلاحيات ثم جرّب مرة أخرى.");
     }
   };
 
   useEffect(() => {
     const run = async () => {
-      if (!selectedTenantId) return;
+      if (!selectedTenantId) {
+        setLinkedTenantAdminEmail("");
+        setOriginalEditTenantName("");
+        return;
+      }
       try {
         const state = await loadTenantEditState(selectedTenantId);
         setEditTenantName(state.name);
+        setOriginalEditTenantName(state.name);
         setEditTenantEnabled(state.enabled);
         setEditWilayatAr(state.wilayatAr);
         setEditLogoUrl(state.logoUrl);
@@ -418,7 +669,45 @@ export default function SuperSystem() {
         console.error(e);
       }
     };
-    run();
+
+    void run();
+  }, [selectedTenantId, editReloadTick]);
+
+  useEffect(() => {
+    const run = async () => {
+      if (!selectedTenantId) {
+        setUserEmail("");
+        setUserName("");
+        setUserEnabled(true);
+        setLinkedTenantAdminEmail("");
+        return;
+      }
+
+      try {
+        const existingAdmin = await getExistingLinkByTenant(selectedTenantId);
+        if (!existingAdmin) {
+          setUserEmail("");
+          setUserName("");
+          setUserEnabled(true);
+          setLinkedTenantAdminEmail("");
+          return;
+        }
+
+        const existingEmail = String(existingAdmin.email || "").trim().toLowerCase();
+        setLinkedTenantAdminEmail(existingEmail);
+        setUserEmail(existingEmail);
+        setUserName(String(existingAdmin.userName || ""));
+        setUserEnabled(existingAdmin.enabled !== false);
+      } catch (e) {
+        console.error(e);
+        setUserEmail("");
+        setUserName("");
+        setUserEnabled(true);
+        setLinkedTenantAdminEmail("");
+      }
+    };
+
+    void run();
   }, [selectedTenantId, editReloadTick]);
 
   useEffect(() => {
@@ -434,10 +723,16 @@ export default function SuperSystem() {
               tenantName: String(t.name || t.id || ""),
               governorate: String((t as any).governorate || ""),
             },
-          ])
+          ]),
         );
 
-        const q = query(allowRef, where("role", "in", ["tenant_admin", "admin"]));
+        const q = !canSeeAllGovs
+          ? query(
+              allowRef,
+              where("role", "in", ["tenant_admin", "admin"]),
+              where("governorate", "==", String(myGov || "").trim()),
+            )
+          : query(allowRef, where("role", "in", ["tenant_admin", "admin"]));
         const snap = await getDocs(q);
 
         const rows: TenantAdminLinkRow[] = [];
@@ -459,13 +754,12 @@ export default function SuperSystem() {
               tenantMeta?.governorate ||
               data?.governorate ||
               data?.tenantGovernorate ||
-              ""
-          ).trim();
+              "",
+          )
+            .trim()
+            .toLowerCase();
 
-          if (
-            !canSeeAllGovs &&
-            String(effectiveGovernorate || "").trim().toLowerCase() !== String(myGov || "").trim().toLowerCase()
-          ) {
+          if (!canSeeAllGovs && effectiveGovernorate !== String(myGov || "").trim().toLowerCase()) {
             continue;
           }
 
@@ -476,11 +770,7 @@ export default function SuperSystem() {
           rows.push({
             tenantId,
             tenantName: String(
-              tenantDocData?.name ||
-                data?.schoolName ||
-                data?.tenantName ||
-                tenantMeta?.tenantName ||
-                tenantId
+              tenantDocData?.name || data?.schoolName || data?.tenantName || tenantMeta?.tenantName || tenantId,
             ),
             email,
           });
@@ -494,7 +784,7 @@ export default function SuperSystem() {
       }
     };
 
-    run();
+    void run();
   }, [tenants, canSeeAllGovs, myGov, editReloadTick, selectedTenantId]);
 
   const createTenant = async () => {
@@ -502,6 +792,7 @@ export default function SuperSystem() {
       alert("سوبر الوزارة للمشاهدة فقط ولا يمكنه إنشاء المدارس.");
       return;
     }
+
     try {
       const result = await createTenantForScope({
         tenantId: newTenantId,
@@ -523,13 +814,56 @@ export default function SuperSystem() {
       } else if (String(e?.message || "") === "MISSING_GOVERNORATE") {
         alert("حساب السوبر غير مرتبط بمحافظة.");
       } else {
-        alert(
-          getActionErrorMessage(
-            e,
-            "تعذر إنشاء المدرسة. تأكد من الصلاحيات ثم جرّب مرة أخرى."
-          )
-        );
+        alert(getActionErrorMessage(e, "تعذر إنشاء المدرسة. تأكد من الصلاحيات ثم جرّب مرة أخرى."));
       }
+    }
+  };
+
+  const commitSaveSelectedTenant = async (tenantId: string, name: string) => {
+    setEditBusy(true);
+    try {
+      await saveTenantForScope({
+        tenantId,
+        name,
+        enabled: editTenantEnabled,
+        wilayatAr: editWilayatAr,
+        logoUrl: editLogoUrl,
+        canSeeAllGovs,
+        myGov,
+      });
+
+      setOriginalEditTenantName(name);
+      setTenants((prev) =>
+        prev.map((tenant) =>
+          tenant.id === tenantId
+            ? {
+                ...tenant,
+                name,
+                enabled: editTenantEnabled,
+              }
+            : tenant,
+        ),
+      );
+
+      if (linkedTenantAdminEmail) {
+        setLinkedTenantAdminEmail(String(linkedTenantAdminEmail || "").trim().toLowerCase());
+      }
+
+      if (
+        !String(userName || "").trim() ||
+        String(userName || "").trim() === String(originalEditTenantName || "").trim()
+      ) {
+        setUserName(name);
+      }
+
+      setEditReloadTick((x: number) => x + 1);
+      alert("تم حفظ بيانات المدرسة بنجاح.");
+    } catch (e: any) {
+      console.error(e);
+      alert(getActionErrorMessage(e, "تعذر حفظ بيانات المدرسة. تأكد من الصلاحيات ثم جرّب مرة أخرى."));
+    } finally {
+      setEditBusy(false);
+      setPendingSchoolRenameConfirm(null);
     }
   };
 
@@ -549,30 +883,25 @@ export default function SuperSystem() {
       return;
     }
 
-    setEditBusy(true);
-    try {
-      await saveTenantForScope({
+    const oldName = String(originalEditTenantName || "").trim();
+    if (oldName && oldName !== name) {
+      setPendingSchoolRenameConfirm({
         tenantId: selectedTenantId,
-        name,
-        enabled: editTenantEnabled,
-        wilayatAr: editWilayatAr,
-        logoUrl: editLogoUrl,
-        canSeeAllGovs,
-        myGov,
+        oldName,
+        newName: name,
       });
-      setEditReloadTick((x: number) => x + 1);
-      alert("تم حفظ بيانات المدرسة بنجاح.");
-    } catch (e: any) {
-      console.error(e);
-      alert(
-        getActionErrorMessage(
-          e,
-          "تعذر حفظ بيانات المدرسة. تأكد من الصلاحيات ثم جرّب مرة أخرى."
-        )
-      );
-    } finally {
-      setEditBusy(false);
+      return;
     }
+
+    await commitSaveSelectedTenant(selectedTenantId, name);
+  };
+
+  const confirmSchoolRenameAndSave = async () => {
+    if (!pendingSchoolRenameConfirm) return;
+    await commitSaveSelectedTenant(
+      pendingSchoolRenameConfirm.tenantId,
+      pendingSchoolRenameConfirm.newName,
+    );
   };
 
   const deleteTenant = async (tenantId: string) => {
@@ -582,33 +911,31 @@ export default function SuperSystem() {
     }
     const id = String(tenantId || "").trim();
     if (!id) return;
-    if (!confirm(`تأكيد حذف المدرسة (${id})؟`)) return;
 
     try {
       await archiveAndDeleteTenant({
         tenantId: id,
         deletedBy: String(user?.email || ""),
-      });
+        canSeeAllGovs,
+        myGov,
+      } as any);
       setTenants((prev) => prev.filter((t) => t.id !== id));
       if (selectedTenantId === id) setSelectedTenantId("");
+      setPendingTenantDelete(null);
       setEditReloadTick((x: number) => x + 1);
       alert("تم حذف المدرسة بنجاح.");
     } catch (e) {
       console.error(e);
-      alert(
-        getActionErrorMessage(
-          e,
-          "تعذر حذف المدرسة. تأكد من الصلاحيات ثم جرّب مرة أخرى."
-        )
-      );
+      alert(getActionErrorMessage(e, "تعذر حذف المدرسة. تأكد من الصلاحيات ثم جرّب مرة أخرى."));
     }
   };
 
-  const saveAdminUser = async () => {
+  const saveAdminUser = async (forceReplaceExistingEmail?: boolean) => {
     if (isMinistryViewer) {
       alert("سوبر الوزارة للمشاهدة فقط ولا يمكنه إضافة أو تعديل أدمن المدرسة.");
       return;
     }
+
     const tenantId = String(selectedTenantId || "").trim();
     if (!tenantId) {
       alert("اختر مدرسة أولاً.");
@@ -629,26 +956,36 @@ export default function SuperSystem() {
       return;
     }
 
+    if (tenant.enabled === false) {
+      alert("لا يمكن تعديل ربط الأدمن لمدرسة غير مفعلة. قم بتفعيل المدرسة أولاً.");
+      return;
+    }
+
     setSaveBusy(true);
     try {
-      const existingByEmail = await getExistingLinkByEmail(userEmail);
-      if (existingByEmail && existingByEmail.tenantId !== tenantId) {
-        alert(
-          `هذا البريد الإلكتروني مرتبط مسبقًا بمدرسة: ${existingByEmail.schoolName} (Tenant ID: ${existingByEmail.tenantId}). لا يمكن ربط بريد واحد بأكثر من مدرسة.`
-        );
+      const normalizedEmail = String(userEmail || "").trim().toLowerCase();
+      const existingByEmail = await getExistingLinkByEmail(normalizedEmail);
+      if (existingByEmail && existingByEmail.tenantId !== tenantId && !forceReplaceExistingEmail) {
+        setExistingEmailReplaceState({
+          email: normalizedEmail,
+          currentTenantId: existingByEmail.tenantId,
+          currentSchoolName: existingByEmail.schoolName,
+          newTenantId: tenantId,
+          newSchoolName: String(tenant.name || tenantId),
+        });
         return;
       }
 
       const existingByTenant = await getExistingLinkByTenant(tenantId);
-      if (existingByTenant && existingByTenant.email !== String(userEmail || "").trim().toLowerCase()) {
+      if (existingByTenant && existingByTenant.email !== normalizedEmail) {
         alert(
-          `هذه المدرسة مرتبطة مسبقًا بالبريد الإلكتروني: ${existingByTenant.email} لمدرسة ${existingByTenant.schoolName} (Tenant ID: ${existingByTenant.tenantId}). لا يمكن ربط مدرسة واحدة بأكثر من بريد إلكتروني.`
+          `هذه المدرسة مرتبطة مسبقًا بالبريد الإلكتروني: ${existingByTenant.email} لمدرسة ${existingByTenant.schoolName} (Tenant ID: ${existingByTenant.tenantId}). لا يمكن ربط مدرسة واحدة بأكثر من بريد إلكتروني.`,
         );
         return;
       }
 
       await saveTenantAdminAssignment({
-        email: userEmail,
+        email: normalizedEmail,
         enabled: userEnabled,
         tenantId,
         tenantName: tenant.name,
@@ -657,6 +994,8 @@ export default function SuperSystem() {
         myGov,
         userName,
       });
+
+      setExistingEmailReplaceState(null);
       setUserEmail("");
       setUserName("");
       setUserEnabled(true);
@@ -664,555 +1003,623 @@ export default function SuperSystem() {
       alert("تم حفظ المستخدم بنجاح.");
     } catch (e: any) {
       console.error(e);
-      alert(
-        String(e?.message || "") === "INVALID_EMAIL"
-          ? "يرجى إدخال بريد صحيح."
-          : getActionErrorMessage(
-              e,
-              "تعذر حفظ المستخدم. تأكد من الصلاحيات ثم جرّب مرة أخرى."
-            )
-      );
+      const message = String(e?.message || "");
+      if (message === "INVALID_EMAIL") {
+        alert("يرجى إدخال بريد صحيح.");
+      } else if (message === "TENANT_DISABLED") {
+        alert("لا يمكن تعديل ربط الأدمن لمدرسة غير مفعلة. قم بتفعيل المدرسة أولاً.");
+      } else if (message === "DISABLED_TENANT_LINK_LOCKED") {
+        alert("هذا البريد مرتبط بمدرسة غير مفعلة، ولا يمكن نقله أو إعادة ربطه حتى يتم تفعيل تلك المدرسة أولاً.");
+      } else if (message === "TENANT_ALREADY_LINKED_TO_ANOTHER_EMAIL") {
+        alert("هذه المدرسة مرتبطة مسبقًا بإيميل آخر، ولا يمكن ربطها بإيميل مختلف.");
+      } else {
+        alert(getActionErrorMessage(e, "تعذر حفظ المستخدم. تأكد من الصلاحيات ثم جرّب مرة أخرى."));
+      }
     } finally {
       setSaveBusy(false);
     }
   };
 
   return (
-    <div className="super-system-page" dir="rtl">
-      <div className="super-header">
-        <div className="super-header-right super-brand">
-          <img
-            className="super-brand-logo"
-            src={MINISTRY_LOGO_URL}
-            alt="وزارة التعليم"
-          />
-          <div className="super-brand-text">
-            <div className="super-brand-ministry">وزارة التعليم</div>
-            <div className="super-brand-gov">{myGov || ""}</div>
+    <>
+      <div className="super-system-page" dir="rtl">
+        <div className="super-header">
+          <div className="super-header-right super-brand">
+            <img className="super-brand-logo" src={MINISTRY_LOGO_URL} alt="وزارة التعليم" />
+            <div className="super-brand-text">
+              <div className="super-brand-ministry">وزارة التعليم</div>
+              <div className="super-brand-gov">{myGov || ""}</div>
+            </div>
+          </div>
+
+          <div className="super-header-center">
+            <div className="super-program-title">نظام إدارة الامتحانات المطور</div>
+            <div className="super-subtitle">
+              {isOwner
+                ? "مالك المنصة داخل نطاق المحافظات"
+                : isMinistryViewer
+                  ? "سوبر الوزارة - مشاهدة فقط"
+                  : "سوبر المحافظات - إدارة المدارس وأدمنات المدارس داخل النطاق"}
+            </div>
+          </div>
+
+          <div className="super-header-left">
+            {isOwner ? (
+              <button className="super-btn" onClick={() => navigate("/system")}>
+                لوحة مالك المنصة
+              </button>
+            ) : null}
+            <button className="super-btn" onClick={() => navigate("/")}>العودة</button>
+            <button className="super-btn danger" onClick={() => logout()}>تسجيل خروج</button>
           </div>
         </div>
 
-        <div className="super-header-center">
-          <div className="super-program-title">نظام إدارة الامتحانات المطور</div>
-          <div className="super-subtitle">
+        <div className="super-cards">
+          <button
+            className="super-card"
+            onClick={() =>
+              document.getElementById("section-tenants")?.scrollIntoView({
+                behavior: "smooth",
+              })
+            }
+          >
+            <div className="super-card-title">إدارة المدارس</div>
+            <div className="super-card-desc">عرض/بحث المدارس + حذف/اختيار.</div>
+          </button>
+
+          <button
+            className="super-card"
+            disabled={isMinistryViewer}
+            onClick={() =>
+              document.getElementById("section-edit")?.scrollIntoView({
+                behavior: "smooth",
+              })
+            }
+          >
+            <div className="super-card-title">تعديل بيانات المدرسة</div>
+            <div className="super-card-desc">تعديل اسم المدرسة والشعار والولاية (داخل محافظتك).</div>
+          </button>
+
+          <button
+            className="super-card"
+            disabled={isMinistryViewer}
+            onClick={() =>
+              document.getElementById("section-create")?.scrollIntoView({
+                behavior: "smooth",
+              })
+            }
+          >
+            <div className="super-card-title">إضافة مدرسة جديدة</div>
+            <div className="super-card-desc">إنشاء مدرسة داخل محافظتك.</div>
+          </button>
+
+          <button
+            className="super-card"
+            disabled={isMinistryViewer}
+            onClick={() =>
+              document.getElementById("section-admin")?.scrollIntoView({
+                behavior: "smooth",
+              })
+            }
+          >
+            <div className="super-card-title">إدارة أدمن المدرسة</div>
+            <div className="super-card-desc">إضافة/ربط أو حذف أدمن مدرسة داخل النطاق المسموح.</div>
+          </button>
+
+          <button className="super-card" onClick={() => navigate("/")}>
+            <div className="super-card-title">الدخول للبرنامج</div>
+            <div className="super-card-desc">الانتقال للواجهة الرئيسية بعد اختيار المدرسة.</div>
+          </button>
+        </div>
+
+        <div
+          style={{
+            marginBottom: 16,
+            border: "1px solid rgba(212,175,55,0.28)",
+            background: "rgba(0,0,0,0.32)",
+            borderRadius: 16,
+            padding: 14,
+            color: "#f8fafc",
+          }}
+        >
+          <div style={{ fontWeight: 900, color: "#d4af37", marginBottom: 6 }}>{roleBadge.label}</div>
+          <div style={{ lineHeight: 1.8, opacity: 0.92 }}>
             {isOwner
-              ? "مالك المنصة داخل نطاق المحافظات"
+              ? "أنت مالك المنصة، ويمكنك من هذه الشاشة إدارة المحافظات والسوبرات والمدارس والمستخدمين والدخول إلى جميع البيانات حسب الصلاحيات العليا."
               : isMinistryViewer
-              ? "سوبر الوزارة - مشاهدة فقط"
-              : "سوبر المحافظات - إدارة المدارس وأدمنات المدارس داخل النطاق"}
+                ? "أنت سوبر الوزارة، وصلاحيتك هنا مشاهدة المحافظات والمدارس فقط بدون إضافة أو تعديل أو حذف، وبدون دخول إلى البيانات الداخلية للمدارس."
+                : "أنت سوبر المحافظات، ويمكنك إدارة المدارس وأدمنات المدارس داخل محافظتك فقط، بدون دخول إلى البيانات الداخلية للمدرسة."}
           </div>
         </div>
 
-        <div className="super-header-left">
-          {isOwner ? (
-            <button className="super-btn" onClick={() => navigate("/system")}>
-              لوحة مالك المنصة
-            </button>
-          ) : null}
-          <button className="super-btn" onClick={() => navigate("/")}>
-            العودة
-          </button>
-          <button className="super-btn danger" onClick={() => logout()}>
-            تسجيل خروج
-          </button>
-        </div>
-      </div>
+        <div className="super-grid">
+          <div className="super-panel" id="section-tenants">
+            <div className="super-panel-title">إدارة المدارس (Tenants)</div>
+            <div style={{ marginBottom: 10 }}>
+              <input
+                className="input"
+                placeholder="بحث..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
 
-      <div className="super-cards">
-        <button
-          className="super-card"
-          onClick={() =>
-            document.getElementById("section-tenants")?.scrollIntoView({
-              behavior: "smooth",
-            })
-          }
-        >
-          <div className="super-card-title">إدارة المدارس</div>
-          <div className="super-card-desc">عرض/بحث المدارس + حذف/اختيار.</div>
-        </button>
-
-        <button
-          className="super-card"
-          disabled={isMinistryViewer}
-          onClick={() =>
-            document.getElementById("section-edit")?.scrollIntoView({
-              behavior: "smooth",
-            })
-          }
-        >
-          <div className="super-card-title">تعديل بيانات المدرسة</div>
-          <div className="super-card-desc">
-            تعديل اسم المدرسة والشعار والولاية (داخل محافظتك).
-          </div>
-        </button>
-
-        <button
-          className="super-card"
-          disabled={isMinistryViewer}
-          onClick={() =>
-            document.getElementById("section-create")?.scrollIntoView({
-              behavior: "smooth",
-            })
-          }
-        >
-          <div className="super-card-title">إضافة مدرسة جديدة</div>
-          <div className="super-card-desc">إنشاء مدرسة داخل محافظتك.</div>
-        </button>
-
-        <button
-          className="super-card"
-          disabled={isMinistryViewer}
-          onClick={() =>
-            document.getElementById("section-admin")?.scrollIntoView({
-              behavior: "smooth",
-            })
-          }
-        >
-          <div className="super-card-title">إدارة أدمن المدرسة</div>
-          <div className="super-card-desc">إضافة/ربط أو حذف أدمن مدرسة داخل النطاق المسموح.</div>
-        </button>
-
-        <button className="super-card" onClick={() => navigate("/")}>
-          <div className="super-card-title">الدخول للبرنامج</div>
-          <div className="super-card-desc">
-            الانتقال للواجهة الرئيسية بعد اختيار المدرسة.
-          </div>
-        </button>
-      </div>
-
-      <div
-        style={{
-          marginBottom: 16,
-          border: "1px solid rgba(212,175,55,0.28)",
-          background: "rgba(0,0,0,0.32)",
-          borderRadius: 16,
-          padding: 14,
-          color: "#f8fafc",
-        }}
-      >
-        <div style={{ fontWeight: 900, color: "#d4af37", marginBottom: 6 }}>
-          {roleBadge.label}
-        </div>
-        <div style={{ lineHeight: 1.8, opacity: 0.92 }}>
-          {isOwner
-            ? "أنت مالك المنصة، ويمكنك من هذه الشاشة إدارة المحافظات والسوبرات والمدارس والمستخدمين والدخول إلى جميع البيانات حسب الصلاحيات العليا."
-            : isMinistryViewer
-            ? "أنت سوبر الوزارة، وصلاحيتك هنا مشاهدة المحافظات والمدارس فقط بدون إضافة أو تعديل أو حذف، وبدون دخول إلى البيانات الداخلية للمدارس."
-            : "أنت سوبر المحافظات، ويمكنك إدارة المدارس وأدمنات المدارس داخل محافظتك فقط، بدون دخول إلى البيانات الداخلية للمدرسة."}
-        </div>
-      </div>
-
-      <div className="super-grid">
-        <div className="super-panel" id="section-tenants">
-          <div className="super-panel-title">إدارة المدارس (Tenants)</div>
-          <div style={{ marginBottom: 10 }}>
-            <input
-              className="input"
-              placeholder="بحث..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-
-          <div className="tenant-list">
-            {visibleTenants.map((t) => (
-              <div
-                key={t.id}
-                className={`tenant-row ${selectedTenantId === t.id ? "active" : ""}`}
-              >
-                <button className="icon-btn" title="حذف" onClick={() => deleteTenant(t.id)} disabled={isMinistryViewer}>
-                  🗑️
-                </button>
-                <button
-                  className="icon-btn"
-                  title="اختيار"
-                  onClick={() => setSelectedTenantId(t.id)}
-                >
-                  📁
-                </button>
-                <div className="tenant-meta" onClick={() => setSelectedTenantId(t.id)}>
-                  <div className="tenant-name">{t.name || t.id}</div>
-                  <div className="tenant-id">{t.id}</div>
-                  <div className="tenant-id" style={{ opacity: 0.8 }}>
-                    {t.governorate ? `المحافظة: ${t.governorate}` : ""}
+            <div className="tenant-list">
+              {visibleTenants.map((t) => (
+                <div key={t.id} className={`tenant-row ${selectedTenantId === t.id ? "active" : ""}`}>
+                  <button
+                    className="icon-btn"
+                    title="حذف"
+                    onClick={() =>
+                      setPendingTenantDelete({
+                        tenantId: String(t.id || "").trim(),
+                        tenantName: String(t.name || t.id || "").trim(),
+                      })
+                    }
+                    disabled={isMinistryViewer}
+                  >
+                    🗑️
+                  </button>
+                  <button className="icon-btn" title="اختيار" onClick={() => setSelectedTenantId(t.id)}>
+                    📁
+                  </button>
+                  <div className="tenant-meta" onClick={() => setSelectedTenantId(t.id)}>
+                    <div className="tenant-name">{t.name || t.id}</div>
+                    <div className="tenant-id">{t.id}</div>
+                    <div className="tenant-id" style={{ opacity: 0.8 }}>
+                      {t.governorate ? `المحافظة: ${t.governorate}` : ""}
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      marginInlineStart: "auto",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                    }}
+                  >
+                    <span style={{ opacity: 0.9 }}>{t.enabled ? "مفعل" : "غير مفعل"}</span>
+                    <input type="checkbox" checked={t.enabled !== false} readOnly />
                   </div>
                 </div>
-                <div
-                  style={{
-                    marginInlineStart: "auto",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                  }}
-                >
-                  <span style={{ opacity: 0.9 }}>{t.enabled ? "مفعل" : "غير مفعل"}</span>
-                  <input type="checkbox" checked={t.enabled !== false} readOnly />
-                </div>
-              </div>
-            ))}
-            {!visibleTenants.length ? (
-              <div style={{ padding: 12, opacity: 0.8 }}>لا توجد مدارس.</div>
-            ) : null}
+              ))}
+              {!visibleTenants.length ? <div style={{ padding: 12, opacity: 0.8 }}>لا توجد مدارس.</div> : null}
+            </div>
           </div>
-        </div>
 
-        <div className="super-panel" id="section-edit">
-          <div className="super-panel-title">تعديل بيانات المدرسة المختارة</div>
-          {!selectedTenantId ? (
-            <div style={{ padding: 12, opacity: 0.85 }}>اختر مدرسة من القائمة أولاً.</div>
-          ) : (
-            <div className="form-grid">
-              <label className="label">Tenant ID</label>
-              <input className="input" value={selectedTenantId} readOnly />
+          <div className="super-panel" id="section-edit">
+            <div className="super-panel-title">تعديل بيانات المدرسة المختارة</div>
+            {!selectedTenantId ? (
+              <div style={{ padding: 12, opacity: 0.85 }}>اختر مدرسة من القائمة أولاً.</div>
+            ) : (
+              <div className="form-grid">
+                <label className="label">Tenant ID</label>
+                <input className="input" value={selectedTenantId} readOnly />
+
+                <label className="label">الإيميل المرتبط بالمدرسة</label>
+              <input
+                className="input"
+                value={linkedTenantAdminEmail}
+                readOnly
+                placeholder="لا يوجد ربط حالياً"
+              />
 
               <label className="label">اسم المدرسة</label>
-              <input
-                className="input"
-                value={editTenantName}
-                onChange={(e) => setEditTenantName(e.target.value)}
-                disabled={isMinistryViewer}
-              />
-
-              <label className="label">الحالة</label>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <input
-                  type="checkbox"
-                  checked={editTenantEnabled !== false}
-                  onChange={(e) => setEditTenantEnabled(e.target.checked)}
+                  className="input"
+                  value={editTenantName}
+                  onChange={(e) => setEditTenantName(e.target.value)}
                   disabled={isMinistryViewer}
                 />
-                <span style={{ opacity: 0.9 }}>
-                  {editTenantEnabled ? "مفعل" : "غير مفعل"}
-                </span>
-              </div>
 
-              <label className="label">الولاية</label>
-              <input
-                className="input"
-                value={editWilayatAr}
-                onChange={(e) => setEditWilayatAr(e.target.value)}
-                disabled={isMinistryViewer}
-                placeholder="مثال: بوشر"
-              />
+                <label className="label">الحالة</label>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <input
+                    type="checkbox"
+                    checked={editTenantEnabled !== false}
+                    onChange={(e) => setEditTenantEnabled(e.target.checked)}
+                    disabled={isMinistryViewer}
+                  />
+                  <span style={{ opacity: 0.9 }}>{editTenantEnabled ? "مفعل" : "غير مفعل"}</span>
+                </div>
 
-              <label className="label">رابط الشعار</label>
-              <input
-                className="input"
-                value={editLogoUrl}
-                onChange={(e) => setEditLogoUrl(e.target.value)}
-                disabled={isMinistryViewer}
-                placeholder={MINISTRY_LOGO_URL}
-              />
+                <label className="label">الولاية</label>
+                <input
+                  className="input"
+                  value={editWilayatAr}
+                  onChange={(e) => setEditWilayatAr(e.target.value)}
+                  disabled={isMinistryViewer}
+                  placeholder="مثال: بوشر"
+                />
 
-              <div />
-              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                <button className="btn" disabled={editBusy || isMinistryViewer} onClick={saveSelectedTenant}>
-                  {editBusy ? "جاري الحفظ..." : "حفظ التغييرات"}
-                </button>
-                <button
-                  className="btn btn-ghost"
-                  disabled={editBusy}
-                  onClick={() => setEditReloadTick((x: number) => x + 1)}
-                  title="إعادة تحميل البيانات"
-                >
-                  تحديث
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
+                <label className="label">رابط الشعار</label>
+                <input
+                  className="input"
+                  value={editLogoUrl}
+                  onChange={(e) => setEditLogoUrl(e.target.value)}
+                  disabled={isMinistryViewer}
+                  placeholder={MINISTRY_LOGO_URL}
+                />
 
-        <div className="super-panel" id="section-create">
-          <div className="super-panel-title">إنشاء مدرسة جديدة (Tenant)</div>
-          <div className="form-grid">
-            <label className="label">اسم المدرسة</label>
-            <input
-              className="input"
-              value={newTenantName}
-              onChange={(e) => setNewTenantName(e.target.value)}
-              disabled={isMinistryViewer}
-              placeholder="مثال: أزان 12-9"
-            />
-
-            <label className="label">Tenant ID (Subdomain)</label>
-            <input
-              className="input"
-              value={newTenantId}
-              onChange={(e) => setNewTenantId(safeId(e.target.value))}
-              disabled={isMinistryViewer}
-              placeholder="مثال: azaan-9-12"
-            />
-
-            <div />
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span className="label">مفعل</span>
-              <input
-                type="checkbox"
-                checked={newTenantEnabled}
-                onChange={(e) => setNewTenantEnabled(e.target.checked)}
-                disabled={isMinistryViewer}
-              />
-            </div>
-
-            <div />
-            <button className="btn primary" onClick={createTenant} disabled={isMinistryViewer}>
-              إنشاء مدرسة جديدة
-            </button>
-          </div>
-
-          <div style={{ marginTop: 10, opacity: 0.8, lineHeight: 1.9 }}>
-            {isOwner ? (
-              <div>مالك المنصة يمكنه إنشاء مدارس لأي محافظة.</div>
-            ) : isMinistryViewer ? (
-              <div>سوبر الوزارة للمشاهدة فقط، ولا يمكنه إنشاء المدارس أو تعديلها أو حذفها.</div>
-            ) : (
-              <div>
-                سيتم تثبيت محافظة المدرسة تلقائيًا على: <b>{myGov || "غير محددة"}</b>
+                <div />
+                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                  <button className="btn" disabled={editBusy || isMinistryViewer} onClick={() => void saveSelectedTenant()}>
+                    {editBusy ? "جاري الحفظ..." : "حفظ التغييرات"}
+                  </button>
+                  <button
+                    className="btn btn-ghost"
+                    disabled={editBusy}
+                    onClick={() => setEditReloadTick((x: number) => x + 1)}
+                    title="إعادة تحميل البيانات"
+                  >
+                    تحديث
+                  </button>
+                </div>
               </div>
             )}
           </div>
-        </div>
 
-        <div className="super-panel" id="section-admin">
-          <div className="super-panel-title">إدارة أدمن المدرسة</div>
-
-          <div style={{ marginBottom: 10, opacity: 0.85 }}>
-            المدرسة المحددة: <b>{selectedTenant?.name || selectedTenantId || "—"}</b>
-          </div>
-          {isMinistryViewer ? (
-            <div style={{ marginBottom: 10, opacity: 0.82, color: "#fbbf24" }}>
-              هذه الصفحة في وضع مشاهدة فقط لسوبر الوزارة.
-            </div>
-          ) : null}
-
-          <div className="form-grid">
-            <label className="label">البريد الإلكتروني (مفتاح الوثيقة)</label>
-            <input
-              className="input"
-              value={userEmail}
-              onChange={(e) => setUserEmail(e.target.value)}
-              disabled={isMinistryViewer}
-              placeholder="name@example.com"
-            />
-
-            <label className="label">الاسم (اختياري)</label>
-            <input
-              className="input"
-              value={userName}
-              onChange={(e) => setUserName(e.target.value)}
-              disabled={isMinistryViewer}
-              placeholder="اسم المستخدم"
-            />
-
-            <div />
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span className="label">مفعل</span>
+          <div className="super-panel" id="section-create">
+            <div className="super-panel-title">إنشاء مدرسة جديدة (Tenant)</div>
+            <div className="form-grid">
+              <label className="label">اسم المدرسة</label>
               <input
-                type="checkbox"
-                checked={userEnabled}
-                onChange={(e) => setUserEnabled(e.target.checked)}
+                className="input"
+                value={newTenantName}
+                onChange={(e) => setNewTenantName(e.target.value)}
                 disabled={isMinistryViewer}
+                placeholder="مثال: أزان 12-9"
               />
+
+              <label className="label">Tenant ID (Subdomain)</label>
+              <input
+                className="input"
+                value={newTenantId}
+                onChange={(e) => setNewTenantId(safeId(e.target.value))}
+                disabled={isMinistryViewer}
+                placeholder="مثال: azaan-9-12"
+              />
+
+              <div />
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span className="label">مفعل</span>
+                <input
+                  type="checkbox"
+                  checked={newTenantEnabled}
+                  onChange={(e) => setNewTenantEnabled(e.target.checked)}
+                  disabled={isMinistryViewer}
+                />
+              </div>
+
+              <div />
+              <button className="btn primary" onClick={() => void createTenant()} disabled={isMinistryViewer}>
+                إنشاء مدرسة جديدة
+              </button>
             </div>
 
-            <div />
-            <button className="btn primary" onClick={saveAdminUser} disabled={saveBusy || isMinistryViewer}>
-              {saveBusy ? "جارٍ الحفظ..." : "حفظ المستخدم"}
-            </button>
+            <div style={{ marginTop: 10, opacity: 0.8, lineHeight: 1.9 }}>
+              {isOwner ? (
+                <div>مالك المنصة يمكنه إنشاء مدارس لأي محافظة.</div>
+              ) : isMinistryViewer ? (
+                <div>سوبر الوزارة للمشاهدة فقط، ولا يمكنه إنشاء المدارس أو تعديلها أو حذفها.</div>
+              ) : (
+                <div>
+                  سيتم تثبيت محافظة المدرسة تلقائيًا على: <b>{myGov || "غير محددة"}</b>
+                </div>
+              )}
+            </div>
           </div>
 
-          <div style={{ marginTop: 10, opacity: 0.8, lineHeight: 1.9 }}>
-            <div>
-              ملاحظة: هذه الصفحة تسمح لسوبر المحافظات أو مالك المنصة بإضافة <b>أدمن المدرسة</b> فقط، بينما سوبر الوزارة للمشاهدة فقط.
-            </div>
-            <div>
-              لا يمكن ربط نفس البريد الإلكتروني بأكثر من مدرسة، ولا يمكن ربط المدرسة نفسها بأكثر من بريد إلكتروني.
-            </div>
-          </div>
+          <div className="super-panel" id="section-admin">
+            <div className="super-panel-title">إدارة أدمن المدرسة</div>
 
-          <div
-            style={{
-              marginTop: 18,
-              border: "1px solid rgba(212,175,55,0.22)",
-              borderRadius: 14,
-              padding: 14,
-              background: "rgba(0,0,0,0.18)",
-            }}
-          >
+            <div style={{ marginBottom: 10, opacity: 0.85 }}>
+              المدرسة المحددة: <b>{selectedTenant?.name || selectedTenantId || "—"}</b>
+            </div>
+            {isMinistryViewer ? (
+              <div style={{ marginBottom: 10, opacity: 0.82, color: "#fbbf24" }}>
+                هذه الصفحة في وضع مشاهدة فقط لسوبر الوزارة.
+              </div>
+            ) : null}
+
+            <div className="form-grid">
+              <label className="label">البريد الإلكتروني (مفتاح الوثيقة)</label>
+              <input
+                className="input"
+                value={userEmail}
+                onChange={(e) => setUserEmail(e.target.value)}
+                disabled={isMinistryViewer}
+                placeholder="name@example.com"
+              />
+
+              <label className="label">الاسم (اختياري)</label>
+              <input
+                className="input"
+                value={userName}
+                onChange={(e) => setUserName(e.target.value)}
+                disabled={isMinistryViewer}
+                placeholder="اسم المستخدم"
+              />
+
+              <div />
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span className="label">مفعل</span>
+                <input
+                  type="checkbox"
+                  checked={userEnabled}
+                  onChange={(e) => setUserEnabled(e.target.checked)}
+                  disabled={isMinistryViewer}
+                />
+              </div>
+
+              <div />
+              <button className="btn primary" onClick={() => void saveAdminUser()} disabled={saveBusy || isMinistryViewer}>
+                {saveBusy ? "جارٍ الحفظ..." : "حفظ المستخدم"}
+              </button>
+            </div>
+
+            <div style={{ marginTop: 10, opacity: 0.8, lineHeight: 1.9 }}>
+              <div>
+                ملاحظة: هذه الصفحة تسمح لسوبر المحافظات أو مالك المنصة بإضافة <b>أدمن المدرسة</b> فقط، بينما سوبر الوزارة للمشاهدة فقط.
+              </div>
+              <div>
+                لا يمكن ربط نفس البريد الإلكتروني بأكثر من مدرسة، ولا يمكن ربط المدرسة نفسها بأكثر من بريد إلكتروني.
+              </div>
+            </div>
+
             <div
               style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: 12,
-                flexWrap: "wrap",
-                marginBottom: 12,
+                marginTop: 18,
+                border: "1px solid rgba(212,175,55,0.22)",
+                borderRadius: 14,
+                padding: 14,
+                background: "rgba(0,0,0,0.18)",
               }}
             >
-              <div style={{ fontWeight: 900, color: "#d4af37" }}>
-                جدول ربط المدارس مع الأدمن
-              </div>
-
-              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                <span style={{ opacity: 0.85 }}>
-                  {tenantAdminBusy ? "جارٍ التحديث..." : `عدد السجلات: ${tenantAdminRows.length}`}
-                </span>
-
-                <button
-                  className="btn btn-ghost"
-                  onClick={() => excelInputRef.current?.click()}
-                  disabled={importBusy || isMinistryViewer}
-                >
-                  {importBusy ? "جارٍ الاستيراد..." : "استيراد Excel"}
-                </button>
-
-                <button
-                  className="btn btn-ghost"
-                  onClick={() => setEditReloadTick((x: number) => x + 1)}
-                  disabled={tenantAdminBusy}
-                >
-                  تحديث الجدول
-                </button>
-
-                <button
-                  className="btn primary"
-                  onClick={exportTenantAdminLinksToExcel}
-                  disabled={!tenantAdminRows.length}
-                >
-                  تصدير Excel
-                </button>
-
-                {isOwner ? (
-                  <button
-                    className="btn"
-                    onClick={runAllowlistMigration}
-                    disabled={migrationBusy}
-                  >
-                    {migrationBusy ? "جارٍ التنظيف..." : "تنظيف الروابط القديمة"}
-                  </button>
-                ) : null}
-              </div>
-            </div>
-
-            <input
-              ref={excelInputRef}
-              type="file"
-              accept=".csv,.txt,.xls,.xlsx"
-              style={{ display: "none" }}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) {
-                  void importTenantAdminLinksFromExcel(file);
-                }
-              }}
-            />
-
-            <div style={{ overflowX: "auto" }}>
-              <table
+              <div
                 style={{
-                  width: "100%",
-                  borderCollapse: "collapse",
-                  minWidth: 860,
-                  background: "rgba(255,255,255,0.02)",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 12,
+                  flexWrap: "wrap",
+                  marginBottom: 12,
                 }}
               >
-                <thead>
-                  <tr style={{ background: "rgba(212,175,55,0.14)" }}>
-                    <th
-                      style={{
-                        padding: 10,
-                        border: "1px solid rgba(255,255,255,0.08)",
-                        textAlign: "right",
-                      }}
-                    >
-                      Tenant ID
-                    </th>
-                    <th
-                      style={{
-                        padding: 10,
-                        border: "1px solid rgba(255,255,255,0.08)",
-                        textAlign: "right",
-                      }}
-                    >
-                      اسم المدرسة
-                    </th>
-                    <th
-                      style={{
-                        padding: 10,
-                        border: "1px solid rgba(255,255,255,0.08)",
-                        textAlign: "right",
-                      }}
-                    >
-                      البريد الإلكتروني المرتبط
-                    </th>
-                    <th
-                      style={{
-                        padding: 10,
-                        border: "1px solid rgba(255,255,255,0.08)",
-                        textAlign: "center",
-                        width: 120,
-                      }}
-                    >
-                      إجراء
-                    </th>
-                  </tr>
-                </thead>
+                <div style={{ fontWeight: 900, color: "#d4af37" }}>جدول ربط المدارس مع الأدمن</div>
 
-                <tbody>
-                  {tenantAdminRows.length ? (
-                    tenantAdminRows.map((row, idx) => (
-                      <tr key={`${row.tenantId}-${row.email}-${idx}`}>
-                        <td style={{ padding: 10, border: "1px solid rgba(255,255,255,0.08)" }}>
-                          {row.tenantId}
-                        </td>
-                        <td style={{ padding: 10, border: "1px solid rgba(255,255,255,0.08)" }}>
-                          {row.tenantName}
-                        </td>
-                        <td style={{ padding: 10, border: "1px solid rgba(255,255,255,0.08)" }}>
-                          {row.email}
-                        </td>
-                        <td
-                          style={{
-                            padding: 10,
-                            border: "1px solid rgba(255,255,255,0.08)",
-                            textAlign: "center",
-                          }}
-                        >
-                          <button
-                            className="btn danger"
-                            onClick={() => deleteTenantAdminLink(row)}
-                            disabled={isMinistryViewer}
-                          >
-                            حذف الربط
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td
-                        colSpan={4}
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <span style={{ opacity: 0.85 }}>
+                    {tenantAdminBusy ? "جارٍ التحديث..." : `عدد السجلات: ${tenantAdminRows.length}`}
+                  </span>
+
+                  <button
+                    className="btn btn-ghost"
+                    onClick={() => excelInputRef.current?.click()}
+                    disabled={importBusy || isMinistryViewer}
+                  >
+                    {importBusy ? "جارٍ الاستيراد..." : "استيراد Excel"}
+                  </button>
+
+                  <button
+                    className="btn btn-ghost"
+                    onClick={() => setEditReloadTick((x: number) => x + 1)}
+                    disabled={tenantAdminBusy}
+                  >
+                    تحديث الجدول
+                  </button>
+
+                  <button className="btn primary" onClick={exportTenantAdminLinksToExcel} disabled={!tenantAdminRows.length}>
+                    تصدير Excel
+                  </button>
+
+                  {isOwner ? (
+                    <button className="btn" onClick={() => void runAllowlistMigration()} disabled={migrationBusy}>
+                      {migrationBusy ? "جارٍ التنظيف..." : "تنظيف الروابط القديمة"}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+
+              <input
+                ref={excelInputRef}
+                type="file"
+                accept=".csv,.txt,.xls,.xlsx"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    void importTenantAdminLinksFromExcel(file);
+                  }
+                }}
+              />
+
+              <div style={{ overflowX: "auto" }}>
+                <table
+                  style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                    minWidth: 860,
+                    background: "rgba(255,255,255,0.02)",
+                  }}
+                >
+                  <thead>
+                    <tr style={{ background: "rgba(212,175,55,0.14)" }}>
+                      <th style={{ padding: 10, border: "1px solid rgba(255,255,255,0.08)", textAlign: "right" }}>
+                        Tenant ID
+                      </th>
+                      <th style={{ padding: 10, border: "1px solid rgba(255,255,255,0.08)", textAlign: "right" }}>
+                        اسم المدرسة
+                      </th>
+                      <th style={{ padding: 10, border: "1px solid rgba(255,255,255,0.08)", textAlign: "right" }}>
+                        البريد الإلكتروني المرتبط
+                      </th>
+                      <th
                         style={{
-                          padding: 14,
+                          padding: 10,
                           border: "1px solid rgba(255,255,255,0.08)",
                           textAlign: "center",
-                          opacity: 0.8,
+                          width: 120,
                         }}
                       >
-                        لا توجد بيانات ربط حالياً.
-                      </td>
+                        إجراء
+                      </th>
                     </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
 
-            <div style={{ marginTop: 10, opacity: 0.78, lineHeight: 1.9 }}>
-              صيغة الاستيراد المقترحة: Tenant ID ، اسم المدرسة ، البريد الإلكتروني المرتبط
+                  <tbody>
+                    {tenantAdminRows.length ? (
+                      tenantAdminRows.map((row, idx) => (
+                        <tr key={`${row.tenantId}-${row.email}-${idx}`}>
+                          <td style={{ padding: 10, border: "1px solid rgba(255,255,255,0.08)" }}>{row.tenantId}</td>
+                          <td style={{ padding: 10, border: "1px solid rgba(255,255,255,0.08)" }}>{row.tenantName}</td>
+                          <td style={{ padding: 10, border: "1px solid rgba(255,255,255,0.08)" }}>{row.email}</td>
+                          <td
+                            style={{
+                              padding: 10,
+                              border: "1px solid rgba(255,255,255,0.08)",
+                              textAlign: "center",
+                            }}
+                          >
+                            <button
+                              className="btn danger"
+                              onClick={() => setPendingAdminLinkDelete(row)}
+                              disabled={isMinistryViewer}
+                            >
+                              حذف الربط
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td
+                          colSpan={4}
+                          style={{
+                            padding: 14,
+                            border: "1px solid rgba(255,255,255,0.08)",
+                            textAlign: "center",
+                            opacity: 0.8,
+                          }}
+                        >
+                          لا توجد بيانات ربط حالياً.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div style={{ marginTop: 10, opacity: 0.78, lineHeight: 1.9 }}>
+                صيغة الاستيراد المقترحة: Tenant ID ، اسم المدرسة ، البريد الإلكتروني المرتبط
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
+
+      <ConfirmModal
+        open={!!pendingTenantDelete}
+        title="تأكيد طلب الحذف"
+        confirmVariant="danger"
+        message={
+          pendingTenantDelete ? (
+            <div>
+              هل تريد الحذف؟
+              <div style={{ marginTop: 10, opacity: 0.9 }}>
+                المدرسة: <b>{pendingTenantDelete.tenantName || pendingTenantDelete.tenantId}</b>
+              </div>
+              <div style={{ opacity: 0.8 }}>Tenant ID: {pendingTenantDelete.tenantId}</div>
+            </div>
+          ) : null
+        }
+        onConfirm={() => {
+          if (pendingTenantDelete) {
+            void deleteTenant(pendingTenantDelete.tenantId);
+          }
+        }}
+        onClose={() => setPendingTenantDelete(null)}
+      />
+
+      <ConfirmModal
+        open={!!pendingAdminLinkDelete}
+        title="تأكيد حذف الربط"
+        confirmVariant="danger"
+        message={
+          pendingAdminLinkDelete ? (
+            <div>
+              هل تريد الحذف؟
+              <div style={{ marginTop: 10, opacity: 0.9 }}>
+                المدرسة: <b>{pendingAdminLinkDelete.tenantName || pendingAdminLinkDelete.tenantId}</b>
+              </div>
+              <div style={{ opacity: 0.8 }}>Tenant ID: {pendingAdminLinkDelete.tenantId}</div>
+              <div style={{ opacity: 0.8 }}>البريد الإلكتروني: {pendingAdminLinkDelete.email}</div>
+            </div>
+          ) : null
+        }
+        onConfirm={() => {
+          if (pendingAdminLinkDelete) {
+            void deleteTenantAdminLink(pendingAdminLinkDelete);
+          }
+        }}
+        onClose={() => setPendingAdminLinkDelete(null)}
+      />
+
+      <ConfirmModal
+        open={!!pendingSchoolRenameConfirm}
+        title="تأكيد تغيير اسم المدرسة"
+        confirmVariant="primary"
+        busy={editBusy}
+        message={
+          pendingSchoolRenameConfirm ? (
+            <div>
+              <div>هل تريد تغير الاسم من اسم "{pendingSchoolRenameConfirm.oldName}" إلى الاسم الجديد "{pendingSchoolRenameConfirm.newName}"؟</div>
+            </div>
+          ) : null
+        }
+        onConfirm={() => {
+          void confirmSchoolRenameAndSave();
+        }}
+        onClose={() => {
+          if (!editBusy) {
+            setPendingSchoolRenameConfirm(null);
+          }
+        }}
+      />
+
+      <ConfirmModal
+        open={!!existingEmailReplaceState}
+        title="البريد الإلكتروني مرتبط مسبقًا"
+        confirmVariant="primary"
+        busy={saveBusy}
+        message={
+          existingEmailReplaceState ? (
+            <div>
+              <div>هذا البريد الإلكتروني مرتبط مسبقًا بمدرسة أخرى.</div>
+              <div style={{ marginTop: 10 }}>هل تريد استبدال المدرسة؟</div>
+              <div style={{ marginTop: 14, opacity: 0.92 }}>
+                البريد الإلكتروني: <b>{existingEmailReplaceState.email}</b>
+              </div>
+              <div style={{ marginTop: 8, opacity: 0.92 }}>
+                المدرسة الحالية: <b>{existingEmailReplaceState.currentSchoolName}</b>
+              </div>
+              <div style={{ opacity: 0.8 }}>Tenant ID الحالي: {existingEmailReplaceState.currentTenantId}</div>
+              <div style={{ marginTop: 12, opacity: 0.92 }}>
+                المدرسة الجديدة: <b>{existingEmailReplaceState.newSchoolName}</b>
+              </div>
+              <div style={{ opacity: 0.8 }}>Tenant ID الجديد: {existingEmailReplaceState.newTenantId}</div>
+            </div>
+          ) : null
+        }
+        onConfirm={() => {
+          void saveAdminUser(true);
+        }}
+        onClose={() => {
+          if (!saveBusy) {
+            setExistingEmailReplaceState(null);
+          }
+        }}
+      />
+    </>
   );
 }
