@@ -95,6 +95,28 @@ const optionStyle: React.CSSProperties = {
   color: "#d4af37",
 };
 
+function mapGovernorateTenantManagerError(error: any, fallback: string) {
+  const code = String(error?.message || error || "").trim();
+
+  if (code === "MISSING_TENANT_ID") return "لم يتم تحديد المدرسة.";
+  if (code === "TENANT_NOT_FOUND") return "المدرسة المحددة غير موجودة.";
+  if (code === "MISSING_OLD_TENANT_ID") return "Tenant الحالي غير محدد.";
+  if (code === "MISSING_NEW_TENANT_ID") return "أدخل Tenant ID الجديد.";
+  if (code === "INVALID_NEW_TENANT_ID") return "Tenant ID الجديد غير صالح.";
+  if (code === "SAME_TENANT_ID") return "Tenant ID الجديد مطابق للحالي.";
+  if (code === "OLD_TENANT_NOT_FOUND") return "Tenant الحالي غير موجود.";
+  if (code === "NEW_TENANT_ALREADY_EXISTS") return "Tenant ID الجديد مستخدم مسبقًا.";
+  if (code === "MISSING_EMAIL") return "البريد الإلكتروني غير موجود.";
+  if (code === "USER_NOT_FOUND") return "المستخدم غير موجود.";
+  if (code === "NOT_REGIONAL_SUPER") return "هذا المستخدم ليس من نوع سوبر المحافظات.";
+  if (code === "MISSING_GOVERNORATE") return "اختر المحافظة أولًا.";
+  if (code === "Missing or insufficient permissions." || /permission/i.test(code)) {
+    return "لا توجد صلاحية كافية لتنفيذ هذه العملية.";
+  }
+
+  return fallback;
+}
+
 export default function GovernorateTenantsManager() {
   const { user, logout } = useAuth() as any;
   const navigate = useNavigate();
@@ -133,7 +155,7 @@ export default function GovernorateTenantsManager() {
       })
       .catch((e: any) => {
         setDetails(null);
-        setMsg(String(e?.message || e || ""));
+        setMsg(mapGovernorateTenantManagerError(e, "تعذر تحميل بيانات المدرسة."));
       });
   }, [selectedTenantId]);
 
@@ -177,7 +199,7 @@ export default function GovernorateTenantsManager() {
       setSelectedTenantId(newTenantId.trim());
       await refresh();
     } catch (e: any) {
-      setMsg(String(e?.message || e || "تعذر تنفيذ نقل Tenant."));
+      setMsg(mapGovernorateTenantManagerError(e, "تعذر تنفيذ نقل Tenant."));
     } finally {
       setBusy(false);
     }
@@ -196,7 +218,7 @@ export default function GovernorateTenantsManager() {
       setMsg("تم تنظيف Tenant المرتبط بسوبر المحافظات.");
       await refresh();
     } catch (e: any) {
-      setMsg(String(e?.message || e || "تعذر تنظيف Tenant."));
+      setMsg(mapGovernorateTenantManagerError(e, "تعذر تنظيف Tenant."));
     } finally {
       setBusy(false);
     }
@@ -213,7 +235,7 @@ export default function GovernorateTenantsManager() {
       setMsg("تم تحديث محافظة سوبر المحافظات.");
       await refresh();
     } catch (e: any) {
-      setMsg(String(e?.message || e || "تعذر تحديث المحافظة."));
+      setMsg(mapGovernorateTenantManagerError(e, "تعذر تحديث المحافظة."));
     } finally {
       setBusy(false);
     }
