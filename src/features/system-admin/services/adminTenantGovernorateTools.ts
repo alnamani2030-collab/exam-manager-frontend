@@ -112,8 +112,12 @@ export async function getTenantManagerDetailsAction(tenantId: string) {
 
   return {
     tenantId: tid,
+    name: String(root?.name || tid).trim(),
     schoolName: String(cfg?.schoolNameAr || root?.name || tid).trim(),
+    schoolNameAr: String(cfg?.schoolNameAr || root?.name || tid).trim(),
     governorate: String(cfg?.governorate || cfg?.regionAr || root?.governorate || "").trim(),
+    regionAr: String(cfg?.regionAr || cfg?.governorate || root?.governorate || "").trim(),
+    wilayatAr: String(cfg?.wilayatAr || "").trim(),
     enabled: root?.enabled !== false && cfg?.enabled !== false,
     linkedEmail: String(linkedRow?.email || (linkSnap.exists() ? (linkSnap.data() as any)?.email : "") || "").trim(),
     root,

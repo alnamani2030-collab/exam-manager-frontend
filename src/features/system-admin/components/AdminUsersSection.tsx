@@ -159,6 +159,12 @@ export default function AdminUsersSection(props: any) {
                 }
 
                 const currentRole = norm(view.role || "");
+                if (!isSchoolRole(currentRole) || isOwnerRole(currentRole)) {
+                  view.tenantId = "";
+                  view.schoolName = "";
+                  view.tenantName = "";
+                  view.tenantGovernorate = "";
+                }
                 const dirty = Object.keys(draft).length > 0;
                 const canManageRowRole = canManageAdminSystemRole(authzSnapshot, currentRole as any);
                 const showTenantSelect = isSchoolRole(currentRole) && !isOwnerRole(currentRole);

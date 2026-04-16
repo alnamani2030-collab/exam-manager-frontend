@@ -39,6 +39,35 @@ function isSchoolAdminRole(role: string) {
   return r === "tenant_admin" || r === "admin";
 }
 
+function isSchoolScopedRole(role: string) {
+  const r = String(role || "").trim().toLowerCase();
+  return r === "tenant_admin" || r === "admin" || r === "user";
+}
+
+function sanitizeNonSchoolRolePayload(input: {
+  roleNorm: string;
+  tenantId?: string;
+  schoolName?: string;
+  tenantName?: string;
+  tenantGovernorate?: string;
+}) {
+  if (isSchoolScopedRole(input.roleNorm)) {
+    return {
+      tenantId: String(input.tenantId || "").trim(),
+      schoolName: String(input.schoolName || "").trim(),
+      tenantName: String(input.tenantName || "").trim(),
+      tenantGovernorate: String(input.tenantGovernorate || "").trim(),
+    };
+  }
+
+  return {
+    tenantId: "",
+    schoolName: "",
+    tenantName: "",
+    tenantGovernorate: "",
+  };
+}
+
 async function resolveTenantSchoolName(tenantId: string) {
   const cfgSnap = await getDoc(doc(db, "tenants", tenantId, "meta", "config"));
   if (cfgSnap.exists()) {
@@ -257,6 +286,13 @@ export async function createAllowUserAction(args: any) {
   }
 
   const governorateFinal = await buildGovernorateForUserRole(roleNorm, tenantId, newUserGovernorate);
+  const roleScope = sanitizeNonSchoolRolePayload({
+    roleNorm,
+    tenantId,
+    schoolName: String(newUserSchoolName || "").trim(),
+    tenantName: String(newUserSchoolName || "").trim(),
+    tenantGovernorate: governorateFinal,
+  });
 
   if (roleNorm === "tenant_admin" || String(roleNorm) === "admin") {
     await assertTenantCanChangeAdminBinding(tenantId);
@@ -279,10 +315,10 @@ export async function createAllowUserAction(args: any) {
           email,
           enabled: !!newUserEnabled,
           role: roleNorm,
-          tenantId,
+          tenantId: roleScope.tenantId,
           governorate: governorateFinal,
           name: String(newUserName || "").trim(),
-          schoolName: String(newUserSchoolName || "").trim(),
+          schoolName: roleScope.schoolName,
         });
       } else {
         throw new Error("skip");
@@ -297,10 +333,10 @@ export async function createAllowUserAction(args: any) {
           email,
           enabled: !!newUserEnabled,
           role: roleNorm,
-          tenantId,
+          tenantId: roleScope.tenantId,
           governorate: governorateFinal,
           name: String(newUserName || "").trim(),
-          schoolName: String(newUserSchoolName || "").trim(),
+          schoolName: roleScope.schoolName,
           createdAt: serverTimestamp(),
           createdBy: user.email || "",
           updatedAt: serverTimestamp(),
@@ -383,6 +419,14 @@ export async function updateAllowUserAction(args: any) {
       normalizeText(await resolveTenantGovernorate(String(merged.tenantId || ""))) || undefined;
   }
 
+  const roleScope = sanitizeNonSchoolRolePayload({
+    roleNorm,
+    tenantId: String(merged.tenantId || "").trim(),
+    schoolName: String((merged as any).schoolName || "").trim(),
+    tenantName: String((merged as any).tenantName || "").trim(),
+    tenantGovernorate: governorateFinal,
+  });
+
   if (roleNorm === "tenant_admin" || String(roleNorm) === "admin") {
     const oldTenantId = String((current as any)?.tenantId || "").trim();
     const newTenantId = String(merged.tenantId || "").trim();
@@ -417,16 +461,31 @@ export async function updateAllowUserAction(args: any) {
     return;
   }
 
+  if (isSchoolAdminRole(String((current as any)?.role || ""))) {
+    const oldTenantId = String((current as any)?.tenantId || "").trim();
+    if (oldTenantId) {
+      const oldTenantLinkRef = doc(db, "tenantAdminLinks", oldTenantId);
+      const oldTenantLinkSnap = await getDoc(oldTenantLinkRef);
+      if (oldTenantLinkSnap.exists()) {
+        const oldTenantLinkData = oldTenantLinkSnap.data() as any;
+        const oldLinkedEmail = String(oldTenantLinkData?.email || "").trim().toLowerCase();
+        if (oldLinkedEmail === merged.email) {
+          await deleteDoc(oldTenantLinkRef);
+        }
+      }
+    }
+  }
+
   try {
     if (USE_FUNCTIONS) {
       await callFn<any, any>("adminUpsertAllowlist")({
         email: merged.email,
-        tenantId: merged.tenantId,
+        tenantId: roleScope.tenantId,
         governorate: governorateFinal,
         enabled: !!merged.enabled,
         role: roleNorm,
         name: (merged.name || "").trim(),
-        schoolName: String((merged as any).schoolName || "").trim(),
+        schoolName: roleScope.schoolName,
       });
     } else {
       throw new Error("skip");
@@ -439,12 +498,14 @@ export async function updateAllowUserAction(args: any) {
       doc(db, "allowlist", merged.email),
       stripUndefined({
         email: merged.email,
-        tenantId: merged.tenantId,
+        tenantId: roleScope.tenantId,
         governorate: governorateFinal,
         enabled: !!merged.enabled,
         role: roleNorm,
         name: (merged.name || "").trim(),
-        schoolName: String((merged as any).schoolName || "").trim(),
+        schoolName: roleScope.schoolName,
+        tenantName: roleScope.tenantName || undefined,
+        tenantGovernorate: roleScope.tenantGovernorate || undefined,
         updatedAt: serverTimestamp(),
         updatedBy: user.email || "",
       }),

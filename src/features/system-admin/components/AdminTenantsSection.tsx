@@ -131,19 +131,11 @@ export default function AdminTenantsSection(props: any) {
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                 <div>
                   <div style={{ marginBottom: 6, opacity: 0.85 }}>البريد المربوط بالمدرسة</div>
-                  <Input
-                    value={selectedTenantLinkedEmail || ""}
-                    readOnly
-                    placeholder="لا يوجد بريد مربوط"
-                  />
+                  <Input value={String(selectedTenantLinkedEmail || "").trim()} readOnly placeholder="لا يوجد بريد مربوط" />
                 </div>
                 <div>
                   <div style={{ marginBottom: 6, opacity: 0.85 }}>Tenant ID الخاص بالمدرسة</div>
-                  <Input
-                    value={selectedTenantResolvedId || ""}
-                    readOnly
-                    placeholder="لا يوجد Tenant محدد"
-                  />
+                  <Input value={String(selectedTenantResolvedId || selectedTenantId || "").trim()} readOnly placeholder="لا يوجد Tenant محدد" />
                 </div>
               </div>
 
