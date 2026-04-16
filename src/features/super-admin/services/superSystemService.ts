@@ -2,6 +2,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  documentId,
   getDoc,
   getDocs,
   limit,
@@ -77,24 +78,6 @@ export async function loadTenantEditState(selectedTenantId: string) {
   };
 }
 
-
-async function getTenantAdminAllowlistDocs(
-  tenantId: string,
-  governorate?: string,
-  restrictGovernorate: boolean = false,
-) {
-  const constraints: any[] = [
-    where("tenantId", "==", tenantId),
-    where("role", "in", ["tenant_admin", "admin"]),
-  ];
-
-  if (restrictGovernorate && governorate) {
-    constraints.push(where("governorate", "==", governorate));
-  }
-
-  return getDocs(query(collection(db, "allowlist"), ...constraints));
-}
-
 export async function createTenantForScope(input: {
   tenantId: string;
   name: string;
@@ -115,8 +98,12 @@ export async function createTenantForScope(input: {
   if (!gov) throw new Error("MISSING_GOVERNORATE");
 
   const tRef = doc(db, "tenants", id);
-  const existing = await getDoc(tRef);
-  if (existing.exists()) throw new Error("TENANT_EXISTS");
+
+  // مهم: سوبر المحافظات قد لا يُسمح له بعمل getDoc مباشر على مستند غير موجود بعد،
+  // لذلك نتحقق من الوجود عبر query على collection لأن list مسموح له حسب القواعد.
+  const existingQ = query(collection(db, "tenants"), where(documentId(), "==", id), limit(1));
+  const existing = await getDocs(existingQ);
+  if (!existing.empty) throw new Error("TENANT_EXISTS");
 
   const batch = writeBatch(db);
 
@@ -156,22 +143,16 @@ export async function saveTenantForScope(input: {
   canSeeAllGovs: boolean;
   myGov: string;
 }) {
-  const tenantId = String(input.tenantId || "").trim();
-  const schoolName = String(input.name || "").trim();
-
   const gov = input.canSeeAllGovs
     ? String(input.myGov || MINISTRY_SCOPE).trim()
     : String(input.myGov || "").trim();
 
-  if (!tenantId || !schoolName) throw new Error("INVALID_TENANT_INPUT");
   if (!input.canSeeAllGovs && !gov) throw new Error("MISSING_GOVERNORATE");
 
-  const batch = writeBatch(db);
-
-  batch.set(
-    doc(db, "tenants", tenantId),
+  await setDoc(
+    doc(db, "tenants", input.tenantId),
     {
-      name: schoolName,
+      name: String(input.name || "").trim(),
       enabled: !!input.enabled,
       governorate: gov,
       updatedAt: serverTimestamp(),
@@ -179,47 +160,18 @@ export async function saveTenantForScope(input: {
     { merge: true },
   );
 
-  batch.set(
-    doc(db, "tenants", tenantId, "meta", "config"),
+  await setDoc(
+    doc(db, "tenants", input.tenantId, "meta", "config"),
     {
       governorate: gov,
       regionAr: gov,
-      schoolNameAr: schoolName,
+      schoolNameAr: String(input.name || "").trim(),
       wilayatAr: String(input.wilayatAr || "").trim(),
       logoUrl: String(input.logoUrl || "").trim() || MINISTRY_LOGO_URL,
       updatedAt: serverTimestamp(),
     },
     { merge: true },
   );
-
-  const allowlistSnap = await getTenantAdminAllowlistDocs(
-    tenantId,
-    gov,
-    !input.canSeeAllGovs,
-  );
-
-  for (const allowDoc of allowlistSnap.docs) {
-    const allowData = (allowDoc.data() as Record<string, unknown>) || {};
-    const existingUserName = String(allowData.userName || "").trim();
-    const existingSchoolName = String(allowData.schoolName || allowData.tenantName || "").trim();
-
-    const payload: Record<string, unknown> = {
-      schoolName,
-      tenantName: schoolName,
-      governorate: gov,
-      tenantGovernorate: gov,
-      enabled: !!input.enabled,
-      updatedAt: serverTimestamp(),
-    };
-
-    if (!existingUserName || existingUserName === existingSchoolName) {
-      payload.userName = schoolName;
-    }
-
-    batch.set(allowDoc.ref, payload, { merge: true });
-  }
-
-  await batch.commit();
 }
 
 export async function archiveAndDeleteTenant(input: { tenantId: string; deletedBy?: string }) {
@@ -263,63 +215,15 @@ export async function saveTenantAdminAssignment(input: {
   const tenantId = String(input.tenantId || "").trim();
   if (!tenantId) throw new Error("MISSING_TENANT_ID");
 
-  const tenantSnap = await getDoc(doc(db, "tenants", tenantId));
-  if (!tenantSnap.exists()) throw new Error("TENANT_NOT_FOUND");
-
-  const tenantData = (tenantSnap.data() as Record<string, unknown>) || {};
-  const tenantEnabled = tenantData.enabled !== false;
-  if (!tenantEnabled) throw new Error("TENANT_DISABLED");
-
   const governorate = input.canSeeAllGovs
     ? String(input.tenantGovernorate || input.myGov || MINISTRY_SCOPE).trim()
     : String(input.myGov || "").trim();
 
-  const schoolName = String(input.tenantName || tenantData.name || "").trim() || tenantId;
-
-  const existingLinkSnap = await getDoc(doc(db, "allowlist", email));
-  if (existingLinkSnap.exists()) {
-    const existingData = (existingLinkSnap.data() as Record<string, unknown>) || {};
-    const existingTenantId = String(existingData.tenantId || "").trim();
-    const existingRole = String(existingData.role || "").trim().toLowerCase();
-
-    if (
-      existingTenantId &&
-      existingTenantId !== tenantId &&
-      (existingRole === "tenant_admin" || existingRole === "admin")
-    ) {
-      const existingTenantSnap = await getDoc(doc(db, "tenants", existingTenantId));
-      const existingTenantData = existingTenantSnap.exists()
-        ? ((existingTenantSnap.data() as Record<string, unknown>) || {})
-        : {};
-      const existingTenantEnabled = existingTenantData.enabled !== false;
-
-      if (!existingTenantEnabled) {
-        throw new Error("DISABLED_TENANT_LINK_LOCKED");
-      }
-
-      throw new Error("EMAIL_ALREADY_LINKED_TO_ANOTHER_TENANT");
-    }
-  }
-
-  const existingTenantLinks = await getTenantAdminAllowlistDocs(
-    tenantId,
-    governorate,
-    !input.canSeeAllGovs,
-  );
-
-  const linkedToOtherEmail = existingTenantLinks.docs.find((d) => {
-    const data = (d.data() as Record<string, unknown>) || {};
-    const docEmail = String(data.email || d.id || "").trim().toLowerCase();
-    return docEmail && docEmail !== email;
-  });
-
-  if (linkedToOtherEmail) {
-    throw new Error("TENANT_ALREADY_LINKED_TO_ANOTHER_EMAIL");
-  }
+  const schoolName = String(input.tenantName || "").trim() || tenantId;
 
   const payload: SuperSystemAllowDoc = {
     email,
-    enabled: !!input.enabled && tenantEnabled,
+    enabled: !!input.enabled,
     role: "tenant_admin" as any,
     tenantId,
     governorate,
@@ -334,43 +238,6 @@ export async function saveTenantAdminAssignment(input: {
   return { email };
 }
 
-export async function deleteTenantAdminAssignment(input: {
-  email: string;
-  tenantId: string;
-}) {
-  const email = String(input.email || "").trim().toLowerCase();
-  const tenantId = String(input.tenantId || "").trim();
-
-  if (!email) throw new Error("MISSING_EMAIL");
-  if (!tenantId) throw new Error("MISSING_TENANT_ID");
-
-  const tenantSnap = await getDoc(doc(db, "tenants", tenantId));
-  if (!tenantSnap.exists()) throw new Error("TENANT_NOT_FOUND");
-
-  const tenantData = (tenantSnap.data() as Record<string, unknown>) || {};
-  if (tenantData.enabled === false) {
-    throw new Error("TENANT_DISABLED_LINK_CHANGE_BLOCKED");
-  }
-
-  const linkRef = doc(db, "allowlist", email);
-  const linkSnap = await getDoc(linkRef);
-  if (!linkSnap.exists()) return;
-
-  const linkData = (linkSnap.data() as Record<string, unknown>) || {};
-  const linkedTenantId = String(linkData.tenantId || "").trim();
-  const linkRole = String(linkData.role || "").trim().toLowerCase();
-
-  if (
-    linkedTenantId &&
-    linkedTenantId !== tenantId &&
-    (linkRole === "tenant_admin" || linkRole === "admin")
-  ) {
-    throw new Error("EMAIL_LINKED_TO_ANOTHER_TENANT");
-  }
-
-  await deleteDoc(linkRef);
-}
-
 export async function disableAllowlistForTenant(tenantId: string) {
   const qs = await getDocs(query(collection(db, "allowlist"), where("tenantId", "==", tenantId)));
 
@@ -382,4 +249,19 @@ export async function disableAllowlistForTenant(tenantId: string) {
       }),
     ),
   );
+}
+
+
+export async function deleteTenantAdminAssignment(input: {
+  tenantId: string;
+  email: string;
+}) {
+  const tenantId = String(input.tenantId || "").trim();
+  const email = String(input.email || "").trim().toLowerCase();
+
+  if (!tenantId) throw new Error("MISSING_TENANT_ID");
+  if (!email || !email.includes("@")) throw new Error("INVALID_EMAIL");
+
+  await deleteDoc(doc(db, "allowlist", email));
+  return { tenantId, email };
 }
