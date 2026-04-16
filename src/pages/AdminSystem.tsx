@@ -509,10 +509,6 @@ export default function AdminSystem() {
               إضافة السوبرات
             </Button>
 
-            <Button variant="ghost" className="btn-luxury-blue" onClick={() => navigate("/system/governorate-tenants")} style={{ padding: "8px 10px" }}>
-              المدارس حسب المحافظات
-            </Button>
-
             <Button variant="ghost" className="btn-luxury-green" onClick={() => navigate("/super-system")} style={{ padding: "8px 10px" }}>
               صفحة السوبر (المحافظات)
             </Button>
