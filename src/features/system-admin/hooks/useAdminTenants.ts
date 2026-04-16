@@ -32,40 +32,52 @@ export function useAdminTenants(params: { isPlatformOwner: boolean; isSuper: boo
 
   useEffect(() => {
     const qTenants = query(collection(db, "tenants"), orderBy("updatedAt", "desc"), limit(500));
+
     const unsub = onSnapshot(
       qTenants,
       (snap) => {
         const seq = ++tenantsSnapSeqRef.current;
-        const listAll: TenantDoc[] = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+
+        const listAll: TenantDoc[] = snap.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as any),
+        }));
+
         const list: TenantDoc[] = listAll.filter((t: any) => t?.deleted !== true);
 
         Promise.all(
           list.map(async (t) => {
             try {
               const cfgSnap = await getDoc(doc(db, "tenants", t.id, "meta", "config"));
-              const cfg = cfgSnap.exists() ? (((cfgSnap.data() as any) || {})) : {};
-              const displayName = String(cfg?.schoolNameAr || (t as any)?.name || t.id || "").trim();
-              const governorate = String(cfg?.governorate || cfg?.regionAr || (t as any)?.governorate || "").trim();
-              const enabled = (t as any)?.enabled !== false && cfg?.enabled !== false;
-              const deleted = (t as any)?.deleted === true || cfg?.deleted === true;
+              const cfg = cfgSnap.exists() ? ((cfgSnap.data() as any) || {}) : {};
+              const governorate = String(
+                cfg?.governorate ?? cfg?.regionAr ?? (t as any)?.governorate ?? "",
+              ).trim();
+              const schoolNameAr = String(cfg?.schoolNameAr ?? "").trim();
+              const displayName = schoolNameAr || String((t as any)?.name || t.id || "").trim();
 
               return {
                 ...t,
-                name: displayName,
-                displayName,
-                schoolNameAr: String(cfg?.schoolNameAr || "").trim(),
                 governorate,
-                enabled,
-                deleted,
-              } as TenantDoc;
+                schoolNameAr,
+                displayName,
+                name: displayName,
+              } as TenantDoc & { displayName?: string; schoolNameAr?: string };
             } catch {
-              return t as TenantDoc;
+              const displayName = String((t as any)?.name || t.id || "").trim();
+              return {
+                ...t,
+                displayName,
+                name: displayName,
+              } as TenantDoc & { displayName?: string };
             }
           }),
         ).then((withGovAll) => {
           if (seq !== tenantsSnapSeqRef.current) return;
+
           const withGov = withGovAll.filter((t: any) => t?.deleted !== true);
           setTenants(withGov);
+
           const stillExists = selectedTenantId && withGov.some((x) => x.id === selectedTenantId);
           if (!stillExists) {
             setSelectedTenantId(withGov.length ? withGov[0].id : null);
@@ -85,21 +97,9 @@ export function useAdminTenants(params: { isPlatformOwner: boolean; isSuper: boo
     (async () => {
       setLoadingConfig(true);
       try {
-        const [tenantSnap, configSnap] = await Promise.all([
-          getDoc(doc(db, "tenants", selectedTenantId)),
-          getDoc(doc(db, "tenants", selectedTenantId, "meta", "config")),
-        ]);
+        const snap = await getDoc(doc(db, "tenants", selectedTenantId, "meta", "config"));
         if (!alive) return;
-        const tenantData = tenantSnap.exists() ? (((tenantSnap.data() as any) || {})) : {};
-        const configData = configSnap.exists() ? (((configSnap.data() as any) || {})) : {};
-        setSelectedTenantConfig({
-          ...tenantData,
-          ...configData,
-          schoolNameAr: String(configData?.schoolNameAr || tenantData?.name || selectedTenantId).trim(),
-          governorate: String(configData?.governorate || configData?.regionAr || tenantData?.governorate || "").trim(),
-          regionAr: String(configData?.regionAr || configData?.governorate || tenantData?.governorate || "").trim(),
-          enabled: tenantData?.enabled !== false && configData?.enabled !== false,
-        } as any);
+        setSelectedTenantConfig((snap.data() as any) || {});
       } catch {
         if (!alive) return;
         setSelectedTenantConfig({});

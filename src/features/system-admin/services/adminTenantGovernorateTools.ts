@@ -112,12 +112,8 @@ export async function getTenantManagerDetailsAction(tenantId: string) {
 
   return {
     tenantId: tid,
-    name: String(root?.name || tid).trim(),
     schoolName: String(cfg?.schoolNameAr || root?.name || tid).trim(),
-    schoolNameAr: String(cfg?.schoolNameAr || root?.name || tid).trim(),
     governorate: String(cfg?.governorate || cfg?.regionAr || root?.governorate || "").trim(),
-    regionAr: String(cfg?.regionAr || cfg?.governorate || root?.governorate || "").trim(),
-    wilayatAr: String(cfg?.wilayatAr || "").trim(),
     enabled: root?.enabled !== false && cfg?.enabled !== false,
     linkedEmail: String(linkedRow?.email || (linkSnap.exists() ? (linkSnap.data() as any)?.email : "") || "").trim(),
     root,
@@ -189,7 +185,8 @@ export async function migrateTenantIdAction(args: { user: any; oldTenantId: stri
   for (const d of allowSnap.docs) {
     const data = (d.data() as any) || {};
     const role = norm(data?.role || "");
-    if (isSchoolAdminRole(role)) {
+
+    if (isSchoolAdminRole(role) || role === "user") {
       batch.set(
         d.ref,
         {
@@ -204,10 +201,14 @@ export async function migrateTenantIdAction(args: { user: any; oldTenantId: stri
         { merge: true },
       );
     } else {
+      // مهم: أي دور غير مدرسي لا يجب أن يبقى مربوطًا بـ Tenant بعد النقل
       batch.set(
         d.ref,
         {
-          tenantId: newId,
+          tenantId: "",
+          schoolName: "",
+          tenantName: "",
+          tenantGovernorate: "",
           updatedAt: serverTimestamp(),
           updatedBy: user?.email || "",
         },
@@ -293,6 +294,13 @@ export async function updateRegionalSuperGovernorateAction(args: { user: any; em
   const em = String(email || "").trim().toLowerCase();
   const gov = String(governorate || "").trim();
   if (!em) throw new Error("MISSING_EMAIL");
+  if (!gov) throw new Error("MISSING_GOVERNORATE");
+
+  const snap = await getDoc(doc(db, "allowlist", em));
+  if (!snap.exists()) throw new Error("USER_NOT_FOUND");
+  const data = (snap.data() as any) || {};
+  if (!isGovernorateSuperRole(data?.role || "")) throw new Error("NOT_REGIONAL_SUPER");
+
   await setDoc(
     doc(db, "allowlist", em),
     {
