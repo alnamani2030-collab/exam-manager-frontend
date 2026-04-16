@@ -327,7 +327,7 @@ export default function GovernorateTenantsManager() {
                     </div>
                     <div>
                       <div style={labelStyle}>البريد المربوط بالمدرسة</div>
-                      <input style={input} value={String(details?.email || "")} readOnly placeholder="لا يوجد ربط" />
+                      <input style={input} value={String(details?.linkedEmail || details?.email || "")} readOnly placeholder="لا يوجد ربط" />
                     </div>
                   </div>
 
