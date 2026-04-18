@@ -16,6 +16,65 @@ const SUBS = {
 const GOLD_DARK = "#d4af37";
 const GOLD_GLOW = "rgba(212, 175, 55, 0.45)";
 
+
+type SmartAlertItem = {
+  id?: string;
+  title?: string;
+  message?: string;
+  titleAr?: string;
+  titleEn?: string;
+  messageAr?: string;
+  messageEn?: string;
+  level?: string;
+  route?: string;
+};
+
+function localizeSmartAlert(alert: SmartAlertItem, lang: string): SmartAlertItem {
+  const useArabic = lang === "ar";
+  const title = String(alert?.title || "").trim();
+  const message = String(alert?.message || "").trim();
+  const id = String(alert?.id || "").trim().toLowerCase();
+
+  if (useArabic) {
+    return {
+      ...alert,
+      title: String(alert?.titleAr || title).trim(),
+      message: String(alert?.messageAr || message).trim(),
+    };
+  }
+
+  if (alert?.titleEn || alert?.messageEn) {
+    return {
+      ...alert,
+      title: String(alert?.titleEn || title).trim(),
+      message: String(alert?.messageEn || message).trim(),
+    };
+  }
+
+  const stableTitleAr = "الوضع التشغيلي مستقر";
+  const stableMessageAr = "لا توجد Warning حرجة ظاهرة الآن، ويمكن متابعة التشغيل بصورة آمنة.";
+
+  if (
+    id in { stable: 1, operational_stable: 1, healthy: 1 } ||
+    title == stableTitleAr ||
+    title == "الحالة التشغيلية مستقرة" ||
+    message == stableMessageAr ||
+    (alert?.level === "success" && /warning/i.test(message) && /لا توجد|لا يوجد/.test(message))
+  ) {
+    return {
+      ...alert,
+      title: "Operational status is stable",
+      message: "There are no critical warnings right now, and operations can continue safely.",
+    };
+  }
+
+  return {
+    ...alert,
+    title: title.replace(/التنبيهات الذكية المباشرة/g, "Live smart alerts"),
+    message,
+  };
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const { effectiveTenantId, userProfile } = useAuth() as any;
@@ -151,7 +210,7 @@ export default function Dashboard() {
   );
 
 
-  const smartAlerts = useMemo(() => buildSmartAlerts(alertsModel), [alertsModel]);
+  const smartAlerts = useMemo(() => buildSmartAlerts(alertsModel).map((alert: SmartAlertItem) => localizeSmartAlert(alert, lang)), [alertsModel, lang]);
 
   const longRows = useMemo(
     () => [
