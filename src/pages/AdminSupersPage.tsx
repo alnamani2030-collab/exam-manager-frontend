@@ -123,7 +123,7 @@ export default function AdminSupersPage() {
             <div className="system-brand-title">وزارة التعليم</div>
           </div>
 
-          <div className="system-program">إدارة السوبرات</div>
+          <div className="system-program">إدارة سوبر المحافظات </div>
 
           <div className="system-actions">
             {user?.email ? <span style={{ opacity: 0.75 }}>({String(user.email)})</span> : null}
