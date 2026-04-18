@@ -575,7 +575,7 @@ export default function AdminSystem() {
             </Button>
 
             <Button variant="ghost" className="btn-luxury-purple" onClick={() => navigate("/system/add-supers")} style={{ padding: "8px 10px" }}>
-              إضافة السوبرات
+              إضافة سوبر المحافظات
             </Button>
             <Button variant="ghost" className="btn-luxury-blue" onClick={() => navigate("/system/governorate-tenants")} style={{ padding: "8px 10px" }}>
               المدارس حسب المحافظات
