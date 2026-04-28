@@ -8,12 +8,33 @@ export default function RootRedirect() {
 
   if (auth?.loading) return null;
 
+  const role = String(
+    auth?.effectiveRole ||
+    auth?.allow?.role ||
+    auth?.profile?.role ||
+    auth?.userProfile?.role ||
+    ""
+  ).trim().toLowerCase();
+
+  const tenantId = String(
+    auth?.effectiveTenantId ||
+    auth?.tenantId ||
+    auth?.allow?.tenantId ||
+    auth?.profile?.tenantId ||
+    auth?.userProfile?.tenantId ||
+    ""
+  ).trim();
+
+  if (role === "exam_super" && tenantId) {
+    return <Navigate to={`/t/${tenantId}/dashboard12`} replace />;
+  }
+
   const snapshot = buildAuthzSnapshot({
     user: auth?.user,
-    profile: auth?.profile || auth?.userProfile || null,
+    profile: auth?.allow || auth?.profile || auth?.userProfile || null,
     isSuperAdmin: !!auth?.isSuperAdmin,
     isSuper: !!auth?.isSuper,
-    tenantId: auth?.tenantId ?? auth?.profile?.tenantId ?? auth?.userProfile?.tenantId ?? null,
+    tenantId: tenantId || null,
     supportTenantId: auth?.supportTenantId ?? null,
     supportUntil: typeof auth?.supportUntil === "number" ? auth.supportUntil : null,
     isSupportMode: !!auth?.isSupportMode,

@@ -30,7 +30,7 @@ const DISABLE_FUNCTIONS =
 type AllowlistDoc = {
   email: string;
   enabled: boolean;
-  role: "super_admin" | "ministry_super" | "super" | "tenant_admin" | "admin" | "user";
+  role: "super_admin" | "ministry_super" | "super" | "exam_super" | "tenant_admin" | "admin" | "user";
   tenantId: string;
 };
 
@@ -108,6 +108,8 @@ async function fetchAllowlist(email: string): Promise<AllowlistDoc | null> {
     (data as any).role = "ministry_super";
   } else if (r === "super") {
     (data as any).role = "super";
+  } else if (r === "exam_super" || r === "exam super" || r === "exam-super" || r === "super_exam" || r === "super-exam") {
+    (data as any).role = "exam_super";
   } else if (r === "tenant_admin" || r === "tenant admin" || r === "tenant-admin") {
     (data as any).role = "tenant_admin";
   } else if (r === "admin") {
@@ -122,6 +124,10 @@ async function fetchAllowlist(email: string): Promise<AllowlistDoc | null> {
 }
 
 function resolveAllowlistHomePath(user: User | null, allow: AllowlistDoc | null): string {
+  if (allow?.enabled && allow?.role === "exam_super" && allow?.tenantId) {
+    return `/t/${allow.tenantId}/dashboard12`;
+  }
+
   return resolveHomePath(
     buildAuthzSnapshot({
       user,
@@ -141,6 +147,7 @@ function translateRoleLabel(label: string, lang: Lang): string {
     "مشرف نطاق": { ar: "سوبر المحافظات", en: "Governorates Super" },
     "مدير جهة": { ar: "أدمن المدرسة", en: "School Admin" },
     "مدير": { ar: "أدمن المدرسة", en: "School Admin" },
+    "سوبر الامتحانات": { ar: "سوبر الامتحانات", en: "Exam Super" },
     "مستخدم تشغيلي": { ar: "مستخدم تشغيلي", en: "Operational User" },
     "مستخدم": { ar: "مستخدم", en: "User" },
   };

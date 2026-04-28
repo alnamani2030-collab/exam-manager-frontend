@@ -133,13 +133,11 @@ export default function Settings1() {
           style={{
             display: "grid",
             gap: 18,
-            border: "1px solid rgba(212,175,55,0.18)",
+            border: "5px solid #e6d27a",
             borderRadius: 34,
             padding: 28,
-            background:
-              "linear-gradient(135deg, rgba(30,22,2,0.95), rgba(8,8,8,0.98), rgba(27,21,3,0.94))",
-            boxShadow:
-              "0 32px 100px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.05), inset 0 -1px 0 rgba(255,255,255,0.03)",
+            background: "linear-gradient(180deg, #f7f3e7 0%, #f3efdf 100%)",
+            boxShadow: "0 0 0 6px rgba(245,232,170,0.35) inset, 0 10px 28px rgba(190,160,40,0.10)",
           }}
         >
           <div
@@ -162,7 +160,7 @@ export default function Settings1() {
                   borderRadius: 999,
                   background: "rgba(16,185,129,0.12)",
                   border: "1px solid rgba(16,185,129,0.22)",
-                  color: "#a7f3d0",
+                  color: "#000000",
                   fontWeight: 900,
                   fontSize: 12,
                 }}
@@ -171,7 +169,7 @@ export default function Settings1() {
               </div>
 
               <div>
-                <div style={{ fontSize: 18, fontWeight: 900, color: "rgba(255,241,196,0.88)", marginBottom: 10 }}>
+                <div style={{ fontSize: 18, fontWeight: 900, color: "#000000", marginBottom: 10 }}>
                   {tr("نظام إدارة الامتحانات الذكي", "Smart Exam Management System")}
                 </div>
                 <h1
@@ -180,7 +178,7 @@ export default function Settings1() {
                     fontSize: "clamp(34px, 5vw, 60px)",
                     lineHeight: 1.05,
                     fontWeight: 950,
-                    color: "#fff1c4",
+                    color: "#000000",
                     letterSpacing: "-0.03em",
                     textShadow: "0 8px 28px rgba(212,175,55,0.16)",
                   }}
@@ -194,7 +192,7 @@ export default function Settings1() {
                   margin: 0,
                   fontSize: 16,
                   lineHeight: 2,
-                  color: "rgba(255,241,196,0.82)",
+                  color: "#000000",
                   maxWidth: 940,
                 }}
               >
@@ -213,16 +211,16 @@ export default function Settings1() {
                   <div
                     key={item.label}
                     style={{
-                      border: "1px solid rgba(255,255,255,0.08)",
-                      background: "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
+                      border: "2px solid #ead98b",
+                      background: "linear-gradient(180deg, #faf7ee 0%, #f6f1e2 100%)",
                       borderRadius: 18,
                       padding: "12px 14px",
                       minWidth: 190,
-                      boxShadow: "0 14px 28px rgba(0,0,0,0.22)",
+                      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.75), 0 8px 18px rgba(190,160,40,0.10)",
                     }}
                   >
-                    <div style={{ fontSize: 12, color: "rgba(255,241,196,0.64)", fontWeight: 800 }}>{item.label}</div>
-                    <div style={{ marginTop: 6, fontSize: 16, color: "#fff8dc", fontWeight: 900 }}>{item.value}</div>
+                    <div style={{ fontSize: 12, color: "#000000", fontWeight: 800 }}>{item.label}</div>
+                    <div style={{ marginTop: 6, fontSize: 16, color: "#000000", fontWeight: 900 }}>{item.value}</div>
                   </div>
                 ))}
               </div>
@@ -233,11 +231,11 @@ export default function Settings1() {
                 minWidth: 300,
                 maxWidth: 390,
                 width: "100%",
-                border: "1px solid rgba(255,255,255,0.08)",
+                border: "2px solid #ead98b",
                 borderRadius: 28,
                 padding: 22,
-                background: "linear-gradient(180deg, rgba(212,175,55,0.08), rgba(255,255,255,0.02))",
-                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
+                background: "linear-gradient(180deg, #faf7ee 0%, #f6f1e2 100%)",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.75)",
                 display: "grid",
                 gap: 16,
               }}
@@ -250,7 +248,7 @@ export default function Settings1() {
                   borderRadius: 999,
                   background: "rgba(16,185,129,0.14)",
                   border: "1px solid rgba(16,185,129,0.24)",
-                  color: "#a7f3d0",
+                  color: "#000000",
                   fontWeight: 900,
                   fontSize: 12,
                 }}
@@ -258,14 +256,14 @@ export default function Settings1() {
                 {tr("معاينة مباشرة وهوية مؤسسية", "Live preview and institutional identity")}
               </div>
 
-              <div style={{ fontSize: 28, lineHeight: 1.5, fontWeight: 950, color: "#fff1c4" }}>
+              <div style={{ fontSize: 28, lineHeight: 1.5, fontWeight: 950, color: "#000000" }}>
                 {tr(
                   "اكتب البيانات مرة واحدة وشاهد شكلها النهائي داخل نموذج التقرير فورًا.",
                   "Enter the data once and instantly see its final appearance inside the report template."
                 )}
               </div>
 
-              <div style={{ fontSize: 14, lineHeight: 1.95, color: "rgba(255,241,196,0.78)" }}>
+              <div style={{ fontSize: 14, lineHeight: 1.95, color: "#000000" }}>
                 {tr(
                   "تم تطوير الصفحة لتجمع بين سهولة إدخال البيانات وجمال المعاينة الرسمية، بحيث يشعر المستخدم بأنه يتعامل مع منتج شركة عالمية من أول لحظة.",
                   "This page was designed to combine easy data entry with a beautiful official preview, so the user feels they are using a world-class product from the very first moment."
@@ -284,7 +282,7 @@ export default function Settings1() {
               style={{
                 marginTop: -4,
                 marginBottom: 18,
-                color: "rgba(255,255,255,0.78)",
+                color: "#000000",
                 fontSize: 14,
                 lineHeight: 1.9,
                 textAlign: isRTL ? "right" : "left",
@@ -303,7 +301,7 @@ export default function Settings1() {
                   type="text"
                   value={data.name}
                   onChange={(e) => handleChange("name", e.target.value)}
-                  style={inputStyle}
+                  style={{ ...inputStyle, color: "#000000", caretColor: "#000000", WebkitTextFillColor: "#000000", fontWeight: 900 }}
                 />
               </div>
 
@@ -312,13 +310,13 @@ export default function Settings1() {
                 <select
                   value={data.governorate}
                   onChange={(e) => handleChange("governorate", e.target.value)}
-                  style={selectStyle}
+                  style={{ ...selectStyle, color: "#000000", caretColor: "#000000", WebkitTextFillColor: "#000000", fontWeight: 900 }}
                 >
-                  <option value="" style={optionStyle}>
+                  <option value="" style={{ ...optionStyle, color: "#000000", fontWeight: 900 }}>
                     {tr("اختر...", "Select...")}
                   </option>
                   {governorates.map((gov) => (
-                    <option key={gov} value={gov} style={optionStyle}>
+                    <option key={gov} value={gov} style={{ ...optionStyle, color: "#000000", fontWeight: 900 }}>
                       {gov}
                     </option>
                   ))}
@@ -330,13 +328,13 @@ export default function Settings1() {
                 <select
                   value={data.semester}
                   onChange={(e) => handleChange("semester", e.target.value)}
-                  style={selectStyle}
+                  style={{ ...selectStyle, color: "#000000", caretColor: "#000000", WebkitTextFillColor: "#000000", fontWeight: 900 }}
                 >
-                  <option value="" style={optionStyle}>
+                  <option value="" style={{ ...optionStyle, color: "#000000", fontWeight: 900 }}>
                     {tr("اختر...", "Select...")}
                   </option>
                   {semesters.map((sem) => (
-                    <option key={sem} value={sem} style={optionStyle}>
+                    <option key={sem} value={sem} style={{ ...optionStyle, color: "#000000", fontWeight: 900 }}>
                       {sem}
                     </option>
                   ))}
@@ -349,7 +347,7 @@ export default function Settings1() {
                   type="tel"
                   value={data.phone}
                   onChange={(e) => handleChange("phone", e.target.value)}
-                  style={inputStyle}
+                  style={{ ...inputStyle, color: "#000000", caretColor: "#000000", WebkitTextFillColor: "#000000", fontWeight: 900 }}
                 />
               </div>
 
@@ -379,7 +377,7 @@ export default function Settings1() {
                     borderRadius: 999,
                     background: "rgba(212,175,55,0.10)",
                     border: "1px solid rgba(212,175,55,0.22)",
-                    color: "#fff1c4",
+                    color: "#000000",
                     fontWeight: 900,
                     fontSize: 12,
                   }}
@@ -476,8 +474,8 @@ const pageWrap: React.CSSProperties = {
   direction: "rtl",
   minHeight: "100vh",
   padding: "24px",
-  background: "#000000",
-  color: "#ffffff",
+  background: "#f7f3e7",
+  color: "#000000",
   display: "flex",
   justifyContent: "center",
 };
@@ -492,10 +490,10 @@ const gridWrap: React.CSSProperties = {
 };
 
 const formCard: React.CSSProperties = {
-  background: "linear-gradient(145deg, #050505 0%, #0d0d0d 55%, #000000 100%)",
+  background: "linear-gradient(180deg, #f7f3e7 0%, #f3efdf 100%)",
   borderRadius: 28,
   padding: 28,
-  color: white,
+  color: "#000000",
   border: `5px solid ${gold}`,
   boxShadow: `
     0 28px 70px rgba(0,0,0,0.7),
@@ -513,54 +511,61 @@ const formTitle: React.CSSProperties = {
   fontSize: 24,
   fontWeight: 900,
   marginBottom: 20,
-  color: white,
-  textShadow: whiteGlowStrong,
+  color: "#000000",
+  
 };
 
 const labelStyle: React.CSSProperties = {
   display: "block",
-  fontSize: 13,
-  color: white,
+  fontSize: 16,
+  color: "#000000",
   marginBottom: 6,
-  fontWeight: 800,
-  textShadow: whiteGlow,
+  fontWeight: 900,
+  
 };
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
   padding: "12px 16px",
-  borderRadius: 14,
-  background: "#000000",
-  border: `1px solid ${goldDark}`,
-  color: "#ffffff",
-  fontSize: 15,
+  borderRadius: 22,
+  background: "linear-gradient(180deg, #faf7ee 0%, #f6f1e2 100%)",
+  border: "2px solid #ead98b",
+  color: "#000000",
+  caretColor: "#000000",
+  WebkitTextFillColor: "#000000",
+  fontSize: 17,
+  fontWeight: 900,
   outline: "none",
   boxSizing: "border-box",
-  boxShadow:
-    "inset 0 2px 8px rgba(255,255,255,0.04), 0 0 8px rgba(212,175,55,0.08)",
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.75)",
 };
 
 const selectStyle: React.CSSProperties = {
   ...inputStyle,
-  backgroundColor: "#000000",
-  color: "#ffffff",
+  background: "linear-gradient(180deg, #faf7ee 0%, #f6f1e2 100%)",
+  backgroundColor: "#faf7ee",
+  color: "#000000",
+  caretColor: "#000000",
+  WebkitTextFillColor: "#000000",
+  fontWeight: 900,
   appearance: "none",
   WebkitAppearance: "none",
   MozAppearance: "none",
 };
 
 const optionStyle: React.CSSProperties = {
-  backgroundColor: "#000000",
-  color: "#ffffff",
+  backgroundColor: "#faf7ee",
+  color: "#000000",
+  fontWeight: 900,
 };
 
 const saveBtn: React.CSSProperties = {
   padding: "14px 24px",
-  borderRadius: 14,
-  background: `linear-gradient(145deg, ${gold}, ${goldDark}, ${goldDeep})`,
-  color: "#FFFFFF",
+  borderRadius: 22,
+  background: "linear-gradient(180deg, #bfdbfe 0%, #93c5fd 100%)",
+  color: "#000000",
   fontWeight: 900,
-  border: `2px solid ${gold}`,
+  border: "2px solid #2563eb",
   cursor: "pointer",
   marginTop: 12,
   boxShadow:
@@ -570,7 +575,7 @@ const saveBtn: React.CSSProperties = {
 const previewOuter: React.CSSProperties = {
   width: "100%",
   maxWidth: 560,
-  background: "linear-gradient(145deg, #050505 0%, #0d0d0d 55%, #000000 100%)",
+  background: "linear-gradient(180deg, #f7f3e7 0%, #f3efdf 100%)",
   borderRadius: 28,
   padding: 26,
   border: `6px solid ${gold}`,
@@ -587,7 +592,7 @@ const previewOuter: React.CSSProperties = {
 };
 
 const previewPaper: React.CSSProperties = {
-  background: "linear-gradient(145deg, #080808 0%, #111111 50%, #050505 100%)",
+  background: "linear-gradient(180deg, #faf7ee 0%, #f6f1e2 100%)",
   borderRadius: 18,
   padding: "26px 28px",
   minHeight: 280,
@@ -624,26 +629,26 @@ const mastheadRuleThin: React.CSSProperties = {
 const rightGold: React.CSSProperties = {
   fontWeight: 900,
   fontSize: 14,
-  color: white,
+  color: "#000000",
   lineHeight: 1.2,
-  textShadow: whiteGlowStrong,
+  
 };
 
 const rightGoldSoft: React.CSSProperties = {
   marginTop: 10,
   fontWeight: 900,
-  fontSize: 13,
-  color: whiteSoft,
+  fontSize: 16,
+  color: "#000000",
   lineHeight: 1.2,
-  textShadow: whiteGlow,
+  
 };
 
 const leftGold: React.CSSProperties = {
   fontWeight: 900,
   fontSize: 14,
-  color: white,
+  color: "#000000",
   lineHeight: 1.25,
-  textShadow: whiteGlowStrong,
+  
 };
 
 const belowRuleRow: React.CSSProperties = {
@@ -658,20 +663,20 @@ const belowRuleRow: React.CSSProperties = {
 const belowTitle: React.CSSProperties = {
   fontWeight: 900,
   fontSize: 18,
-  color: white,
+  color: "#000000",
   textDecoration: "underline",
   textUnderlineOffset: 4,
-  textShadow: whiteGlowStrong,
+  
 };
 
 const belowMeta: React.CSSProperties = {
   fontWeight: 900,
   fontSize: 14,
-  color: white,
+  color: "#000000",
   display: "flex",
   alignItems: "center",
   gap: 10,
-  textShadow: whiteGlow,
+  
 };
 
 const belowMetaItem: React.CSSProperties = {
@@ -680,6 +685,6 @@ const belowMetaItem: React.CSSProperties = {
 
 const belowMetaSep: React.CSSProperties = {
   opacity: 0.95,
-  color: whiteSoft,
-  textShadow: whiteGlow,
+  color: "#000000",
+  
 };

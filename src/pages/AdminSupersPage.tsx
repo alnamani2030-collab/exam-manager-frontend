@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, where } from "firebase/firestore";
 import { db } from "../firebase/firebase";
 import { useAuth } from "../auth/AuthContext";
 import {
@@ -33,42 +33,129 @@ export default function AdminSupersPage() {
   const [superName, setSuperName] = useState<string>("");
   const [superRole, setSuperRole] = useState<string>("super");
   const [superGovernorate, setSuperGovernorate] = useState<string>("");
+  const [superTenantId, setSuperTenantId] = useState<string>("");
+  const [tenantMode, setTenantMode] = useState<"list" | "manual" | "create">("list");
+  const [newCenterName, setNewCenterName] = useState<string>("");
+  const [newCenterTenantId, setNewCenterTenantId] = useState<string>("");
   const [superEnabled, setSuperEnabled] = useState(true);
   const [supers, setSupers] = useState<any[]>([]);
+  const [visibleTenants, setVisibleTenants] = useState<any[]>([]);
 
   if (!user) return <Navigate to="/login" replace />;
   if (!isPlatformOwner) return <Navigate to="/system" replace />;
 
   const loadSupers = async () => {
     const superSnap = await getDocs(query(collection(db, "allowlist"), where("role", "==", "super")));
+    const examSuperSnap = await getDocs(query(collection(db, "allowlist"), where("role", "==", "exam_super")));
     const ministrySnap = await getDocs(query(collection(db, "allowlist"), where("role", "==", "ministry_super")));
 
     const rows = [
       ...superSnap.docs.map((d: any) => ({ email: d.id, ...(d.data() as any) })),
+      ...examSuperSnap.docs.map((d: any) => ({ email: d.id, ...(d.data() as any) })),
       ...ministrySnap.docs.map((d: any) => ({ email: d.id, ...(d.data() as any) })),
     ].sort((a, b) => String(a.email || "").localeCompare(String(b.email || "")));
 
     setSupers(rows);
   };
 
+  const loadVisibleTenants = async () => {
+    const snap = await getDocs(collection(db, "tenants"));
+    const rows = snap.docs
+      .map((d: any) => {
+        const data = d.data() as any;
+        return {
+          id: d.id,
+          name: String(data?.name || data?.schoolName || data?.title || d.id),
+          governorate: String(data?.governorate || data?.regionAr || ""),
+          enabled: data?.enabled !== false,
+        };
+      })
+      .sort((a: any, b: any) => String(a.name || "").localeCompare(String(b.name || "")));
+    setVisibleTenants(rows);
+  };
+
   useEffect(() => {
     void loadSupers();
+    void loadVisibleTenants();
   }, []);
 
   const canCreateSuperUser = useMemo(() => {
     const email = String(superEmail || "").trim().toLowerCase();
+    const role = String(superRole || "").trim();
+    const effectiveExamTenantId =
+      tenantMode === "create" ? String(newCenterTenantId || "").trim() : String(superTenantId || "").trim();
+
     if (!isPlatformOwner) return false;
     if (!email.includes("@")) return false;
-    if (!["super", "ministry_super"].includes(String(superRole || "").trim())) return false;
-    if (String(superRole || "").trim() === "super" && !String(superGovernorate || "").trim()) return false;
+    if (!["super", "exam_super", "ministry_super"].includes(role)) return false;
+    if (role === "super" && !String(superGovernorate || "").trim()) return false;
+
+    if (role === "exam_super") {
+      if (!String(superGovernorate || "").trim()) return false;
+      if (!effectiveExamTenantId) return false;
+      if (tenantMode === "create" && !String(newCenterName || "").trim()) return false;
+    }
+
     return true;
-  }, [isPlatformOwner, superEmail, superRole, superGovernorate]);
+  }, [
+    isPlatformOwner,
+    superEmail,
+    superRole,
+    superGovernorate,
+    superTenantId,
+    tenantMode,
+    newCenterName,
+    newCenterTenantId,
+  ]);
 
   const createSuperUser = async () => {
     if (!user || !canCreateSuperUser) return;
 
     const role = String(superRole || "").trim();
     const governorate = role === "ministry_super" ? MINISTRY_SCOPE : String(superGovernorate || "").trim();
+    let targetTenantId = "system";
+
+    if (role === "exam_super") {
+      targetTenantId =
+        tenantMode === "create" ? String(newCenterTenantId || "").trim() : String(superTenantId || "").trim();
+
+      if (!targetTenantId) {
+        alert("يجب اختيار أو إدخال مركز الامتحانات أولًا.");
+        return;
+      }
+
+      if (tenantMode === "create") {
+        const tenantRef = doc(db, "tenants", targetTenantId);
+        const tenantSnap = await getDoc(tenantRef);
+
+        if (tenantSnap.exists()) {
+          alert("Tenant ID موجود بالفعل. اختر Tenant ID آخر.");
+          return;
+        }
+
+        await setDoc(tenantRef, {
+          name: String(newCenterName || "").trim(),
+          governorate,
+          enabled: true,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+
+        await setDoc(
+          doc(db, "tenants", targetTenantId, "meta", "config"),
+          {
+            schoolNameAr: String(newCenterName || "").trim(),
+            regionAr: governorate,
+            governorate,
+            enabled: true,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+
+        await loadVisibleTenants();
+      }
+    }
 
     try {
       await createAllowUserAction({
@@ -78,7 +165,7 @@ export default function AdminSupersPage() {
         profile,
         users: [],
         newUserEmail: superEmail,
-        newUserTenantId: "system",
+        newUserTenantId: targetTenantId,
         newUserRole: role,
         newUserGovernorate: governorate,
         newUserEnabled: superEnabled,
@@ -91,6 +178,10 @@ export default function AdminSupersPage() {
       setSuperName("");
       setSuperRole("super");
       setSuperGovernorate("");
+      setSuperTenantId("");
+      setTenantMode("list");
+      setNewCenterName("");
+      setNewCenterTenantId("");
       setSuperEnabled(true);
 
       await loadSupers();
@@ -149,11 +240,13 @@ export default function AdminSupersPage() {
           }}
         >
           <div style={{ display: "grid", gap: 14 }}>
-            <Card title="صفحة مستقلة لإدارة سوبر المحافظات وسوبر الوزارة">
+            <Card title="صفحة مستقلة لإدارة سوبر المحافظات وسوبر الامتحانات وسوبر الوزارة">
               <div style={{ color: "#e5e7eb", lineHeight: 1.9 }}>
                 هذه الصفحة مستقلة عن لوحة مالك المنصة، ومخصصة فقط لإدارة:
                 <br />
                 - سوبر المحافظات
+                <br />
+                - سوبر الامتحانات
                 <br />
                 - سوبر الوزارة
               </div>
@@ -168,6 +261,15 @@ export default function AdminSupersPage() {
               setSuperRole={setSuperRole}
               superGovernorate={superGovernorate}
               setSuperGovernorate={setSuperGovernorate}
+              superTenantId={superTenantId}
+              setSuperTenantId={setSuperTenantId}
+              tenantMode={tenantMode}
+              setTenantMode={setTenantMode}
+              newCenterName={newCenterName}
+              setNewCenterName={setNewCenterName}
+              newCenterTenantId={newCenterTenantId}
+              setNewCenterTenantId={setNewCenterTenantId}
+              visibleTenants={visibleTenants}
               superEnabled={superEnabled}
               setSuperEnabled={setSuperEnabled}
               createSuperUser={createSuperUser}

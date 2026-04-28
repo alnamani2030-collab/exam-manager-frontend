@@ -570,6 +570,10 @@ export default function AdminSystem() {
               {hasNewSuggestions ? "🔔 رسائل جديدة" : "🔔 رسائل التطوير"}
             </Button>
 
+            <Button variant="ghost" className="btn-luxury-gold" onClick={() => navigate("/programs-gateway")} style={{ padding: "8px 10px" }}>
+              البوابة التشغيلية
+            </Button>
+
             <Button variant="ghost" className="btn-luxury-blue" onClick={() => navigate("/system/supers")} style={{ padding: "8px 10px" }}>
               إدارة سوبر المحافظات
             </Button>

@@ -1,6 +1,6 @@
 // src/pages/SuperSystem.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import "./superSystem.theme.css";
 
 import {
@@ -170,6 +170,7 @@ function ConfirmModal(props: {
 
 export default function SuperSystem() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const auth = useAuth() as any;
   const { user, allow, logout } = auth;
   const authzSnapshot = useMemo(() => buildAuthzSnapshot(auth), [auth]);
@@ -196,6 +197,101 @@ export default function SuperSystem() {
     visibleTenants,
     selectedTenant,
   } = useSuperSystemTenants({ canSeeAllGovs, myGov });
+
+  const requestedTenantId = String(searchParams.get("tenantId") || "").trim();
+
+  useEffect(() => {
+    if (!requestedTenantId) return;
+    const existsInVisibleList = visibleTenants.some(
+      (t) => String(t.id || "").trim() === requestedTenantId
+    );
+    if (!existsInVisibleList) return;
+    if (selectedTenantId === requestedTenantId) return;
+    setSelectedTenantId(requestedTenantId);
+  }, [requestedTenantId, visibleTenants, selectedTenantId, setSelectedTenantId]);
+
+
+  useEffect(() => {
+    const styleEl = document.createElement("style");
+    styleEl.setAttribute("data-super-system-settings12-theme", "true");
+    styleEl.textContent = `
+      .super-system-page{
+        background: linear-gradient(180deg, #f7f3e7 0%, #f3edde 100%) !important;
+        color: #111111 !important;
+      }
+      .super-system-page .super-header{
+        background: linear-gradient(135deg, #8b6a00 0%, #b8860b 48%, #7a5c00 100%) !important;
+        border: 4px solid #d4af37 !important;
+        border-radius: 28px !important;
+        box-shadow: 0 24px 50px rgba(0,0,0,0.18), 0 0 24px rgba(212,175,55,0.18) !important;
+      }
+      .super-system-page .super-program-title,
+      .super-system-page .super-subtitle,
+      .super-system-page .super-brand-ministry,
+      .super-system-page .super-brand-gov,
+      .super-system-page .super-brand-text{
+        color: #fff7d8 !important;
+      }
+      .super-system-page .super-panel,
+      .super-system-page .super-card{
+        background: linear-gradient(180deg, #faf6ec 0%, #f2eddf 100%) !important;
+        color: #111111 !important;
+        border: 3px solid #d4af37 !important;
+        box-shadow: 0 14px 28px rgba(190,160,40,0.12), 0 0 0 4px rgba(245,232,170,0.25) inset !important;
+      }
+      .super-system-page .super-card-title,
+      .super-system-page .super-panel-title,
+      .super-system-page .tenant-name,
+      .super-system-page .super-card-desc,
+      .super-system-page .tenant-id,
+      .super-system-page .tenant-meta,
+      .super-system-page .label{
+        color: #111111 !important;
+      }
+      .super-system-page .tenant-row{
+        background: #fbf8ef !important;
+        border: 2px solid rgba(212,175,55,0.35) !important;
+        border-radius: 18px !important;
+      }
+      .super-system-page .input,
+      .super-system-page input.input,
+      .super-system-page select.input,
+      .super-system-page textarea.input{
+        background: #fffdf7 !important;
+        color: #111111 !important;
+        border: 2px solid rgba(212,175,55,0.35) !important;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.9) !important;
+      }
+      .super-system-page .input::placeholder{
+        color: #6b7280 !important;
+      }
+      .super-system-page .btn,
+      .super-system-page .super-btn,
+      .super-system-page .icon-btn{
+        background: linear-gradient(180deg, #f2dc8a 0%, #d4af37 100%) !important;
+        color: #111111 !important;
+        border: 2px solid #d4af37 !important;
+        box-shadow: 0 10px 20px rgba(150,120,20,0.14) !important;
+      }
+      .super-system-page .btn.btn-ghost{
+        background: rgba(212,175,55,0.08) !important;
+        color: #111111 !important;
+      }
+      .super-system-page .btn.danger,
+      .super-system-page .super-btn.danger{
+        background: linear-gradient(180deg, #fecaca 0%, #fca5a5 100%) !important;
+        border-color: #ef4444 !important;
+        color: #7f1d1d !important;
+      }
+    `;
+    document.head.appendChild(styleEl);
+    return () => {
+      try {
+        document.head.removeChild(styleEl);
+      } catch {}
+    };
+  }, []);
+
 
   const [editTenantName, setEditTenantName] = useState("");
   const [editTenantEnabled, setEditTenantEnabled] = useState(true);
@@ -1039,7 +1135,7 @@ export default function SuperSystem() {
                 ? "مالك المنصة داخل نطاق المحافظات"
                 : isMinistryViewer
                   ? "سوبر الوزارة - مشاهدة فقط"
-                  : "سوبر المحافظات - إدارة المدارس وأدمنات المدارس داخل النطاق"}
+                  : "البوابة الإشرافية - إدارة المدارس وأدمنات المدارس داخل النطاق"}
             </div>
           </div>
 
@@ -1057,6 +1153,22 @@ export default function SuperSystem() {
         <div className="super-cards">
           <button
             className="super-card"
+            onClick={() => navigate("/exam-supers")}
+          >
+            <div className="super-card-title">سوبر الامتحانات في المحافظة</div>
+            <div className="super-card-desc">عرض جميع سوبر الامتحانات ضمن النطاق المسموح ثم فتح مركز الامتحانات للمشاهدة والمتابعة.</div>
+          </button>
+
+          <button
+            className="super-card"
+            onClick={() => navigate("/school-admins")}
+          >
+            <div className="super-card-title">أدمنات المدارس في المحافظة</div>
+            <div className="super-card-desc">عرض جميع أدمنات المدارس حسب المحافظة ثم فتح نظام المدرسة للمشاهدة والمتابعة.</div>
+          </button>
+
+          <button
+            className="super-card"
             onClick={() =>
               document.getElementById("section-tenants")?.scrollIntoView({
                 behavior: "smooth",
@@ -1064,7 +1176,7 @@ export default function SuperSystem() {
             }
           >
             <div className="super-card-title">إدارة المدارس</div>
-            <div className="super-card-desc">عرض/بحث المدارس + حذف/اختيار.</div>
+            <div className="super-card-desc">عرض وبحث المدارس داخل النطاق المسموح.</div>
           </button>
 
           <button
@@ -1077,7 +1189,7 @@ export default function SuperSystem() {
             }
           >
             <div className="super-card-title">تعديل بيانات المدرسة</div>
-            <div className="super-card-desc">تعديل اسم المدرسة والشعار والولاية (داخل محافظتك).</div>
+            <div className="super-card-desc">تعديل اسم المدرسة والشعار والولاية داخل محافظتك.</div>
           </button>
 
           <button
@@ -1103,12 +1215,12 @@ export default function SuperSystem() {
             }
           >
             <div className="super-card-title">إدارة أدمن المدرسة</div>
-            <div className="super-card-desc">إضافة/ربط أو حذف أدمن مدرسة داخل النطاق المسموح.</div>
+            <div className="super-card-desc">إضافة أو ربط أو حذف أدمن مدرسة داخل النطاق المسموح.</div>
           </button>
 
-          <button className="super-card" onClick={() => navigate("/")}>
-            <div className="super-card-title">الدخول للبرنامج</div>
-            <div className="super-card-desc">الانتقال للواجهة الرئيسية بعد اختيار المدرسة.</div>
+          <button className="super-card" onClick={() => navigate("/programs-gateway")}>
+            <div className="super-card-title">فتح البوابة التشغيلية</div>
+            <div className="super-card-desc">الانتقال إلى البوابة التشغيلية لاختيار البرنامج أو القوائم الإشرافية.</div>
           </button>
         </div>
 

@@ -369,8 +369,16 @@ export default function Teachers() {
       }
       .teachersTable3D table { position: relative; z-index: 2; }
 
-      .teachersTable3D td { transition: transform .18s ease, box-shadow .18s ease, filter .18s ease; }
-      .teachersTable3D td:hover { transform: translateY(-2px); filter: brightness(1.03); }
+      .teachersTable3D th,
+      .teachersTable3D td {
+        border-color: #d4af37 !important;
+      }
+
+      .teachersTable3D td { transition: transform .18s ease, filter .18s ease; }
+      .teachersTable3D td:hover {
+        transform: translateY(-2px);
+        filter: brightness(1.04);
+      }
 
       .teachersTable3D .col-name { min-width: 260px; font-weight: 900; color: #fff1c4 !important; }
 
@@ -380,9 +388,6 @@ export default function Teachers() {
         font-weight: 900;
         background: linear-gradient(180deg,#7a5c00,#4a3600) !important;
         color: #fff1c4 !important;
-        box-shadow:
-          inset 0 2px 0 rgba(255,255,255,0.20),
-          0 10px 20px rgba(0,0,0,0.65);
       }
     `;
 
@@ -646,56 +651,65 @@ export default function Teachers() {
     }
   }
 
+  const PAGE_BG = "#f7f3e7";
+  const CARD_BG = "linear-gradient(180deg, #f8f4e8 0%, #f2eddf 100%)";
+  const PANEL_BG = "linear-gradient(180deg, #faf7ee 0%, #f6f1e2 100%)";
+  const GOLD_BORDER = "#d4af37";
+
   const pageStyle: React.CSSProperties = {
     padding: 18,
-    color: "#e6c76a",
+    color: "#000000",
     minHeight: "100vh",
-    background:
-      "radial-gradient(circle at top, rgba(212,175,55,0.14), transparent 24%), radial-gradient(circle at 88% 18%, rgba(59,130,246,0.10), transparent 24%), linear-gradient(180deg, #070b12 0%, #0b1220 42%, #060a12 100%)",
+    background: PAGE_BG,
     position: "relative",
     overflowX: "hidden",
     direction: isRTL ? "rtl" : "ltr",
+    boxSizing: "border-box",
   };
 
   const card: React.CSSProperties = {
-    background: "linear-gradient(180deg, rgba(11,18,32,0.94), rgba(9,16,29,0.96))",
-    border: "1px solid rgba(212,175,55,0.15)",
-    borderRadius: 24,
-    padding: 18,
-    boxShadow: "0 22px 60px rgba(0,0,0,0.36)",
-    marginBottom: 14,
-    backdropFilter: "blur(6px)",
+    background: CARD_BG,
+    border: `5px solid ${GOLD_BORDER}`,
+    borderRadius: 30,
+    padding: 22,
+    boxShadow: "0 0 0 6px rgba(245,232,170,0.35) inset, 0 14px 28px rgba(190,160,40,0.12)",
+    marginBottom: 16,
+    color: "#000000",
   };
 
-  const btn = (bg: string, fg = "#0b1220"): React.CSSProperties => ({
+  const btn = (bg: string, fg = "#000000"): React.CSSProperties => ({
     background: bg,
     color: fg,
-    border: "1px solid rgba(255,255,255,0.08)",
-    borderRadius: 14,
-    padding: "10px 14px",
+    border: `3px solid ${GOLD_BORDER}`,
+    borderRadius: 16,
+    padding: "11px 16px",
     cursor: "pointer",
-    fontWeight: 800,
-    boxShadow: "0 10px 24px rgba(0,0,0,0.25)",
+    fontWeight: 1000,
+    boxShadow: "0 10px 22px rgba(212,175,55,0.18), 0 0 0 2px rgba(255,235,140,0.35) inset",
   });
 
   const inputStyle: React.CSSProperties = {
-    background: "#0b1220",
-    color: "#e6c76a",
-    border: "1px solid rgba(212,175,55,0.25)",
-    borderRadius: 12,
-    padding: "10px 12px",
+    background: "#f8f4e8",
+    color: "#000000",
+    border: `3px solid ${GOLD_BORDER}`,
+    borderRadius: 20,
+    padding: "13px 16px",
     outline: "none",
     width: "100%",
+    minHeight: 54,
+    fontWeight: 1000,
+    fontSize: 16,
+    boxSizing: "border-box",
+    WebkitTextFillColor: "#000000",
+    boxShadow: "0 8px 18px rgba(150,120,20,0.08)",
   };
 
   const tableWrap: React.CSSProperties = {
     maxHeight: "55vh",
     overflow: "auto",
-    borderRadius: 18,
-    border: "1px solid rgba(212,175,55,0.18)",
-    background: "linear-gradient(180deg, rgba(11,18,32,0.92), rgba(8,12,22,0.92))",
-    boxShadow:
-      "0 22px 60px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.08), inset 0 -10px 18px rgba(0,0,0,0.35)",
+    borderRadius: 24,
+    border: `4px solid ${GOLD_BORDER}`,
+    background: PANEL_BG,
   };
 
   const tableStyle3D: React.CSSProperties = {
@@ -708,36 +722,31 @@ export default function Teachers() {
   const thStyle: React.CSSProperties = {
     position: "sticky",
     top: 0,
-    background: "linear-gradient(180deg, #0f1a2e, #0b1220)",
-    color: "#d4af37",
+    background: "linear-gradient(180deg, #f2dc8a 0%, #d4af37 100%)",
+    color: "#000000",
     zIndex: 2,
-    padding: 10,
+    padding: 12,
     textAlign: isRTL ? "right" : "left",
-    fontWeight: 900,
-    borderBottom: "1px solid rgba(212,175,55,0.22)",
-    borderLeft: isRTL ? "3px solid rgba(184,134,11,0.95)" : undefined,
-    borderRight: !isRTL ? "3px solid rgba(184,134,11,0.95)" : undefined,
+    fontWeight: 1000,
     whiteSpace: "nowrap",
-    borderRadius: 14,
-    boxShadow: "0 10px 18px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.08)",
+    borderRadius: 16,
+    border: `3.5px solid ${GOLD_BORDER}`,
   };
 
   const tdStyle: React.CSSProperties = {
     padding: 12,
-    borderBottom: "1px solid rgba(255,255,255,0.07)",
-    borderLeft: isRTL ? "3px solid rgba(184,134,11,0.65)" : undefined,
-    borderRight: !isRTL ? "3px solid rgba(184,134,11,0.65)" : undefined,
     whiteSpace: "nowrap",
-    color: "#e6c76a",
-    background: "linear-gradient(145deg, rgba(20,24,34,0.96), rgba(10,12,18,0.96))",
-    borderRadius: 14,
-    boxShadow: "0 10px 22px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.05)",
+    color: "#000000",
+    background: "#f8f4e8",
+    borderRadius: 16,
+    border: `3.5px solid ${GOLD_BORDER}`,
+    fontWeight: 900,
   };
 
   const modalOverlay: React.CSSProperties = {
     position: "fixed",
     inset: 0,
-    background: "rgba(0,0,0,0.6)",
+    background: "rgba(0,0,0,0.45)",
     zIndex: 9999,
     display: "flex",
     alignItems: "center",
@@ -747,21 +756,216 @@ export default function Teachers() {
 
   const modalCard: React.CSSProperties = {
     width: "min(720px, 96vw)",
-    background: "linear-gradient(180deg, #0b1220, #09101d)",
-    border: "1px solid rgba(212,175,55,0.25)",
-    borderRadius: 18,
-    padding: 16,
-    boxShadow: "0 22px 80px rgba(0,0,0,0.55)",
-    color: "#e6c76a",
+    background: CARD_BG,
+    border: `5px solid ${GOLD_BORDER}`,
+    borderRadius: 28,
+    padding: 22,
+    boxShadow: "0 0 0 6px rgba(245,232,170,0.35) inset, 0 22px 80px rgba(150,120,20,0.18)",
+    color: "#000000",
     direction: isRTL ? "rtl" : "ltr",
   };
 
   return (
-    <div style={pageStyle} ref={topRef}>
+    <div style={pageStyle} ref={topRef} className="teachers12PageRoot teachers12PreviousChangesScope">
+
+      <style>{`
+        .teachers12PreviousChangesScope table th:first-child,
+        .teachers12PreviousChangesScope table td:first-child,
+        .teachers12PreviousChangesScope table th:last-child,
+        .teachers12PreviousChangesScope table td:last-child {
+          color: #000000 !important;
+          font-weight: 900 !important;
+          -webkit-text-fill-color: #000000 !important;
+          text-shadow: none !important;
+        }
+
+        .teachers12PreviousChangesScope td[style*="color"],
+        .teachers12PreviousChangesScope th[style*="color"] {
+          color: #000000 !important;
+          font-weight: 900 !important;
+          -webkit-text-fill-color: #000000 !important;
+          text-shadow: none !important;
+        }
+      `}</style>
+
+
+      <style>{`
+        .teachers12PreviousChangesScope,
+        .teachers12PreviousChangesScope * {
+          color: #000000 !important;
+          text-shadow: none !important;
+        }
+
+        .teachers12PreviousChangesScope h1,
+        .teachers12PreviousChangesScope h2,
+        .teachers12PreviousChangesScope h3,
+        .teachers12PreviousChangesScope h4,
+        .teachers12PreviousChangesScope p,
+        .teachers12PreviousChangesScope div,
+        .teachers12PreviousChangesScope span,
+        .teachers12PreviousChangesScope label,
+        .teachers12PreviousChangesScope button,
+        .teachers12PreviousChangesScope input,
+        .teachers12PreviousChangesScope select,
+        .teachers12PreviousChangesScope textarea,
+        .teachers12PreviousChangesScope option,
+        .teachers12PreviousChangesScope th,
+        .teachers12PreviousChangesScope td,
+        .teachers12PreviousChangesScope strong,
+        .teachers12PreviousChangesScope b {
+          color: #000000 !important;
+          font-weight: 900 !important;
+          text-shadow: none !important;
+        }
+
+        .teachers12PreviousChangesScope table th,
+        .teachers12PreviousChangesScope table td {
+          color: #000000 !important;
+          font-weight: 900 !important;
+          border-width: 2px !important;
+          border-style: solid !important;
+          text-shadow: none !important;
+        }
+
+        .teachers12PreviousChangesScope table th:nth-child(10n + 1),
+        .teachers12PreviousChangesScope table td:nth-child(10n + 1) { border-color: #2563eb !important; }
+
+        .teachers12PreviousChangesScope table th:nth-child(10n + 2),
+        .teachers12PreviousChangesScope table td:nth-child(10n + 2) { border-color: #16a34a !important; }
+
+        .teachers12PreviousChangesScope table th:nth-child(10n + 3),
+        .teachers12PreviousChangesScope table td:nth-child(10n + 3) { border-color: #dc2626 !important; }
+
+        .teachers12PreviousChangesScope table th:nth-child(10n + 4),
+        .teachers12PreviousChangesScope table td:nth-child(10n + 4) { border-color: #9333ea !important; }
+
+        .teachers12PreviousChangesScope table th:nth-child(10n + 5),
+        .teachers12PreviousChangesScope table td:nth-child(10n + 5) { border-color: #ea580c !important; }
+
+        .teachers12PreviousChangesScope table th:nth-child(10n + 6),
+        .teachers12PreviousChangesScope table td:nth-child(10n + 6) { border-color: #0891b2 !important; }
+
+        .teachers12PreviousChangesScope table th:nth-child(10n + 7),
+        .teachers12PreviousChangesScope table td:nth-child(10n + 7) { border-color: #4f46e5 !important; }
+
+        .teachers12PreviousChangesScope table th:nth-child(10n + 8),
+        .teachers12PreviousChangesScope table td:nth-child(10n + 8) { border-color: #db2777 !important; }
+
+        .teachers12PreviousChangesScope table th:nth-child(10n + 9),
+        .teachers12PreviousChangesScope table td:nth-child(10n + 9) { border-color: #ca8a04 !important; }
+
+        .teachers12PreviousChangesScope table th:nth-child(10n + 10),
+        .teachers12PreviousChangesScope table td:nth-child(10n + 10) { border-color: #059669 !important; }
+
+        .teachers12PreviousChangesScope div[style*="border"],
+        .teachers12PreviousChangesScope button[style*="border"],
+        .teachers12PreviousChangesScope section[style*="border"],
+        .teachers12PreviousChangesScope article[style*="border"] {
+          border-width: 3px !important;
+          border-style: solid !important;
+        }
+
+        .teachers12PreviousChangesScope div[style*="border"]:nth-of-type(10n + 1),
+        .teachers12PreviousChangesScope button[style*="border"]:nth-of-type(10n + 1) { border-color: #2563eb !important; }
+
+        .teachers12PreviousChangesScope div[style*="border"]:nth-of-type(10n + 2),
+        .teachers12PreviousChangesScope button[style*="border"]:nth-of-type(10n + 2) { border-color: #16a34a !important; }
+
+        .teachers12PreviousChangesScope div[style*="border"]:nth-of-type(10n + 3),
+        .teachers12PreviousChangesScope button[style*="border"]:nth-of-type(10n + 3) { border-color: #dc2626 !important; }
+
+        .teachers12PreviousChangesScope div[style*="border"]:nth-of-type(10n + 4),
+        .teachers12PreviousChangesScope button[style*="border"]:nth-of-type(10n + 4) { border-color: #9333ea !important; }
+
+        .teachers12PreviousChangesScope div[style*="border"]:nth-of-type(10n + 5),
+        .teachers12PreviousChangesScope button[style*="border"]:nth-of-type(10n + 5) { border-color: #ea580c !important; }
+
+        .teachers12PreviousChangesScope div[style*="border"]:nth-of-type(10n + 6),
+        .teachers12PreviousChangesScope button[style*="border"]:nth-of-type(10n + 6) { border-color: #0891b2 !important; }
+
+        .teachers12PreviousChangesScope div[style*="border"]:nth-of-type(10n + 7),
+        .teachers12PreviousChangesScope button[style*="border"]:nth-of-type(10n + 7) { border-color: #4f46e5 !important; }
+
+        .teachers12PreviousChangesScope div[style*="border"]:nth-of-type(10n + 8),
+        .teachers12PreviousChangesScope button[style*="border"]:nth-of-type(10n + 8) { border-color: #db2777 !important; }
+
+        .teachers12PreviousChangesScope div[style*="border"]:nth-of-type(10n + 9),
+        .teachers12PreviousChangesScope button[style*="border"]:nth-of-type(10n + 9) { border-color: #ca8a04 !important; }
+
+        .teachers12PreviousChangesScope div[style*="border"]:nth-of-type(10n + 10),
+        .teachers12PreviousChangesScope button[style*="border"]:nth-of-type(10n + 10) { border-color: #059669 !important; }
+      `}</style>
+
+      <style>{`
+        .teachers12PreviousChangesScope input,
+        .teachers12PreviousChangesScope textarea,
+        .teachers12PreviousChangesScope select {
+          color: #000000 !important;
+          font-weight: 900 !important;
+          -webkit-text-fill-color: #000000 !important;
+          caret-color: #000000 !important;
+        }
+
+        .teachers12PreviousChangesScope input::placeholder,
+        .teachers12PreviousChangesScope textarea::placeholder {
+          color: #000000 !important;
+          opacity: 0.75 !important;
+          font-weight: 900 !important;
+        }
+
+        .teachers12PreviousChangesScope input[name*="name"],
+        .teachers12PreviousChangesScope input[id*="name"],
+        .teachers12PreviousChangesScope input[placeholder*="اسم"],
+        .teachers12PreviousChangesScope input[placeholder*="name"],
+        .teachers12PreviousChangesScope input[aria-label*="اسم"],
+        .teachers12PreviousChangesScope input[aria-label*="name"] {
+          color: #000000 !important;
+          font-weight: 900 !important;
+          -webkit-text-fill-color: #000000 !important;
+          caret-color: #000000 !important;
+        }
+      `}</style>
+
+
+      <style>{`
+        html,
+        body,
+        #root {
+          margin: 0 !important;
+          min-height: 100% !important;
+          background:
+            radial-gradient(1200px 520px at 50% -10%, rgba(212, 175, 55, 0.18), transparent 62%),
+            linear-gradient(180deg, #fffdf7 0%, #f7f3e7 48%, #fffaf0 100%) !important;
+        }
+
+        body {
+          background-color: #f7f3e7 !important;
+        }
+
+        .teachers12PageRoot {
+          position: relative;
+          z-index: 1;
+          background:
+            radial-gradient(1200px 520px at 50% -10%, rgba(212, 175, 55, 0.18), transparent 62%),
+            linear-gradient(180deg, #fffdf7 0%, #f7f3e7 48%, #fffaf0 100%) !important;
+        }
+
+        .teachers12FixedLightBg {
+          position: fixed;
+          inset: 0;
+          z-index: -1;
+          pointer-events: none;
+          background:
+            radial-gradient(1200px 520px at 50% -10%, rgba(212, 175, 55, 0.18), transparent 62%),
+            linear-gradient(180deg, #fffdf7 0%, #f7f3e7 48%, #fffaf0 100%) !important;
+        }
+      `}</style>
+      <div className="teachers12FixedLightBg" aria-hidden="true" />
+
       {dupModal.open && (
         <div style={modalOverlay} onClick={() => resolveDuplicate("change")}>
           <div style={modalCard} onClick={(e) => e.stopPropagation()}>
-            <div style={{ fontWeight: 1000, fontSize: 18, marginBottom: 8, color: "#d4af37" }}>
+            <div style={{ fontWeight: 1000, fontSize: 18, marginBottom: 8, color: "#000000" }}>
               {tr("⚠️ الرقم الوظيفي مكرر", "⚠️ Duplicate employee number")}
             </div>
             <div style={{ opacity: 0.95, marginBottom: 12, lineHeight: 1.8 }}>
@@ -771,7 +975,7 @@ export default function Teachers() {
               )}
             </div>
 
-            <div style={{ border: "1px solid rgba(212,175,55,0.18)", borderRadius: 14, overflow: "hidden" }}>
+            <div style={{ border: `4px solid ${GOLD_BORDER}`, borderRadius: 14, overflow: "hidden" }}>
               <table style={{ width: "100%" }}>
                 <thead>
                   <tr>
@@ -787,7 +991,7 @@ export default function Teachers() {
                       <td style={tdStyle}>{c.employeeNo}</td>
                       <td style={tdStyle}>
                         <button
-                          style={btn("#f59e0b", "#07101f")}
+                          style={btn("#f59e0b", "#000000")}
                           onClick={() => resolveDuplicate("overwrite", c.id)}
                         >
                           {tr("استبدال هذا الاسم", "Replace this name")}
@@ -800,7 +1004,7 @@ export default function Teachers() {
             </div>
 
             <div style={{ display: "flex", gap: 10, marginTop: 12, justifyContent: "flex-end" }}>
-              <button style={btn("#1f2937", "#d4af37")} onClick={() => resolveDuplicate("change")}>
+              <button style={btn("#fffdf7", "#000000")} onClick={() => resolveDuplicate("change")}>
                 {tr("تغيير الرقم", "Change number")}
               </button>
             </div>
@@ -810,7 +1014,7 @@ export default function Teachers() {
 
       <div
         style={{
-          maxWidth: 1500,
+          maxWidth: 1680,
           margin: "0 auto 18px auto",
           display: "grid",
           gap: 18,
@@ -820,162 +1024,130 @@ export default function Teachers() {
       >
         <div
           style={{
-            display: "grid",
-            gap: 18,
-            border: "1px solid rgba(212,175,55,0.18)",
-            borderRadius: 34,
+            background: "linear-gradient(180deg, #f8f4e8 0%, #f2eddf 100%)",
+            borderRadius: 40,
+            border: "5px solid #d4af37",
+            boxShadow: "0 0 0 10px rgba(212,175,55,0.12) inset, 0 18px 38px rgba(150,120,20,0.14)",
             padding: 28,
-            background:
-              "linear-gradient(135deg, rgba(30,22,2,0.95), rgba(8,8,8,0.98), rgba(27,21,3,0.94))",
-            boxShadow:
-              "0 32px 100px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.05), inset 0 -1px 0 rgba(255,255,255,0.03)",
           }}
         >
           <div
             style={{
-              position: "absolute",
-              top: -120,
-              left: "50%",
-              transform: "translateX(-50%)",
-              width: 560,
-              height: 560,
-              borderRadius: "50%",
-              background: "radial-gradient(circle, rgba(212,175,55,0.16), rgba(212,175,55,0.05) 38%, transparent 72%)",
-              filter: "blur(10px)",
-              pointerEvents: "none",
+              background: "linear-gradient(180deg, #faf7ee 0%, #f6f1e2 100%)",
+              borderRadius: 36,
+              border: "5px solid #d4af37",
+              boxShadow: "0 0 0 8px rgba(212,175,55,0.10) inset",
+              padding: 26,
             }}
-          />
-          <div
-            style={{
-              position: "absolute",
-              right: isRTL ? -100 : undefined,
-              left: !isRTL ? -100 : undefined,
-              bottom: -120,
-              width: 320,
-              height: 320,
-              borderRadius: "50%",
-              background: "radial-gradient(circle, rgba(16,185,129,0.10), transparent 72%)",
-              filter: "blur(10px)",
-              pointerEvents: "none",
-            }}
-          />
-
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 18, flexWrap: "wrap", alignItems: "start", position: "relative", zIndex: 1 }}>
-            <div style={{ display: "grid", gap: 14, maxWidth: 900 }}>
-              <div
-                style={{
-                  display: "inline-flex",
-                  width: "fit-content",
-                  alignItems: "center",
-                  gap: 8,
-                  padding: "8px 14px",
-                  borderRadius: 999,
-                  background: "rgba(16,185,129,0.12)",
-                  border: "1px solid rgba(16,185,129,0.22)",
-                  color: "#a7f3d0",
-                  fontWeight: 900,
-                  fontSize: 12,
-                }}
-              >
-                {tr("إدارة ذكية ومباشرة للكادر التعليمي", "Smart and direct teaching staff management")}
-              </div>
-
-              <div>
-                <div style={{ fontSize: 18, fontWeight: 900, color: "rgba(255,241,196,0.88)", marginBottom: 10 }}>
-                  {tr("نظام إدارة الامتحانات المطوّر", "Advanced Exam Management System")}
-                </div>
-                <h1
-                  style={{
-                    margin: 0,
-                    fontSize: "clamp(34px, 5vw, 64px)",
-                    lineHeight: 1.05,
-                    fontWeight: 950,
-                    color: "#fff1c4",
-                    letterSpacing: "-0.03em",
-                    textShadow: "0 8px 28px rgba(212,175,55,0.16)",
-                  }}
-                >
-                  {tr("مركز إدارة الكادر التعليمي", "Teaching Staff Management Center")}
-                </h1>
-              </div>
-
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: 16,
-                  lineHeight: 2,
-                  color: "rgba(255,241,196,0.82)",
-                  maxWidth: 940,
-                }}
-              >
-                {tr(
-                  "تمنح هذه الصفحة الإدارة واجهة فاخرة ومنظمة لإدارة بيانات المعلمين والمواد والصفوف والاتصال، مع تجربة سلسة للإضافة والتعديل والاستيراد والتصدير، وإبراز قوي للجدول التشغيلي في صورة مؤسسية راقية.",
-                  "This page gives the administration a premium and organized interface to manage teachers, subjects, grades, and contact data, with a smooth experience for adding, editing, importing, and exporting, and a strong professional presentation of the operational table."
-                )}
-              </p>
-
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                {[
-                  { label: tr("إجمالي المعلمين", "Total Teachers"), value: teachers.length },
-                  { label: tr("المعروض الآن", "Currently Shown"), value: filtered.length },
-                  { label: tr("البحث الحالي", "Current Search"), value: query.trim() || tr("بدون فلترة", "No Filter") },
-                ].map((item) => (
-                  <div
-                    key={item.label}
-                    style={{
-                      border: "1px solid rgba(255,255,255,0.08)",
-                      background: "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
-                      borderRadius: 18,
-                      padding: "12px 14px",
-                      minWidth: 190,
-                      boxShadow: "0 14px 28px rgba(0,0,0,0.22)",
-                    }}
-                  >
-                    <div style={{ fontSize: 12, color: "rgba(255,241,196,0.64)", fontWeight: 800 }}>{item.label}</div>
-                    <div style={{ marginTop: 6, fontSize: 16, color: "#fff8dc", fontWeight: 900 }}>{item.value}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
+          >
             <div
               style={{
-                minWidth: 300,
-                maxWidth: 390,
-                width: "100%",
-                border: "1px solid rgba(255,255,255,0.08)",
-                borderRadius: 28,
-                padding: 22,
-                background: "linear-gradient(180deg, rgba(212,175,55,0.08), rgba(255,255,255,0.02))",
-                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
-                display: "grid",
-                gap: 16,
+                background: "linear-gradient(180deg, #faf7ee 0%, #f6f1e2 100%)",
+                borderRadius: 32,
+                border: "5px solid #d4af37",
+                boxShadow: "0 0 0 6px rgba(212,175,55,0.10) inset",
+                padding: 18,
               }}
             >
               <div
                 style={{
-                  display: "inline-flex",
-                  width: "fit-content",
-                  padding: "8px 12px",
-                  borderRadius: 999,
-                  background: teachers.length ? "rgba(16,185,129,0.14)" : "rgba(245,158,11,0.14)",
-                  border: teachers.length ? "1px solid rgba(16,185,129,0.24)" : "1px solid rgba(245,158,11,0.24)",
-                  color: teachers.length ? "#a7f3d0" : "#fde68a",
-                  fontWeight: 900,
-                  fontSize: 12,
+                  background: "linear-gradient(180deg, #f7f3e7 0%, #f3efdf 100%)",
+                  borderRadius: 28,
+                  border: "5px solid #d4af37",
+                  padding: 28,
+                  display: "grid",
+                  gap: 26,
                 }}
               >
-                {teachers.length ? tr("البيانات جاهزة للإدارة", "Data is ready for management") : tr("لا توجد بيانات بعد", "No data yet")}
-              </div>
+                <div
+                  style={{
+                    display: "inline-flex",
+                    width: "fit-content",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "10px 18px",
+                    borderRadius: 999,
+                    background: "#fffdf7",
+                    border: "5px solid #d4af37",
+                    color: "#000000",
+                    fontWeight: 1000,
+                    fontSize: 20,
+                  }}
+                >
+                  {tr("واجهة تشغيل مخصصة", "Dedicated Operating View")}
+                </div>
 
-              <div style={{ fontSize: 28, lineHeight: 1.5, fontWeight: 950, color: "#fff1c4" }}>
-                {tr(
-                  "يمكنك من هنا إدارة المعلمين والمواد والصفوف وتصدير البيانات أو استيرادها، مع جدول فاخر وتجربة إدخال مريحة ومنظمة من أول لحظة.",
-                  "From here you can manage teachers, subjects, and grades, and export or import data, with a premium table and a comfortable, organized entry experience from the first moment."
-                )}
-              </div>
+                <div style={{ display: "grid", gap: 12 }}>
+                  <h1
+                    style={{
+                      margin: 0,
+                      fontSize: "clamp(46px, 6vw, 70px)",
+                      lineHeight: 1.08,
+                      fontWeight: 1000,
+                      color: "#000000",
+                      letterSpacing: "-0.03em",
+                    }}
+                  >
+                    {tr("مركز إدارة الكادر التعليمي", "Teaching Staff Management Center")}
+                  </h1>
 
-              <div style={{ fontSize: 14, lineHeight: 1.95, color: "rgba(255,241,196,0.78)" }} />
+                  <div
+                    style={{
+                      fontSize: "clamp(22px, 3vw, 34px)",
+                      fontWeight: 1000,
+                      color: "#000000",
+                    }}
+                  >
+                    {tr("لوحة تحكم إدارة الكادر التعليمي", "Teaching Staff Control Panel")}
+                  </div>
+
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: 18,
+                      lineHeight: 2,
+                      color: "#000000",
+                      fontWeight: 1000,
+                      maxWidth: 1380,
+                    }}
+                  >
+                    {tr(
+                      "هذه الصفحة تضبط بيانات المعلمين والمواد والصفوف والاتصال بنفس الهوية المعتمدة لصفحات الدبلوم، بحيث تظهر جميع العناصر بخلفية فاتحة وحدود ذهبية وخط أسود عريض واضح.",
+                      "This page manages teachers, subjects, grades, and contact data using the same approved diploma visual identity, so every element appears with a light background, bold golden borders, and clear black text."
+                    )}
+                  </p>
+                </div>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+                    gap: 18,
+                  }}
+                >
+                  {[
+                    { label: tr("إجمالي المعلمين", "Total Teachers"), value: String(teachers.length) },
+                    { label: tr("المعروض الآن", "Currently Shown"), value: String(filtered.length) },
+                    { label: tr("البحث الحالي", "Current Search"), value: query.trim() || tr("بدون فلترة", "No Filter") },
+                  ].map((item) => (
+                    <div
+                      key={item.label}
+                      style={{
+                        background: "linear-gradient(180deg, #faf7ee 0%, #f6f1e2 100%)",
+                        border: "4px solid #d4af37",
+                        borderRadius: 24,
+                        padding: 18,
+                        display: "grid",
+                        gap: 8,
+                        boxShadow: "0 8px 18px rgba(190,160,40,0.10)",
+                      }}
+                    >
+                      <div style={{ fontSize: 18, color: "#000000", fontWeight: 1000 }}>{item.label}</div>
+                      <div style={{ fontSize: 22, color: "#000000", fontWeight: 1000 }}>{item.value}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -983,17 +1155,17 @@ export default function Teachers() {
 
       <div style={{ ...card, padding: 12 }}>
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          <button style={btn("#1f2937", "#d4af37")} onClick={() => history.back()}>
+          <button style={btn("#fffdf7", "#000000")} onClick={() => history.back()}>
             {tr("← رجوع", "← Back")}
           </button>
-          <button style={btn("#3b82f6", "#07101f")} onClick={startAdd}>
+          <button style={btn("#3b82f6", "#000000")} onClick={startAdd}>
             {tr("+ إضافة معلم جديد", "+ Add New Teacher")}
           </button>
-          <button style={btn("#ef4444", "#07101f")} onClick={deleteAll}>
+          <button style={btn("#ef4444", "#000000")} onClick={deleteAll}>
             {tr("🗑 حذف الكل", "🗑 Delete All")}
           </button>
 
-          <div style={{ marginInlineStart: "auto", fontWeight: 1000, color: "#d4af37" }}>
+          <div style={{ marginInlineStart: "auto", fontWeight: 1000, color: "#000000" }}>
             {tr("إدارة بيانات الكادر التعليمي", "Teaching Staff Data Management")}
           </div>
         </div>
@@ -1008,14 +1180,14 @@ export default function Teachers() {
             onChange={(e) => setQuery(e.target.value)}
           />
 
-          <button style={btn("#10b981", "#07101f")} onClick={exportExcel}>
+          <button style={btn("#10b981", "#000000")} onClick={exportExcel}>
             {tr("تصدير Excel", "Export Excel")}
           </button>
-          <button style={btn("#22c55e", "#07101f")} onClick={exportCSV}>
+          <button style={btn("#22c55e", "#000000")} onClick={exportCSV}>
             {tr("تصدير CSV", "Export CSV")}
           </button>
 
-          <label style={btn("#60a5fa", "#07101f")}>
+          <label style={btn("#60a5fa", "#000000")}>
             {tr("استيراد CSV ⬆️", "Import CSV ⬆️")}
             <input
               type="file"
@@ -1029,7 +1201,7 @@ export default function Teachers() {
             />
           </label>
 
-          <label style={btn("#93c5fd", "#07101f")}>
+          <label style={btn("#93c5fd", "#000000")}>
             {tr("استيراد Excel ⬆️", "Import Excel ⬆️")}
             <input
               type="file"
@@ -1043,7 +1215,7 @@ export default function Teachers() {
             />
           </label>
 
-          <div style={{ marginInlineStart: "auto", fontWeight: 900, color: "#d4af37" }}>
+          <div style={{ marginInlineStart: "auto", fontWeight: 900, color: "#000000" }}>
             {tr("إجمالي", "Total")}: {teachers.length} — {tr("المعروض", "Shown")}: {filtered.length}
           </div>
         </div>
@@ -1053,7 +1225,7 @@ export default function Teachers() {
         <div style={card}>
           <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(4, minmax(220px, 1fr))" }}>
             <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("الاسم الكامل", "Full Name")}</div>
+              <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("الاسم الكامل", "Full Name")}</div>
               <input
                 style={inputStyle}
                 value={adding ? newTeacher.fullName : edit.fullName}
@@ -1066,7 +1238,7 @@ export default function Teachers() {
             </div>
 
             <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("الرقم الوظيفي", "Employee Number")}</div>
+              <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("الرقم الوظيفي", "Employee Number")}</div>
               <input
                 style={inputStyle}
                 value={adding ? newTeacher.employeeNo : edit.employeeNo}
@@ -1079,7 +1251,7 @@ export default function Teachers() {
             </div>
 
             <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("المادة 1", "Subject 1")}</div>
+              <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("المادة 1", "Subject 1")}</div>
               <GoldDropdown
                 value={adding ? newTeacher.subject1 : edit.subject1}
                 options={SUBJECT_OPTIONS}
@@ -1091,7 +1263,7 @@ export default function Teachers() {
             </div>
 
             <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("المادة 2", "Subject 2")}</div>
+              <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("المادة 2", "Subject 2")}</div>
               <GoldDropdown
                 value={adding ? newTeacher.subject2 : edit.subject2}
                 options={SUBJECT_OPTIONS}
@@ -1103,7 +1275,7 @@ export default function Teachers() {
             </div>
 
             <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("المادة 3", "Subject 3")}</div>
+              <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("المادة 3", "Subject 3")}</div>
               <GoldDropdown
                 value={adding ? newTeacher.subject3 : edit.subject3}
                 options={SUBJECT_OPTIONS}
@@ -1115,7 +1287,7 @@ export default function Teachers() {
             </div>
 
             <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("المادة 4", "Subject 4")}</div>
+              <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("المادة 4", "Subject 4")}</div>
               <GoldDropdown
                 value={adding ? newTeacher.subject4 : edit.subject4}
                 options={SUBJECT_OPTIONS}
@@ -1127,7 +1299,7 @@ export default function Teachers() {
             </div>
 
             <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("الصفوف", "Grades")}</div>
+              <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("الصفوف", "Grades")}</div>
               <input
                 style={inputStyle}
                 placeholder={tr("مثال: 10-5", "Example: 10-5")}
@@ -1141,7 +1313,7 @@ export default function Teachers() {
             </div>
 
             <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("الهاتف", "Phone")}</div>
+              <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("الهاتف", "Phone")}</div>
               <input
                 style={inputStyle}
                 value={adding ? newTeacher.phone : edit.phone}
@@ -1154,7 +1326,7 @@ export default function Teachers() {
             </div>
 
             <div style={{ gridColumn: "1 / -1" }}>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("ملاحظات", "Notes")}</div>
+              <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("ملاحظات", "Notes")}</div>
               <textarea
                 style={{ ...inputStyle, minHeight: 80 }}
                 value={adding ? newTeacher.notes : edit.notes}
@@ -1170,19 +1342,19 @@ export default function Teachers() {
           <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
             {adding ? (
               <>
-                <button style={btn("#10b981", "#07101f")} onClick={saveAdd}>
+                <button style={btn("#10b981", "#000000")} onClick={saveAdd}>
                   {tr("حفظ", "Save")}
                 </button>
-                <button style={btn("#1f2937", "#d4af37")} onClick={() => setAdding(false)}>
+                <button style={btn("#fffdf7", "#000000")} onClick={() => setAdding(false)}>
                   {tr("إلغاء", "Cancel")}
                 </button>
               </>
             ) : (
               <>
-                <button style={btn("#10b981", "#07101f")} onClick={saveEdit}>
+                <button style={btn("#10b981", "#000000")} onClick={saveEdit}>
                   {tr("حفظ التعديل", "Save Changes")}
                 </button>
-                <button style={btn("#1f2937", "#d4af37")} onClick={() => setEditingId(null)}>
+                <button style={btn("#fffdf7", "#000000")} onClick={() => setEditingId(null)}>
                   {tr("إلغاء", "Cancel")}
                 </button>
               </>
@@ -1204,19 +1376,19 @@ export default function Teachers() {
                 marginBottom: 0,
                 borderRadius: 0,
                 padding: 12,
-                background: "rgba(10,10,12,0.96)",
+                background: PAGE_BG,
                 overflow: "hidden",
-                border: "1px solid rgba(212,175,55,0.22)",
+                border: `5px solid ${GOLD_BORDER}`,
                 boxShadow: "0 30px 80px rgba(0,0,0,0.65)",
               }
             : card
         }
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10 }}>
-          <div style={{ fontWeight: 900, color: "#d4af37" }}>{tr("قائمة الكادر التعليمي", "Teaching Staff List")}</div>
+          <div style={{ fontWeight: 900, color: "#000000" }}>{tr("قائمة الكادر التعليمي", "Teaching Staff List")}</div>
 
           <button
-            style={btn(tableFullScreen ? "#ef4444" : "#1f2937", tableFullScreen ? "#07101f" : "#d4af37")}
+            style={btn(tableFullScreen ? "#ef4444" : "#fffdf7", "#000000")}
             onClick={() => setTableFullScreen((v) => !v)}
             title={tableFullScreen ? tr("عودة للحجم الطبيعي", "Return to normal size") : tr("تكبير الجدول ملء الشاشة", "Fullscreen table")}
           >
@@ -1232,7 +1404,7 @@ export default function Teachers() {
                   height: "calc(100vh - 70px)",
                   overflow: "auto",
                   borderRadius: 16,
-                  border: "1px solid rgba(212,175,55,0.12)",
+                  border: `4px solid ${GOLD_BORDER}`,
                   position: "relative",
                 }
               : {
@@ -1267,7 +1439,7 @@ export default function Teachers() {
               ) : (
                 filtered.map((t) => (
                   <tr key={t.id}>
-                    <td style={tdStyle} className="col-name">{t.fullName}</td>
+                    <td style={{ ...tdStyle, color: "#000000", fontWeight: 1000 }} className="col-name"><span style={{ color: "#000000", fontWeight: 900, WebkitTextFillColor: "#000000", textShadow: "none" }}>{t.fullName}</span></td>
                     <td style={tdStyle} className="col-emp">{t.employeeNo}</td>
                     <td style={tdStyle}>{translateSubject(t.subject1)}</td>
                     <td style={tdStyle}>{translateSubject(t.subject2)}</td>
@@ -1278,10 +1450,10 @@ export default function Teachers() {
                     <td style={tdStyle} title={t.notes}>{t.notes}</td>
                     <td style={tdStyle}>
                       <div style={{ display: "flex", gap: 8 }}>
-                        <button style={btn("#60a5fa", "#07101f")} onClick={() => startEdit(t)}>
+                        <button style={btn("#60a5fa", "#000000")} onClick={() => startEdit(t)}>
                           {tr("✏️ تعديل", "✏️ Edit")}
                         </button>
-                        <button style={btn("#ef4444", "#07101f")} onClick={() => removeTeacher(t.id)}>
+                        <button style={btn("#ef4444", "#000000")} onClick={() => removeTeacher(t.id)}>
                           {tr("🗑 حذف", "🗑 Delete")}
                         </button>
                       </div>

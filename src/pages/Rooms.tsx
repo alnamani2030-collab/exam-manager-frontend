@@ -8,6 +8,29 @@ import { createId, isRoomBlockedToday } from "../lib/roomScheduling";
 import type { Room } from "../services/rooms.service";
 import type { RoomBlock } from "../services/roomBlocks.service";
 
+
+const ROOMS_BORDER_COLORS = [
+  "#2563eb",
+  "#16a34a",
+  "#dc2626",
+  "#9333ea",
+  "#ea580c",
+  "#0891b2",
+  "#4f46e5",
+  "#db2777",
+  "#ca8a04",
+  "#059669",
+];
+
+const roomsBorderColor = (index: number) =>
+  ROOMS_BORDER_COLORS[Math.abs(index) % ROOMS_BORDER_COLORS.length];
+
+const roomsColoredBorder = (index: number) =>
+  `3px solid ${roomsBorderColor(index)}`;
+
+const roomsCellBorder = (rowIndex: number, cellIndex: number) =>
+  `2px solid ${roomsBorderColor(rowIndex + cellIndex)}`;
+
 const APP_NAME = "";
 
 const BUILDING_OPTIONS_AR = [
@@ -214,7 +237,7 @@ async function tryReadExcel(file: File): Promise<Record<string, unknown>[] | nul
 
 function parseRoomsFromObjects(rows: Record<string, unknown>[]): Room[] {
   return rows
-    .map((r) => {
+    .map((r, index) => {
       const roomName = getCell(r, ["اسم القاعة", "القاعة", "room", "roomname", "name"]);
       const code = getCell(r, ["الكود", "code", "roomCode", "رقم القاعة"]);
       const building = getCell(r, ["المبنى", "building", "block", "الدور"]);
@@ -288,14 +311,11 @@ export default function Rooms() {
     style.innerHTML = `
       .roomsTableLuxury {
         position: relative;
-        background:
-          linear-gradient(180deg, rgba(8,12,19,0.98) 0%, rgba(7,10,16,0.98) 100%);
-        border: 1px solid rgba(212,175,55,0.18);
+        background: linear-gradient(180deg, rgba(255,253,246,0.98) 0%, rgba(248,242,223,0.98) 100%);
+        border: 1.5px solid rgba(212,175,55,0.34);
         border-radius: 30px;
         padding: 16px;
-        box-shadow:
-          0 28px 70px rgba(0,0,0,0.48),
-          inset 0 1px 0 rgba(255,255,255,0.03);
+        box-shadow: 0 18px 42px rgba(108,82,12,0.14);
         overflow: auto;
       }
       .roomsTableLuxury::before {
@@ -350,18 +370,15 @@ export default function Rooms() {
         border-bottom-left-radius: 22px;
       }
       .roomsTableLuxury tbody td {
-        background:
-          linear-gradient(90deg, rgba(9,12,18,0.98) 0%, rgba(13,16,23,0.96) 60%, rgba(10,13,19,0.98) 100%) !important;
-        color: #f0c94d !important;
+        background: linear-gradient(180deg, #fffdf6 0%, #fff8e6 100%) !important;
+        color: #111827 !important;
         padding: 16px 16px;
-        border-top: 1px solid rgba(212,175,55,0.12);
-        border-bottom: 1px solid rgba(212,175,55,0.12);
+        border-top: 1.5px solid rgba(212,175,55,0.34);
+        border-bottom: 1.5px solid rgba(212,175,55,0.34);
         white-space: nowrap;
         vertical-align: middle;
-        box-shadow:
-          0 10px 24px rgba(0,0,0,0.35),
-          inset 0 1px 0 rgba(255,255,255,0.03);
-        transition: transform .18s ease, box-shadow .18s ease, filter .18s ease, border-color .18s ease;
+        box-shadow: none;
+        transition: transform .18s ease, filter .18s ease, border-color .18s ease;
       }
       .roomsTableLuxury tbody td:first-child {
         border-right: 1px solid rgba(212,175,55,0.12);
@@ -371,25 +388,23 @@ export default function Rooms() {
       }
       .roomsTableLuxury tbody tr:hover td {
         transform: translateY(-2px);
-        box-shadow:
-          0 18px 34px rgba(0,0,0,0.46),
-          inset 0 1px 0 rgba(255,255,255,0.04);
-        filter: brightness(1.04);
-        border-top-color: rgba(212,175,55,0.24);
-        border-bottom-color: rgba(212,175,55,0.24);
+        box-shadow: none;
+        filter: brightness(1.01);
+        border-top-color: rgba(212,175,55,0.58);
+        border-bottom-color: rgba(212,175,55,0.58);
       }
       .roomsTableLuxury .cell-main {
         font-size: 18px;
         font-weight: 900;
-        color: #f8df87 !important;
+        color: #111827 !important;
       }
       .roomsTableLuxury .cell-subtle {
-        color: #e8c65a !important;
+        color: #111827 !important;
         opacity: 0.96;
         font-weight: 800;
       }
       .roomsTableLuxury .cell-muted {
-        color: rgba(242,207,99,0.72) !important;
+        color: rgba(17,24,39,0.72) !important;
         font-size: 13px;
         font-weight: 700;
         margin-top: 4px;
@@ -469,7 +484,7 @@ export default function Rooms() {
         text-align: center;
         font-size: 18px;
         font-weight: 900;
-        color: #f2cf63 !important;
+        color: #111827 !important;
         padding: 24px !important;
       }
     `;
@@ -479,11 +494,11 @@ export default function Rooms() {
     };
   }, []);
 
-  const roomsById = useMemo(() => new Map(rooms.map((room) => [room.id, room])), [rooms]);
+  const roomsById = useMemo(() => new Map(rooms.map((room, index) => [room.id, room])), [rooms]);
 
   const normalizedBlocks = useMemo<RoomBlock[]>(
     () =>
-      roomBlocks.map((block) => {
+      roomBlocks.map((block, index) => {
         const normalizedStatus: RoomBlock["status"] =
           block.status === "cancelled"
             ? "cancelled"
@@ -503,7 +518,7 @@ export default function Rooms() {
       new Set(
         rooms
           .filter((room) => isRoomBlockedToday(room.id, todayISO, normalizedBlocks))
-          .map((room) => room.id)
+          .map((room, index) => room.id)
       ),
     [rooms, todayISO, normalizedBlocks]
   );
@@ -551,21 +566,21 @@ export default function Rooms() {
 
   const pageStyle: React.CSSProperties = {
     padding: 18,
-    color: "#e6c76a",
+    color: "#111827",
     minHeight: "100vh",
     background:
-      "radial-gradient(circle at top, rgba(212,175,55,0.14), transparent 24%), radial-gradient(circle at 88% 18%, rgba(59,130,246,0.10), transparent 24%), linear-gradient(180deg, #070b12 0%, #0b1220 42%, #060a12 100%)",
+      "radial-gradient(circle at top, rgba(212,175,55,0.20), transparent 26%), radial-gradient(circle at 88% 18%, rgba(212,175,55,0.12), transparent 24%), linear-gradient(180deg, #fffdf6 0%, #f8f2df 46%, #fffaf0 100%)",
     position: "relative",
     overflowX: "hidden",
     direction: isRTL ? "rtl" : "ltr",
   };
 
   const card: React.CSSProperties = {
-    background: "linear-gradient(180deg, rgba(11,18,32,0.94), rgba(9,16,29,0.96))",
-    border: "1px solid rgba(212,175,55,0.15)",
+    background: "linear-gradient(180deg, rgba(255,253,246,0.96), rgba(255,248,230,0.98))",
+    border: "1.5px solid rgba(212,175,55,0.30)",
     borderRadius: 24,
     padding: 18,
-    boxShadow: "0 22px 60px rgba(0,0,0,0.36)",
+    boxShadow: "0 18px 42px rgba(108,82,12,0.12)",
     marginBottom: 14,
     backdropFilter: "blur(6px)",
   };
@@ -586,18 +601,18 @@ export default function Rooms() {
   const btn = (bg: string, fg = "#0b1220"): React.CSSProperties => ({
     background: bg,
     color: fg,
-    border: "1px solid rgba(255,255,255,0.08)",
+    border: "3px solid #2563eb",
     borderRadius: 14,
     padding: "10px 14px",
     cursor: "pointer",
-    fontWeight: 800,
+    fontWeight: 900,
     boxShadow: "0 10px 24px rgba(0,0,0,0.25)",
   });
 
   const inputStyle: React.CSSProperties = {
-    background: "#0b1220",
-    color: "#e6c76a",
-    border: "1px solid rgba(212,175,55,0.25)",
+    background: "#fffdf6",
+    color: "#111827",
+    border: "3px solid #16a34a",
     borderRadius: 12,
     padding: "10px 12px",
     outline: "none",
@@ -608,7 +623,7 @@ export default function Rooms() {
     maxHeight: "70vh",
     overflow: "auto",
     borderRadius: 24,
-    border: "1px solid rgba(212,175,55,0.12)",
+    border: "3px solid #dc2626",
     background: "transparent",
   };
 
@@ -636,12 +651,12 @@ export default function Rooms() {
     width: "min(820px, 96vw)",
     maxHeight: "90vh",
     overflow: "auto",
-    background: "linear-gradient(180deg, #0b1220, #09101d)",
-    border: "1px solid rgba(212,175,55,0.25)",
+    background: "linear-gradient(180deg, #fffdf6, #fff8e6)",
+    border: "1.5px solid rgba(212,175,55,0.32)",
     borderRadius: 18,
     padding: 16,
-    boxShadow: "0 22px 80px rgba(0,0,0,0.55)",
-    color: "#e6c76a",
+    boxShadow: "0 22px 70px rgba(108,82,12,0.22)",
+    color: "#111827",
     direction: isRTL ? "rtl" : "ltr",
   };
 
@@ -659,7 +674,7 @@ export default function Rooms() {
 
     const lines = [
       header.join(","),
-      ...rows.map((r) =>
+      ...rows.map((r, index) =>
         [
           r.roomName,
           r.code || "",
@@ -760,7 +775,7 @@ export default function Rooms() {
     const ok = confirm(tr("⚠️ هل أنت متأكد من حذف جدول القاعات كاملًا؟ لا يمكن التراجع.", "⚠️ Are you sure you want to delete the entire rooms table? This cannot be undone."));
     if (!ok) return;
     try {
-      const roomIds = new Set(rooms.map((room) => room.id));
+      const roomIds = new Set(rooms.map((room, index) => room.id));
       await deleteAllRooms();
       setRoomBlocks((prev) => prev.filter((block) => !roomIds.has(block.roomId)));
       alert(tr("✅ تم حذف جميع القاعات", "✅ All rooms deleted"));
@@ -776,7 +791,7 @@ export default function Rooms() {
   async function exportExcel() {
     try {
       const XLSX = await import("xlsx");
-      const rows = rooms.map((r) =>
+      const rows = rooms.map((r, index) =>
         lang === "ar"
           ? {
               "اسم القاعة": r.roomName,
@@ -902,7 +917,107 @@ export default function Rooms() {
   }
 
   return (
-    <div style={pageStyle} ref={topRef}>
+    <div style={pageStyle} ref={topRef} className="rooms12PageRoot roomsColoredBordersScope roomsColoredBlackTextScope">
+      <style>{`
+        .roomsColoredBlackTextScope,
+        .roomsColoredBlackTextScope * {
+          color: #000000 !important;
+          text-shadow: none !important;
+        }
+
+        .roomsColoredBlackTextScope h1,
+        .roomsColoredBlackTextScope h2,
+        .roomsColoredBlackTextScope h3,
+        .roomsColoredBlackTextScope h4,
+        .roomsColoredBlackTextScope p,
+        .roomsColoredBlackTextScope div,
+        .roomsColoredBlackTextScope span,
+        .roomsColoredBlackTextScope label,
+        .roomsColoredBlackTextScope button,
+        .roomsColoredBlackTextScope input,
+        .roomsColoredBlackTextScope select,
+        .roomsColoredBlackTextScope textarea,
+        .roomsColoredBlackTextScope option,
+        .roomsColoredBlackTextScope th,
+        .roomsColoredBlackTextScope td,
+        .roomsColoredBlackTextScope strong,
+        .roomsColoredBlackTextScope b {
+          color: #000000 !important;
+          font-weight: 900 !important;
+          text-shadow: none !important;
+        }
+
+        .roomsColoredBlackTextScope table th:nth-child(10n + 1),
+        .roomsColoredBlackTextScope table td:nth-child(10n + 1) { border-color: #2563eb !important; }
+        .roomsColoredBlackTextScope table th:nth-child(10n + 2),
+        .roomsColoredBlackTextScope table td:nth-child(10n + 2) { border-color: #16a34a !important; }
+        .roomsColoredBlackTextScope table th:nth-child(10n + 3),
+        .roomsColoredBlackTextScope table td:nth-child(10n + 3) { border-color: #dc2626 !important; }
+        .roomsColoredBlackTextScope table th:nth-child(10n + 4),
+        .roomsColoredBlackTextScope table td:nth-child(10n + 4) { border-color: #9333ea !important; }
+        .roomsColoredBlackTextScope table th:nth-child(10n + 5),
+        .roomsColoredBlackTextScope table td:nth-child(10n + 5) { border-color: #ea580c !important; }
+
+        .roomsColoredBlackTextScope table th,
+        .roomsColoredBlackTextScope table td {
+          border-width: 2px !important;
+          border-style: solid !important;
+        }
+      `}</style>
+
+      <style>{`
+        .roomsColoredBordersScope table th:nth-child(10n + 1),
+        .roomsColoredBordersScope table td:nth-child(10n + 1) { border-color: #2563eb !important; }
+        .roomsColoredBordersScope table th:nth-child(10n + 2),
+        .roomsColoredBordersScope table td:nth-child(10n + 2) { border-color: #16a34a !important; }
+        .roomsColoredBordersScope table th:nth-child(10n + 3),
+        .roomsColoredBordersScope table td:nth-child(10n + 3) { border-color: #dc2626 !important; }
+        .roomsColoredBordersScope table th:nth-child(10n + 4),
+        .roomsColoredBordersScope table td:nth-child(10n + 4) { border-color: #9333ea !important; }
+        .roomsColoredBordersScope table th:nth-child(10n + 5),
+        .roomsColoredBordersScope table td:nth-child(10n + 5) { border-color: #ea580c !important; }
+        .roomsColoredBordersScope table th,
+        .roomsColoredBordersScope table td {
+          border-width: 2px !important;
+          border-style: solid !important;
+        }
+      `}</style>
+
+      <style>{`
+        html,
+        body,
+        #root {
+          margin: 0 !important;
+          min-height: 100% !important;
+          background:
+            radial-gradient(1200px 520px at 50% -10%, rgba(212, 175, 55, 0.18), transparent 62%),
+            linear-gradient(180deg, #fffdf7 0%, #f7f3e7 48%, #fffaf0 100%) !important;
+        }
+
+        body {
+          background-color: #f7f3e7 !important;
+        }
+
+        .rooms12PageRoot {
+          position: relative;
+          z-index: 1;
+          background:
+            radial-gradient(1200px 520px at 50% -10%, rgba(212, 175, 55, 0.18), transparent 62%),
+            linear-gradient(180deg, #fffdf7 0%, #f7f3e7 48%, #fffaf0 100%) !important;
+        }
+
+        .rooms12FixedLightBg {
+          position: fixed;
+          inset: 0;
+          z-index: -1;
+          pointer-events: none;
+          background:
+            radial-gradient(1200px 520px at 50% -10%, rgba(212, 175, 55, 0.18), transparent 62%),
+            linear-gradient(180deg, #fffdf7 0%, #f7f3e7 48%, #fffaf0 100%) !important;
+        }
+      `}</style>
+      <div className="rooms12FixedLightBg" aria-hidden="true" />
+
       <div
         style={{
           position: "absolute",
@@ -937,13 +1052,13 @@ export default function Rooms() {
           style={{
             display: "grid",
             gap: 18,
-            border: "1px solid rgba(212,175,55,0.18)",
+            border: "3px solid #9333ea",
             borderRadius: 34,
             padding: 28,
             background:
-              "linear-gradient(135deg, rgba(30,22,2,0.95), rgba(8,8,8,0.98), rgba(27,21,3,0.94))",
+              "linear-gradient(135deg, rgba(255,253,246,0.98), rgba(248,242,223,0.98), rgba(255,250,240,0.98))",
             boxShadow:
-              "0 32px 100px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.05), inset 0 -1px 0 rgba(255,255,255,0.03)",
+              "0 26px 70px rgba(108,82,12,0.16), inset 0 1px 0 rgba(255,255,255,0.75)",
             marginBottom: 18,
           }}
         >
@@ -968,7 +1083,7 @@ export default function Rooms() {
               </div>
 
               <div>
-                <div style={{ fontSize: 18, fontWeight: 900, color: "rgba(255,241,196,0.88)", marginBottom: 10 }}>
+                <div style={{ fontSize: 18, fontWeight: 900, color: "#6f5100", marginBottom: 10 }}>
                   {APP_NAME}
                 </div>
                 <h1
@@ -977,12 +1092,12 @@ export default function Rooms() {
                     fontSize: "clamp(34px, 5vw, 64px)",
                     lineHeight: 1.05,
                     fontWeight: 950,
-                    color: "#fff1c4",
+                    color: "#111827",
                     letterSpacing: "-0.03em",
                     textShadow: "0 8px 28px rgba(212,175,55,0.16)",
                   }}
                 >
-                  {tr("مركز إدارة القاعات", "Rooms Management Center")}
+                  {tr(" إدارة قاعات مركز إمتحانات الدبلوم", "Rooms Management Center")}
                 </h1>
               </div>
 
@@ -991,7 +1106,7 @@ export default function Rooms() {
                   margin: 0,
                   fontSize: 16,
                   lineHeight: 2,
-                  color: "rgba(255,241,196,0.82)",
+                  color: "rgba(17,24,39,0.78)",
                   maxWidth: 940,
                 }}
               >
@@ -1006,20 +1121,20 @@ export default function Rooms() {
                   { label: tr("حالة البيانات", "Data Status"), value: loaded ? tr("مرتبطة ببيانات فعلية", "Connected to live data") : tr("جاري التحميل", "Loading") },
                   { label: tr("البحث الحالي", "Current Search"), value: query.trim() || tr("بدون فلترة", "No Filter") },
                   { label: tr("الحالة المختارة", "Selected Status"), value: statusFilter === "all" ? tr("كل الحالات", "All Statuses") : statusFilter === "active" ? tr("نشطة", "Active") : statusFilter === "inactive" ? tr("موقوفة", "Inactive") : tr("محظورة اليوم", "Blocked Today") },
-                ].map((item) => (
+                ].map((item, index) => (
                   <div
                     key={item.label}
                     style={{
-                      border: "1px solid rgba(255,255,255,0.08)",
-                      background: "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
+                      border: "3px solid #ea580c",
+                      background: "linear-gradient(180deg, rgba(255,255,255,0.78), rgba(255,248,230,0.88))",
                       borderRadius: 18,
                       padding: "12px 14px",
                       minWidth: 190,
-                      boxShadow: "0 14px 28px rgba(0,0,0,0.22)",
+                      boxShadow: "0 12px 24px rgba(108,82,12,0.10)",
                     }}
                   >
-                    <div style={{ fontSize: 12, color: "rgba(255,241,196,0.64)", fontWeight: 800 }}>{item.label}</div>
-                    <div style={{ marginTop: 6, fontSize: 16, color: "#fff8dc", fontWeight: 900 }}>{item.value}</div>
+                    <div style={{ fontSize: 12, color: "rgba(17,24,39,0.62)", fontWeight: 900 }}>{item.label}</div>
+                    <div style={{ marginTop: 6, fontSize: 16, color: "#111827", fontWeight: 900 }}>{item.value}</div>
                   </div>
                 ))}
               </div>
@@ -1030,11 +1145,11 @@ export default function Rooms() {
                 minWidth: 300,
                 maxWidth: 390,
                 width: "100%",
-                border: "1px solid rgba(255,255,255,0.08)",
+                border: "3px solid #0891b2",
                 borderRadius: 28,
                 padding: 22,
-                background: "linear-gradient(180deg, rgba(212,175,55,0.08), rgba(255,255,255,0.02))",
-                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
+                background: "linear-gradient(180deg, rgba(255,255,255,0.82), rgba(255,248,230,0.90))",
+                boxShadow: "0 14px 32px rgba(108,82,12,0.10)",
                 display: "grid",
                 gap: 16,
               }}
@@ -1055,14 +1170,14 @@ export default function Rooms() {
                 {stats.blocked > 0 ? tr("يوجد حظر نشط يحتاج متابعة", "There is an active block that needs follow-up") : tr("الوضع التشغيلي مستقر", "Operational status is stable")}
               </div>
 
-              <div style={{ fontSize: 28, lineHeight: 1.5, fontWeight: 950, color: "#fff1c4" }}>
+              <div style={{ fontSize: 28, lineHeight: 1.5, fontWeight: 950, color: "#111827" }}>
                 {tr(
-                  "يمكنك من هنا إدارة القاعات، تنفيذ الحظر السريع، مراجعة سجل الحظر، واستيراد أو تصدير البيانات مع تسلسل بصري فاخر يعكس جودة منتج مؤسسي.",
+                  "",
                   "From here you can manage rooms, apply quick blocks, review block history, and import or export data with a premium visual flow that reflects the quality of an institutional product."
                 )}
               </div>
 
-              <div style={{ fontSize: 14, lineHeight: 1.95, color: "rgba(255,241,196,0.78)" }} />
+              <div style={{ fontSize: 14, lineHeight: 1.95, color: "rgba(17,24,39,0.72)" }} />
             </div>
           </div>
         </div>
@@ -1070,7 +1185,7 @@ export default function Rooms() {
         {quickBlock.open && (
           <div style={modalOverlay} onClick={() => setQuickBlock((prev) => ({ ...prev, open: false }))}>
             <div style={modalCard} onClick={(e) => e.stopPropagation()}>
-              <div style={{ fontWeight: 1000, fontSize: 18, marginBottom: 12, color: "#d4af37" }}>
+              <div style={{ fontWeight: 1000, fontSize: 18, marginBottom: 12, color: "#000000" }}>
                 {tr("حظر سريع للقاعة:", "Quick block for room:")} {quickBlock.roomName}
               </div>
               <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(2, minmax(220px, 1fr))" }}>
@@ -1135,39 +1250,39 @@ export default function Rooms() {
         {historyRoomId && (
           <div style={modalOverlay} onClick={() => setHistoryRoomId(null)}>
             <div style={modalCard} onClick={(e) => e.stopPropagation()}>
-              <div style={{ fontWeight: 1000, fontSize: 18, marginBottom: 12, color: "#d4af37" }}>
+              <div style={{ fontWeight: 1000, fontSize: 18, marginBottom: 12, color: "#000000" }}>
                 {tr("سجل الحظر:", "Block History:")} {roomsById.get(historyRoomId)?.roomName || tr("القاعة", "Room")}
               </div>
               <div style={tableWrap}>
                 <table style={{ width: "100%", minWidth: 720 }}>
                   <thead>
                     <tr>
-                      <th style={{ ...thStyle, position: "sticky", top: 0, background: "#0b1220", color: "#d4af37", zIndex: 2, padding: 10, borderBottom: "1px solid rgba(212,175,55,0.2)" }}>{tr("السبب", "Reason")}</th>
-                      <th style={{ ...thStyle, position: "sticky", top: 0, background: "#0b1220", color: "#d4af37", zIndex: 2, padding: 10, borderBottom: "1px solid rgba(212,175,55,0.2)" }}>{tr("النوع", "Type")}</th>
-                      <th style={{ ...thStyle, position: "sticky", top: 0, background: "#0b1220", color: "#d4af37", zIndex: 2, padding: 10, borderBottom: "1px solid rgba(212,175,55,0.2)" }}>{tr("من", "From")}</th>
-                      <th style={{ ...thStyle, position: "sticky", top: 0, background: "#0b1220", color: "#d4af37", zIndex: 2, padding: 10, borderBottom: "1px solid rgba(212,175,55,0.2)" }}>{tr("إلى", "To")}</th>
-                      <th style={{ ...thStyle, position: "sticky", top: 0, background: "#0b1220", color: "#d4af37", zIndex: 2, padding: 10, borderBottom: "1px solid rgba(212,175,55,0.2)" }}>{tr("الفترة", "Session")}</th>
-                      <th style={{ ...thStyle, position: "sticky", top: 0, background: "#0b1220", color: "#d4af37", zIndex: 2, padding: 10, borderBottom: "1px solid rgba(212,175,55,0.2)" }}>{tr("الحالة", "Status")}</th>
+                      <th style={{ border: "2px solid #2563eb",  ...thStyle, position: "sticky", top: 0, background: "#d4af37", color: "#111827", zIndex: 2, padding: 10, borderBottom: "1px solid rgba(212,175,55,0.2)" }}>{tr("السبب", "Reason")}</th>
+                      <th style={{ border: "2px solid #16a34a",  ...thStyle, position: "sticky", top: 0, background: "#d4af37", color: "#111827", zIndex: 2, padding: 10, borderBottom: "1px solid rgba(212,175,55,0.2)" }}>{tr("النوع", "Type")}</th>
+                      <th style={{ border: "2px solid #dc2626",  ...thStyle, position: "sticky", top: 0, background: "#d4af37", color: "#111827", zIndex: 2, padding: 10, borderBottom: "1px solid rgba(212,175,55,0.2)" }}>{tr("من", "From")}</th>
+                      <th style={{ border: "2px solid #9333ea",  ...thStyle, position: "sticky", top: 0, background: "#d4af37", color: "#111827", zIndex: 2, padding: 10, borderBottom: "1px solid rgba(212,175,55,0.2)" }}>{tr("إلى", "To")}</th>
+                      <th style={{ border: "2px solid #ea580c",  ...thStyle, position: "sticky", top: 0, background: "#d4af37", color: "#111827", zIndex: 2, padding: 10, borderBottom: "1px solid rgba(212,175,55,0.2)" }}>{tr("الفترة", "Session")}</th>
+                      <th style={{ border: "2px solid #0891b2",  ...thStyle, position: "sticky", top: 0, background: "#d4af37", color: "#111827", zIndex: 2, padding: 10, borderBottom: "1px solid rgba(212,175,55,0.2)" }}>{tr("الحالة", "Status")}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {historyBlocks.length === 0 ? (
                       <tr>
-                        <td style={{ padding: 10, borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#e6c76a" }} colSpan={6}>
+                        <td style={{ border: "2px solid #4f46e5",  padding: 10, borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#e6c76a" }} colSpan={6}>
                           {tr("لا يوجد سجل حظر لهذه القاعة.", "There is no block history for this room.")}
                         </td>
                       </tr>
                     ) : (
-                      historyBlocks.map((block) => (
+                      historyBlocks.map((block, index) => (
                         <tr key={block.id}>
-                          <td style={{ padding: 10, borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#e6c76a" }}>{block.reason}</td>
-                          <td style={{ padding: 10, borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#e6c76a" }}>{block.reasonType}</td>
-                          <td style={{ padding: 10, borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#e6c76a" }}>{block.startDate}</td>
-                          <td style={{ padding: 10, borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#e6c76a" }}>{block.endDate}</td>
-                          <td style={{ padding: 10, borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#e6c76a" }}>
+                          <td style={{ border: "2px solid #db2777",  padding: 10, borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#e6c76a" }}>{block.reason}</td>
+                          <td style={{ border: "2px solid #2563eb",  padding: 10, borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#e6c76a" }}>{block.reasonType}</td>
+                          <td style={{ border: "2px solid #16a34a",  padding: 10, borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#e6c76a" }}>{block.startDate}</td>
+                          <td style={{ border: "2px solid #dc2626",  padding: 10, borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#e6c76a" }}>{block.endDate}</td>
+                          <td style={{ border: "2px solid #9333ea",  padding: 10, borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#e6c76a" }}>
                             {block.session === "full-day" ? tr("اليوم كامل", "Full Day") : block.session === "الفترة الأولى" ? tr("الفترة الأولى", "First Period") : tr("الفترة الثانية", "Second Period")}
                           </td>
-                          <td style={{ padding: 10, borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#e6c76a" }}>
+                          <td style={{ border: "2px solid #ea580c",  padding: 10, borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#e6c76a" }}>
                             {block.status === "active" ? tr("نشط", "Active") : block.status === "expired" ? tr("منتهي", "Expired") : tr("ملغي", "Cancelled")}
                           </td>
                         </tr>
@@ -1220,7 +1335,7 @@ export default function Rooms() {
               background: "rgba(59,130,246,0.12)",
               border: "1px solid rgba(59,130,246,0.35)",
               color: "#bfdbfe",
-              fontWeight: 800,
+              fontWeight: 900,
             }}
           >
             {tr("جار تحميل بيانات القاعات...", "Loading rooms data...")}
@@ -1236,7 +1351,7 @@ export default function Rooms() {
               background: "rgba(239,68,68,0.12)",
               border: "1px solid rgba(239,68,68,0.35)",
               color: "#fecaca",
-              fontWeight: 800,
+              fontWeight: 900,
             }}
           >
             {error}
@@ -1307,7 +1422,7 @@ export default function Rooms() {
                 }}
               />
             </label>
-            <div style={{ marginInlineStart: "auto", fontWeight: 900, color: "#d4af37" }}>
+            <div style={{ marginInlineStart: "auto", fontWeight: 900, color: "#000000" }}>
               {tr("إجمالي", "Total")}: {rooms.length} — {tr("المعروض", "Shown")}: {filtered.length}
             </div>
           </div>
@@ -1317,7 +1432,7 @@ export default function Rooms() {
           <div style={card}>
             <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(4, minmax(220px, 1fr))" }}>
               <div>
-                <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("اسم القاعة", "Room Name")}</div>
+                <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("اسم القاعة", "Room Name")}</div>
                 <input
                   style={inputStyle}
                   value={current.roomName}
@@ -1325,7 +1440,7 @@ export default function Rooms() {
                 />
               </div>
               <div>
-                <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("كود القاعة", "Room Code")}</div>
+                <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("كود القاعة", "Room Code")}</div>
                 <input
                   style={inputStyle}
                   value={current.code || ""}
@@ -1333,7 +1448,7 @@ export default function Rooms() {
                 />
               </div>
               <div>
-                <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("المبنى", "Building")}</div>
+                <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("المبنى", "Building")}</div>
                 <GoldDropdown
                   value={current.building}
                   options={BUILDING_OPTIONS}
@@ -1342,7 +1457,7 @@ export default function Rooms() {
                 />
               </div>
               <div>
-                <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("نوع القاعة", "Room Type")}</div>
+                <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("نوع القاعة", "Room Type")}</div>
                 <GoldDropdown
                   value={current.type}
                   options={ROOM_TYPE_OPTIONS}
@@ -1351,7 +1466,7 @@ export default function Rooms() {
                 />
               </div>
               <div>
-                <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("السعة", "Capacity")}</div>
+                <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("السعة", "Capacity")}</div>
                 <input
                   style={inputStyle}
                   type="number"
@@ -1360,7 +1475,7 @@ export default function Rooms() {
                 />
               </div>
               <div>
-                <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("الحالة", "Status")}</div>
+                <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("الحالة", "Status")}</div>
                 <GoldDropdown
                   value={current.status || "active"}
                   options={ROOM_STATUS_OPTIONS}
@@ -1368,7 +1483,7 @@ export default function Rooms() {
                 />
               </div>
               <div style={{ gridColumn: "1 / -1" }}>
-                <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("ملاحظات", "Notes")}</div>
+                <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("ملاحظات", "Notes")}</div>
                 <textarea
                   style={{ ...inputStyle, minHeight: 80 }}
                   value={current.notes}
@@ -1421,7 +1536,7 @@ export default function Rooms() {
             ...card,
             padding: 12,
             borderRadius: 28,
-            background: "linear-gradient(180deg, #0a0d14 0%, #09101d 100%)",
+            background: "linear-gradient(180deg, rgba(255,253,246,0.96), rgba(255,248,230,0.98))",
             boxShadow: "0 22px 60px rgba(0,0,0,0.42)",
           }}
         >
@@ -1436,7 +1551,7 @@ export default function Rooms() {
             }}
           >
             <div style={{ fontWeight: 1000, fontSize: 20, color: "#f2cf63" }}>{tr("القاعات", "Rooms")}</div>
-            <div style={{ fontWeight: 900, color: "#d4af37", opacity: 0.9 }}>
+            <div style={{ fontWeight: 900, color: "#000000", opacity: 0.9 }}>
               {tr("جدول القاعات", "Rooms Table")}
             </div>
           </div>
@@ -1463,7 +1578,7 @@ export default function Rooms() {
                     </td>
                   </tr>
                 ) : (
-                  filtered.map((r) => {
+                  filtered.map((r, index) => {
                     const blockedNow = blockedRoomIdsToday.has(r.id);
                     const roomStatus = (r.status || "active") === "active" ? tr("نشطة", "Active") : tr("موقوفة", "Inactive");
                     return (

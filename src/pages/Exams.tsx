@@ -618,10 +618,10 @@ export default function Exams() {
     style.innerHTML = `
       .examTable3D {
         position: relative;
-        background: linear-gradient(145deg, #111, #1a1a1a);
+        background: linear-gradient(180deg, #fffdf6, #f8f2df);
         border-radius: 16px;
         padding: 12px;
-        box-shadow: 0 18px 35px rgba(0,0,0,0.6), inset 0 2px 0 rgba(255,255,255,0.05);
+        box-shadow: 0 18px 35px rgba(86,63,0,0.16), inset 0 0 0 4px rgba(255,255,255,0.65);
         overflow: hidden;
       }
 
@@ -651,17 +651,18 @@ export default function Exams() {
       }
 
       .examTable3D tbody td {
-        background: linear-gradient(145deg,#181818,#101010) !important;
-        color: #d4af37 !important;
+        background: linear-gradient(180deg,#fffdf7,#f7efd9) !important;
+        color: #050505 !important;
+        font-weight: 900;
         border-bottom: none !important;
         border-radius: 14px;
-        box-shadow: 0 10px 22px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,255,255,0.06);
+        box-shadow: none;
         transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
       }
 
       .examTable3D tbody tr:hover td {
         transform: translateY(-3px);
-        box-shadow: 0 14px 30px rgba(0,0,0,0.75), inset 0 1px 0 rgba(255,255,255,0.10);
+        box-shadow: none;
         filter: brightness(1.03);
       }
 
@@ -1106,10 +1107,10 @@ export default function Exams() {
 
   const pageStyle: React.CSSProperties = {
     padding: 18,
-    color: "#e6c76a",
+    color: "#0b0b0b",
     minHeight: "100vh",
     background:
-      "radial-gradient(circle at top, rgba(212,175,55,0.14), transparent 24%), radial-gradient(circle at 88% 18%, rgba(59,130,246,0.10), transparent 24%), linear-gradient(180deg, #070b12 0%, #0b1220 42%, #060a12 100%)",
+      "radial-gradient(circle at 50% -10%, rgba(212,175,55,0.20), transparent 28%), linear-gradient(180deg, #fffdf6 0%, #f8f2df 45%, #fffaf0 100%)",
     position: "relative",
     overflowX: "hidden",
     direction: isRTL ? "rtl" : "ltr",
@@ -1129,13 +1130,13 @@ export default function Exams() {
   };
 
   const card: React.CSSProperties = {
-    background: "linear-gradient(180deg, rgba(11,18,32,0.94), rgba(9,16,29,0.96))",
-    border: "1px solid rgba(212,175,55,0.15)",
-    borderRadius: 24,
+    background: "linear-gradient(180deg, #fffdf6 0%, #f8f2df 100%)",
+    border: "4px solid #d4af37",
+    borderRadius: 30,
     padding: 18,
-    boxShadow: "0 22px 60px rgba(0,0,0,0.36)",
-    marginBottom: 14,
-    backdropFilter: "blur(6px)",
+    boxShadow: "0 22px 50px rgba(86,63,0,0.16), inset 0 0 0 7px rgba(255,255,255,0.72)",
+    marginBottom: 18,
+    color: "#050505",
   };
 
   const fullScreenOverlay: React.CSSProperties = {
@@ -1158,43 +1159,44 @@ export default function Exams() {
   });
 
   const inputStyle: React.CSSProperties = {
-    background: "#0b1220",
-    color: "#e6c76a",
-    border: "1px solid rgba(212,175,55,0.25)",
-    borderRadius: 12,
+    background: "#fffdf6",
+    color: "#050505",
+    border: "2px solid rgba(212,175,55,0.78)",
+    borderRadius: 14,
     padding: "10px 12px",
     outline: "none",
     width: "100%",
+    fontWeight: 800,
   };
 
   const tableWrap: React.CSSProperties = {
     maxHeight: "55vh",
     overflow: "auto",
-    borderRadius: 20,
-    border: "1px solid rgba(212,175,55,0.12)",
-    background: "linear-gradient(180deg, rgba(8,12,19,0.98) 0%, rgba(7,10,16,0.98) 100%)",
-    boxShadow:
-      "0 28px 70px rgba(0,0,0,0.48), inset 0 1px 0 rgba(255,255,255,0.03)",
+    borderRadius: 24,
+    border: "3px solid #d4af37",
+    background: "linear-gradient(180deg, #fffdf6 0%, #f8f2df 100%)",
+    boxShadow: "0 18px 38px rgba(86,63,0,0.16)",
   };
 
   const thStyle: React.CSSProperties = {
     position: "sticky",
     top: 0,
-    background: "#0b1220",
-    color: "#d4af37",
+    background: "linear-gradient(180deg, #6f5300, #4f3900)",
+    color: "#fff7d7",
     zIndex: 2,
     padding: 10,
     textAlign: isRTL ? "right" : "left",
-    fontWeight: 900,
-    borderBottom: "1px solid rgba(212,175,55,0.2)",
+    fontWeight: 1000,
+    borderBottom: "2px solid rgba(212,175,55,0.75)",
     whiteSpace: "nowrap",
   };
 
   const tdStyle: React.CSSProperties = {
     padding: 10,
-    borderBottom: "1px solid rgba(255,255,255,0.06)",
+    borderBottom: "2px solid rgba(212,175,55,0.32)",
     whiteSpace: "nowrap",
-    color: "#e6c76a",
+    color: "#050505",
+    fontWeight: 800,
   };
 
   const current = editingId ? edit : row;
@@ -1226,7 +1228,25 @@ export default function Exams() {
   };
 
   return (
-    <div style={pageStyle} ref={topRef}>
+    <div style={pageStyle} ref={topRef} className="examsScheduleOuterCardTextBlackOnly">
+      <style>{`
+        .examsScheduleOuterCardTextBlackOnly .scheduleOuterCardText,
+        .examsScheduleOuterCardTextBlackOnly .scheduleOuterCardText * {
+          color: #000000 !important;
+          font-weight: 900 !important;
+          text-shadow: none !important;
+          -webkit-text-fill-color: #000000 !important;
+        }
+
+        .examsScheduleOuterCardTextBlackOnly table,
+        .examsScheduleOuterCardTextBlackOnly table *,
+        .examsScheduleOuterCardTextBlackOnly th,
+        .examsScheduleOuterCardTextBlackOnly td {
+          color: inherit;
+          -webkit-text-fill-color: initial;
+        }
+      `}</style>
+
       <div
         style={{
           position: "absolute",
@@ -1261,49 +1281,90 @@ export default function Exams() {
           style={{
             display: "grid",
             gap: 18,
-            border: "1px solid rgba(212,175,55,0.18)",
-            borderRadius: 34,
-            padding: 28,
-            background:
-              "linear-gradient(135deg, rgba(30,22,2,0.95), rgba(8,8,8,0.98), rgba(27,21,3,0.94))",
-            boxShadow:
-              "0 32px 100px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.05), inset 0 -1px 0 rgba(255,255,255,0.03)",
-            marginBottom: 18,
+            border: "5px solid #d4af37",
+            borderRadius: 36,
+            padding: 26,
+            background: "linear-gradient(180deg, #fffdf7 0%, #f8f2df 100%)",
+            boxShadow: "0 22px 50px rgba(88,64,0,0.18), inset 0 0 0 8px rgba(255,255,255,0.78)",
+            marginBottom: 26,
+            color: "#050505",
           }}
         >
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 18, flexWrap: "wrap", alignItems: "start" }}>
-            <div style={{ display: "grid", gap: 14, maxWidth: 900 }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: isRTL ? "minmax(0, 1.45fr) minmax(320px, 0.75fr)" : "minmax(320px, 0.75fr) minmax(0, 1.45fr)",
+              gap: 28,
+              alignItems: "center",
+            }}
+          >
+            <div
+              style={{
+                order: isRTL ? 2 : 1,
+                border: "4px solid #d4af37",
+                borderRadius: 30,
+                padding: 24,
+                background: "rgba(255,253,246,0.76)",
+                boxShadow: "inset 0 0 0 4px rgba(255,255,255,0.68)",
+                display: "grid",
+                gap: 16,
+              }}
+            >
+              {[
+                { label: tr("إجمالي الامتحانات", "Total Exams"), value: exams.length },
+                { label: tr("المعروض الآن", "Currently Shown"), value: filtered.length },
+                { label: tr("قاعات الربط", "Assigned Rooms"), value: examRoomAssignments.length },
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  style={{
+                    border: "3px solid #d4af37",
+                    borderRadius: 22,
+                    padding: "18px 22px",
+                    background: "linear-gradient(180deg, #fffdf8, #f7f0dd)",
+                    color: "#050505",
+                    textAlign: isRTL ? "right" : "left",
+                  }}
+                >
+                  <div style={{ fontSize: 14, color: "#050505", fontWeight: 1000 }}>{item.label}</div>
+                  <div style={{ marginTop: 8, fontSize: 23, color: "#050505", fontWeight: 1000 }}>{item.value}</div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ order: isRTL ? 1 : 2, display: "grid", gap: 18, textAlign: isRTL ? "right" : "left" }}>
               <div
                 style={{
                   display: "inline-flex",
+                  justifySelf: isRTL ? "end" : "start",
                   width: "fit-content",
                   alignItems: "center",
                   gap: 8,
-                  padding: "8px 14px",
+                  padding: "11px 22px",
                   borderRadius: 999,
-                  background: "rgba(16,185,129,0.12)",
-                  border: "1px solid rgba(16,185,129,0.22)",
-                  color: "#a7f3d0",
-                  fontWeight: 900,
-                  fontSize: 12,
+                  background: "#eaf2ff",
+                  border: "4px solid #d4af37",
+                  color: "#050505",
+                  fontWeight: 1000,
+                  fontSize: 15,
                 }}
               >
                 {tr("إدارة مركزية لجدول الامتحانات والقاعات", "Central management for exams schedule and rooms")}
               </div>
 
               <div>
-                <div style={{ fontSize: 18, fontWeight: 900, color: "rgba(255,241,196,0.88)", marginBottom: 10 }}>
+                <div style={{ fontSize: 22, fontWeight: 1000, color: "#050505", marginBottom: 10 }}>
                   {APP_NAME}
                 </div>
                 <h1
                   style={{
                     margin: 0,
-                    fontSize: "clamp(34px, 5vw, 64px)",
-                    lineHeight: 1.05,
-                    fontWeight: 950,
-                    color: "#fff1c4",
+                    fontSize: "clamp(42px, 6vw, 76px)",
+                    lineHeight: 1.08,
+                    fontWeight: 1000,
+                    color: "#050505",
                     letterSpacing: "-0.03em",
-                    textShadow: "0 8px 28px rgba(212,175,55,0.16)",
+                    textShadow: "0 10px 24px rgba(0,0,0,0.08)",
                   }}
                 >
                   {tr("مركز إدارة الامتحانات", "Exams Management Center")}
@@ -1313,10 +1374,11 @@ export default function Exams() {
               <p
                 style={{
                   margin: 0,
-                  fontSize: 16,
-                  lineHeight: 2,
-                  color: "rgba(255,241,196,0.82)",
-                  maxWidth: 940,
+                  fontSize: 18,
+                  lineHeight: 2.15,
+                  color: "#050505",
+                  fontWeight: 900,
+                  maxWidth: 980,
                 }}
               >
                 {tr(
@@ -1325,70 +1387,6 @@ export default function Exams() {
                 )}
               </p>
 
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                {[
-                  { label: tr("إجمالي الامتحانات", "Total Exams"), value: exams.length },
-                  { label: tr("المعروض الآن", "Currently Shown"), value: filtered.length },
-                  { label: tr("قاعات الربط", "Assigned Rooms"), value: examRoomAssignments.length },
-                ].map((item) => (
-                  <div
-                    key={item.label}
-                    style={{
-                      border: "1px solid rgba(255,255,255,0.08)",
-                      background: "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
-                      borderRadius: 18,
-                      padding: "12px 14px",
-                      minWidth: 190,
-                      boxShadow: "0 14px 28px rgba(0,0,0,0.22)",
-                    }}
-                  >
-                    <div style={{ fontSize: 12, color: "rgba(255,241,196,0.64)", fontWeight: 800 }}>{item.label}</div>
-                    <div style={{ marginTop: 6, fontSize: 16, color: "#fff8dc", fontWeight: 900 }}>{item.value}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div
-              style={{
-                minWidth: 300,
-                maxWidth: 390,
-                width: "100%",
-                border: "1px solid rgba(255,255,255,0.08)",
-                borderRadius: 28,
-                padding: 22,
-                background: "linear-gradient(180deg, rgba(212,175,55,0.08), rgba(255,255,255,0.02))",
-                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
-                display: "grid",
-                gap: 16,
-              }}
-            >
-              <div
-                style={{
-                  display: "inline-flex",
-                  width: "fit-content",
-                  padding: "8px 12px",
-                  borderRadius: 999,
-                  background: filtered.length ? "rgba(16,185,129,0.14)" : "rgba(245,158,11,0.14)",
-                  border: filtered.length ? "1px solid rgba(16,185,129,0.24)" : "1px solid rgba(245,158,11,0.24)",
-                  color: filtered.length ? "#a7f3d0" : "#fde68a",
-                  fontWeight: 900,
-                  fontSize: 12,
-                }}
-              >
-                {filtered.length ? tr("الجدول جاهز للإدارة والاستعراض", "The table is ready for management and review") : tr("لا توجد بيانات معروضة حاليًا", "No data is currently displayed")}
-              </div>
-
-              <div style={{ fontSize: 28, lineHeight: 1.5, fontWeight: 950, color: "#fff1c4" }}>
-                {tr("واجهة أكثر فخامة ووضوحًا لإدارة جدول الامتحانات وربط القاعات.", "A more premium and clearer interface for managing the exams schedule and room assignments.")}
-              </div>
-
-              <div style={{ fontSize: 14, lineHeight: 1.95, color: "rgba(255,241,196,0.78)" }}>
-                {tr(
-                  "تم تطوير الصفحة لتمنح المستخدم انطباعًا قويًا من أول لحظة، مع تسلسل بصري أنيق بين الإدخال والاستيراد والبحث والجدول وعمليات الربط.",
-                  "This page was designed to give the user a strong impression from the first moment, with an elegant visual flow between entry, import, search, table display, and assignment operations."
-                )}
-              </div>
             </div>
           </div>
         </div>
