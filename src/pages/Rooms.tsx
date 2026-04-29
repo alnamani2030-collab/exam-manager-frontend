@@ -9,7 +9,7 @@ import type { Room } from "../services/rooms.service";
 import type { RoomBlock } from "../services/roomBlocks.service";
 
 
-const ROOMS_BORDER_COLORS = [
+const ROOMS12_BORDER_COLORS = [
   "#2563eb",
   "#16a34a",
   "#dc2626",
@@ -22,14 +22,11 @@ const ROOMS_BORDER_COLORS = [
   "#059669",
 ];
 
-const roomsBorderColor = (index: number) =>
-  ROOMS_BORDER_COLORS[Math.abs(index) % ROOMS_BORDER_COLORS.length];
+const rooms12BorderColor = (index: number) =>
+  ROOMS12_BORDER_COLORS[Math.abs(index) % ROOMS12_BORDER_COLORS.length];
 
-const roomsColoredBorder = (index: number) =>
-  `3px solid ${roomsBorderColor(index)}`;
-
-const roomsCellBorder = (rowIndex: number, cellIndex: number) =>
-  `2px solid ${roomsBorderColor(rowIndex + cellIndex)}`;
+const rooms12ColoredBorder = (index: number) =>
+  `3px solid ${rooms12BorderColor(index)}`;
 
 const APP_NAME = "";
 
@@ -917,67 +914,177 @@ export default function Rooms() {
   }
 
   return (
-    <div style={pageStyle} ref={topRef} className="rooms12PageRoot roomsColoredBordersScope roomsColoredBlackTextScope">
+    <div style={pageStyle} ref={topRef} className="rooms12PageRoot rooms12ColoredBordersScope rooms12BlackTextScope rooms12ForceBlackText rooms12NoBlackTableCellsScope">
       <style>{`
-        .roomsColoredBlackTextScope,
-        .roomsColoredBlackTextScope * {
+        .rooms12NoBlackTableCellsScope table,
+        .rooms12NoBlackTableCellsScope table tbody,
+        .rooms12NoBlackTableCellsScope table tr,
+        .rooms12NoBlackTableCellsScope table th,
+        .rooms12NoBlackTableCellsScope table td {
+          background: #fffdf7 !important;
+          color: #000000 !important;
+          -webkit-text-fill-color: #000000 !important;
+          text-shadow: none !important;
+          font-weight: 900 !important;
+        }
+
+        .rooms12NoBlackTableCellsScope table th {
+          background: linear-gradient(180deg, #fff4c4 0%, #ead077 100%) !important;
+        }
+
+        .rooms12NoBlackTableCellsScope table td *,
+        .rooms12NoBlackTableCellsScope table th * {
+          color: #000000 !important;
+          -webkit-text-fill-color: #000000 !important;
+          text-shadow: none !important;
+          font-weight: 900 !important;
+        }
+
+        .rooms12NoBlackTableCellsScope table td div,
+        .rooms12NoBlackTableCellsScope table td span,
+        .rooms12NoBlackTableCellsScope table td button,
+        .rooms12NoBlackTableCellsScope table td [style*="background"],
+        .rooms12NoBlackTableCellsScope table td [style*="#0"],
+        .rooms12NoBlackTableCellsScope table td [style*="rgba(15"],
+        .rooms12NoBlackTableCellsScope table td [style*="rgba(30"],
+        .rooms12NoBlackTableCellsScope table td [style*="rgba(2"] {
+          background: #fffdf7 !important;
+          color: #000000 !important;
+          -webkit-text-fill-color: #000000 !important;
+          box-shadow: none !important;
+          text-shadow: none !important;
+        }
+
+        .rooms12NoBlackTableCellsScope table td button {
+          background: linear-gradient(180deg, #dbeafe 0%, #93c5fd 100%) !important;
+          border: 2px solid #2563eb !important;
+          border-radius: 18px !important;
+        }
+
+        .rooms12NoBlackTableCellsScope table th,
+        .rooms12NoBlackTableCellsScope table td {
+          border-width: 2px !important;
+          border-style: solid !important;
+        }
+
+        .rooms12NoBlackTableCellsScope table th:nth-child(10n + 1),
+        .rooms12NoBlackTableCellsScope table td:nth-child(10n + 1) { border-color: #2563eb !important; }
+
+        .rooms12NoBlackTableCellsScope table th:nth-child(10n + 2),
+        .rooms12NoBlackTableCellsScope table td:nth-child(10n + 2) { border-color: #16a34a !important; }
+
+        .rooms12NoBlackTableCellsScope table th:nth-child(10n + 3),
+        .rooms12NoBlackTableCellsScope table td:nth-child(10n + 3) { border-color: #dc2626 !important; }
+
+        .rooms12NoBlackTableCellsScope table th:nth-child(10n + 4),
+        .rooms12NoBlackTableCellsScope table td:nth-child(10n + 4) { border-color: #9333ea !important; }
+
+        .rooms12NoBlackTableCellsScope table th:nth-child(10n + 5),
+        .rooms12NoBlackTableCellsScope table td:nth-child(10n + 5) { border-color: #ea580c !important; }
+
+        .rooms12NoBlackTableCellsScope table th:nth-child(10n + 6),
+        .rooms12NoBlackTableCellsScope table td:nth-child(10n + 6) { border-color: #0891b2 !important; }
+
+        .rooms12NoBlackTableCellsScope table th:nth-child(10n + 7),
+        .rooms12NoBlackTableCellsScope table td:nth-child(10n + 7) { border-color: #4f46e5 !important; }
+
+        .rooms12NoBlackTableCellsScope table th:nth-child(10n + 8),
+        .rooms12NoBlackTableCellsScope table td:nth-child(10n + 8) { border-color: #db2777 !important; }
+
+        .rooms12NoBlackTableCellsScope table th:nth-child(10n + 9),
+        .rooms12NoBlackTableCellsScope table td:nth-child(10n + 9) { border-color: #ca8a04 !important; }
+
+        .rooms12NoBlackTableCellsScope table th:nth-child(10n + 10),
+        .rooms12NoBlackTableCellsScope table td:nth-child(10n + 10) { border-color: #059669 !important; }
+      `}</style>
+
+
+      <style>{`
+        .rooms12ForceBlackText,
+        .rooms12ForceBlackText * {
           color: #000000 !important;
           text-shadow: none !important;
         }
 
-        .roomsColoredBlackTextScope h1,
-        .roomsColoredBlackTextScope h2,
-        .roomsColoredBlackTextScope h3,
-        .roomsColoredBlackTextScope h4,
-        .roomsColoredBlackTextScope p,
-        .roomsColoredBlackTextScope div,
-        .roomsColoredBlackTextScope span,
-        .roomsColoredBlackTextScope label,
-        .roomsColoredBlackTextScope button,
-        .roomsColoredBlackTextScope input,
-        .roomsColoredBlackTextScope select,
-        .roomsColoredBlackTextScope textarea,
-        .roomsColoredBlackTextScope option,
-        .roomsColoredBlackTextScope th,
-        .roomsColoredBlackTextScope td,
-        .roomsColoredBlackTextScope strong,
-        .roomsColoredBlackTextScope b {
+        .rooms12ForceBlackText h1,
+        .rooms12ForceBlackText h2,
+        .rooms12ForceBlackText h3,
+        .rooms12ForceBlackText h4,
+        .rooms12ForceBlackText p,
+        .rooms12ForceBlackText div,
+        .rooms12ForceBlackText span,
+        .rooms12ForceBlackText label,
+        .rooms12ForceBlackText button,
+        .rooms12ForceBlackText input,
+        .rooms12ForceBlackText select,
+        .rooms12ForceBlackText textarea,
+        .rooms12ForceBlackText option,
+        .rooms12ForceBlackText th,
+        .rooms12ForceBlackText td,
+        .rooms12ForceBlackText strong,
+        .rooms12ForceBlackText b {
           color: #000000 !important;
           font-weight: 900 !important;
           text-shadow: none !important;
         }
 
-        .roomsColoredBlackTextScope table th:nth-child(10n + 1),
-        .roomsColoredBlackTextScope table td:nth-child(10n + 1) { border-color: #2563eb !important; }
-        .roomsColoredBlackTextScope table th:nth-child(10n + 2),
-        .roomsColoredBlackTextScope table td:nth-child(10n + 2) { border-color: #16a34a !important; }
-        .roomsColoredBlackTextScope table th:nth-child(10n + 3),
-        .roomsColoredBlackTextScope table td:nth-child(10n + 3) { border-color: #dc2626 !important; }
-        .roomsColoredBlackTextScope table th:nth-child(10n + 4),
-        .roomsColoredBlackTextScope table td:nth-child(10n + 4) { border-color: #9333ea !important; }
-        .roomsColoredBlackTextScope table th:nth-child(10n + 5),
-        .roomsColoredBlackTextScope table td:nth-child(10n + 5) { border-color: #ea580c !important; }
+        .rooms12ForceBlackText [style*="#d4af37"],
+        .rooms12ForceBlackText [style*="#D4AF37"],
+        .rooms12ForceBlackText [style*="gold"],
+        .rooms12ForceBlackText [style*="rgb(212, 175, 55)"] {
+          color: #000000 !important;
+          font-weight: 900 !important;
+          text-shadow: none !important;
+        }
+      `}</style>
 
-        .roomsColoredBlackTextScope table th,
-        .roomsColoredBlackTextScope table td {
-          border-width: 2px !important;
-          border-style: solid !important;
+
+      <style>{`
+        .rooms12BlackTextScope,
+        .rooms12BlackTextScope * {
+          color: #000000 !important;
+          text-shadow: none !important;
+        }
+
+        .rooms12BlackTextScope button,
+        .rooms12BlackTextScope input,
+        .rooms12BlackTextScope select,
+        .rooms12BlackTextScope textarea,
+        .rooms12BlackTextScope option,
+        .rooms12BlackTextScope label,
+        .rooms12BlackTextScope th,
+        .rooms12BlackTextScope td,
+        .rooms12BlackTextScope div,
+        .rooms12BlackTextScope span,
+        .rooms12BlackTextScope p,
+        .rooms12BlackTextScope h1,
+        .rooms12BlackTextScope h2,
+        .rooms12BlackTextScope h3 {
+          color: #000000 !important;
+          font-weight: 800;
+        }
+
+        .rooms12BlackTextScope th,
+        .rooms12BlackTextScope td {
+          color: #000000 !important;
+          font-weight: 800;
         }
       `}</style>
 
       <style>{`
-        .roomsColoredBordersScope table th:nth-child(10n + 1),
-        .roomsColoredBordersScope table td:nth-child(10n + 1) { border-color: #2563eb !important; }
-        .roomsColoredBordersScope table th:nth-child(10n + 2),
-        .roomsColoredBordersScope table td:nth-child(10n + 2) { border-color: #16a34a !important; }
-        .roomsColoredBordersScope table th:nth-child(10n + 3),
-        .roomsColoredBordersScope table td:nth-child(10n + 3) { border-color: #dc2626 !important; }
-        .roomsColoredBordersScope table th:nth-child(10n + 4),
-        .roomsColoredBordersScope table td:nth-child(10n + 4) { border-color: #9333ea !important; }
-        .roomsColoredBordersScope table th:nth-child(10n + 5),
-        .roomsColoredBordersScope table td:nth-child(10n + 5) { border-color: #ea580c !important; }
-        .roomsColoredBordersScope table th,
-        .roomsColoredBordersScope table td {
+        .rooms12ColoredBordersScope table th:nth-child(10n + 1),
+        .rooms12ColoredBordersScope table td:nth-child(10n + 1) { border-color: #2563eb !important; }
+        .rooms12ColoredBordersScope table th:nth-child(10n + 2),
+        .rooms12ColoredBordersScope table td:nth-child(10n + 2) { border-color: #16a34a !important; }
+        .rooms12ColoredBordersScope table th:nth-child(10n + 3),
+        .rooms12ColoredBordersScope table td:nth-child(10n + 3) { border-color: #dc2626 !important; }
+        .rooms12ColoredBordersScope table th:nth-child(10n + 4),
+        .rooms12ColoredBordersScope table td:nth-child(10n + 4) { border-color: #9333ea !important; }
+        .rooms12ColoredBordersScope table th:nth-child(10n + 5),
+        .rooms12ColoredBordersScope table td:nth-child(10n + 5) { border-color: #ea580c !important; }
+
+        .rooms12ColoredBordersScope table th,
+        .rooms12ColoredBordersScope table td {
           border-width: 2px !important;
           border-style: solid !important;
         }
@@ -1276,13 +1383,13 @@ export default function Rooms() {
                       historyBlocks.map((block, index) => (
                         <tr key={block.id}>
                           <td style={{ border: "2px solid #db2777",  padding: 10, borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#e6c76a" }}>{block.reason}</td>
-                          <td style={{ border: "2px solid #2563eb",  padding: 10, borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#e6c76a" }}>{block.reasonType}</td>
-                          <td style={{ border: "2px solid #16a34a",  padding: 10, borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#e6c76a" }}>{block.startDate}</td>
-                          <td style={{ border: "2px solid #dc2626",  padding: 10, borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#e6c76a" }}>{block.endDate}</td>
-                          <td style={{ border: "2px solid #9333ea",  padding: 10, borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#e6c76a" }}>
+                          <td style={{ border: "2px solid #ca8a04",  padding: 10, borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#e6c76a" }}>{block.reasonType}</td>
+                          <td style={{ border: "2px solid #059669",  padding: 10, borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#e6c76a" }}>{block.startDate}</td>
+                          <td style={{ border: "2px solid #2563eb",  padding: 10, borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#e6c76a" }}>{block.endDate}</td>
+                          <td style={{ border: "2px solid #16a34a",  padding: 10, borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#e6c76a" }}>
                             {block.session === "full-day" ? tr("اليوم كامل", "Full Day") : block.session === "الفترة الأولى" ? tr("الفترة الأولى", "First Period") : tr("الفترة الثانية", "Second Period")}
                           </td>
-                          <td style={{ border: "2px solid #ea580c",  padding: 10, borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#e6c76a" }}>
+                          <td style={{ border: "2px solid #dc2626",  padding: 10, borderBottom: "1px solid rgba(255,255,255,0.06)", color: "#e6c76a" }}>
                             {block.status === "active" ? tr("نشط", "Active") : block.status === "expired" ? tr("منتهي", "Expired") : tr("ملغي", "Cancelled")}
                           </td>
                         </tr>
