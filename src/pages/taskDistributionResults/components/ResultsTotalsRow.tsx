@@ -1,11 +1,19 @@
 import React from "react";
-import { useI18n } from "../../../i18n/I18nProvider";
-import type { SubCol } from "./TeacherRow";
+
+type TotalsDetail = {
+  inv?: number;
+  res?: number;
+  corr?: number;
+  total?: number;
+  deficit?: number;
+  committees?: number;
+  required?: number;
+};
 
 type Props = {
-  allSubCols: SubCol[];
-  totalsDetailBySubCol: Record<string, { inv: number; res: number; corr: number; total: number; deficit: number; committees: number; required?: number }>;
-  committeesCountBySubCol: Record<string, number>;
+  allSubCols: Array<{ key: string }>;
+  totalsDetailBySubCol: Record<string, TotalsDetail>;
+  committeesCountBySubCol?: Record<string, number>;
   styles: {
     tableFontSize: string;
     goldLine: string;
@@ -14,80 +22,91 @@ type Props = {
   showTeacherSidebar?: boolean;
 };
 
-export function ResultsTotalsRow({ allSubCols, totalsDetailBySubCol, committeesCountBySubCol, styles, showTeacherSidebar = true }: Props) {
-  const { lang } = useI18n();
-  const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
+const metricRowStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1fr auto",
+  alignItems: "center",
+  gap: 12,
+  lineHeight: 1.9,
+};
 
+function Metric({ label, value, className }: { label: string; value: number; className: string }) {
   return (
-    <tr>
+    <div className={className} style={metricRowStyle}>
+      <span className="results-total-metric-label">{label}</span>
+      <span className="results-total-metric-value">{Number(value || 0)}</span>
+    </div>
+  );
+}
+
+export function ResultsTotalsRow({ allSubCols, totalsDetailBySubCol, styles, showTeacherSidebar = true }: Props) {
+  return (
+    <tr className="results-table-total-row">
       {showTeacherSidebar ? (
         <td
           style={{
             position: "sticky",
             right: 0,
-            zIndex: 50,
-            padding: "10px 12px",
-            color: "#111827",
-            fontWeight: 900,
-            fontSize: styles.tableFontSize,
-            background: `linear-gradient(180deg, rgba(251,191,36,0.95), rgba(184,134,11,0.95))`,
-            borderTop: `1px solid ${styles.goldLineSoft}`,
-            borderLeft: `10px solid ${styles.goldLine}`,
-            boxShadow: "-14px 0 28px rgba(0,0,0,0.55)",
+            zIndex: 4,
+            borderRadius: 16,
+            padding: "14px 18px",
+            textAlign: "center",
+            fontSize: "20px",
+            fontWeight: 1000,
+            color: "#7c2d12",
+            background: "linear-gradient(135deg, rgba(255,237,213,.98), rgba(251,146,60,.50))",
+            border: "6px solid #9a5310",
+            boxShadow: "0 0 24px rgba(154,83,15,.65)",
             whiteSpace: "nowrap",
           }}
         >
-          {tr("الإجمالي (تفصيل لكل مادة)", "Total (details per subject)")}
+          الإجمالي
         </td>
       ) : null}
 
-      {allSubCols.map((sc, idx) => {
-        const d = totalsDetailBySubCol[sc.key] || {
-          inv: 0,
-          res: 0,
-          corr: 0,
-          total: 0,
-          deficit: 0,
-          committees: committeesCountBySubCol[sc.key] ?? 0,
-        };
-        const isDayStart = idx === 0 || allSubCols[idx - 1]?.dateISO !== sc.dateISO;
+      {allSubCols.map((sc) => {
+        const d = totalsDetailBySubCol?.[sc.key] || {};
+        const inv = Number(d.inv || 0);
+        const res = Number(d.res || 0);
+        const corr = Number(d.corr || 0);
+        const total = Number(d.total ?? inv + res + corr);
+        const deficit = Number(d.deficit || 0);
 
         return (
           <td
-            key={`${sc.key}__total`}
+            key={sc.key}
             style={{
-              padding: "10px 10px",
-              borderLeft: isDayStart ? `10px solid ${styles.goldLine}` : `3px solid ${styles.goldLine}`,
-              borderTop: `1px solid ${styles.goldLineSoft}`,
-              background: "rgba(251,191,36,0.10)",
-              textAlign: "center",
-              verticalAlign: "middle",
-              color: "#fff",
-              fontWeight: 900,
-              boxShadow: isDayStart ? `inset 10px 0 0 rgba(212,175,55,0.14)` : undefined,
+              borderRadius: 16,
+              padding: "14px 18px",
+              fontSize: "18px",
+              fontWeight: 1000,
+              background: "linear-gradient(135deg, rgba(255,237,213,.98), rgba(251,146,60,.42))",
+              border: "6px solid #9a5310",
+              boxShadow: "0 0 24px rgba(154,83,15,.65)",
+              minWidth: 260,
             }}
           >
-            <div style={{ lineHeight: 1.65, fontSize: 13 }}>
-              <div>{tr("مراقبة", "Invigilation")}: {d.inv}</div>
-              <div>{tr("احتياط", "Reserve")}: {d.res}</div>
-              <div>{tr("تصحيح", "Correction")}: {d.corr}</div>
-              <div style={{ marginTop: 6, opacity: 0.95 }}>{tr("المجموع", "Total")}: {d.total}</div>
-              <div style={{ marginTop: 4, color: d.deficit > 0 ? "#fecaca" : "#bbf7d0" }}>{tr("العجز", "Deficit")}: {d.deficit}</div>
-            </div>
+            <Metric label="مراقبة" value={inv} className="results-total-metric-inv" />
+            <Metric label="احتياط" value={res} className="results-total-metric-res" />
+            <Metric label="تصحيح" value={corr} className="results-total-metric-corr" />
+            <Metric label="المجموع" value={total} className="results-total-metric-total" />
+            <Metric label="العجز" value={deficit} className="results-total-metric-deficit" />
           </td>
         );
       })}
 
       <td
         style={{
-          padding: "10px 10px",
-          borderLeft: `3px solid ${styles.goldLine}`,
-          borderTop: `1px solid ${styles.goldLineSoft}`,
-          background: "rgba(251,191,36,0.18)",
+          borderRadius: 16,
+          padding: "14px 18px",
           textAlign: "center",
-          color: "#fff",
-          fontWeight: 900,
-          minWidth: 140,
+          fontSize: "20px",
+          fontWeight: 1000,
+          color: "#7c2d12",
+          background: "linear-gradient(135deg, rgba(255,237,213,.98), rgba(251,146,60,.50))",
+          border: "6px solid #9a5310",
+          boxShadow: "0 0 24px rgba(154,83,15,.65)",
+          whiteSpace: "nowrap",
         }}
       >
         —
