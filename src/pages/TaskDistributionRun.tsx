@@ -3385,19 +3385,44 @@ export default function TaskDistributionRun() {
     return arr;
   }, [fairnessRowsBase, fairnessQuery, sortMode]);
 
-  // ====== UI constants (كما هي) ======
-  const DARK_BLUE = "#0b1b3a";
-  const DARK_BLUE_2 = "#0a1630";
-  const GOLD_2 = "#c9a227"; // Dark gold
-const GOLD_SUB = "rgba(201,162,39,0.75)";
-  const LINE = "rgba(201,162,39,.18)";
+  // ====== UI constants - Light colored theme
+  const DARK_BLUE = "#fff7d6";
+  const DARK_BLUE_2 = "#fff1bd";
+  const GOLD_2 = "#000000"; // black bold text replacing all previous gold text
+const GOLD_SUB = "rgba(0,0,0,0.82)";
+  const LINE = "rgba(184,134,11,.42)";
+  const CARD_BORDERS = [
+    "rgba(37,99,235,.75)",
+    "rgba(22,163,74,.75)",
+    "rgba(220,38,38,.70)",
+    "rgba(147,51,234,.70)",
+    "rgba(234,88,12,.75)",
+    "rgba(8,145,178,.75)",
+  ];
+  const CELL_BORDERS = [
+    "rgba(37,99,235,.55)",
+    "rgba(22,163,74,.55)",
+    "rgba(220,38,38,.50)",
+    "rgba(147,51,234,.50)",
+    "rgba(234,88,12,.55)",
+    "rgba(8,145,178,.55)",
+  ];
+  const BUTTON_GRADIENTS = [
+    "linear-gradient(135deg,#dbeafe,#93c5fd)",
+    "linear-gradient(135deg,#dcfce7,#86efac)",
+    "linear-gradient(135deg,#fee2e2,#fca5a5)",
+    "linear-gradient(135deg,#f3e8ff,#c4b5fd)",
+    "linear-gradient(135deg,#ffedd5,#fdba74)",
+    "linear-gradient(135deg,#cffafe,#67e8f9)",
+  ];
 
   const page: React.CSSProperties = {
     color: GOLD_2,
+    fontWeight: 900,
     direction: isRTL ? "rtl" : "ltr",
     minHeight: "100vh",
     background:
-      "radial-gradient(circle at top, rgba(201,162,39,0.12), transparent 24%), radial-gradient(circle at 88% 18%, rgba(59,130,246,0.10), transparent 24%), linear-gradient(180deg, #07101f 0%, #0a1020 42%, #060b16 100%)",
+      "radial-gradient(circle at top, rgba(245,158,11,0.20), transparent 26%), radial-gradient(circle at 88% 18%, rgba(59,130,246,0.12), transparent 24%), linear-gradient(180deg, #fffdf2 0%, #fff7d6 46%, #fff3c4 100%)",
     padding: 18,
     boxSizing: "border-box",
     position: "relative",
@@ -3412,7 +3437,7 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
     alignItems: "center",
     justifyContent: "space-between",
     gap: 14,
-    boxShadow: "0 18px 50px rgba(0,0,0,.45)",
+    boxShadow: "0 18px 36px rgba(146,101,0,.14)",
     border: `1px solid ${LINE}`,
   };
 
@@ -3425,8 +3450,8 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
 
   const hBtn: React.CSSProperties = {
     border: `1px solid ${LINE}`,
-    background: "rgba(255,255,255,.06)",
-    color: GOLD_2,
+    background: BUTTON_GRADIENTS[0],
+    color: "#1f2937",
     borderRadius: 14,
     padding: "10px 14px",
     fontWeight: 950,
@@ -3438,8 +3463,8 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
 
   const btnMini: React.CSSProperties = {
     border: `1px solid ${LINE}`,
-    background: "rgba(255,255,255,.10)",
-    color: GOLD_2,
+    background: BUTTON_GRADIENTS[1],
+    color: "#1f2937",
     borderRadius: 14,
     padding: "10px 14px",
     fontWeight: 950,
@@ -3475,7 +3500,7 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
     opacity: 0.9,
     fontWeight: 800,
     marginTop: 2,
-    color: "rgba(201,162,39,.85)",
+    color: "#000000",
     fontSize: 12,
   };
 
@@ -3487,11 +3512,11 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
   };
 
   const card: React.CSSProperties = {
-    background: `linear-gradient(180deg, ${DARK_BLUE}, ${DARK_BLUE_2})`,
+    background: "linear-gradient(180deg,#fff8da,#fff1bd)",
     borderRadius: 20,
     padding: 16,
-    boxShadow: "0 12px 35px rgba(0,0,0,.45)",
-    border: `1px solid ${LINE}`,
+    boxShadow: "0 14px 30px rgba(146,101,0,.14)",
+    border: `2px solid ${CARD_BORDERS[0]}`,
     color: GOLD_2,
   };
 
@@ -3505,7 +3530,7 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
   const cardTitle: React.CSSProperties = { fontWeight: 950, color: GOLD_2, fontSize: 16 };
   const cardSub: React.CSSProperties = {
     marginTop: 4,
-    color: "rgba(201,162,39,.80)",
+    color: "#000000",
     fontWeight: 800,
     fontSize: 12,
   };
@@ -3520,7 +3545,7 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
   };
 
   const label: React.CSSProperties = { color: GOLD_2, fontWeight: 950, fontSize: 13 };
-  const note: React.CSSProperties = { color: "rgba(201,162,39,.82)", fontWeight: 800, fontSize: 12, marginTop: 2 };
+  const note: React.CSSProperties = { color: "#000000", fontWeight: 950, fontSize: 12, marginTop: 2 };
 
   const toggle: React.CSSProperties = {
     width: 56,
@@ -3551,15 +3576,15 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
     fontWeight: 950,
     fontSize: 12,
     border: `1px solid ${LINE}`,
-    background: "rgba(255,255,255,.06)",
-    color: GOLD_2,
+    background: BUTTON_GRADIENTS[0],
+    color: "#1f2937",
     whiteSpace: "nowrap",
   };
 
   const miniBtn: React.CSSProperties = {
     border: `1px solid ${LINE}`,
-    background: "rgba(255,255,255,.06)",
-    color: GOLD_2,
+    background: BUTTON_GRADIENTS[0],
+    color: "#1f2937",
     borderRadius: 12,
     padding: "8px 12px",
     fontWeight: 950,
@@ -3573,8 +3598,8 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
     border: `1px solid ${LINE}`,
     outline: "none",
     fontWeight: 950,
-    color: GOLD_2,
-    background: "rgba(255,255,255,.06)",
+    color: "#1f2937",
+    background: "linear-gradient(180deg,#ffffff,#fff7d6)",
     textAlign: "center",
   };
 
@@ -3588,8 +3613,8 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
     fontWeight: 950,
     fontSize: 18,
     color: GOLD_2,
-    background: `linear-gradient(135deg, ${DARK_BLUE}, ${DARK_BLUE_2})`,
-    boxShadow: "0 18px 45px rgba(0,0,0,.45)",
+    background: BUTTON_GRADIENTS[2],
+    boxShadow: "0 14px 34px rgba(146,101,0,.18)",
   };
 
   const errorsBox: React.CSSProperties = { marginTop: 12, display: "grid", gap: 8 };
@@ -3606,7 +3631,7 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
   const warnChip: React.CSSProperties = {
     background: "rgba(245,158,11,.12)",
     border: "1px solid rgba(245,158,11,.28)",
-    color: "#fde68a",
+    color: "#000000",
     borderRadius: 14,
     padding: "10px 12px",
     fontWeight: 900,
@@ -3614,11 +3639,11 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
 
   const fairnessWrap: React.CSSProperties = {
     marginTop: 18,
-    background: `linear-gradient(180deg, ${DARK_BLUE}, ${DARK_BLUE_2})`,
+    background: "linear-gradient(180deg,#fff8da,#fff1bd)",
     borderRadius: 20,
     overflow: "hidden",
-    boxShadow: "0 12px 35px rgba(0,0,0,.45)",
-    border: `1px solid ${LINE}`,
+    boxShadow: "0 14px 30px rgba(146,101,0,.14)",
+    border: `2px solid ${CARD_BORDERS[1]}`,
     color: GOLD_2,
   };
 
@@ -3635,7 +3660,7 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
   const fairnessSub: React.CSSProperties = {
     fontWeight: 800,
     fontSize: 12,
-    color: "rgba(201,162,39,.82)",
+    color: "#000000",
     marginTop: 4,
   };
 
@@ -3648,18 +3673,25 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
     padding: "14px 10px",
     fontWeight: 950,
     fontSize: 13,
-    background: "rgba(255,255,255,.04)",
-    color: GOLD_2,
-    borderBottom: `1px solid ${LINE}`,
+    background: "linear-gradient(180deg,#dbeafe,#bfdbfe)",
+    color: "#000000",
+    borderTop: `3px solid ${CELL_BORDERS[0]}`,
+    borderBottom: `3px solid ${CELL_BORDERS[1]}`,
+    borderInlineStart: `3px solid ${CELL_BORDERS[2]}`,
+    borderInlineEnd: `3px solid ${CELL_BORDERS[3]}`,
     zIndex: 2,
   };
 
   const td2: React.CSSProperties = {
     textAlign: "center",
     padding: "16px 10px",
-    borderTop: `1px solid ${LINE}`,
-    fontWeight: 900,
-    color: GOLD_2,
+    borderTop: `3px solid ${CELL_BORDERS[1]}`,
+    borderBottom: `3px solid ${CELL_BORDERS[4]}`,
+    borderInlineStart: `3px solid ${CELL_BORDERS[3]}`,
+    borderInlineEnd: `3px solid ${CELL_BORDERS[2]}`,
+    fontWeight: 950,
+    color: "#000000",
+    background: "linear-gradient(180deg,#fffef7,#fff4c9)",
   };
 
   const totalBadge: React.CSSProperties = {
@@ -3669,9 +3701,9 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    background: "rgba(201,162,39,.18)",
-    border: `1px solid ${LINE}`,
-    color: GOLD_2,
+    background: "linear-gradient(135deg,#fef3c7,#fde68a)",
+    border: `2px solid ${CELL_BORDERS[4]}`,
+    color: "#1f2937",
     boxShadow: "0 10px 20px rgba(0,0,0,.25)",
   };
 
@@ -3681,10 +3713,10 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
     gap: 8,
     padding: "8px 12px",
     borderRadius: 999,
-    background: "rgba(255,255,255,.06)",
-    border: `1px solid ${LINE}`,
+    background: "linear-gradient(135deg,#ecfeff,#cffafe)",
+    border: `2px solid ${CELL_BORDERS[5]}`,
     fontWeight: 900,
-    color: GOLD_2,
+    color: "#164e63",
   };
 
   const fairnessTableScroll: React.CSSProperties = {
@@ -3753,7 +3785,108 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
   const correctionByTeacher: any[] = Array.isArray(debug?.correctionByTeacher) ? debug.correctionByTeacher : [];
 
   return (
-    <div style={page}>
+    <div style={page} className="task-run-black-text-scope">
+
+      <style>{`
+        .task-run-black-text-scope,
+        .task-run-black-text-scope * {
+          color: #000000 !important;
+          font-weight: 900;
+        }
+        .task-run-black-text-scope table th,
+        .task-run-black-text-scope table td {
+          color: #000000 !important;
+          font-weight: 950 !important;
+          border-style: solid !important;
+          border-width: 3px !important;
+        }
+        .task-run-black-text-scope table th:nth-child(6n+1),
+        .task-run-black-text-scope table td:nth-child(6n+1) { border-color: rgba(37,99,235,.80) !important; }
+        .task-run-black-text-scope table th:nth-child(6n+2),
+        .task-run-black-text-scope table td:nth-child(6n+2) { border-color: rgba(22,163,74,.80) !important; }
+        .task-run-black-text-scope table th:nth-child(6n+3),
+        .task-run-black-text-scope table td:nth-child(6n+3) { border-color: rgba(220,38,38,.78) !important; }
+        .task-run-black-text-scope table th:nth-child(6n+4),
+        .task-run-black-text-scope table td:nth-child(6n+4) { border-color: rgba(147,51,234,.78) !important; }
+        .task-run-black-text-scope table th:nth-child(6n+5),
+        .task-run-black-text-scope table td:nth-child(6n+5) { border-color: rgba(234,88,12,.82) !important; }
+        .task-run-black-text-scope table th:nth-child(6n+6),
+        .task-run-black-text-scope table td:nth-child(6n+6) { border-color: rgba(8,145,178,.82) !important; }
+
+        /* ألوان مختلفة للأزرار بدون تغيير منطق الكود */
+        .task-run-black-text-scope button {
+          color: #000000 !important;
+          font-weight: 950 !important;
+          border-width: 2px !important;
+          border-style: solid !important;
+          box-shadow: 0 10px 22px rgba(15,23,42,.12) !important;
+        }
+        .task-run-black-text-scope button:nth-of-type(6n+1) {
+          background: linear-gradient(135deg,#dbeafe,#93c5fd) !important;
+          border-color: rgba(37,99,235,.85) !important;
+        }
+        .task-run-black-text-scope button:nth-of-type(6n+2) {
+          background: linear-gradient(135deg,#dcfce7,#86efac) !important;
+          border-color: rgba(22,163,74,.85) !important;
+        }
+        .task-run-black-text-scope button:nth-of-type(6n+3) {
+          background: linear-gradient(135deg,#fee2e2,#fca5a5) !important;
+          border-color: rgba(220,38,38,.82) !important;
+        }
+        .task-run-black-text-scope button:nth-of-type(6n+4) {
+          background: linear-gradient(135deg,#f3e8ff,#c4b5fd) !important;
+          border-color: rgba(147,51,234,.82) !important;
+        }
+        .task-run-black-text-scope button:nth-of-type(6n+5) {
+          background: linear-gradient(135deg,#ffedd5,#fdba74) !important;
+          border-color: rgba(234,88,12,.85) !important;
+        }
+        .task-run-black-text-scope button:nth-of-type(6n+6) {
+          background: linear-gradient(135deg,#cffafe,#67e8f9) !important;
+          border-color: rgba(8,145,178,.85) !important;
+        }
+
+        /* ألوان مختلفة للأيقونات */
+        .task-run-black-text-scope svg,
+        .task-run-black-text-scope [class*="icon"],
+        .task-run-black-text-scope [class*="Icon"] {
+          color: #2563eb !important;
+          stroke: currentColor !important;
+          fill: none;
+        }
+        .task-run-black-text-scope button:nth-of-type(6n+1) svg { color: #1d4ed8 !important; }
+        .task-run-black-text-scope button:nth-of-type(6n+2) svg { color: #15803d !important; }
+        .task-run-black-text-scope button:nth-of-type(6n+3) svg { color: #b91c1c !important; }
+        .task-run-black-text-scope button:nth-of-type(6n+4) svg { color: #7e22ce !important; }
+        .task-run-black-text-scope button:nth-of-type(6n+5) svg { color: #c2410c !important; }
+        .task-run-black-text-scope button:nth-of-type(6n+6) svg { color: #0e7490 !important; }
+
+        /* خلفيات وحدود مختلفة لخلايا الجداول */
+        .task-run-black-text-scope table th:nth-child(6n+1),
+        .task-run-black-text-scope table td:nth-child(6n+1) {
+          background: linear-gradient(180deg,#eff6ff,#dbeafe) !important;
+        }
+        .task-run-black-text-scope table th:nth-child(6n+2),
+        .task-run-black-text-scope table td:nth-child(6n+2) {
+          background: linear-gradient(180deg,#f0fdf4,#dcfce7) !important;
+        }
+        .task-run-black-text-scope table th:nth-child(6n+3),
+        .task-run-black-text-scope table td:nth-child(6n+3) {
+          background: linear-gradient(180deg,#fff1f2,#ffe4e6) !important;
+        }
+        .task-run-black-text-scope table th:nth-child(6n+4),
+        .task-run-black-text-scope table td:nth-child(6n+4) {
+          background: linear-gradient(180deg,#faf5ff,#f3e8ff) !important;
+        }
+        .task-run-black-text-scope table th:nth-child(6n+5),
+        .task-run-black-text-scope table td:nth-child(6n+5) {
+          background: linear-gradient(180deg,#fff7ed,#ffedd5) !important;
+        }
+        .task-run-black-text-scope table th:nth-child(6n+6),
+        .task-run-black-text-scope table td:nth-child(6n+6) {
+          background: linear-gradient(180deg,#ecfeff,#cffafe) !important;
+        }
+      `}</style>
       <div
         style={{
           maxWidth: 1460,
@@ -3768,11 +3901,11 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
           style={{
             position: "relative",
             overflow: "hidden",
-            border: `1px solid ${LINE}`,
+            border: `3px solid ${CARD_BORDERS[2]}`,
             borderRadius: 32,
             padding: 28,
-            background: `linear-gradient(135deg, rgba(11,27,58,0.96), rgba(8,18,34,0.98), rgba(11,27,58,0.94))`,
-            boxShadow: "0 28px 80px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.05)",
+            background: "linear-gradient(135deg,#fff9df,#fff4c4,#fffbeb)",
+            boxShadow: "0 24px 55px rgba(146,101,0,.18), inset 0 1px 0 rgba(255,255,255,.85)",
           }}
         >
           <div
@@ -3784,7 +3917,7 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
               width: 560,
               height: 560,
               borderRadius: "50%",
-              background: "radial-gradient(circle, rgba(201,162,39,0.16), rgba(201,162,39,0.05) 38%, transparent 72%)",
+              background: "radial-gradient(circle, rgba(245,158,11,0.20), rgba(245,158,11,0.08) 38%, transparent 72%)",
               filter: "blur(10px)",
               pointerEvents: "none",
             }}
@@ -3797,7 +3930,7 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
               width: 280,
               height: 280,
               borderRadius: "50%",
-              background: "radial-gradient(circle, rgba(16,185,129,0.10), transparent 72%)",
+              background: "radial-gradient(circle, rgba(59,130,246,0.14), transparent 72%)",
               filter: "blur(8px)",
               pointerEvents: "none",
             }}
@@ -3814,9 +3947,9 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
                     gap: 8,
                     padding: "8px 14px",
                     borderRadius: 999,
-                    background: "rgba(16,185,129,0.12)",
-                    border: "1px solid rgba(16,185,129,0.22)",
-                    color: "#a7f3d0",
+                    background: "linear-gradient(135deg,#dcfce7,#bbf7d0)",
+                    border: "2px solid rgba(22,163,74,.55)",
+                    color: "#14532d",
                     fontWeight: 950,
                     fontSize: 12,
                   }}
@@ -3825,16 +3958,16 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
                 </div>
 
                 <div style={{ display: "grid", gap: 8 }}>
-                  <div style={{ fontSize: 18, fontWeight: 900, color: "rgba(201,162,39,.84)" }}>{APP_NAME}</div>
+                  <div style={{ fontSize: 18, fontWeight: 900, color: "#000000" }}>{APP_NAME}</div>
                   <h1
                     style={{
                       margin: 0,
                       fontSize: "clamp(34px, 5vw, 64px)",
                       lineHeight: 1.02,
                       fontWeight: 950,
-                      color: "#f8e7a6",
+                      color: "#1f2937",
                       letterSpacing: "-0.03em",
-                      textShadow: "0 10px 30px rgba(201,162,39,.18)",
+                      textShadow: "0 8px 22px rgba(245,158,11,.22)",
                     }}
                   >
                     {tr("منصة تشغيل توزيع المهام","Task Distribution Run Platform")}
@@ -3846,7 +3979,7 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
                     margin: 0,
                     fontSize: 16,
                     lineHeight: 2,
-                    color: "rgba(201,162,39,.86)",
+                    color: "#000000",
                     maxWidth: 900,
                   }}
                 >
@@ -3863,15 +3996,15 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
                       key={item.label}
                       style={{
                         minWidth: 190,
-                        border: `1px solid ${LINE}`,
+                        border: `2px solid ${CELL_BORDERS[Math.abs(item.label.length) % CELL_BORDERS.length]}`,
                         borderRadius: 18,
                         padding: "12px 14px",
-                        background: "rgba(255,255,255,.05)",
-                        boxShadow: "0 10px 26px rgba(0,0,0,.22)",
+                        background: "linear-gradient(180deg,#fffef7,#fff2bf)",
+                        boxShadow: "0 10px 24px rgba(146,101,0,.12)",
                       }}
                     >
-                      <div style={{ fontSize: 12, color: "rgba(201,162,39,.68)", fontWeight: 800 }}>{item.label}</div>
-                      <div style={{ marginTop: 6, fontSize: 16, color: "#f8e7a6", fontWeight: 950 }}>{item.value}</div>
+                      <div style={{ fontSize: 12, color: "#000000", fontWeight: 800 }}>{item.label}</div>
+                      <div style={{ marginTop: 6, fontSize: 16, color: "#1f2937", fontWeight: 950 }}>{item.value}</div>
                     </div>
                   ))}
                 </div>
@@ -3882,11 +4015,11 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
                   minWidth: 300,
                   maxWidth: 390,
                   width: "100%",
-                  border: `1px solid ${LINE}`,
+                  border: `3px solid ${CARD_BORDERS[3]}`,
                   borderRadius: 28,
                   padding: 22,
-                  background: "linear-gradient(180deg, rgba(201,162,39,.08), rgba(255,255,255,.02))",
-                  boxShadow: "inset 0 1px 0 rgba(255,255,255,.05)",
+                  background: "linear-gradient(180deg,#fefce8,#fef3c7)",
+                  boxShadow: "0 14px 30px rgba(146,101,0,.13), inset 0 1px 0 rgba(255,255,255,.85)",
                   display: "grid",
                   gap: 14,
                 }}
@@ -3897,9 +4030,9 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
                     width: "fit-content",
                     padding: "8px 12px",
                     borderRadius: 999,
-                    background: runtimeError || errors.length ? "rgba(239,68,68,.14)" : "rgba(16,185,129,.14)",
-                    border: runtimeError || errors.length ? "1px solid rgba(239,68,68,.24)" : "1px solid rgba(16,185,129,.24)",
-                    color: runtimeError || errors.length ? "#fecaca" : "#a7f3d0",
+                    background: runtimeError || errors.length ? "linear-gradient(135deg,#fee2e2,#fecaca)" : "linear-gradient(135deg,#dcfce7,#bbf7d0)",
+                    border: runtimeError || errors.length ? "2px solid rgba(220,38,38,.50)" : "2px solid rgba(22,163,74,.55)",
+                    color: runtimeError || errors.length ? "#7f1d1d" : "#14532d",
                     fontWeight: 950,
                     fontSize: 12,
                   }}
@@ -3907,13 +4040,13 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
                   {runtimeError || errors.length ? tr("يحتاج مراجعة قبل التشغيل","Needs review before running") : tr("الوضع التشغيلي جاهز","Operational status is ready")}
                 </div>
 
-                <div style={{ fontSize: 30, lineHeight: 1.45, fontWeight: 950, color: "#f8e7a6" }}>
+                <div style={{ fontSize: 30, lineHeight: 1.45, fontWeight: 950, color: "#1f2937" }}>
                   {runOut
                     ? tr("تم ربط الصفحة بآخر تشغيل محفوظ ويمكنك مراجعة العدالة والعجز والتحسينات مباشرة.","The page is linked to the latest saved run and you can review fairness, shortages, and improvements directly.")
                     : tr("ابدأ تشغيل التوزيع من هنا وشاهد النتائج والعدالة والتنبيهات في تدفق واحد منظم.","Start the distribution run here and review results, fairness, and alerts in one organized flow.")}
                 </div>
 
-                <div style={{ fontSize: 14, lineHeight: 1.95, color: "rgba(201,162,39,.78)" }}>
+                <div style={{ fontSize: 14, lineHeight: 1.95, color: "#000000" }}>
                   {tr("الواجهة المطورة تبرز حالة الجاهزية، وعدد البيانات الأساسية، وإجمالي التكليفات، مع انتقال بصري أنيق من لوحة التشغيل إلى أقسام العدالة والجاهزية والتفاصيل.","The enhanced interface highlights readiness, core data counts, and total assignments, with an elegant visual transition from the run panel to fairness, readiness, and detail sections.")}
                 </div>
               </div>
@@ -3931,7 +4064,7 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
                   label: tr("المعلمون","Teachers"),
                   value: teachersCount,
                   hint: tr("الكادر الجاهز للتوزيع","Teaching staff ready for distribution"),
-                  tone: "#f8e7a6",
+                  tone: "#000000",
                 },
                 {
                   label: tr("الاختبارات","Exams"),
@@ -3955,7 +4088,7 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
                   label: tr("إسنادات آخر تشغيل","Last Run Assignments"),
                   value: latestRunSummary?.totalAssignments ?? 0,
                   hint: tr("إجمالي ما تم توليده","Total generated"),
-                  tone: "#fde68a",
+                  tone: "#000000",
                 },
                 {
                   label: tr("تحذيرات آخر تشغيل","Last Run Warnings"),
@@ -3967,16 +4100,16 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
                 <div
                   key={item.label}
                   style={{
-                    border: `1px solid ${LINE}`,
+                    border: `2px solid ${CARD_BORDERS[Math.abs(item.label.length) % CARD_BORDERS.length]}`,
                     borderRadius: 24,
-                    background: "linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.02))",
+                    background: "linear-gradient(180deg,#fffef7,#fff1bd)",
                     padding: 18,
-                    boxShadow: "0 18px 40px rgba(0,0,0,.24)",
+                    boxShadow: "0 14px 30px rgba(146,101,0,.12)",
                   }}
                 >
-                  <div style={{ fontSize: 13, color: "rgba(201,162,39,.66)", fontWeight: 800 }}>{item.label}</div>
+                  <div style={{ fontSize: 13, color: "#000000", fontWeight: 800 }}>{item.label}</div>
                   <div style={{ marginTop: 10, fontSize: 36, fontWeight: 950, color: item.tone }}>{item.value}</div>
-                  <div style={{ marginTop: 8, fontSize: 12, color: "rgba(201,162,39,.56)", lineHeight: 1.8 }}>{item.hint}</div>
+                  <div style={{ marginTop: 8, fontSize: 12, color: "#000000", lineHeight: 1.8 }}>{item.hint}</div>
                 </div>
               ))}
             </div>

@@ -66,9 +66,11 @@ export default function TaskDistributionResults() {
         case "RESERVE":
           return tr("احتياط", "Reserve");
         case "REVIEW_FREE":
-          return tr("مراجعة", "Review");
+          return tr("فاضي للمراجعة", "Free for review");
         case "CORRECTION_FREE":
-          return tr("تصحيح", "Correction");
+          return tr("فاضي للتصحيح", "Free for correction");
+        case "DUTY_INVIGILATOR":
+          return tr("مراقب دور", "Duty Invigilator");
         default:
           return tr("مهمة", "Task");
       }
