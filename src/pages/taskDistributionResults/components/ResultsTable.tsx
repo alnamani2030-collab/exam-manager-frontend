@@ -126,7 +126,7 @@ function getTaskCardStyle(kind: HighlightKind, isDragging: boolean, isConflict: 
       ...base,
       color: "#ffffff",
       background: "linear-gradient(135deg, rgba(37,99,235,.98), rgba(14,165,233,.94))",
-      border: "2px solid rgba(147,197,253,.98)",
+      border: "3px solid rgba(37,99,235,1)",
       textShadow: "0 1px 3px rgba(0,0,0,.35)",
     };
   }
@@ -136,7 +136,7 @@ function getTaskCardStyle(kind: HighlightKind, isDragging: boolean, isConflict: 
       ...base,
       color: "#ffffff",
       background: "linear-gradient(135deg, rgba(220,38,38,.98), rgba(239,68,68,.94))",
-      border: "2px solid rgba(254,202,202,.98)",
+      border: "3px solid rgba(220,38,38,1)",
       textShadow: "0 1px 3px rgba(0,0,0,.35)",
     };
   }
@@ -146,7 +146,7 @@ function getTaskCardStyle(kind: HighlightKind, isDragging: boolean, isConflict: 
       ...base,
       color: "#ffffff",
       background: "linear-gradient(135deg, rgba(22,163,74,.98), rgba(34,197,94,.94))",
-      border: "2px solid rgba(187,247,208,.98)",
+      border: "3px solid rgba(22,163,74,1)",
       textShadow: "0 1px 3px rgba(0,0,0,.35)",
     };
   }
@@ -184,8 +184,8 @@ function getTdStyle(args: {
     return {
       ...base,
       background: "linear-gradient(135deg, rgba(250,204,21,.96), rgba(212,175,55,.88))",
-      border: "2px solid rgba(59,130,246,.95)",
-      boxShadow: `${isSelected ? "0 0 0 3px rgba(250,204,21,.55) inset, " : ""}0 0 18px rgba(59,130,246,.48)`,
+      border: "5px solid rgba(37,99,235,1)",
+      boxShadow: `${isSelected ? "0 0 0 3px rgba(250,204,21,.55) inset, " : ""}0 0 28px rgba(37,99,235,.82)`,
     };
   }
 
@@ -193,8 +193,8 @@ function getTdStyle(args: {
     return {
       ...base,
       background: "linear-gradient(135deg, rgba(250,204,21,.96), rgba(212,175,55,.88))",
-      border: "2px solid rgba(239,68,68,.95)",
-      boxShadow: `${isSelected ? "0 0 0 3px rgba(250,204,21,.55) inset, " : ""}0 0 18px rgba(239,68,68,.46)`,
+      border: "5px solid rgba(220,38,38,1)",
+      boxShadow: `${isSelected ? "0 0 0 3px rgba(250,204,21,.55) inset, " : ""}0 0 28px rgba(220,38,38,.82)`,
     };
   }
 
@@ -202,8 +202,8 @@ function getTdStyle(args: {
     return {
       ...base,
       background: "linear-gradient(135deg, rgba(250,204,21,.96), rgba(212,175,55,.88))",
-      border: "2px solid rgba(34,197,94,.95)",
-      boxShadow: `${isSelected ? "0 0 0 3px rgba(250,204,21,.55) inset, " : ""}0 0 18px rgba(34,197,94,.42)`,
+      border: "5px solid rgba(22,163,74,1)",
+      boxShadow: `${isSelected ? "0 0 0 3px rgba(250,204,21,.55) inset, " : ""}0 0 28px rgba(22,163,74,.78)`,
     };
   }
 
@@ -257,25 +257,46 @@ export function ResultsTable(props: ResultsTableProps) {
   return (
     <div style={containerStyle}>
       <style>{`${RESULTS_TABLE_CONFLICT_CSS}
+        @keyframes resultsReserveBlink {
+          0%, 100% { box-shadow: 0 0 0 rgba(22,163,74,0), inset 0 0 0 rgba(22,163,74,0); filter: brightness(1); }
+          50% { box-shadow: 0 0 30px rgba(22,163,74,.95), inset 0 0 18px rgba(22,163,74,.28); filter: brightness(1.25); }
+        }
         @keyframes resultsReviewBlink {
-          0%, 100% { filter: brightness(1); transform: scale(1); }
-          50% { filter: brightness(1.38); transform: scale(1.015); }
+          0%, 100% { box-shadow: 0 0 0 rgba(37,99,235,0), inset 0 0 0 rgba(37,99,235,0); filter: brightness(1); }
+          50% { box-shadow: 0 0 30px rgba(37,99,235,.95), inset 0 0 18px rgba(37,99,235,.28); filter: brightness(1.25); }
         }
         @keyframes resultsCorrectionBlink {
-          0%, 100% { filter: brightness(1); transform: scale(1); }
-          50% { filter: brightness(1.42); transform: scale(1.015); }
+          0%, 100% { box-shadow: 0 0 0 rgba(220,38,38,0), inset 0 0 0 rgba(220,38,38,0); filter: brightness(1); }
+          50% { box-shadow: 0 0 30px rgba(220,38,38,.95), inset 0 0 18px rgba(220,38,38,.28); filter: brightness(1.25); }
         }
-        @keyframes resultsReserveBlink {
-          0%, 100% { filter: brightness(1); transform: scale(1); }
-          50% { filter: brightness(1.35); transform: scale(1.015); }
+        @keyframes resultsTotalBlink {
+          0%, 100% { box-shadow: 0 0 0 rgba(154,83,15,0), inset 0 0 0 rgba(154,83,15,0); filter: brightness(1); }
+          50% { box-shadow: 0 0 30px rgba(154,83,15,.95), inset 0 0 18px rgba(154,83,15,.30); filter: brightness(1.22); }
         }
+        .results-cell-blink-reserve { animation: resultsReserveBlink 1.05s ease-in-out infinite; }
         .results-cell-blink-review { animation: resultsReviewBlink 1.05s ease-in-out infinite; }
         .results-cell-blink-correction { animation: resultsCorrectionBlink 1.05s ease-in-out infinite; }
-        .results-cell-blink-reserve { animation: resultsReserveBlink 1.05s ease-in-out infinite; }
-        @media print {
+        .results-total-cell-blink,
+        .results-table-total-row td {
+          animation: resultsTotalBlink 1.05s ease-in-out infinite;
+          border: 6px solid #9a5310 !important;
+          font-weight: 1000 !important;
+          font-size: 18px !important;
+          letter-spacing: .2px;
+        }
+        .results-total-metric-inv { color: #0f172a !important; }
+        .results-total-metric-res { color: #15803d !important; }
+        .results-total-metric-corr { color: #dc2626 !important; }
+        .results-total-metric-total { color: #7c2d12 !important; }
+        .results-total-metric-deficit { color: #b91c1c !important; }
+        .results-total-metric-label { opacity: .95; font-weight: 1000; font-size: 1.18em; }
+        .results-total-metric-value { font-weight: 1000; font-size: 1.35em; min-width: 34px; text-align: left; }
+         print {
           .results-cell-blink-review,
           .results-cell-blink-correction,
-          .results-cell-blink-reserve { animation: none !important; filter: none !important; transform: none !important; }
+          .results-cell-blink-reserve,
+          .results-total-cell-blink,
+          .results-table-total-row td { animation: none !important; filter: none !important; }
         }
       `}</style>
       <table
@@ -471,7 +492,7 @@ export function ResultsTable(props: ResultsTableProps) {
                                 fontWeight: 900,
                               }}
                             >
-                              + مراجعة
+                              + فاضي للمراجعة
                             </button>
                             <button
                               type="button"
@@ -489,7 +510,7 @@ export function ResultsTable(props: ResultsTableProps) {
                                 fontWeight: 900,
                               }}
                             >
-                              + تصحيح
+                              + فاضي للتصحيح
                             </button>
                           </div>
                         ) : null}
@@ -503,15 +524,16 @@ export function ResultsTable(props: ResultsTableProps) {
                 })}
 
                 <td
+                  className="results-total-cell-blink"
                   style={{
                     borderRadius: 16,
                     padding: "10px 12px",
                     textAlign: "center",
                     fontWeight: 950,
-                    color: styles.tableText,
-                    background: "rgba(255,255,255,.94)",
-                    border: `1px solid ${styles.goldLineSoft}`,
-                    boxShadow: "0 8px 18px rgba(15,23,42,.14)",
+                    color: "#7c2d12",
+                    background: "linear-gradient(135deg, rgba(255,237,213,.98), rgba(251,146,60,.48))",
+                    border: "5px solid #9a5310",
+                    boxShadow: "0 0 24px rgba(154,83,15,.70)",
                   }}
                 >
                   {teacherTotals[teacher] ?? 0}
