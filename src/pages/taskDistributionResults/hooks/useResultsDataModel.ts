@@ -3,13 +3,17 @@ import type { Assignment } from "../../../contracts/taskDistributionContract";
 import { loadTenantArray } from "../../../services/tenantData";
 import { extractExamCommitteesCount, extractExamDateISO, extractExamPeriod, extractExamSubject } from "../excelHelpers";
 import type { SubCol } from "../excelExport";
-import { colKeyOf } from "../services/resultsDragDropRules";
-import { getCommitteeNo } from "../taskUtils";
 import { buildResultsConflictUids, buildResultsWarnings } from "../services/resultsDataModelHelpers";
 
 const TEACHERS_SUB = "teachers";
 const EXAMS_SUB = "exams";
 
+
+function getCommitteeNo(a: any) {
+  const value = a?.committeeNo ?? a?.committee ?? a?.roomNo ?? a?.room;
+  if (value === undefined || value === null || value === "") return undefined;
+  return String(value);
+}
 
 function periodToAMPM(p: string): "AM" | "PM" {
   const x = String(p || "").trim().toUpperCase();
@@ -19,12 +23,30 @@ function periodToAMPM(p: string): "AM" | "PM" {
 
 function normalizeStoredTaskType(rawTaskType: any): string {
   const raw = String(rawTaskType || "").trim().toUpperCase();
-  if (raw === "INVIGILATION" || raw === "RESERVE" || raw === "REVIEW_FREE" || raw === "CORRECTION_FREE") return raw;
-  if (raw.includes("مراقبة")) return "INVIGILATION";
-  if (raw.includes("احتياط")) return "RESERVE";
-  if (raw.includes("مراجعة")) return "REVIEW_FREE";
-  if (raw.includes("تصحيح")) return "CORRECTION_FREE";
+  if (
+    raw === "INVIGILATION" ||
+    raw === "RESERVE" ||
+    raw === "REVIEW_FREE" ||
+    raw === "CORRECTION_FREE" ||
+    raw === "DUTY_INVIGILATOR"
+  ) {
+    return raw;
+  }
+
+  const text = String(rawTaskType || "").trim();
+  if (text.includes("مراقب دور") || text.includes("مراقب الدور")) return "DUTY_INVIGILATOR";
+  if (text.includes("مراقبة")) return "INVIGILATION";
+  if (text.includes("احتياط")) return "RESERVE";
+  if (text.includes("مراجعة")) return "REVIEW_FREE";
+  if (text.includes("تصحيح")) return "CORRECTION_FREE";
+
   return raw;
+}
+
+function normalizeResultsAssignmentSubject(_taskType: string, assignment: any, normalizeSubject: (subject: string) => string) {
+  // صفحة المدرسة تعرض الأنواع الأصلية كما هي: مراقبة، احتياط، فاضي للمراجعة، فاضي للتصحيح.
+  // لا يتم تحويل المراجعة أو التصحيح إلى مراقب دور هنا.
+  return normalizeSubject(String(assignment?.subject || ""));
 }
 
 function getAssignmentPeriods(assignment: any, taskType?: string): ("AM" | "PM")[] {
@@ -33,6 +55,10 @@ function getAssignmentPeriods(assignment: any, taskType?: string): ("AM" | "PM")
     ? assignment.coversPeriods.map((p: any) => periodToAMPM(String(p || "")))
     : [];
 
+  // مراقب الدور يعرض مرة واحدة داخل عمود الامتحان، وليس كعمود مستقل أو تكرار AM/PM.
+  if (safeTaskType === "DUTY_INVIGILATOR") {
+    return [periodToAMPM(String(assignment?.period || "AM"))];
+  }
   if (covers.length) return Array.from(new Set(covers));
   if (assignment?.fullDay || safeTaskType === "REVIEW_FREE" || safeTaskType === "CORRECTION_FREE") {
     return ["AM", "PM"];
@@ -78,7 +104,7 @@ export function useResultsDataModel({
           __uid: a?.__uid,
           dateISO: a?.dateISO,
           taskType,
-          subject: normalizeSubject(String(a?.subject || "")),
+          subject: normalizeResultsAssignmentSubject(taskType, a, normalizeSubject),
           period: periodToAMPM(String(a?.period || "AM")),
           __periods: periods,
         };
@@ -255,15 +281,10 @@ export function useResultsDataModel({
     };
 
     if (examsFromStorage.length) {
+      // الأعمدة الأساسية تُبنى من جدول الامتحانات فقط.
+      // فاضي للمراجعة وفاضي للتصحيح لا ينشئان أعمدة مستقلة؛
+      // يتم عرضهما داخل عمود مادة الامتحان المطابق أو أول عمود في نفس اليوم/الفترة عند عدم وجود تطابق مباشر.
       for (const ex of examsFromStorage) push(ex.dateISO as string, ex.period as string, ex.subject as string);
-      for (const a of assignments as any[]) {
-        if (String(a?.taskType || "") !== "CORRECTION_FREE") continue;
-        const d = String(a?.dateISO || "").trim();
-        if (!d) continue;
-        const s = normalizeSubject(String(a?.subject || "").trim()) || "تصحيح";
-        const periods = getAssignmentPeriods(a, a?.taskType);
-        for (const p of periods) push(d, p, s);
-      }
     } else {
       for (const a of assignments as any[]) push(String(a.dateISO || ""), String(a.period || "AM"), String(a.subject || ""));
     }
@@ -291,18 +312,48 @@ export function useResultsDataModel({
     return out;
   }, [displayDates, dateToSubCols]);
 
+  const firstExamSubColKeyByDatePeriod = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const sc of allSubCols) {
+      const key = `${sc.dateISO}__${String(sc.period || "AM").toUpperCase()}`;
+      if (!m.has(key)) m.set(key, sc.key);
+    }
+    return m;
+  }, [allSubCols]);
+
+  const exactExamSubColKeyByDatePeriodSubject = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const sc of allSubCols) {
+      const key = `${sc.dateISO}__${String(sc.period || "AM").toUpperCase()}__${normalizeSubject(String(sc.subject || ""))}`;
+      if (!m.has(key)) m.set(key, sc.key);
+    }
+    return m;
+  }, [allSubCols, normalizeSubject]);
+
+  const getDisplaySubColKeyForAssignment = (assignment: any, period: "AM" | "PM") => {
+    const dateISO = String(assignment?.dateISO || "").trim();
+    const subject = normalizeSubject(String(assignment?.subject || "").trim());
+    const exactKey = exactExamSubColKeyByDatePeriodSubject.get(`${dateISO}__${period}__${subject}`);
+    if (exactKey) return exactKey;
+
+    const taskType = String(assignment?.taskType || "").trim();
+    if (taskType === "REVIEW_FREE" || taskType === "CORRECTION_FREE") {
+      return firstExamSubColKeyByDatePeriod.get(`${dateISO}__${period}`) || `${dateISO}__${period}__${subject}`;
+    }
+
+    return `${dateISO}__${period}__${subject}`;
+  };
+
   const matrix2 = useMemo(() => {
     const m: Record<string, Record<string, Assignment[]>> = {};
     for (const t of allTeachers) m[t] = {};
     for (const a of assignments as any[]) {
       const teacher = String(a.teacherName || "").trim();
       if (!teacher) continue;
-      const dateISO = String(a.dateISO || "").trim();
-      const subject = normalizeSubject(String(a.subject || "").trim());
       const periods = getAssignmentPeriods(a, a?.taskType);
       if (!m[teacher]) m[teacher] = {};
       for (const period of periods) {
-        const key = `${dateISO}__${period}__${subject}`;
+        const key = getDisplaySubColKeyForAssignment(a, period);
         if (!m[teacher][key]) m[teacher][key] = [];
         m[teacher][key].push(a as Assignment);
       }
@@ -323,7 +374,7 @@ export function useResultsDataModel({
       }
     }
     return m;
-  }, [assignments, allTeachers, normalizeSubject]);
+  }, [assignments, allTeachers, normalizeSubject, firstExamSubColKeyByDatePeriod, exactExamSubColKeyByDatePeriodSubject]);
 
   const committeesCountBySubCol = useMemo(() => {
     const out: Record<string, number> = {};
@@ -348,24 +399,26 @@ export function useResultsDataModel({
   }, [allSubCols, examKeyToCommittees, allTeachers, matrix2]);
 
   const totalsDetailBySubCol = useMemo(() => {
-    const out: Record<string, { inv: number; res: number; corr: number; total: number; deficit: number; committees: number; required: number; coveragePct: number }> = {};
+    const out: Record<string, { inv: number; res: number; duty: number; corr: number; total: number; deficit: number; committees: number; required: number; coveragePct: number }> = {};
     for (const sc of allSubCols) {
       const committees = committeesCountBySubCol[sc.key] ?? 0;
       const ek = `${sc.dateISO}__${sc.period}__${sc.subject}`;
       const roomsFromExams = examKeyToCommittees[ek];
       const invPerRoom = typeof roomsFromExams === "number" && roomsFromExams > 0 ? invigilatorsPerRoomForSubject(sc.subject) : 0;
       const required = Math.max(0, (Number(roomsFromExams) || 0) * Math.max(0, Number(invPerRoom) || 0));
-      out[sc.key] = { inv: 0, res: 0, corr: 0, total: 0, deficit: 0, committees, required, coveragePct: 100 };
+      out[sc.key] = { inv: 0, res: 0, duty: 0, corr: 0, total: 0, deficit: 0, committees, required, coveragePct: 100 };
     }
     for (const a of assignments as any[]) {
-      const key = colKeyOf(a);
+      const t = String(a.taskType || "");
+      const period = periodToAMPM(String(a?.period || "AM"));
+      const key = getDisplaySubColKeyForAssignment(a, period);
       if (!out[key]) {
         const committees = committeesCountBySubCol[key] ?? 0;
-        out[key] = { inv: 0, res: 0, corr: 0, total: 0, deficit: 0, committees, required: 0, coveragePct: 100 };
+        out[key] = { inv: 0, res: 0, duty: 0, corr: 0, total: 0, deficit: 0, committees, required: 0, coveragePct: 100 };
       }
-      const t = String(a.taskType || "");
       if (t === "INVIGILATION") out[key].inv += 1;
       if (t === "RESERVE") out[key].res += 1;
+      if (t === "DUTY_INVIGILATOR") out[key].duty += 1;
       if (t === "CORRECTION_FREE") out[key].corr += 1;
     }
     for (const k of Object.keys(out)) {
@@ -376,7 +429,7 @@ export function useResultsDataModel({
       x.coveragePct = (x.required || 0) > 0 ? Math.round((covered / x.required) * 100) : 100;
     }
     return out;
-  }, [assignments, allSubCols, committeesCountBySubCol, examKeyToCommittees]);
+  }, [assignments, allSubCols, committeesCountBySubCol, examKeyToCommittees, firstExamSubColKeyByDatePeriod, exactExamSubColKeyByDatePeriodSubject]);
 
   const teacherTotals = useMemo(() => {
     const out: Record<string, number> = {};
@@ -385,7 +438,9 @@ export function useResultsDataModel({
       const teacher = String(a.teacherName || "").trim();
       if (!teacher) continue;
       const tt = String(a.taskType || "");
-      if (tt === "INVIGILATION" || tt === "RESERVE" || tt === "REVIEW_FREE") out[teacher] = (out[teacher] || 0) + 1;
+      if (tt === "INVIGILATION" || tt === "RESERVE" || tt === "REVIEW_FREE" || tt === "CORRECTION_FREE") {
+        out[teacher] = (out[teacher] || 0) + 1;
+      }
     }
     return out;
   }, [assignments, allTeachers]);

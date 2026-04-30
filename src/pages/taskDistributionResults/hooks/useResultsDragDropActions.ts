@@ -14,14 +14,6 @@ import {
   validatePlacement,
 } from "../services/resultsDragDropRules";
 
-function tr(ar: string, en: string) {
-  try {
-    const lang = String(document?.documentElement?.lang || "").toLowerCase();
-    if (lang.startsWith("en")) return en;
-  } catch {}
-  return ar;
-}
-
 export function useResultsDragDropActions({
   run,
   colKeyToExamId,
@@ -78,12 +70,12 @@ export function useResultsDragDropActions({
 
     const m1 = getUnavailabilityReasonForCell(dstTeacher, dstColKey, srcType);
     if (m1) {
-      markCellBlocked(dstTeacher, dstColKey, `${tr("غير متاح", "Unavailable")}: ${m1}`);
+      markCellBlocked(dstTeacher, dstColKey, `غير متاح: ${m1}`);
       return;
     }
     const m2 = getUnavailabilityReasonForCell(srcTeacher, srcColKey, dstType);
     if (m2) {
-      markCellBlocked(srcTeacher, srcColKey, `${tr("غير متاح", "Unavailable")}: ${m2}`);
+      markCellBlocked(srcTeacher, srcColKey, `غير متاح: ${m2}`);
       return;
     }
 
@@ -124,8 +116,8 @@ export function useResultsDragDropActions({
     persistEditedAssignments(
       next,
       srcNowConflicts || dstNowConflicts
-        ? `⚠️ ${tr("تعارض نفس الفترة بعد التبديل", "Same-period conflict after swap")}: ${humanType} (${tr("يمكنك التراجع", "you can undo")}).`
-        : `🖐️ ${tr("تعديل يدوي", "Manual edit")}: ${tr("تبديل", "Swap")} ${humanType} ${tr("بين", "between")} (${srcTeacher}) ${tr("و", "and")} (${dstTeacher})`
+        ? `⚠️ تعارض نفس الفترة بعد التبديل: ${humanType} (يمكنك التراجع).`
+        : `🖐️ تعديل يدوي: تبديل ${humanType} بين (${srcTeacher}) و (${dstTeacher})`
     );
   }
 
@@ -152,7 +144,7 @@ export function useResultsDragDropActions({
 
     const unMsg = getUnavailabilityReasonForCell(targetTeacher, dstColKey, srcType);
     if (unMsg) {
-      markCellBlocked(targetTeacher, dstColKey, `${tr("غير متاح", "Unavailable")}: ${unMsg}`);
+      markCellBlocked(targetTeacher, dstColKey, `غير متاح: ${unMsg}`);
       return;
     }
 
@@ -188,8 +180,8 @@ export function useResultsDragDropActions({
     persistEditedAssignments(
       next,
       willConflictSameSlot
-        ? `⚠️ ${tr("تعارض نفس الفترة", "Same-period conflict")}: ${tr("نقل", "move")} ${humanType} ${tr("إلى", "to")} (${targetTeacher}) ${tr("مع وجود مهمة أخرى في نفس الفترة", "while another task exists in the same period")}. (${tr("يمكنك التراجع", "you can undo")}).`
-        : `🖐️ ${tr("تعديل يدوي", "Manual edit")}: ${tr("نقل", "Move")} ${humanType} ${tr("من", "from")} (${srcTeacher}) [${from.dateISO} ${from.period} ${from.subject}] ${tr("إلى", "to")} (${targetTeacher}) [${to.dateISO} ${to.period} ${to.subject}]`
+        ? `⚠️ تعارض نفس الفترة: نقل ${humanType} إلى (${targetTeacher}) مع وجود مهمة أخرى في نفس الفترة. (يمكنك التراجع).`
+        : `🖐️ تعديل يدوي: نقل ${humanType} من (${srcTeacher}) [${from.dateISO} ${from.period} ${from.subject}] إلى (${targetTeacher}) [${to.dateISO} ${to.period} ${to.subject}]`
     );
   }
 
