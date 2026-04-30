@@ -5,7 +5,6 @@ import { loadRun, RUN_UPDATED_EVENT, MASTER_TABLE_UPDATED_EVENT } from "../utils
 import { loadTenantArray } from "../services/tenantData";
 import { exportElementAsPdf } from "../lib/pdfExport";
 import SettingsReportHeader from "../features/settings/components/SettingsReportHeader";
-import SettingsDistributionStatsSection from "../features/settings/components/SettingsDistributionStatsSection";
 
 const EXAMS_KEY = "exam-manager:exams:v1";
 const LOGO_KEY = "exam-manager:app-logo";
@@ -96,6 +95,223 @@ function getRowCommitteeNo(row: any) {
     row?.committeeNumber;
   if (value === undefined || value === null || value === "") return "";
   return String(value).trim();
+}
+
+function normalizeTaskType(value: any) {
+  const raw = String(value || "").trim().toUpperCase();
+  if (raw === "INVIGILATION" || raw.includes("مراقبة")) return "INVIGILATION";
+  if (raw === "RESERVE" || raw.includes("احتياط")) return "RESERVE";
+  if (raw === "DUTY_INVIGILATOR" || raw.includes("مراقب دور")) return "DUTY_INVIGILATOR";
+  return raw;
+}
+
+function getRowTaskType(row: any) {
+  return normalizeTaskType(row?.taskType ?? row?.role ?? row?.type ?? row?.taskTypeLabelAr ?? "");
+}
+
+function getRowSubjectsList(row: any) {
+  const out: string[] = [];
+  const push = (value: any) => {
+    const s = normalizeSubjectText(value);
+    if (s && !out.includes(s)) out.push(s);
+  };
+
+  push(getRowSubject(row));
+
+  if (Array.isArray(row?.daySubjects)) row.daySubjects.forEach(push);
+  if (Array.isArray(row?.slotSubjects)) row.slotSubjects.forEach(push);
+  if (Array.isArray(row?.subjects)) row.subjects.forEach(push);
+
+  return out;
+}
+
+function assignmentCoversPeriod(row: any, period: "AM" | "PM") {
+  const covers = Array.isArray(row?.coversPeriods) ? row.coversPeriods.map((p: any) => normalizePeriod(p)) : [];
+  if (covers.length) return covers.includes(period);
+  if (row?.fullDay) return true;
+  return getRowPeriod(row) === period;
+}
+
+function rowMatchesExamSlot(row: any, exam: Exam) {
+  if (getRowDateISO(row) !== String(exam.dateISO || "")) return false;
+  if (!assignmentCoversPeriod(row, exam.period)) return false;
+
+  const examSubject = normalizeSubjectText(exam.subject);
+  const rowSubjects = getRowSubjectsList(row);
+  if (!examSubject) return true;
+  if (!rowSubjects.length) return true;
+  return rowSubjects.some((s) => normalizeSubjectText(s) === examSubject);
+}
+
+type DistributionReportRow = Exam & {
+  day: string;
+  periodLabel: string;
+  invAssigned: number;
+  reserveAssigned: number;
+  dutyAssigned: number;
+  invPerRoom: number;
+  requiredTotal: number;
+  deficitWithoutReserve: number;
+  coveragePct: number;
+  deficit: number;
+  total: number;
+};
+
+type DistributionTotals = {
+  committees: number;
+  inv: number;
+  reserve: number;
+  duty: number;
+  deficit: number;
+  total: number;
+  requiredTotal: number;
+};
+
+function SettingsDistributionStatsSection({
+  hasAssignments,
+  isStatsFull,
+  totalDeficit,
+  totalCoveragePct,
+  reportRows,
+  totals,
+  bigDeficitThreshold,
+  whatsappAdminKey,
+  onCloseFullscreen,
+}: {
+  hasAssignments: boolean;
+  isStatsFull: boolean;
+  totalDeficit: number;
+  totalCoveragePct: number;
+  reportRows: DistributionReportRow[];
+  totals: DistributionTotals;
+  bigDeficitThreshold: number;
+  whatsappAdminKey: string;
+  onCloseFullscreen: () => void;
+}) {
+  const { lang } = useI18n();
+  const tr = React.useCallback((ar: string, en: string) => (lang === "ar" ? ar : en), [lang]);
+  const whatsappAdmin = typeof window !== "undefined" ? String(localStorage.getItem(whatsappAdminKey) || "").trim() : "";
+
+  const wrapperStyle: React.CSSProperties = isStatsFull
+    ? {
+        position: "fixed",
+        inset: 0,
+        zIndex: 9999,
+        background: "#0f0f0f",
+        padding: 18,
+        overflow: "auto",
+      }
+    : {};
+
+  if (!hasAssignments) {
+    return (
+      <div className="distStats3D" style={{ color: "#fff", textAlign: "center", padding: 24 }}>
+        {tr("لا توجد بيانات توزيع محفوظة للعرض.", "No saved distribution data to display.")}
+      </div>
+    );
+  }
+
+  return (
+    <div style={wrapperStyle}>
+      <div className="distStats3D" id="dist-stats-report">
+        {isStatsFull ? (
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+            <button
+              type="button"
+              onClick={onCloseFullscreen}
+              style={{
+                border: "1px solid rgba(212,175,55,.7)",
+                background: "#2b1f00",
+                color: "#fff1c4",
+                borderRadius: 12,
+                padding: "8px 14px",
+                fontWeight: 900,
+                cursor: "pointer",
+              }}
+            >
+              {tr("إغلاق", "Close")}
+            </button>
+          </div>
+        ) : null}
+
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
+          <div className="distTd" style={{ minWidth: 150 }}>
+            {tr("إجمالي المراقبة", "Total Invigilation")}: <b>{totals.inv}</b>
+          </div>
+          <div className="distTd" style={{ minWidth: 150 }}>
+            {tr("إجمالي الاحتياط", "Total Reserve")}: <b>{totals.reserve}</b>
+          </div>
+          <div className="distTd" style={{ minWidth: 140 }}>
+            {tr("الإجمالي", "Total")}: <b>{totals.total}</b>
+          </div>
+          <div className="distTd" style={{ minWidth: 140, color: totalDeficit > 0 ? "#ffb4b4" : "#bbf7d0" }}>
+            {tr("العجز", "Deficit")}: <b>{totalDeficit}</b>
+          </div>
+          <div className="distTd" style={{ minWidth: 140 }}>
+            {tr("التغطية", "Coverage")}: <b>{totalCoveragePct}%</b>
+          </div>
+          {whatsappAdmin ? (
+            <div className="distTd" style={{ minWidth: 180, color: "#bbf7d0" }}>
+              {tr("تنبيه واتساب مفعل", "WhatsApp alert enabled")}
+            </div>
+          ) : null}
+        </div>
+
+        <div style={{ overflowX: "auto" }}>
+          <table className="distTable">
+            <thead>
+              <tr>
+                <th className="distTh">{tr("التاريخ", "Date")}</th>
+                <th className="distTh">{tr("اليوم", "Day")}</th>
+                <th className="distTh">{tr("الفترة", "Period")}</th>
+                <th className="distTh">{tr("المادة", "Subject")}</th>
+                <th className="distTh">{tr("عدد القاعات", "Rooms")}</th>
+                <th className="distTh">{tr("المطلوب", "Required")}</th>
+                <th className="distTh">{tr("المراقبة", "Invigilation")}</th>
+                <th className="distTh">{tr("الاحتياط", "Reserve")}</th>
+                <th className="distTh">{tr("الإجمالي", "Total")}</th>
+                <th className="distTh">{tr("العجز", "Deficit")}</th>
+                <th className="distTh">{tr("التغطية", "Coverage")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {reportRows.map((r: any, index: number) => {
+                const isBig = Number(r.deficit || 0) >= bigDeficitThreshold;
+                const isDeficit = Number(r.deficit || 0) > 0;
+                return (
+                  <tr key={`${r.dateISO}-${r.period}-${r.subject}-${index}`} className={isBig ? "row-big-deficit" : isDeficit ? "row-deficit" : ""}>
+                    <td className="distTd distColDate">{r.dateISO}</td>
+                    <td className="distTd">{r.day}</td>
+                    <td className="distTd">{r.periodLabel}</td>
+                    <td className="distTd distColSubject">{r.subject}</td>
+                    <td className="distTd">{r.roomsCount}</td>
+                    <td className="distTd">{r.requiredTotal}</td>
+                    <td className="distTd">{r.invAssigned}</td>
+                    <td className="distTd">{r.reserveAssigned}</td>
+                    <td className="distTd">{r.total}</td>
+                    <td className="distTd" style={{ color: r.deficit > 0 ? "#ffb4b4" : "#bbf7d0" }}>{r.deficit}</td>
+                    <td className="distTd">{r.coveragePct}%</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td className="distTh" colSpan={4}>{tr("الإجمالي", "Total")}</td>
+                <td className="distTh">{totals.committees}</td>
+                <td className="distTh">{totals.requiredTotal}</td>
+                <td className="distTh">{totals.inv}</td>
+                <td className="distTh">{totals.reserve}</td>
+                <td className="distTh">{totals.total}</td>
+                <td className="distTh">{totals.deficit}</td>
+                <td className="distTh">{totalCoveragePct}%</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function Settings() {
@@ -411,15 +627,19 @@ export default function Settings() {
     const computedFromExams = exams.map((ex) => {
       const invAssigned = rows.filter(
         (a: any) =>
-          String(a?.taskType || "").toUpperCase() === "INVIGILATION" &&
+          getRowTaskType(a) === "INVIGILATION" &&
           String(a?.examId || "") === String(ex.id)
       ).length;
 
       const reserveAssigned = rows.filter(
         (a: any) =>
-          String(a?.taskType || "").toUpperCase() === "RESERVE" &&
+          getRowTaskType(a) === "RESERVE" &&
           String(a?.dateISO || "") === String(ex.dateISO) &&
-          normalizePeriod(a?.period || "") === ex.period
+          assignmentCoversPeriod(a, ex.period)
+      ).length;
+
+      const dutyAssigned = rows.filter(
+        (a: any) => getRowTaskType(a) === "DUTY_INVIGILATOR" && rowMatchesExamSlot(a, ex)
       ).length;
 
       const invPerRoom = invigilatorsPerRoomForSubject(ex.subject);
@@ -428,7 +648,7 @@ export default function Settings() {
       const deficit = Math.max(0, requiredTotal - covered);
       const coveragePct = requiredTotal > 0 ? Math.round((covered / requiredTotal) * 100) : 100;
       const deficitWithoutReserve = Math.max(0, requiredTotal - invAssigned);
-      const total = covered;
+      const total = invAssigned + reserveAssigned + dutyAssigned;
 
       return {
         ...ex,
@@ -436,6 +656,7 @@ export default function Settings() {
         periodLabel: formatPeriodLabel(ex.period, lang),
         invAssigned,
         reserveAssigned,
+        dutyAssigned,
         invPerRoom,
         requiredTotal,
         deficitWithoutReserve,
@@ -468,20 +689,22 @@ export default function Settings() {
             period,
             committeeSet: new Set<string>(),
             invAssigned: 0,
+            dutyAssigned: 0,
           });
         }
 
         const item = grouped.get(key);
-        const taskType = String(row?.taskType || "").toUpperCase();
+        const taskType = getRowTaskType(row);
         const committeeNo = getRowCommitteeNo(row);
 
         if (committeeNo) item.committeeSet.add(committeeNo);
         if (taskType === "INVIGILATION") item.invAssigned += 1;
+        if (taskType === "DUTY_INVIGILATOR") item.dutyAssigned += 1;
       }
 
       const reserveByDatePeriod = new Map<string, number>();
       for (const row of rows as any[]) {
-        const taskType = String(row?.taskType || "").toUpperCase();
+        const taskType = getRowTaskType(row);
         if (taskType !== "RESERVE") continue;
 
         const dateISO = getRowDateISO(row);
@@ -503,11 +726,12 @@ export default function Settings() {
         const invPerRoom = invigilatorsPerRoomForSubject(item.subject);
         const requiredTotal = Math.max(0, roomsCount * Math.max(0, Number(invPerRoom) || 0));
         const reserveAssigned = reserveByDatePeriod.get(`${item.dateISO}__${item.period}`) || 0;
+        const dutyAssigned = Number(item.dutyAssigned || 0) || 0;
         const covered = item.invAssigned + reserveAssigned;
         const deficit = Math.max(0, requiredTotal - covered);
         const coveragePct = requiredTotal > 0 ? Math.round((covered / requiredTotal) * 100) : 100;
         const deficitWithoutReserve = Math.max(0, requiredTotal - item.invAssigned);
-        const total = covered;
+        const total = item.invAssigned + reserveAssigned + dutyAssigned;
 
         return {
           id: item.key,
@@ -521,6 +745,7 @@ export default function Settings() {
           periodLabel: formatPeriodLabel(item.period, lang),
           invAssigned: item.invAssigned,
           reserveAssigned,
+          dutyAssigned,
           invPerRoom,
           requiredTotal,
           deficitWithoutReserve,
@@ -549,11 +774,12 @@ export default function Settings() {
   }, [exams, assignments.rows, assignments.source, sortDir, lang]);
 
   const totals = useMemo(() => {
-    const t = { committees: 0, inv: 0, reserve: 0, deficit: 0, total: 0, requiredTotal: 0 };
+    const t: DistributionTotals = { committees: 0, inv: 0, reserve: 0, duty: 0, deficit: 0, total: 0, requiredTotal: 0 };
     for (const r of reportRows as any[]) {
       t.committees += Number(r.roomsCount || 0) || 0;
       t.inv += Number(r.invAssigned || 0) || 0;
       t.reserve += Number(r.reserveAssigned || 0) || 0;
+      t.duty += Number(r.dutyAssigned || 0) || 0;
       t.deficit += Number(r.deficit || 0) || 0;
       t.total += Number(r.total || 0) || 0;
       t.requiredTotal += Number(r.requiredTotal || 0) || 0;
