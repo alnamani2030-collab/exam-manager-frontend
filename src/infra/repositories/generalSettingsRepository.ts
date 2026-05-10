@@ -1,4 +1,4 @@
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { db } from "../../firebase/firebase";
 import { tenantDoc } from "../../services/tenantPaths";
 
@@ -12,15 +12,26 @@ export type GeneralSettingsRecord = {
   logoUrl?: string;
 } & Record<string, any>;
 
+function safeTenantId(tenantId: string) {
+  return String(tenantId || "").trim() || "default";
+}
+
 export const generalSettingsRepository = {
   async get(tenantId: string): Promise<GeneralSettingsRecord | null> {
-    const ref = doc(db, tenantDoc(tenantId, "settings", "general"));
+    const ref = doc(db, tenantDoc(safeTenantId(tenantId), "settings", "general"));
     const snap = await getDoc(ref);
     return snap.exists() ? (snap.data() as GeneralSettingsRecord) : null;
   },
 
   async merge(tenantId: string, partial: Partial<GeneralSettingsRecord>): Promise<void> {
-    const ref = doc(db, tenantDoc(tenantId, "settings", "general"));
-    await setDoc(ref, partial, { merge: true });
+    const ref = doc(db, tenantDoc(safeTenantId(tenantId), "settings", "general"));
+    await setDoc(
+      ref,
+      {
+        ...(partial || {}),
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
   },
 };

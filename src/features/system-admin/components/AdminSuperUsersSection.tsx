@@ -16,6 +16,15 @@ export default function AdminSuperUsersSection(props: any) {
     setSuperRole,
     superGovernorate,
     setSuperGovernorate,
+    superTenantId,
+    setSuperTenantId,
+    tenantMode,
+    setTenantMode,
+    newCenterName,
+    setNewCenterName,
+    newCenterTenantId,
+    setNewCenterTenantId,
+    visibleTenants,
     superEnabled,
     setSuperEnabled,
     createSuperUser,
@@ -25,10 +34,11 @@ export default function AdminSuperUsersSection(props: any) {
   } = props;
 
   const isMinistrySuper = String(superRole || "") === "ministry_super";
+  const isExamSuper = String(superRole || "") === "exam_super";
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "minmax(320px, 440px) 1fr", gap: 14, alignItems: "start" }}>
-      <Card title={tr("إضافة سوبر المحافظات / سوبر الوزارة", "Add Governorates Super / Ministry Super")}>
+      <Card title={tr("إضافة سوبر المحافظات / سوبر الامتحانات / سوبر الوزارة", "Add Governorates Super / Exam Super / Ministry Super")}>
         <div style={{ display: "grid", gap: 10 }}>
           <div>
             <div style={{ marginBottom: 6, opacity: 0.85 }}>
@@ -36,7 +46,7 @@ export default function AdminSuperUsersSection(props: any) {
             </div>
             <Input
               value={superEmail}
-              onChange={(e) => setSuperEmail(e.target.value)}
+              onChange={(e: any) => setSuperEmail(e.target.value)}
               placeholder="super@example.com"
             />
           </div>
@@ -47,7 +57,7 @@ export default function AdminSuperUsersSection(props: any) {
             </div>
             <Input
               value={superName}
-              onChange={(e) => setSuperName(e.target.value)}
+              onChange={(e: any) => setSuperName(e.target.value)}
               placeholder={tr("اسم المستخدم", "User name")}
             />
           </div>
@@ -58,7 +68,7 @@ export default function AdminSuperUsersSection(props: any) {
             </div>
             <select
               value={superRole}
-              onChange={(e) => setSuperRole(e.target.value)}
+              onChange={(e: any) => setSuperRole(e.target.value)}
               style={{
                 width: "100%",
                 padding: "10px 12px",
@@ -69,9 +79,101 @@ export default function AdminSuperUsersSection(props: any) {
               }}
             >
               <option value="super">{tr("سوبر المحافظات", "Governorates Super")}</option>
+              <option value="exam_super">{tr("سوبر الامتحانات", "Exam Super")}</option>
               <option value="ministry_super">{tr("سوبر الوزارة", "Ministry Super")}</option>
             </select>
           </div>
+
+          {isExamSuper ? (
+            <div style={{ display: "grid", gap: 10 }}>
+              <div>
+                <div style={{ marginBottom: 6, opacity: 0.85 }}>
+                  {tr("طريقة ربط مركز الامتحانات", "Exam center binding mode")}
+                </div>
+                <select
+                  value={tenantMode}
+                  onChange={(e: any) => setTenantMode?.(e.target.value as any)}
+                  style={{
+                    width: "100%",
+                    padding: "10px 12px",
+                    borderRadius: 12,
+                    background: "rgba(2,6,23,0.55)",
+                    border: "1px solid rgba(255,255,255,0.14)",
+                    color: "#e5e7eb",
+                  }}
+                >
+                  <option value="list">{tr("اختيار من القائمة", "Choose from list")}</option>
+                  <option value="manual">{tr("إدخال يدوي", "Manual entry")}</option>
+                  <option value="create">{tr("إنشاء مركز امتحانات جديد", "Create new exam center")}</option>
+                </select>
+              </div>
+
+              {tenantMode === "list" ? (
+                <div>
+                  <div style={{ marginBottom: 6, opacity: 0.85 }}>
+                    {tr("مركز الامتحانات (Tenant)", "Exam center tenant")}
+                  </div>
+                  <select
+                    value={superTenantId}
+                    onChange={(e: any) => setSuperTenantId?.(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "10px 12px",
+                      borderRadius: 12,
+                      background: "rgba(2,6,23,0.55)",
+                      border: "1px solid rgba(255,255,255,0.14)",
+                      color: "#e5e7eb",
+                    }}
+                  >
+                    <option value="">{tr("اختر مركز الامتحانات", "Select exam center")}</option>
+                    {(visibleTenants || []).map((t: any) => (
+                      <option key={t.id} value={t.id}>
+                        {String(t.name || t.id)} ({t.id})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
+
+              {tenantMode === "manual" ? (
+                <div>
+                  <div style={{ marginBottom: 6, opacity: 0.85 }}>
+                    {tr("Tenant ID لمركز الامتحانات", "Exam center tenant ID")}
+                  </div>
+                  <Input
+                    value={superTenantId}
+                    onChange={(e: any) => setSuperTenantId?.(e.target.value)}
+                    placeholder="exam-center-1"
+                  />
+                </div>
+              ) : null}
+
+              {tenantMode === "create" ? (
+                <div style={{ display: "grid", gap: 10 }}>
+                  <div>
+                    <div style={{ marginBottom: 6, opacity: 0.85 }}>
+                      {tr("اسم مركز الامتحانات الجديد", "New exam center name")}
+                    </div>
+                    <Input
+                      value={newCenterName}
+                      onChange={(e: any) => setNewCenterName?.(e.target.value)}
+                      placeholder={tr("مثال: مركز امتحانات دبلوم التعليم العام", "Example: General Education Diploma Exam Center")}
+                    />
+                  </div>
+                  <div>
+                    <div style={{ marginBottom: 6, opacity: 0.85 }}>
+                      {tr("Tenant ID الجديد", "New tenant ID")}
+                    </div>
+                    <Input
+                      value={newCenterTenantId}
+                      onChange={(e: any) => setNewCenterTenantId?.(e.target.value)}
+                      placeholder="exam-center-1"
+                    />
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
           <div>
             <div style={{ marginBottom: 6, opacity: 0.85 }}>
@@ -79,7 +181,7 @@ export default function AdminSuperUsersSection(props: any) {
             </div>
             <select
               value={superGovernorate}
-              onChange={(e) => setSuperGovernorate(e.target.value)}
+              onChange={(e: any) => setSuperGovernorate(e.target.value)}
               disabled={isMinistrySuper}
               style={{
                 width: "100%",
@@ -93,7 +195,7 @@ export default function AdminSuperUsersSection(props: any) {
             >
               <option value="">{tr("اختر المحافظة", "Choose governorate")}</option>
               <option value={MINISTRY_SCOPE}>{tr("سوبر الوزارة", "Ministry Super")}</option>
-              {DIRECTORATES.map((g) => (
+              {DIRECTORATES.map((g: any) => (
                 <option key={g} value={g}>
                   {g}
                 </option>
@@ -102,7 +204,9 @@ export default function AdminSuperUsersSection(props: any) {
             <div style={{ marginTop: 6, fontSize: 12, opacity: 0.8 }}>
               {isMinistrySuper
                 ? tr("عند اختيار سوبر الوزارة يتم تثبيت النطاق تلقائيًا على الوزارة.", "When Ministry Super is selected, the scope is automatically fixed to the ministry.")
-                : tr("سوبر المحافظات يجب أن يكون مرتبطًا بمحافظة واحدة فقط.", "Governorates Super must be linked to one governorate only.")}
+                : isExamSuper
+                  ? tr("يمكنك اختيار مركز الامتحانات من القائمة، أو إدخاله يدويًا إذا كان موجودًا، أو إنشاء مركز جديد من نفس الصفحة.", "You can choose the exam center from the list, enter it manually if it already exists, or create a new one from this page.")
+                  : tr("سوبر المحافظات يجب أن يكون مرتبطًا بمحافظة واحدة فقط.", "Governorates Super must be linked to one governorate only.")}
             </div>
           </div>
 
@@ -110,7 +214,7 @@ export default function AdminSuperUsersSection(props: any) {
             <input
               type="checkbox"
               checked={!!superEnabled}
-              onChange={(e) => setSuperEnabled(e.target.checked)}
+              onChange={(e: any) => setSuperEnabled(e.target.checked)}
             />
             <span>{tr("مُفعّل", "Enabled")}</span>
           </label>
@@ -127,6 +231,8 @@ export default function AdminSuperUsersSection(props: any) {
             {tr("2) سوبر الوزارة للمشاهدة فقط ولا يدخل إلى بيانات المدارس الداخلية.", "2) Ministry Super is read-only and does not enter internal school data.")}
             <br />
             {tr("3) سوبر المحافظات يدير المدارس وأدمنات المدارس داخل محافظته فقط.", "3) Governorates Super manages schools and school admins inside their governorate only.")}
+            <br />
+            {tr("4) سوبر الامتحانات يمكن ربطه بمركز موجود أو إنشاء مركز امتحانات جديد من نفس الصفحة.", "4) Exam Super can be linked to an existing center or create a new exam center from the same page.")}
           </div>
         </div>
       </Card>
@@ -150,7 +256,9 @@ export default function AdminSuperUsersSection(props: any) {
                 const roleLabel =
                   role === "ministry_super"
                     ? tr("سوبر الوزارة", "Ministry Super")
-                    : tr("سوبر المحافظات", "Governorates Super");
+                    : role === "exam_super"
+                      ? tr("سوبر الامتحانات", "Exam Super")
+                      : tr("سوبر المحافظات", "Governorates Super");
 
                 return (
                   <tr

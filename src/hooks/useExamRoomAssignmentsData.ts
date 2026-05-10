@@ -3,23 +3,32 @@ import { useAuth } from "../auth/AuthContext";
 import {
   loadExamRoomAssignments,
   saveExamRoomAssignments,
+  subscribeExamRoomAssignments,
   type ExamRoomAssignment,
 } from "../services/examRoomAssignments.service";
 import { useTenantArrayState } from "./useTenantArrayState";
 
 export function useExamRoomAssignmentsData() {
   const auth = useAuth() as any;
+  const user = auth?.user;
 
   // ✅ توحيد tenantId حتى لا يتم الحفظ في مسار والقراءة من مسار آخر
-  const tenantId = String(
-    auth?.effectiveTenantId || auth?.tenantId || auth?.profile?.tenantId || ""
-  ).trim();
+  const tenantId =
+    String(
+      auth?.effectiveTenantId ||
+        auth?.tenantId ||
+        auth?.profile?.tenantId ||
+        auth?.userProfile?.tenantId ||
+        user?.tenantId ||
+        "default"
+    ).trim() || "default";
 
   const state = useTenantArrayState<ExamRoomAssignment>({
     tenantId,
     userId: auth?.user?.uid,
     load: loadExamRoomAssignments,
     save: saveExamRoomAssignments,
+    subscribe: subscribeExamRoomAssignments,
   });
 
   const itemsRef = useRef<ExamRoomAssignment[]>(state.items);

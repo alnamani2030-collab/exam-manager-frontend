@@ -1,4 +1,4 @@
-import { collection, deleteDoc, doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import { db } from "../../../firebase/firebase";
 import { callFn } from "../../../services/functionsClient";
 import { isStrictCloudRuntimeFunction, toCloudRuntimeActionError } from "../../../services/functionsRuntimePolicy";
@@ -7,18 +7,24 @@ import { writeSecurityAudit } from "../../../services/securityAudit";
 import { isSameDirectorate, MINISTRY_SCOPE, normalizeText, PRIMARY_SUPER_ADMIN_EMAIL } from "../../../constants/directorates";
 import { canManageAdminSystemRole } from "../../authz";
 import type { AllowUser } from "../types";
-import { normalizeRoleClient, resolveTenantGovernorate, stripUndefined } from "./adminSystemShared";
+import { normalizeRoleClient, resolveTenantGovernorate } from "./adminSystemShared";
 
-const USE_FUNCTIONS = !Boolean((import.meta as any).env?.DEV);
+function canManageTargetRoleLocally(authzSnapshot: any, roleNorm: string) {
+  const roles = Array.isArray(authzSnapshot?.roles) ? authzSnapshot.roles.map((r: any) => String(r).trim().toLowerCase()) : [];
+  const isPlatformOwner = roles.includes("super_admin") || roles.includes("platform_owner");
+  const isMinistrySuper = roles.includes("ministry_super");
+  if (roleNorm === "exam_super") return isPlatformOwner || isMinistrySuper;
+  return canManageAdminSystemRole(authzSnapshot, roleNorm as any);
+}
 
 export async function buildGovernorateForUserRole(
-  roleNorm: AllowUser["role"] | "tenant_admin" | "ministry_super",
+  roleNorm: AllowUser["role"] | "tenant_admin" | "ministry_super" | "exam_super",
   tenantId: string,
   governorateInput: string
 ): Promise<string | undefined> {
   if (roleNorm === "super") return normalizeText(String(governorateInput ?? "")) || undefined;
   if (roleNorm === "ministry_super") return normalizeText(String(MINISTRY_SCOPE)) || undefined;
-  if (roleNorm === "tenant_admin" || String(roleNorm) === "admin") {
+  if (roleNorm === "tenant_admin" || String(roleNorm) === "admin" || roleNorm === "exam_super") {
     return normalizeText(await resolveTenantGovernorate(tenantId)) || undefined;
   }
   return undefined;
@@ -39,7 +45,7 @@ export async function createAllowUserAction(args: any) {
     throw new Error("سوبر المحافظات لا يستطيع إنشاء إلا (أدمن المدرسة) فقط.");
   }
   if (isProtectedOwnerEmail) throw new Error("لا يمكن تعديل/حذف/تعطيل مالك المنصة الرئيسي.");
-  if (!canManageAdminSystemRole(authzSnapshot, roleNorm)) throw new Error("ليست لديك صلاحية لإنشاء هذا النوع من المستخدمين.");
+  if (!canManageTargetRoleLocally(authzSnapshot, roleNorm)) throw new Error("ليست لديك صلاحية لإنشاء هذا النوع من المستخدمين.");
 
   const superAdminCount = users.filter((u: any) => {
     const r = normalizeRoleClient((u as any).role, (u as any).governorate);
@@ -64,12 +70,20 @@ export async function createAllowUserAction(args: any) {
 
   const governorateFinal = await buildGovernorateForUserRole(roleNorm, tenantId, newUserGovernorate);
   try {
-    if (USE_FUNCTIONS) {
-      await callFn<any, any>("adminUpsertAllowlist")({ email, enabled: !!newUserEnabled, role: roleNorm, tenantId, governorate: governorateFinal, name: String(newUserName || "").trim(), schoolName: String(newUserSchoolName || "").trim() });
-    } else throw new Error("skip");
+    await callFn<any, any>("adminUpsertAllowlist")({
+      email,
+      enabled: !!newUserEnabled,
+      role: roleNorm,
+      tenantId,
+      governorate: governorateFinal,
+      name: String(newUserName || "").trim(),
+      schoolName: String(newUserSchoolName || "").trim(),
+    });
   } catch (error) {
-    if (USE_FUNCTIONS && isStrictCloudRuntimeFunction("adminUpsertAllowlist")) throw toCloudRuntimeActionError(error, "adminUpsertAllowlist", "إنشاء/تحديث المستخدم");
-    await setDoc(doc(db, "allowlist", email), stripUndefined({ email, enabled: !!newUserEnabled, role: roleNorm, tenantId, governorate: governorateFinal, name: String(newUserName || "").trim(), schoolName: String(newUserSchoolName || "").trim(), createdAt: serverTimestamp(), createdBy: user.email || "", updatedAt: serverTimestamp(), updatedBy: user.email || "" }), { merge: true });
+    if (isStrictCloudRuntimeFunction("adminUpsertAllowlist")) {
+      throw toCloudRuntimeActionError(error, "adminUpsertAllowlist", "إنشاء/تحديث المستخدم");
+    }
+    throw error;
   }
   await writeSecurityAudit({ type: "ALLOWLIST_CREATE", tenantId, actorUid: user.uid, actorEmail: user.email || "", targetEmail: email, details: { role: roleNorm, governorate: governorateFinal, enabled: !!newUserEnabled, name: String(newUserName || "").trim(), schoolName: String(newUserSchoolName || "").trim() } });
   await logActivity(tenantId, { actorUid: user.uid, actorEmail: user.email || "", action: "ALLOWLIST_CREATED", entity: "allowlist", entityId: email, meta: { role: roleNorm, governorate: governorateFinal, enabled: !!newUserEnabled, name: String(newUserName || "").trim(), schoolName: String(newUserSchoolName || "").trim() } });
@@ -82,7 +96,7 @@ export async function updateAllowUserAction(args: any) {
   const roleNorm = normalizeRoleClient(merged.role, (merged as any).governorate);
   const emailLower = String(merged.email || "").toLowerCase().trim();
   if (emailLower === PRIMARY_SUPER_ADMIN_EMAIL.toLowerCase()) throw new Error("لا يمكن تعديل/حذف/تعطيل مالك المنصة الرئيسي.");
-  if (!canManageAdminSystemRole(authzSnapshot, roleNorm)) throw new Error("ليست لديك صلاحية لتعديل هذا النوع من المستخدمين.");
+  if (!canManageTargetRoleLocally(authzSnapshot, roleNorm)) throw new Error("ليست لديك صلاحية لتعديل هذا النوع من المستخدمين.");
   if (isSuper && roleNorm !== "tenant_admin" && String(roleNorm) !== "admin") {
     throw new Error("سوبر المحافظات لا يستطيع تعديل إلا (أدمن المدرسة) فقط.");
   }
@@ -96,17 +110,25 @@ export async function updateAllowUserAction(args: any) {
     }
   } else if (roleNorm === "ministry_super") {
     governorateFinal = normalizeText(String(MINISTRY_SCOPE)) || undefined;
-  } else if (roleNorm === "tenant_admin" || String(roleNorm) === "admin") {
+  } else if (roleNorm === "tenant_admin" || String(roleNorm) === "admin" || roleNorm === "exam_super") {
     governorateFinal = normalizeText(await resolveTenantGovernorate(String(merged.tenantId || ""))) || undefined;
   }
 
   try {
-    if (USE_FUNCTIONS) {
-      await callFn<any, any>("adminUpsertAllowlist")({ email: merged.email, tenantId: merged.tenantId, governorate: governorateFinal, enabled: !!merged.enabled, role: roleNorm, name: (merged.name || "").trim(), schoolName: String((merged as any).schoolName || "").trim() });
-    } else throw new Error("skip");
+    await callFn<any, any>("adminUpsertAllowlist")({
+      email: merged.email,
+      tenantId: merged.tenantId,
+      governorate: governorateFinal,
+      enabled: !!merged.enabled,
+      role: roleNorm,
+      name: (merged.name || "").trim(),
+      schoolName: String((merged as any).schoolName || "").trim(),
+    });
   } catch (error) {
-    if (USE_FUNCTIONS && isStrictCloudRuntimeFunction("adminUpsertAllowlist")) throw toCloudRuntimeActionError(error, "adminUpsertAllowlist", "تعديل المستخدم");
-    await setDoc(doc(db, "allowlist", merged.email), stripUndefined({ email: merged.email, tenantId: merged.tenantId, governorate: governorateFinal, enabled: !!merged.enabled, role: roleNorm, name: (merged.name || "").trim(), schoolName: String((merged as any).schoolName || "").trim(), updatedAt: serverTimestamp(), updatedBy: user.email || "" }), { merge: true });
+    if (isStrictCloudRuntimeFunction("adminUpsertAllowlist")) {
+      throw toCloudRuntimeActionError(error, "adminUpsertAllowlist", "تعديل المستخدم");
+    }
+    throw error;
   }
 }
 
@@ -118,11 +140,12 @@ export async function removeAllowUserAction(args: any) {
   if (emailLower === PRIMARY_SUPER_ADMIN_EMAIL.toLowerCase()) throw new Error("لا يمكن حذف مالك المنصة الرئيسي.");
   if (!canManageAdminSystemRole(authzSnapshot, roleNorm)) throw new Error("ليست لديك صلاحية لحذف هذا النوع من المستخدمين.");
   try {
-    if (USE_FUNCTIONS) await callFn<any, any>("adminDeleteAllowlist")({ email: emailLower });
-    else throw new Error("skip");
+    await callFn<any, any>("adminDeleteAllowlist")({ email: emailLower });
   } catch (error) {
-    if (USE_FUNCTIONS && isStrictCloudRuntimeFunction("adminDeleteAllowlist")) throw toCloudRuntimeActionError(error, "adminDeleteAllowlist", "حذف المستخدم");
-    await deleteDoc(doc(db, "allowlist", emailLower));
+    if (isStrictCloudRuntimeFunction("adminDeleteAllowlist")) {
+      throw toCloudRuntimeActionError(error, "adminDeleteAllowlist", "حذف المستخدم");
+    }
+    throw error;
   }
   if (item?.tenantId) {
     await writeSecurityAudit({ type: "ALLOWLIST_DELETE", tenantId: item.tenantId, actorUid: user.uid, actorEmail: user.email || "", targetEmail: emailLower, details: { role: roleNorm } });
@@ -135,9 +158,17 @@ export async function loadOwnerForTenantAction(tid: string) {
 }
 
 export async function inviteSingleOwnerAction(args: any) {
-  const { user, ownerTenantId, ownerEmail } = args;
+  const { ownerTenantId, ownerEmail } = args;
   const tid = String(ownerTenantId || "").trim();
   const em = String(ownerEmail || "").trim().toLowerCase();
   if (!tid || !em.includes("@")) throw new Error("أدخل tenantId صحيح وبريد صحيح.");
-  await setDoc(doc(db, "allowlist", em), { email: em, enabled: true, role: "tenant_admin", tenantId: tid, createdAt: serverTimestamp(), createdBy: user.email || "", updatedAt: serverTimestamp(), updatedBy: user.email || "" }, { merge: true });
+
+  await callFn<any, any>("adminUpsertAllowlist")({
+    email: em,
+    enabled: true,
+    role: "tenant_admin",
+    tenantId: tid,
+    name: "",
+    schoolName: "",
+  });
 }

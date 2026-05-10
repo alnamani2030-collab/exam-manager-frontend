@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
 import { signOut } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
-import { auth as firebaseAuth, db } from "../firebase/firebase";
+import { auth as firebaseAuth } from "../firebase/firebase";
 import { useAuth } from "../auth/AuthContext";
 import { buildAuthzSnapshot, canAccessCapability, resolvePrimaryRoleLabel } from "../features/authz";
 import SupportModeBar from "../components/SupportModeBar";
+import BrandedHeader from "../components/BrandedHeader";
 import { useI18n } from "../i18n/I18nProvider";
 import CloudStorageStatusPill from "../features/cloud-storage/CloudStorageStatusPill";
 import "../styles/officialUnifiedTheme.css";
@@ -13,194 +13,6 @@ import "../styles/officialUnifiedTheme.css";
 const APP_LOGO_URL = "https://i.imgur.com/vdDhSMh.png";
 const GOLD_DARK = "#d4af37";
 const GOLD_GLOW = "rgba(212, 175, 55, 0.45)";
-const SIDEBAR_NAV_BG = "linear-gradient(180deg, #081225 0%, #091426 100%)";
-const SIDEBAR_GOLD_SOFT = "rgba(212, 175, 55, 0.22)";
-
-
-type OfficialIdentity = {
-  organizationName: string;
-  governorate: string;
-  semester: string;
-  academicYear: string;
-  logo: string;
-};
-
-const SCHOOL_DATA_KEY = "exam-manager:school-data:v1";
-const SCHOOL_LOGO_KEY = "exam-manager:app-logo";
-
-function safeParseJson(raw: string | null): any {
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
-
-function pickText(...values: any[]) {
-  for (const value of values) {
-    const text = String(value ?? "").trim();
-    if (text) return text;
-  }
-  return "";
-}
-
-function getAcademicYearFromSystemDate(now = new Date()) {
-  const month = now.getMonth() + 1;
-  const year = now.getFullYear();
-  const startYear = month >= 9 ? year : year - 1;
-  const endYear = startYear + 1;
-  return `${startYear} - ${endYear}`;
-}
-
-function readLocalSchoolIdentity(): OfficialIdentity {
-  if (typeof window === "undefined") {
-    return {
-      organizationName: "",
-      governorate: "",
-      semester: "",
-      academicYear: getAcademicYearFromSystemDate(),
-      logo: APP_LOGO_URL,
-    };
-  }
-
-  const schoolData = safeParseJson(window.localStorage.getItem(SCHOOL_DATA_KEY)) || {};
-  const logo = pickText(
-    window.localStorage.getItem(SCHOOL_LOGO_KEY),
-    schoolData.logo,
-    schoolData.logoUrl,
-    APP_LOGO_URL
-  );
-
-  return {
-    organizationName: pickText(schoolData.name, schoolData.schoolName, schoolData.schoolNameAr, schoolData.tenantName),
-    governorate: pickText(schoolData.governorate, schoolData.directorate, schoolData.directorateName, schoolData.scope),
-    semester: pickText(schoolData.semester, schoolData.term, schoolData.currentSemester),
-    academicYear: pickText(schoolData.academicYear, schoolData.schoolYear, getAcademicYearFromSystemDate()),
-    logo,
-  };
-}
-
-function resolveOfficialIdentity(rootData: any, configData: any, authState: any): OfficialIdentity {
-  const local = readLocalSchoolIdentity();
-  const allow = authState?.allow || {};
-  const profile = authState?.profile || authState?.userProfile || {};
-
-  return {
-    // School pages must use Settings1 values first.
-    // Tenant/root data is only a fallback so the official letterhead stays linked to the school profile page.
-    organizationName: pickText(
-      local.organizationName,
-      configData?.schoolName,
-      configData?.schoolNameAr,
-      configData?.name,
-      configData?.tenantName,
-      rootData?.schoolName,
-      rootData?.schoolNameAr,
-      rootData?.name,
-      rootData?.tenantName,
-      allow?.schoolName,
-      allow?.tenantName,
-      profile?.schoolName,
-      profile?.tenantName
-    ),
-    governorate: pickText(
-      local.governorate,
-      configData?.governorate,
-      configData?.directorate,
-      configData?.directorateName,
-      configData?.scope,
-      rootData?.governorate,
-      rootData?.directorate,
-      rootData?.directorateName,
-      rootData?.scope,
-      allow?.governorate,
-      allow?.scope,
-      profile?.governorate,
-      profile?.scope
-    ),
-    semester: pickText(local.semester, configData?.semester, configData?.term, rootData?.semester, rootData?.term),
-    academicYear: pickText(
-      local.academicYear,
-      configData?.academicYear,
-      configData?.schoolYear,
-      rootData?.academicYear,
-      rootData?.schoolYear,
-      getAcademicYearFromSystemDate()
-    ),
-    logo: pickText(local.logo, configData?.logo, configData?.logoUrl, rootData?.logo, rootData?.logoUrl, APP_LOGO_URL),
-  };
-}
-
-function OfficialMinistryHeader({
-  pageTitle,
-  identity,
-  lang,
-}: {
-  pageTitle: string;
-  identity: OfficialIdentity;
-  lang: "ar" | "en";
-}) {
-  const isArabic = lang === "ar";
-  const title = String(pageTitle || "").trim();
-  const organizationName = String(identity?.organizationName || "").trim();
-  const governorate = String(identity?.governorate || "").trim();
-  const semester = String(identity?.semester || "").trim();
-  const academicYear = String(identity?.academicYear || getAcademicYearFromSystemDate()).trim();
-  const logo = String(identity?.logo || APP_LOGO_URL).trim();
-
-  return (
-    <header className="moe-school-letterhead" aria-label={isArabic ? "الترويسة الرسمية" : "Official header"}>
-      <div className="moe-school-letterhead__grid">
-        <div className="moe-school-letterhead__side moe-school-letterhead__right">
-          <div className="moe-school-letterhead__country">{isArabic ? "سلطنة عمان" : "Sultanate of Oman"}</div>
-          <div className="moe-school-letterhead__ministry">{isArabic ? "وزارة التعليم" : "Ministry of Education"}</div>
-          <div className="moe-school-letterhead__directorate">
-            {governorate || (isArabic ? "المحافظة / المديرية" : "Governorate / Directorate")}
-          </div>
-          {organizationName ? <div className="moe-school-letterhead__school">{organizationName}</div> : null}
-        </div>
-
-        <div className="moe-school-letterhead__logoWrap">
-          <img
-            src={logo || APP_LOGO_URL}
-            alt={isArabic ? "شعار وزارة التعليم" : "Ministry logo"}
-            className="moe-school-letterhead__logo"
-            onError={(event) => {
-              const img = event.currentTarget as HTMLImageElement;
-              if (img.src !== APP_LOGO_URL) img.src = APP_LOGO_URL;
-            }}
-          />
-        </div>
-
-        <div className="moe-school-letterhead__side moe-school-letterhead__left">
-          <div className="moe-school-letterhead__title">{title || (isArabic ? "نظام إدارة الامتحانات" : "Exam Management System")}</div>
-          {semester ? <div className="moe-school-letterhead__meta">{semester}</div> : null}
-          <div className="moe-school-letterhead__meta">
-            {isArabic ? "العام الدراسي" : "Academic Year"}: {academicYear}
-          </div>
-        </div>
-      </div>
-
-      <div className="moe-school-letterhead__rule" />
-
-      <div className="moe-school-letterhead__summary">
-        <div>
-          <span>{isArabic ? "اسم المدرسة" : "School"}: </span>
-          <strong>{organizationName || (isArabic ? "غير محدد" : "Not set")}</strong>
-        </div>
-        <div>
-          <span>{isArabic ? "المحافظة" : "Governorate"}: </span>
-          <strong>{governorate || (isArabic ? "غير محددة" : "Not set")}</strong>
-        </div>
-        <div>
-          <span>{isArabic ? "الفصل" : "Semester"}: </span>
-          <strong>{semester || (isArabic ? "غير محدد" : "Not set")}</strong>
-        </div>
-      </div>
-    </header>
-  );
-}
 
 function translateRoleLabel(label: string, lang: "ar" | "en") {
   const map: Record<string, { ar: string; en: string }> = {
@@ -209,7 +21,6 @@ function translateRoleLabel(label: string, lang: "ar" | "en") {
     "مدير جهة": { ar: "مدير جهة", en: "Tenant Admin" },
     "مدير": { ar: "مدير", en: "Manager" },
     "مستخدم تشغيلي": { ar: "مستخدم تشغيلي", en: "Operational User" },
-    "سوبر الامتحانات": { ar: "سوبر الامتحانات", en: "Exam Super" },
     "مستخدم": { ar: "مستخدم", en: "User" },
   };
   const entry = map[label];
@@ -226,108 +37,12 @@ export default function Layout() {
 
   const authzSnapshot = useMemo(() => buildAuthzSnapshot(authState), [authState]);
   const isAdmin = canAccessCapability(authzSnapshot, "SETTINGS_MANAGE");
+  const roleLabel = translateRoleLabel(resolvePrimaryRoleLabel(authzSnapshot), lang);
   const canSeeSystemArea = canAccessCapability(authzSnapshot, "SYSTEM_ADMIN");
   const canSeeOwnerTools = canAccessCapability(authzSnapshot, "PLATFORM_OWNER");
 
-  const currentRole = String(
-    authState?.effectiveRole ||
-    authState?.allow?.role ||
-    authState?.profile?.role ||
-    authState?.userProfile?.role ||
-    ""
-  ).trim().toLowerCase();
-
-  const canBackToProgramsGateway = currentRole === "super_admin" || currentRole === "super";
-
-  const currentTenantId = String(
-    authState?.effectiveTenantId ||
-    authState?.allow?.tenantId ||
-    authState?.profile?.tenantId ||
-    authState?.userProfile?.tenantId ||
-    ""
-  ).trim();
-
-  const [tenantType, setTenantType] = useState("");
-  const [tenantTypeLoading, setTenantTypeLoading] = useState(true);
-  const [officialIdentity, setOfficialIdentity] = useState<OfficialIdentity>(() => readLocalSchoolIdentity());
-
-  const roleLabel =
-    currentRole === "exam_super"
-      ? translateRoleLabel("سوبر الامتحانات", lang)
-      : translateRoleLabel(resolvePrimaryRoleLabel(authzSnapshot), lang);
-
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-
-  useEffect(() => {
-    let mounted = true;
-
-    async function loadTenantIdentity() {
-      const id = String(routeTenantId || "").trim();
-      const localIdentity = readLocalSchoolIdentity();
-
-      if (!id) {
-        if (mounted) {
-          setTenantType("");
-          setOfficialIdentity(localIdentity);
-          setTenantTypeLoading(false);
-        }
-        return;
-      }
-
-      try {
-        const [rootResult, configResult] = await Promise.allSettled([
-          getDoc(doc(db, "tenants", id)),
-          getDoc(doc(db, "tenants", id, "meta", "config")),
-        ]);
-
-        const rootData = rootResult.status === "fulfilled" ? rootResult.value.data() || {} : {};
-        const configData = configResult.status === "fulfilled" ? configResult.value.data() || {} : {};
-        const rootType = String((rootData as any)?.type || "").trim();
-        const configType = String((configData as any)?.type || "").trim();
-
-        if (mounted) {
-          setTenantType(rootType || configType);
-          setOfficialIdentity(resolveOfficialIdentity(rootData, configData, authState));
-          setTenantTypeLoading(false);
-        }
-      } catch {
-        if (mounted) {
-          setTenantType("");
-          setOfficialIdentity(localIdentity);
-          setTenantTypeLoading(false);
-        }
-      }
-    }
-
-    void loadTenantIdentity();
-
-    return () => {
-      mounted = false;
-    };
-  }, [routeTenantId]);
-
-  useEffect(() => {
-    const refreshLocalIdentity = () => {
-      setOfficialIdentity((previous) => {
-        const next = readLocalSchoolIdentity();
-        return {
-          organizationName: next.organizationName || previous.organizationName,
-          governorate: next.governorate || previous.governorate,
-          semester: next.semester || previous.semester,
-          academicYear: next.academicYear || previous.academicYear || getAcademicYearFromSystemDate(),
-          logo: next.logo || previous.logo || APP_LOGO_URL,
-        };
-      });
-    };
-
-    window.addEventListener("exam-manager:changed", refreshLocalIdentity);
-    window.addEventListener("storage", refreshLocalIdentity);
-    return () => {
-      window.removeEventListener("exam-manager:changed", refreshLocalIdentity);
-      window.removeEventListener("storage", refreshLocalIdentity);
-    };
-  }, []);
 
   useEffect(() => {
     const onResize = () => {
@@ -351,14 +66,6 @@ export default function Layout() {
   }, [location.pathname]);
 
   const tenantBase = routeTenantId ? `/t/${routeTenantId}` : "";
-  const isExamCenterTenant = String(tenantType || "").trim().toLowerCase() === "exam_center";
-  const isExamSuper =
-    !tenantTypeLoading &&
-    currentRole === "exam_super" &&
-    !!routeTenantId &&
-    currentTenantId === String(routeTenantId).trim() &&
-    isExamCenterTenant;
-
   const isDiploma12Area = useMemo(() => {
     const path = String(location.pathname || "").toLowerCase();
     return (
@@ -374,21 +81,13 @@ export default function Layout() {
       path.includes("/setting12") ||
       path.includes("/analytics12") ||
       path.includes("/control12") ||
+      path.includes("/student-seat-register12") ||
       path.includes("/cloud-health12") ||
       path.includes("/cloud-backup12") ||
       path.includes("/suggestions12page") ||
       path.includes("/about12")
     );
   }, [location.pathname]);
-
-  const schoolOfficialPageClass = useMemo(() => {
-    const path = String(location.pathname || "").toLowerCase();
-    if (isDiploma12Area) return "";
-    if (path.endsWith("/teachers") || path.includes("/teachers/")) return "moe-school-page--teachers";
-    if (path.endsWith("/exams") || path.includes("/exams/")) return "moe-school-page--exams";
-    if (path.endsWith("/rooms") || path.includes("/rooms/")) return "moe-school-page--rooms";
-    return "";
-  }, [location.pathname, isDiploma12Area]);
 
   const sidebarItems = useMemo(() => {
     const tp = (path: string) => {
@@ -437,6 +136,7 @@ export default function Layout() {
       { to: tp("task-distribution-print12"), label: tr("بوابة التقارير الرسمية للتوزيع", "Official Distribution Reports"), icon: "📑" },
       { to: tp("analytics12"), label: tr("لوحة التحليل", "Analytics"), icon: "📈" },
       { to: tp("control12"), label: tr("ملفات الكنترول", "Control Files"), icon: "🗂️" },
+      { to: tp("student-seat-register12"), label: tr("سجل أرقام الجلوس", "Seat Numbers Register"), icon: "🔎" },
       { to: tp("cloud-health12"), label: tr("فحص التخزين السحابي", "Cloud Health"), icon: "☁️" },
       { to: tp("cloud-backup12"), label: tr("النسخ الاحتياطي السحابي", "Cloud Backup"), icon: "🛡️", adminOnly: true },
       { to: tp("suggestions12page"), label: tr("تطوير البرنامج", "Suggestions"), icon: "💡" },
@@ -482,7 +182,7 @@ export default function Layout() {
   const oppositeMarginProp = isRTL ? "marginRight" : "marginLeft";
 
   return (
-    <div className="moe-official-app-shell moe-school-shell" style={{ direction: isRTL ? "rtl" : "ltr", display: "flex", minHeight: "100vh" }}>
+    <div className="moe-official-app-shell moe-diploma-shell" style={{ direction: isRTL ? "rtl" : "ltr", display: "flex", minHeight: "100vh" }}>
       <aside
         className="moe-official-sidebar"
         style={{
@@ -493,9 +193,9 @@ export default function Layout() {
           [sideProp]: 0,
           background: "linear-gradient(180deg, #f3e1a2 0%, #efd98a 48%, #f8edbf 100%)",
           backdropFilter: "blur(18px)",
-          borderLeft: isRTL ? `2px solid ${SIDEBAR_GOLD_SOFT}` : undefined,
-          borderRight: !isRTL ? `2px solid ${SIDEBAR_GOLD_SOFT}` : undefined,
-          boxShadow: isRTL ? `-18px 0 50px rgba(0,0,0,0.30), 0 0 24px ${SIDEBAR_GOLD_SOFT}` : `18px 0 50px rgba(0,0,0,0.30), 0 0 24px ${SIDEBAR_GOLD_SOFT}`,
+          borderLeft: isRTL ? "3px solid rgba(212,175,55,0.55)" : undefined,
+          borderRight: !isRTL ? "3px solid rgba(212,175,55,0.55)" : undefined,
+          boxShadow: isRTL ? "-18px 0 40px rgba(150,120,20,0.22)" : "18px 0 40px rgba(150,120,20,0.22)",
           zIndex: 999,
           display: "flex",
           flexDirection: "column",
@@ -564,7 +264,7 @@ export default function Layout() {
                 borderRadius: 14,
                 overflow: "hidden",
                 border: "1px solid rgba(212,175,55,0.22)",
-                background: "rgba(255,255,255,0.04)",
+                background: "rgba(255,255,255,0.70)",
               }}
             >
               <button
@@ -629,8 +329,8 @@ export default function Layout() {
                 style={{
                   padding: sidebarCollapsed ? 14 : "12px 16px",
                   borderRadius: 14,
-                  background: active ? "linear-gradient(180deg, #fff1b8 0%, #eadb9f 100%)" : "rgba(255,253,247,0.82)",
-                  border: active ? "2px solid rgba(184,134,11,0.70)" : "1.5px solid rgba(184,134,11,0.34)",
+                  background: active ? "linear-gradient(180deg, #fca5a5 0%, #fef08a 100%)" : "linear-gradient(180deg, #bfdbfe 0%, #d8b4fe 100%)",
+                  border: active ? "3px solid rgba(212,175,55,0.80)" : "2px solid rgba(212,175,55,0.28)",
                   color: "#111111",
                   display: "flex",
                   alignItems: "center",
@@ -640,6 +340,7 @@ export default function Layout() {
                   fontWeight: active ? 800 : 600,
                   transition: "all 0.22s ease",
                   textAlign: isRTL ? "right" : "left",
+                  boxShadow: active ? "0 18px 32px rgba(150,120,20,0.26), 0 0 0 6px rgba(245,232,170,0.30) inset" : "0 10px 20px rgba(120,90,20,0.14)",
                 }}
               >
                 <span style={{ fontSize: 20 }}>{item.icon}</span>
@@ -649,36 +350,13 @@ export default function Layout() {
           })}
         </nav>
 
-        {canBackToProgramsGateway ? (
-          <button
-            onClick={() => navigate("/programs-gateway")}
-            style={{
-              padding: sidebarCollapsed ? 14 : "12px 16px",
-              borderRadius: 14,
-              background: "rgba(212,175,55,0.15)",
-              border: "1px solid rgba(212,175,55,0.35)",
-              color: GOLD_DARK,
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-              justifyContent: sidebarCollapsed ? "center" : "flex-start",
-              cursor: "pointer",
-              fontWeight: 800,
-              boxShadow: `0 10px 24px rgba(0,0,0,0.18), 0 0 16px ${GOLD_GLOW}`,
-            }}
-          >
-            <span style={{ fontSize: 20 }}>↩️</span>
-            {!sidebarCollapsed && <span>{tr("العودة إلى البوابة التشغيلية", "Back to Programs Gateway")}</span>}
-          </button>
-        ) : null}
-
         <button
           onClick={() => setShowLogoutConfirm(true)}
           style={{
             padding: sidebarCollapsed ? 14 : "12px 16px",
             borderRadius: 14,
-            background: "linear-gradient(180deg, #fee2e2 0%, #fecaca 100%)",
-            border: "1px solid rgba(185,28,28,0.30)",
+            background: "linear-gradient(180deg, #fecaca 0%, #fca5a5 100%)",
+            border: "1px solid rgba(239,68,68,0.35)",
             color: "#7f1d1d",
             display: "flex",
             alignItems: "center",
@@ -710,19 +388,19 @@ export default function Layout() {
       />
 
       <main
-        className={`moe-official-main ${isDiploma12Area ? "moe-official-main--diploma" : "moe-official-main--school"} ${schoolOfficialPageClass}`}
+        className="moe-official-main"
         style={{
           [oppositeMarginProp]: SIDEBAR_WIDTH,
           width: `calc(100% - ${SIDEBAR_WIDTH}px)`,
           transition: "all 280ms ease",
           minHeight: "100vh",
-          background: "linear-gradient(135deg, #fbf4df 0%, #f5ecd8 50%, #efe3c7 100%)",
+          background: "linear-gradient(135deg, #0f172a 0%, #020617 100%)",
           padding: window.innerWidth < 768 ? 16 : 28,
           boxSizing: "border-box",
         } as React.CSSProperties}
       >
         <SupportModeBar />
-        <OfficialMinistryHeader pageTitle={pageTitle || ""} identity={officialIdentity} lang={lang} />
+        <BrandedHeader pageTitle={pageTitle || ""} />
         <Outlet />
       </main>
 
@@ -763,8 +441,8 @@ export default function Layout() {
                   padding: 10,
                   borderRadius: 12,
                   border: "1px solid rgba(239,68,68,0.35)",
-                  background: "rgba(239,68,68,0.15)",
-                  color: "#fecaca",
+                  background: "linear-gradient(180deg, #fecaca 0%, #fca5a5 100%)",
+                  color: "#7f1d1d",
                   fontWeight: 900,
                   cursor: "pointer",
                 }}

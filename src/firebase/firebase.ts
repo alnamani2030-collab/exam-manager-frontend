@@ -1,11 +1,16 @@
 // src/firebase/firebase.ts
-import { initializeApp } from "firebase/app";
+import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import {
+  getFirestore,
+  initializeFirestore,
+  memoryLocalCache,
+  type Firestore,
+} from "firebase/firestore";
 import { getFunctions } from "firebase/functions";
 import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 
-// ✅ نفس بياناتك من Firebase
+// Firebase project configuration
 const firebaseConfig = {
   apiKey: "AIzaSyCZhk4MBHz5dCIe1AfPMz2SHtV84GMC6J4",
   authDomain: "exam-manager-frontend.firebaseapp.com",
@@ -16,45 +21,70 @@ const firebaseConfig = {
   measurementId: "G-FYG4ZJZBR2",
 };
 
-export const app = initializeApp(firebaseConfig);
+// HMR-safe initialization: prevents duplicate Firebase app errors in development.
+export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
-// ✅ Auth + Firestore
+// Auth
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+
+// Firestore
+// Use memoryLocalCache to avoid corrupted IndexedDB/local persistence states in development
+// and to prevent Firestore INTERNAL ASSERTION FAILED errors caused by a stale browser cache.
+let firestoreDb: Firestore;
+
+try {
+  firestoreDb = initializeFirestore(app, {
+    localCache: memoryLocalCache(),
+  });
+} catch {
+  // If Firestore was already initialized during Vite HMR, reuse the existing instance.
+  firestoreDb = getFirestore(app);
+}
+
+export const db = firestoreDb;
+
+// Functions
 export const functions = getFunctions(app, "us-central1");
 
 // ============================
-// App Check (حماية متقدمة)
+// App Check
 // ============================
-// ضع مفتاح reCAPTCHA v3 في .env:
+// Put reCAPTCHA v3 site key in .env if App Check is needed:
 //   VITE_APP_CHECK_SITE_KEY=...
-// للتطوير يمكن تفعيل Debug Token:
+//
+// Local development options:
+//   VITE_DISABLE_APPCHECK=true
 //   VITE_APP_CHECK_DEBUG=true
 
 const appCheckKey = (import.meta as any).env?.VITE_APP_CHECK_SITE_KEY as string | undefined;
 
-// You can fully disable App Check locally if you get blocked by enforcement while developing:
-//   VITE_DISABLE_APPCHECK=true
-const disableAppCheck = String((import.meta as any).env?.VITE_DISABLE_APPCHECK || "").toLowerCase() === "true";
+const disableAppCheck =
+  String((import.meta as any).env?.VITE_DISABLE_APPCHECK || "").toLowerCase() === "true";
 
-// Debug mode (local dev). When enabled, the SDK prints a debug token in the browser console.
-// Add that token in Firebase Console -> App Check -> Apps -> Manage debug tokens.
 const appCheckDebug =
-  String((import.meta as any).env?.VITE_APP_CHECK_DEBUG || "").toLowerCase() === "true" || Boolean((import.meta as any).env?.DEV);
+  String((import.meta as any).env?.VITE_APP_CHECK_DEBUG || "").toLowerCase() === "true" ||
+  Boolean((import.meta as any).env?.DEV);
 
 try {
-  if (!disableAppCheck && appCheckKey) {
-    // Debug token for local development
-    if (appCheckDebug && typeof window !== "undefined") {
-      // @ts-ignore
-      self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
-    }
+  if (!disableAppCheck && appCheckKey && typeof window !== "undefined") {
+    const alreadyInitialized = Boolean((window as any).__EXAM_MANAGER_APPCHECK_INITIALIZED__);
 
-    initializeAppCheck(app, {
-      provider: new ReCaptchaV3Provider(appCheckKey),
-      isTokenAutoRefreshEnabled: true,
-    });
+    if (!alreadyInitialized) {
+      if (appCheckDebug) {
+        // Firebase App Check debug token for local development.
+        // Add the generated token in Firebase Console -> App Check -> Manage debug tokens.
+        // @ts-ignore
+        self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+      }
+
+      initializeAppCheck(app, {
+        provider: new ReCaptchaV3Provider(appCheckKey),
+        isTokenAutoRefreshEnabled: true,
+      });
+
+      (window as any).__EXAM_MANAGER_APPCHECK_INITIALIZED__ = true;
+    }
   }
 } catch {
-  // لا نكسر التطبيق في حال عدم تهيئة App Check
+  // Do not break the application if App Check initialization fails.
 }

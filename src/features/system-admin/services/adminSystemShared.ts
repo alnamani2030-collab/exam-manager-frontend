@@ -22,7 +22,7 @@ export function stripUndefined<T extends Record<string, any>>(obj: T): T {
   return out as T;
 }
 
-export function normalizeRoleClient(raw: any, governorate?: any): "super_admin" | "ministry_super" | "super" | "tenant_admin" | "user" {
+export function normalizeRoleClient(raw: any, governorate?: any): "super_admin" | "ministry_super" | "super" | "exam_super" | "tenant_admin" | "user" {
   const r = String(raw ?? "tenant_admin").trim().toLowerCase();
   if (r === "super_admin" || r === "superadmin" || r === "super admin" || r === "super-admin") return "super_admin";
   if (r === "ministry_super" || r === "ministry super" || r === "ministry-super" || r === "super_ministry") return "ministry_super";
@@ -30,6 +30,7 @@ export function normalizeRoleClient(raw: any, governorate?: any): "super_admin" 
     const g = String(governorate ?? "").trim();
     return g ? "super" : "ministry_super";
   }
+  if (r === "exam_super" || r === "exam super" || r === "exam-super" || r === "super_exam" || r === "super-exam") return "exam_super";
   if (r === "admin" || r === "tenant_admin" || r === "tenantadmin" || r === "tenant admin" || r === "tenant-admin") return "tenant_admin";
   return "user";
 }

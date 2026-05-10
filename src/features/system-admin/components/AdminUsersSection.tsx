@@ -10,9 +10,10 @@ import { Button, Card, GOLD, Input } from "../ui";
 
 const norm = (v: any) => String(v || "").trim().toLowerCase();
 
-const isSchoolRole = (role: string) => ["tenant_admin", "admin", "user"].includes(norm(role));
+const isSchoolRole = (role: string) => ["tenant_admin", "admin", "user", "exam_super"].includes(norm(role));
 const isGovRole = (role: string) => ["super", "super_regional", "regional_super"].includes(norm(role));
 const isMinistryRole = (role: string) => norm(role) === "ministry_super";
+const isExamSuperRole = (role: string) => norm(role) === "exam_super";
 const isOwnerRole = (role: string) => norm(role) === "super_admin";
 
 function roleLabel(role: string) {
@@ -20,6 +21,7 @@ function roleLabel(role: string) {
   if (r === "super_admin") return "مالك المنصة / Super Admin";
   if (r === "ministry_super") return "سوبر الوزارة";
   if (r === "super" || r === "super_regional" || r === "regional_super") return "سوبر المحافظات";
+  if (r === "exam_super") return "سوبر الامتحانات";
   if (r === "tenant_admin" || r === "admin") return "أدمن المدرسة";
   return "مستخدم";
 }
@@ -85,6 +87,7 @@ export default function AdminUsersSection(props: any) {
               <option value="tenant_admin">أدمن المدرسة</option>
               <option value="admin">أدمن المدرسة (legacy)</option>
               <option value="user">مستخدم</option>
+              <option value="exam_super">سوبر الامتحانات</option>
               <option value="super">سوبر المحافظات</option>
               <option value="ministry_super">سوبر الوزارة</option>
             </select>
@@ -92,7 +95,7 @@ export default function AdminUsersSection(props: any) {
 
           {isSchoolRole(newUserRole) ? (
             <div>
-              <div style={{ marginBottom: 6, opacity: 0.85 }}>اختر المدرسة (Tenant)</div>
+              <div style={{ marginBottom: 6, opacity: 0.85 }}>{isExamSuperRole(newUserRole) ? "اختر مركز الامتحانات (Tenant)" : "اختر المدرسة (Tenant)"}</div>
               <select
                 value={newUserTenantId}
                 onChange={(e) => setNewUserTenantId(e.target.value)}
@@ -117,6 +120,8 @@ export default function AdminUsersSection(props: any) {
               </select>
             </div>
           ) : null}
+
+          {isExamSuperRole(newUserRole) ? <div style={{ fontSize: 13, opacity: 0.85, lineHeight: 1.8 }}>سيتم ربط البريد بمركز الامتحانات المختار وإعطاؤه صلاحيات التعديل والإضافة والحذف والطباعة داخل صفحات المركز.</div> : null}
 
           {isMinistryRole(newUserRole) ? <div style={{ fontSize: 13, opacity: 0.85, lineHeight: 1.8 }}>النطاق سيتم تثبيته تلقائيًا على: <b style={{ color: GOLD }}>{MINISTRY_SCOPE}</b></div> : null}
 

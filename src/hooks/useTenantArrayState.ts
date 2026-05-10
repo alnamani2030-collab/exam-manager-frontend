@@ -136,9 +136,21 @@ export function useTenantArrayState<T>(options: UseTenantArrayStateOptions<T>) {
   async function persistNow(nextItems?: T[]) {
     if (!enabled || !tenantId) return;
     const payload = Array.isArray(nextItems) ? nextItems : items;
+
+    // Update the UI immediately, but prevent the debounced autosave
+    // from saving the same payload twice.
+    if (Array.isArray(nextItems)) {
+      suppressNextSaveRef.current += 1;
+      setItems(payload);
+    }
+
     setSaving(true);
+    setError(null);
     try {
       await save(tenantId, payload, userId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "failed_to_save");
+      throw err;
     } finally {
       setSaving(false);
     }

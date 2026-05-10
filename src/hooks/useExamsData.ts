@@ -4,8 +4,17 @@ import { loadExams, saveExams, subscribeExams, type Exam } from "../services/exa
 import { useTenantArrayState } from "./useTenantArrayState";
 
 export function useExamsData() {
-  const { user, effectiveTenantId } = useAuth() as any;
-  const tenantId = String(effectiveTenantId || "").trim();
+  const auth = useAuth() as any;
+  const user = auth?.user;
+  const tenantId =
+    String(
+      auth?.effectiveTenantId ||
+        auth?.tenantId ||
+        auth?.profile?.tenantId ||
+        auth?.userProfile?.tenantId ||
+        user?.tenantId ||
+        "default"
+    ).trim() || "default";
 
   const state = useTenantArrayState<Exam>({
     tenantId,

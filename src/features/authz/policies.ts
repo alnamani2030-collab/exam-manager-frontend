@@ -80,6 +80,44 @@ export function canAccessCapability(snapshot: AuthzSnapshot, capability: Capabil
   return capsFromRoles(resolveEffectiveRoles(snapshot)).has(capability);
 }
 
+function safeReadBrowserStorage(key: string): string {
+  if (typeof window === "undefined") return "";
+
+  try {
+    return String(window.sessionStorage?.getItem(key) || window.localStorage?.getItem(key) || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+export function isGovernorateReadOnlyTenantView(routeTenantId: string): boolean {
+  const targetTenantId = String(routeTenantId || "").trim();
+  if (!targetTenantId) return false;
+
+  const expiresAt = Number(safeReadBrowserStorage("governorateSuperViewExpiresAt") || 0);
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) return false;
+
+  const readOnlyFlag = [
+    safeReadBrowserStorage("governorateSuperReadOnly"),
+    safeReadBrowserStorage("viewAsReadOnly"),
+    safeReadBrowserStorage("readOnly"),
+  ].some((value) => ["1", "true", "yes"].includes(value.toLowerCase()));
+
+  if (!readOnlyFlag) return false;
+
+  const storedTenantIds = [
+    safeReadBrowserStorage("governorateSuperViewTenantId"),
+    safeReadBrowserStorage("viewAsTenantId"),
+    safeReadBrowserStorage("effectiveTenantId"),
+    safeReadBrowserStorage("selectedTenantId"),
+    safeReadBrowserStorage("tenantId"),
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+
+  return storedTenantIds.includes(targetTenantId);
+}
+
 export function shouldForceOnboarding(snapshot: AuthzSnapshot): boolean {
   if (isPlatformOwner(snapshot) || canAccessCapability(snapshot, "SYSTEM_ADMIN")) return false;
   return !String(snapshot.displayName || "").trim();
@@ -115,6 +153,10 @@ export function canAccessTenantRoute(
   }
 
   if (roles.includes("super")) {
+    if (isGovernorateReadOnlyTenantView(routeTenantId)) {
+      return { allowed: true };
+    }
+
     return { allowed: false, redirectTo: "/super-system" };
   }
 

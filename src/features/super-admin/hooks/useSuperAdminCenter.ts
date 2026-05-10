@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { loadCloudBackupCount, runOwnerBackupNow, saveAllowlistUser, toggleLocalAutoBackup } from "../services/superAdminCenterService";
+import { loadCloudBackupCount, runOwnerBackupNow, toggleLocalAutoBackup } from "../services/superAdminCenterService";
+import { callFn } from "../../../services/functionsClient";
 
 export function useSuperAdminCenter(tenantId: string, user: any) {
   const [busy, setBusy] = useState("");
@@ -17,8 +18,14 @@ export function useSuperAdminCenter(tenantId: string, user: any) {
     if (!payload.email.trim()) return false;
     setBusy("save");
     try {
-      await saveAllowlistUser(payload);
-      setMsg("✅ تم حفظ المستخدم في allowlist");
+      await callFn<any, any>("adminUpsertAllowlist")({
+        email: payload.email,
+        enabled: payload.enabled,
+        tenantId: payload.tenantId,
+        role: payload.role,
+        governorate: payload.governorate,
+      });
+      setMsg("✅ تم حفظ المستخدم والعضوية التجارية");
       return true;
     } catch (e: any) {
       setMsg(e?.message || "Failed");

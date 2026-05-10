@@ -5,5 +5,6 @@ const baseRepository = createTenantArrayRepository<ExamRoomAssignment>("examRoom
 
 export const examRoomAssignmentsRepository = {
   list: baseRepository.list,
+  subscribe: baseRepository.subscribe,
   replaceAll: baseRepository.replaceAll,
 };

@@ -1,3 +1,5 @@
+
+// src/hooks/useSuperSystemTenants.ts
 import { useEffect, useMemo, useState } from "react";
 import { MINISTRY_SCOPE, normalizeText, isSameDirectorate } from "../../../constants/directorates";
 import type { SuperSystemTenant } from "../types";
@@ -7,19 +9,14 @@ export function useSuperSystemTenants(params: { canSeeAllGovs: boolean; myGov: s
   const [tenants, setTenants] = useState<SuperSystemTenant[]>([]);
   const [search, setSearch] = useState("");
   const [selectedTenantId, setSelectedTenantId] = useState("");
-
   const normalizedMyGov = normalizeText(String(params.myGov || ""));
 
   const isTenantInScope = (tenant: SuperSystemTenant) => {
     const tenantGov = String(tenant.governorate || "").trim();
-
     if (params.canSeeAllGovs) {
-      // مالك المنصة أو سوبر الوزارة يرى الجميع
-      return true;
+      return true; // مالك المنصة يرى الجميع
     }
-
-    // سوبر المحافظات يرى فقط مدارس محافظته
-    return isSameDirectorate(tenantGov, normalizedMyGov);
+    return isSameDirectorate(tenantGov, normalizedMyGov); // سوبر المحافظات يرى فقط مدارس محافظته
   };
 
   useEffect(() => {
