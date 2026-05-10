@@ -69,9 +69,9 @@ export const pageDark: React.CSSProperties = {
   direction: ui.dir,
   minHeight: "100vh",
   background:
-    "radial-gradient(1200px 700px at 70% -10%, rgba(212,175,55,.22), transparent 60%), #0b1220",
+    "radial-gradient(1200px 700px at 70% -10%, rgba(212,175,55,.18), transparent 60%), linear-gradient(180deg, #fffdf6 0%, #f8f3e7 55%, #fffaf0 100%)",
   padding: "18px 18px 40px",
-  color: ui.textOnDark,
+  color: "#000000",
 };
 
 export const container: React.CSSProperties = {

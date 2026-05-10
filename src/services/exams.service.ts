@@ -1,17 +1,27 @@
-import type { Exam } from "../entities/exam/model";
-import { examsRepository } from "../infra/repositories/examsRepository";
+import { loadTenantArray, saveTenantArray, subscribeTenantArray } from "./tenantData";
 
-export type { Exam };
+export type Exam = Record<string, any> & { id: string };
 
-export async function loadExams(tenantId: string): Promise<Exam[]> {
-  return await examsRepository.list(tenantId);
+const SUB_COLLECTION = "exams";
+
+export function loadExams(tenantId: string) {
+  return loadTenantArray<Exam>(tenantId, SUB_COLLECTION, { cacheFallback: true });
 }
 
-export async function saveExams(tenantId: string, exams: Exam[], byUid?: string): Promise<void> {
-  await examsRepository.replaceAll(tenantId, exams, { byUid, auditEntity: "exams" });
+export async function saveExams(tenantId: string, exams: Exam[], userId?: string) {
+  await saveTenantArray<Exam>(tenantId, SUB_COLLECTION, exams || [], {
+    by: userId,
+    audit: {
+      entity: SUB_COLLECTION,
+      meta: { count: Array.isArray(exams) ? exams.length : 0, summary: "saved exams" },
+    },
+  });
 }
 
-
-export function subscribeExams(tenantId: string, onChange: (items: Exam[]) => void, onError?: (error: unknown) => void) {
-  return examsRepository.subscribe(tenantId, onChange, onError);
+export function subscribeExams(
+  tenantId: string,
+  onChange: (items: Exam[]) => void,
+  onError?: (error: unknown) => void,
+) {
+  return subscribeTenantArray<Exam>(tenantId, SUB_COLLECTION, onChange, onError);
 }

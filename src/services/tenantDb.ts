@@ -12,8 +12,24 @@ export type TenantDoc<T> = T & {
   updatedAt?: any;
 };
 
+function clean(value: unknown) {
+  return String(value ?? "").trim();
+}
+
+function safeTenantId(tenantId: string) {
+  return clean(tenantId) || "default";
+}
+
+function safeSegment(value: string, label: string) {
+  const segment = clean(value);
+  if (!segment) throw new Error(`${label} is required.`);
+  if (segment.includes("/") || segment.includes("\\")) {
+    throw new Error(`Invalid ${label}: ${segment}`);
+  }
+  return segment;
+}
+
 function makeId(): string {
-  // بدون أي مكتبات إضافية
   return (
     Date.now().toString(36) +
     Math.random().toString(36).slice(2, 10)
@@ -21,12 +37,11 @@ function makeId(): string {
 }
 
 export function tenantCollectionRef(tenantId: string, sub: string) {
-  return collection(db, "tenants", tenantId, sub);
+  return collection(db, "tenants", safeTenantId(tenantId), safeSegment(sub, "subcollection"));
 }
 
 export async function listTenantDocs<T>(tenantId: string, sub: string): Promise<TenantDoc<T>[]> {
   const colRef = tenantCollectionRef(tenantId, sub);
-  // لو ما عندك createdAt قديم، orderBy قد يفشل، لذلك نخليها بدون orderBy كحل آمن:
   const snap = await getDocs(colRef);
   const out: TenantDoc<T>[] = [];
   snap.forEach((d) => out.push({ id: d.id, ...(d.data() as any) }));
@@ -39,16 +54,19 @@ export async function upsertTenantDoc<T extends Record<string, any>>(
   data: Partial<T> & { id?: string },
   meta?: { by?: string }
 ) {
-  const id = (data.id && String(data.id)) || makeId();
+  const tid = safeTenantId(tenantId);
+  const safeSub = safeSegment(sub, "subcollection");
+  const id = safeSegment((data.id && String(data.id)) || makeId(), "doc id");
 
   // Route all writes through Cloud Functions gateway (RBAC + quotas + audit + rate limit)
   const fn = callFn<{ tenantId: string; sub: string; id: string; data: any }, { ok: boolean; id: string }>("tenantUpsertDoc");
   await fn({
-    tenantId,
-    sub,
+    tenantId: tid,
+    sub: safeSub,
     id,
     data: {
       ...data,
+      id,
       // keep minimal meta for debugging (server will also set updatedBy/createdBy)
       clientUpdatedBy: meta?.by ?? null,
     },
@@ -59,6 +77,11 @@ export async function upsertTenantDoc<T extends Record<string, any>>(
 
 export async function deleteTenantDoc(path: string) {
   // Prefer server-side deletion to avoid Rules limitations.
+  const cleanPath = String(path || "").trim();
+  if (!cleanPath || !cleanPath.startsWith("tenants/")) {
+    throw new Error("deleteTenantDoc expects a tenant-scoped path.");
+  }
+
   const fn = callFn<{ path: string }, { ok: boolean }>("tenantDeleteDoc");
-  return await fn({ path });
+  return await fn({ path: cleanPath });
 }

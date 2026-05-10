@@ -1,50 +1,27 @@
-import type { RoomBlock } from "../entities/roomBlock.model";
-import { roomBlocksRepository } from "../infra/repositories/roomBlocksRepository";
+import { loadTenantArray, saveTenantArray, subscribeTenantArray } from "./tenantData";
 
-export type { RoomBlock };
+export type RoomBlock = Record<string, any> & { id: string };
 
-export async function loadRoomBlocks<T extends RoomBlock = RoomBlock>(tenantId: string): Promise<T[]> {
-  return (await roomBlocksRepository.list(tenantId)) as T[];
+const SUB_COLLECTION = "roomBlocks";
+
+export function loadRoomBlocks(tenantId: string) {
+  return loadTenantArray<RoomBlock>(tenantId, SUB_COLLECTION, { cacheFallback: true });
 }
 
-export async function saveRoomBlocks<T extends RoomBlock = RoomBlock>(
-  tenantId: string,
-  blocks: T[],
-  byUid?: string
-): Promise<void> {
-  await roomBlocksRepository.replaceAll(tenantId, blocks as RoomBlock[], {
-    byUid,
-    auditEntity: "roomBlocks",
+export async function saveRoomBlocks(tenantId: string, roomBlocks: RoomBlock[], userId?: string) {
+  await saveTenantArray<RoomBlock>(tenantId, SUB_COLLECTION, roomBlocks || [], {
+    by: userId,
+    audit: {
+      entity: SUB_COLLECTION,
+      meta: { count: Array.isArray(roomBlocks) ? roomBlocks.length : 0, summary: "saved room blocks" },
+    },
   });
 }
 
 export function subscribeRoomBlocks(
   tenantId: string,
   onChange: (items: RoomBlock[]) => void,
-  onError?: (error: unknown) => void
+  onError?: (error: unknown) => void,
 ) {
-  const repo = roomBlocksRepository as unknown as {
-    subscribe?: (
-      tenantId: string,
-      onChange: (items: RoomBlock[]) => void,
-      onError?: (error: unknown) => void
-    ) => (() => void) | void;
-  };
-
-  if (typeof repo.subscribe === "function") {
-    return repo.subscribe(tenantId, onChange, onError);
-  }
-
-  let active = true;
-  loadRoomBlocks(tenantId)
-    .then((items) => {
-      if (active) onChange(items);
-    })
-    .catch((err) => {
-      if (active) onError?.(err);
-    });
-
-  return () => {
-    active = false;
-  };
+  return subscribeTenantArray<RoomBlock>(tenantId, SUB_COLLECTION, onChange, onError);
 }

@@ -1,21 +1,32 @@
-import type { Teacher } from "../entities/teacher/model";
-import { teachersRepository } from "../infra/repositories/teachersRepository";
+import { loadTenantArray, saveTenantArray, subscribeTenantArray } from "./tenantData";
 
-export type { Teacher };
+export type Teacher = Record<string, any> & { id: string };
 
-export async function loadTeachers(tenantId: string): Promise<Teacher[]> {
-  return await teachersRepository.list(tenantId);
+const SUB_COLLECTION = "teachers";
+
+export function loadTeachers(tenantId: string) {
+  return loadTenantArray<Teacher>(tenantId, SUB_COLLECTION, { cacheFallback: true });
 }
 
-export async function saveTeachers(tenantId: string, teachers: Teacher[], byUid?: string): Promise<void> {
-  await teachersRepository.replaceAll(tenantId, teachers, { byUid, auditEntity: "teachers" });
+export async function saveTeachers(tenantId: string, teachers: Teacher[], userId?: string) {
+  await saveTenantArray<Teacher>(tenantId, SUB_COLLECTION, teachers || [], {
+    by: userId,
+    audit: {
+      entity: SUB_COLLECTION,
+      meta: { count: Array.isArray(teachers) ? teachers.length : 0, summary: "saved teachers" },
+    },
+  });
 }
 
-export async function importTeachersBatch(tenantId: string, teachers: Teacher[]) {
-  await teachersRepository.importBatch(tenantId, teachers);
+export function subscribeTeachers(
+  tenantId: string,
+  onChange: (items: Teacher[]) => void,
+  onError?: (error: unknown) => void,
+) {
+  return subscribeTenantArray<Teacher>(tenantId, SUB_COLLECTION, onChange, onError);
 }
 
-
-export function subscribeTeachers(tenantId: string, onChange: (items: Teacher[]) => void, onError?: (error: unknown) => void) {
-  return teachersRepository.subscribe(tenantId, onChange, onError);
+export async function importTeachersBatch(tenantId: string, teachers: Teacher[], userId?: string) {
+  await saveTeachers(tenantId, teachers, userId);
+  return teachers || [];
 }

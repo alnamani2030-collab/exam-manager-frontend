@@ -43,51 +43,83 @@ function useEmulator() {
   }
 }
 
+function emulatorHost() {
+  return String(import.meta.env.VITE_FUNCTIONS_EMULATOR_HOST || "localhost");
+}
+
+function emulatorPort() {
+  const raw = Number(import.meta.env.VITE_FUNCTIONS_EMULATOR_PORT || 5001);
+  return Number.isFinite(raw) && raw > 0 ? raw : 5001;
+}
+
+function safeFunctionName(name: string) {
+  const fnName = String(name || "").trim();
+  if (!fnName) throw new Error("Cloud Function name is required.");
+  if (!/^[A-Za-z0-9_-]+$/.test(fnName)) {
+    throw new Error(`Invalid Cloud Function name: ${fnName}`);
+  }
+  return fnName;
+}
+
 let wired = false;
+
 function getWiredFunctions() {
   const fns = getFunctions(app, REGION);
+
   if (!wired && (isDev() || isLocalhost()) && useEmulator()) {
-    connectFunctionsEmulator(fns, "localhost", 5001);
+    connectFunctionsEmulator(fns, emulatorHost(), emulatorPort());
     wired = true;
-    console.info("[functionsClient] Connected to Functions Emulator: localhost:5001");
+    console.info(`[functionsClient] Connected to Functions Emulator: ${emulatorHost()}:${emulatorPort()}`);
   }
+
   return fns;
 }
 
 function shouldUseCloudRuntime(name: string) {
+  const fnName = safeFunctionName(name);
+
   if (functionsDisabled()) return false;
   if ((isDev() || isLocalhost()) && useEmulator()) return true;
-  const spec = getCloudFunctionSpec(name);
+
+  const spec = getCloudFunctionSpec(fnName);
   if ((isDev() || isLocalhost()) && !spec?.preferCloudRuntime) return false;
+
   return true;
 }
 
 function buildLocalFallbackError(name: string) {
-  const spec = getCloudFunctionSpec(name);
+  const fnName = safeFunctionName(name);
+  const spec = getCloudFunctionSpec(fnName);
   const descriptor = spec?.platformOwnerOnly ? "platform-owner operation" : "cloud function";
-  return Object.assign(new Error(`CLOUD_RUNTIME_REQUIRED:${name}`), {
+
+  return Object.assign(new Error(`CLOUD_RUNTIME_REQUIRED:${fnName}`), {
     code: "CLOUD_RUNTIME_REQUIRED",
-    functionName: name,
+    functionName: fnName,
     descriptor,
   });
 }
 
 export async function invokeLocalFallback<TRes = unknown>(name: string, data?: unknown): Promise<TRes> {
-  const spec = getCloudFunctionSpec(name);
-  if (!spec?.allowLocalFallback || !hasLocalFunction(name)) {
-    throw buildLocalFallbackError(name);
+  const fnName = safeFunctionName(name);
+  const spec = getCloudFunctionSpec(fnName);
+
+  if (!spec?.allowLocalFallback || !hasLocalFunction(fnName)) {
+    throw buildLocalFallbackError(fnName);
   }
-  return (await runLocalFunction(name, data)) as TRes;
+
+  return (await runLocalFunction(fnName, data)) as TRes;
 }
 
 export function callFn<TReq = any, TRes = any>(name: string) {
+  const fnName = safeFunctionName(name);
+
   return async (data?: TReq): Promise<TRes> => {
-    if (!shouldUseCloudRuntime(name)) {
-      return invokeLocalFallback<TRes>(name, data);
+    if (!shouldUseCloudRuntime(fnName)) {
+      return invokeLocalFallback<TRes>(fnName, data);
     }
 
     const functions = getWiredFunctions();
-    const fn = httpsCallable<TReq, TRes>(functions, name);
+    const fn = httpsCallable<TReq, TRes>(functions, fnName);
     const res = await fn((data ?? {}) as TReq);
     return res.data;
   };

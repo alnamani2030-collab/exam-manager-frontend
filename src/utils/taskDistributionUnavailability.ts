@@ -3,8 +3,21 @@
 import { getAuditContext } from "../services/auditAuto";
 import { loadTenantArray, replaceTenantArray } from "../services/tenantData";
 
-export type UnavailabilityBlock = "INVIGILATION" | "RESERVE" | "REVIEW_FREE" | "CORRECTION_FREE" | "ALL";
+export type UnavailabilityBlock =
+  | "INVIGILATION"
+  | "RESERVE"
+  | "REVIEW_FREE"
+  | "CORRECTION_FREE"
+  | "ALL";
+
 export type UnavailabilityPeriod = "AM" | "PM";
+
+export type UnavailabilityTaskType =
+  | "INVIGILATION"
+  | "RESERVE"
+  | "DUTY_INVIGILATOR"
+  | "REVIEW_FREE"
+  | "CORRECTION_FREE";
 
 export type UnavailabilityRule = {
   id: string;
@@ -21,6 +34,7 @@ const LEGACY_KEY = "exam-manager:task-distribution:unavailability:v1";
 const KEY_PREFIX = "exam-manager:task-distribution:unavailability:";
 const KEY_SUFFIX = ":v2";
 const SUB_COLLECTION = "unavailability";
+
 export const UNAVAIL_UPDATED_EVENT = "exam-manager:task-distribution:unavailability-updated";
 
 function getCurrentLang(): "ar" | "en" {
@@ -29,14 +43,18 @@ function getCurrentLang(): "ar" | "en" {
       typeof document !== "undefined"
         ? String(document.documentElement?.lang || "").trim().toLowerCase()
         : "";
+
     if (htmlLang === "en") return "en";
   } catch {}
 
   try {
     const raw =
       typeof localStorage !== "undefined"
-        ? String(localStorage.getItem("lang") || localStorage.getItem("i18n-lang") || "").trim().toLowerCase()
+        ? String(localStorage.getItem("lang") || localStorage.getItem("i18n-lang") || "")
+            .trim()
+            .toLowerCase()
         : "";
+
     if (raw === "en") return "en";
   } catch {}
 
@@ -51,15 +69,18 @@ function tenantUnavailabilityAuditSummary() {
 
 function normalizeTenantId(input?: string | null): string {
   const direct = String(input ?? "").trim();
+
   if (direct) return direct;
 
   try {
     const auditTenantId = String(getAuditContext()?.tenantId ?? "").trim();
+
     if (auditTenantId) return auditTenantId;
   } catch {}
 
   try {
     const supportTenantId = String(localStorage.getItem("supportTenantId") ?? "").trim();
+
     if (supportTenantId) return supportTenantId;
   } catch {}
 
@@ -75,8 +96,12 @@ function normalizeRule(input: any): UnavailabilityRule | null {
   const teacherId = String(input?.teacherId ?? "").trim();
   const teacherName = String(input?.teacherName ?? "").trim();
   const dateISO = String(input?.dateISO ?? "").trim();
-  const period: UnavailabilityPeriod = String(input?.period ?? "").toUpperCase() === "PM" ? "PM" : "AM";
+
+  const period: UnavailabilityPeriod =
+    String(input?.period ?? "").toUpperCase() === "PM" ? "PM" : "AM";
+
   const blocksRaw = Array.isArray(input?.blocks) ? input.blocks : ["ALL"];
+
   const blocks = Array.from(
     new Set(
       blocksRaw
@@ -87,7 +112,9 @@ function normalizeRule(input: any): UnavailabilityRule | null {
         )
     )
   ) as UnavailabilityBlock[];
+
   if (!id || !teacherId || !teacherName || !dateISO) return null;
+
   return {
     id,
     teacherId,
@@ -110,7 +137,10 @@ function emitUpdated(tenantId?: string | null) {
   try {
     window.dispatchEvent(
       new CustomEvent(UNAVAIL_UPDATED_EVENT, {
-        detail: { ts: Date.now(), tenantId: normalizeTenantId(tenantId) },
+        detail: {
+          ts: Date.now(),
+          tenantId: normalizeTenantId(tenantId),
+        },
       })
     );
   } catch {}
@@ -118,18 +148,24 @@ function emitUpdated(tenantId?: string | null) {
 
 function readLocalRules(tenantId?: string | null): UnavailabilityRule[] {
   const scopedKey = storageKeyForTenant(tenantId);
+
   try {
     const raw = localStorage.getItem(scopedKey);
+
     if (raw) return normalizeRules(JSON.parse(raw));
   } catch {}
 
   const resolvedTenantId = normalizeTenantId(tenantId);
+
   if (tenantId && resolvedTenantId !== "default") return [];
 
   try {
     const legacyRaw = localStorage.getItem(LEGACY_KEY);
+
     if (!legacyRaw) return [];
+
     const migrated = normalizeRules(JSON.parse(legacyRaw));
+
     if (migrated.length) {
       localStorage.setItem(scopedKey, JSON.stringify(migrated));
       return migrated;
@@ -145,9 +181,11 @@ export function loadUnavailability(tenantId?: string | null): UnavailabilityRule
 
 export function saveUnavailability(rules: UnavailabilityRule[], tenantId?: string | null) {
   const scopedKey = storageKeyForTenant(tenantId);
+
   try {
     localStorage.setItem(scopedKey, JSON.stringify(normalizeRules(rules || [])));
   } catch {}
+
   emitUpdated(tenantId);
 }
 
@@ -162,9 +200,15 @@ export function deleteUnavailability(id: string, tenantId?: string | null) {
   saveUnavailability(rules, tenantId);
 }
 
-export async function syncUnavailabilityFromTenant(tenantId?: string | null): Promise<UnavailabilityRule[]> {
+export async function syncUnavailabilityFromTenant(
+  tenantId?: string | null
+): Promise<UnavailabilityRule[]> {
   const resolvedTenantId = normalizeTenantId(tenantId);
-  if (!resolvedTenantId) return loadUnavailability(resolvedTenantId);
+
+  if (!resolvedTenantId) {
+    return loadUnavailability(resolvedTenantId);
+  }
+
   try {
     const rows = await loadTenantArray<any>(resolvedTenantId, SUB_COLLECTION);
     const normalized = normalizeRules(rows || []);
@@ -182,6 +226,7 @@ export async function persistUnavailabilityToTenant(args: {
 }) {
   const resolvedTenantId = normalizeTenantId(args.tenantId);
   const normalized = normalizeRules(args.rules || []);
+
   await replaceTenantArray<UnavailabilityRule>(resolvedTenantId, SUB_COLLECTION, normalized, {
     by: String(args.by ?? "").trim() || undefined,
     audit: {
@@ -193,56 +238,82 @@ export async function persistUnavailabilityToTenant(args: {
       },
     },
   });
+
   saveUnavailability(normalized, resolvedTenantId);
+
   return normalized;
 }
 
 export function buildUnavailabilityIndex(rules: UnavailabilityRule[]) {
   const set = new Set<string>();
+
   for (const r of rules || []) {
     const tid = String(r.teacherId || "").trim();
     const dateISO = String(r.dateISO || "").trim();
     const period = r.period === "PM" ? "PM" : "AM";
+
     if (!tid || !dateISO) continue;
 
     const blocks = Array.isArray(r.blocks) && r.blocks.length ? r.blocks : ["ALL"];
+
     for (const b of blocks) {
       set.add(`${tid}|${dateISO}|${period}|${b}`);
     }
   }
+
   return set;
+}
+
+function normalizeUnavailableTaskType(taskType: UnavailabilityTaskType): UnavailabilityBlock {
+  if (taskType === "DUTY_INVIGILATOR") {
+    return "INVIGILATION";
+  }
+
+  return taskType;
 }
 
 export function isTeacherUnavailable(args: {
   teacherId: string;
   dateISO: string;
   period: UnavailabilityPeriod;
-  taskType: "INVIGILATION" | "RESERVE" | "REVIEW_FREE" | "CORRECTION_FREE";
+  taskType: UnavailabilityTaskType;
   index: Set<string>;
 }) {
   const tid = String(args.teacherId || "").trim();
   const dateISO = String(args.dateISO || "").trim();
   const period = args.period === "PM" ? "PM" : "AM";
-  const t = args.taskType;
+  const taskType = normalizeUnavailableTaskType(args.taskType);
   const idx = args.index;
+
   if (!tid || !dateISO) return false;
-  return idx.has(`${tid}|${dateISO}|${period}|ALL`) || idx.has(`${tid}|${dateISO}|${period}|${t}`);
+
+  return (
+    idx.has(`${tid}|${dateISO}|${period}|ALL`) ||
+    idx.has(`${tid}|${dateISO}|${period}|${taskType}`)
+  );
 }
 
 export function buildUnavailabilityReasonMap(rules: UnavailabilityRule[]) {
   const m = new Map<string, string>();
+
   for (const r of rules || []) {
     const tid = String(r.teacherId || "").trim();
     const dateISO = String(r.dateISO || "").trim();
     const period = r.period === "PM" ? "PM" : "AM";
+
     if (!tid || !dateISO) continue;
 
     const reason = String(r.reason || "").trim();
     const blocks = Array.isArray(r.blocks) && r.blocks.length ? r.blocks : ["ALL"];
+
     for (const b of blocks) {
       const key = `${tid}|${dateISO}|${period}|${b}`;
-      if (!m.has(key)) m.set(key, reason);
+
+      if (!m.has(key)) {
+        m.set(key, reason);
+      }
     }
   }
+
   return m;
 }
