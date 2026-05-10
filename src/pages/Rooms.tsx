@@ -8,7 +8,7 @@ import { useI18n } from "../i18n/I18nProvider";
 import { createId, isRoomBlockedToday } from "../lib/roomScheduling";
 import type { Room } from "../services/rooms.service";
 import type { RoomBlock } from "../services/roomBlocks.service";
-import "../styles/schoolRoomsOfficial.css";
+import "./schoolRoomsOfficial.css";
 
 
 const ROOMS12_BORDER_COLORS = [
