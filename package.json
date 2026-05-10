@@ -3,8 +3,9 @@
     "exceljs": "^4.4.0",
     "firebase": "^12.8.0",
     "html2canvas": "^1.4.1",
-    "jspdf": "^4.1.0",
+    "jspdf": "^4.2.1",
     "lucide-react": "^0.562.0",
+    "nodemailer": "^8.0.4",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-router-dom": "^7.12.0",
@@ -20,6 +21,7 @@
     "test:watch": "vitest"
   },
   "devDependencies": {
+    "@types/nodemailer": "^7.0.11",
     "@types/react": "^19.2.8",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.2",
