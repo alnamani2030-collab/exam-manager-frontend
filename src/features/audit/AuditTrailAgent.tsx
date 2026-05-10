@@ -172,13 +172,13 @@ export default function AuditTrailAgent() {
     const originalReplaceState = window.history.replaceState;
 
     window.history.pushState = function pushStatePatched(...args: Parameters<History["pushState"]>) {
-      const result = originalPushState.apply(this, args);
+      const result = originalPushState.apply(window.history, args);
       window.dispatchEvent(new Event("exam-manager:route-change"));
       return result;
     } as History["pushState"];
 
     window.history.replaceState = function replaceStatePatched(...args: Parameters<History["replaceState"]>) {
-      const result = originalReplaceState.apply(this, args);
+      const result = originalReplaceState.apply(window.history, args);
       window.dispatchEvent(new Event("exam-manager:route-change"));
       return result;
     } as History["replaceState"];
