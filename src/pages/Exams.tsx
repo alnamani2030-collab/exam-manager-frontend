@@ -511,7 +511,13 @@ type RoomManagerState = {
   selectedRoomIds: string[];
 };
 
-type AvailableRoomRow = Room & {
+type AvailableRoomRow = {
+  id: string;
+  roomName?: string;
+  code?: string;
+  building?: string;
+  capacity?: number | string;
+  status?: string;
   blocked: boolean;
   inactive: boolean;
   sameDateConflict: boolean;
@@ -771,7 +777,7 @@ export default function Exams() {
 
         return {
           ...room,
-          blocked: isRoomBlockedForExam(room.id, selectedExam, activeBlocks),
+          blocked: isRoomBlockedForExam(room.id, { dateISO: String((selectedExam as any).dateISO || ""), period: String((selectedExam as any).period || "") } as any, activeBlocks),
           inactive: (room.status || "active") !== "active",
           sameDateConflict: sameDateSamePeriodAssignments.length > 0,
           sameDateConflictLabel,
@@ -1086,7 +1092,7 @@ export default function Exams() {
           id: createId("exam_room"),
           examId: selectedExam.id,
           roomId: room.id,
-          roomName: room.roomName,
+          roomName: String(room.roomName || ""),
           dateISO: selectedExam.dateISO,
           time: selectedExam.time,
           period: selectedExam.period,
@@ -1339,7 +1345,7 @@ export default function Exams() {
                   {(() => {
                     const assigned = assignmentsByExamId.get(e.id) || [];
                     const blockedAssigned = assigned.filter((row) =>
-                      isRoomBlockedForExam(row.roomId, e, activeBlocks)
+                      isRoomBlockedForExam(row.roomId, { dateISO: String((e as any).dateISO || ""), period: String((e as any).period || "") } as any, activeBlocks)
                     ).length;
                     const complete = assigned.length === e.roomsCount && blockedAssigned === 0;
                     return (
