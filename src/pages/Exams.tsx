@@ -518,6 +518,7 @@ type AvailableRoomRow = {
   building?: string;
   capacity?: number | string;
   status?: string;
+  [key: string]: unknown;
   blocked: boolean;
   inactive: boolean;
   sameDateConflict: boolean;
@@ -745,14 +746,14 @@ export default function Exams() {
     [assignmentsByExamId, selectedExam]
   );
 
-  const selectedExamAvailableRooms = useMemo(() => {
+  const selectedExamAvailableRooms = useMemo<AvailableRoomRow[]>(() => {
     if (!selectedExam) return [] as AvailableRoomRow[];
 
     const selectedPeriodKey = normalizeExamPeriod(selectedExam.period);
 
     return [...rooms]
       .sort(sortRoomsByCode)
-      .map((room) => {
+      .map((room): AvailableRoomRow => {
         const sameDateSamePeriodAssignments = examRoomAssignments.filter((assignment) => {
           if (assignment.roomId !== room.id) return false;
           if (assignment.examId === selectedExam.id) return false;
@@ -777,11 +778,11 @@ export default function Exams() {
 
         return {
           ...room,
-          blocked: isRoomBlockedForExam(room.id, { dateISO: String((selectedExam as any).dateISO || ""), period: String((selectedExam as any).period || "") } as any, activeBlocks),
-          inactive: (room.status || "active") !== "active",
+          blocked: isRoomBlockedForExam(room.id, { dateISO: String((selectedExam as any).dateISO || ""), period: String((selectedExam as any).period || "") } as any, activeBlocks as any),
+          inactive: ((room as any).status || "active") !== "active",
           sameDateConflict: sameDateSamePeriodAssignments.length > 0,
           sameDateConflictLabel,
-        };
+        } as AvailableRoomRow;
       });
   }, [rooms, selectedExam, activeBlocks, examRoomAssignments, examsById, lang]);
 
@@ -1345,7 +1346,7 @@ export default function Exams() {
                   {(() => {
                     const assigned = assignmentsByExamId.get(e.id) || [];
                     const blockedAssigned = assigned.filter((row) =>
-                      isRoomBlockedForExam(row.roomId, { dateISO: String((e as any).dateISO || ""), period: String((e as any).period || "") } as any, activeBlocks)
+                      isRoomBlockedForExam(row.roomId, { dateISO: String((e as any).dateISO || ""), period: String((e as any).period || "") } as any, activeBlocks as any)
                     ).length;
                     const complete = assigned.length === e.roomsCount && blockedAssigned === 0;
                     return (

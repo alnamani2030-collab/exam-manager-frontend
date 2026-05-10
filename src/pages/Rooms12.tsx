@@ -1031,7 +1031,7 @@ export default function Rooms() {
     () =>
       new Set(
         rooms
-          .filter((room) => isRoomBlockedToday(room.id, todayISO, normalizedBlocks))
+          .filter((room) => isRoomBlockedToday(room.id, todayISO, normalizedBlocks as any))
           .map((room, index) => room.id)
       ),
     [rooms, todayISO, normalizedBlocks]

@@ -213,7 +213,7 @@ export default function RoomBlocks() {
     () =>
       roomBlocks.map((block) => ({
         ...block,
-        status: blockStatusLabel(block, todayISO) as RoomBlock["status"],
+        status: blockStatusLabel(block as any, todayISO) as RoomBlock["status"],
       })),
     [roomBlocks, todayISO]
   );
@@ -391,7 +391,7 @@ export default function RoomBlocks() {
 
     try {
       if (typeof createRoomBlock === "function") {
-        await createRoomBlock(prepared);
+        await createRoomBlock(prepared as any);
       } else {
         setRoomBlocks((prev: RoomBlock[]) => [prepared, ...prev]);
       }

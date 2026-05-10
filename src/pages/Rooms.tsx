@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from "react"; 
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom"; 
 import GoldDropdown from "../components/GoldDropdown";
 import { useAuth } from "../auth/AuthContext";
 import { useRoomsData } from "../hooks/useRoomsData";
@@ -7,6 +8,7 @@ import { useI18n } from "../i18n/I18nProvider";
 import { createId, isRoomBlockedToday } from "../lib/roomScheduling";
 import type { Room } from "../services/rooms.service";
 import type { RoomBlock } from "../services/roomBlocks.service";
+import "../styles/schoolRoomsOfficial.css";
 
 
 const ROOMS12_BORDER_COLORS = [
@@ -300,8 +302,23 @@ export default function Rooms() {
     session: "full-day",
   });
   const [historyRoomId, setHistoryRoomId] = useState<string | null>(null);
+  const [roomsTableFullScreen, setRoomsTableFullScreen] = useState(false);
   const topRef = useRef<HTMLDivElement>(null);
   const todayISO = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
+  useEffect(() => {
+    if (!roomsTableFullScreen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setRoomsTableFullScreen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [roomsTableFullScreen]);
 
   useEffect(() => {
     const style = document.createElement("style");
@@ -514,7 +531,7 @@ export default function Rooms() {
     () =>
       new Set(
         rooms
-          .filter((room) => isRoomBlockedToday(room.id, todayISO, normalizedBlocks))
+          .filter((room) => isRoomBlockedToday(room.id, todayISO, normalizedBlocks as any))
           .map((room, index) => room.id)
       ),
     [rooms, todayISO, normalizedBlocks]
@@ -913,8 +930,136 @@ export default function Rooms() {
     setQuickBlock((prev) => ({ ...prev, open: false }));
   }
 
+
+  const roomsTableNode = (
+        <div
+          className={`roomsTablePanel ${roomsTableFullScreen ? "roomsFullscreenPortal" : ""}`}
+          style={{
+            ...card,
+            padding: 12,
+            borderRadius: 28,
+            background: "linear-gradient(180deg, rgba(255,253,246,0.96), rgba(255,248,230,0.98))",
+            boxShadow: "0 22px 60px rgba(0,0,0,0.42)",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              marginBottom: 14,
+              padding: "4px 6px 0 6px",
+            }}
+          >
+            <div>
+              <div className="roomsTableTitle">{tr("القاعات", "Rooms")}</div>
+              <div className="roomsTableSubtitle">{tr("جدول القاعات", "Rooms Table")}</div>
+            </div>
+            <div className="roomsTableToolbar">
+              <button
+                type="button"
+                className="roomsFullscreenButton"
+                onClick={() => setRoomsTableFullScreen((value) => !value)}
+              >
+                {roomsTableFullScreen ? tr("إغلاق ملء الشاشة", "Close Full Screen") : tr("ملء الشاشة", "Full Screen")}
+              </button>
+            </div>
+          </div>
+          <div className="roomsTableLuxury" style={tableWrap}>
+            <table>
+              <thead>
+                <tr>
+                  <th style={thStyle}>{tr("اسم القاعة", "Room Name")}</th>
+                  <th style={thStyle}>{tr("الكود", "Code")}</th>
+                  <th style={thStyle}>{tr("المبنى", "Building")}</th>
+                  <th style={thStyle}>{tr("النوع", "Type")}</th>
+                  <th style={thStyle}>{tr("السعة", "Capacity")}</th>
+                  <th style={thStyle}>{tr("الحالة", "Status")}</th>
+                  <th style={thStyle}>{tr("الحظر الحالي", "Current Block")}</th>
+                  <th style={thStyle}>{tr("ملاحظات", "Notes")}</th>
+                  <th style={thStyle}>{tr("إجراءات", "Actions")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.length === 0 ? (
+                  <tr>
+                    <td style={tdStyle} className="emptyCell" colSpan={9}>
+                      {tr("لا توجد بيانات", "No data found")}
+                    </td>
+                  </tr>
+                ) : (
+                  filtered.map((r, index) => {
+                    const blockedNow = blockedRoomIdsToday.has(r.id);
+                    const roomStatus = (r.status || "active") === "active" ? tr("نشطة", "Active") : tr("موقوفة", "Inactive");
+                    return (
+                      <tr key={r.id}>
+                        <td style={tdStyle}>
+                          <div className="cell-main">{r.roomName}</div>
+                          <div className="cell-muted">{r.code ? `${tr("رمز القاعة", "Room Code")}: ${r.code}` : tr("بدون كود", "No Code")}</div>
+                        </td>
+                        <td style={tdStyle} className="cell-subtle">
+                          {r.code || "—"}
+                        </td>
+                        <td style={tdStyle} className="cell-subtle">
+                          {r.building}
+                        </td>
+                        <td style={tdStyle} className="cell-subtle">
+                          {r.type}
+                        </td>
+                        <td style={tdStyle}>
+                          <span className="cell-badge badge-capacity">{r.capacity}</span>
+                        </td>
+                        <td style={tdStyle}>
+                          <span
+                            className={`cell-badge ${
+                              (r.status || "active") === "active" ? "badge-active" : "badge-inactive"
+                            }`}
+                          >
+                            {roomStatus}
+                          </span>
+                        </td>
+                        <td style={tdStyle}>
+                          <span className={`cell-badge ${blockedNow ? "badge-blocked" : "badge-open"}`}>
+                            {blockedNow ? tr("محظورة اليوم", "Blocked Today") : tr("متاحة", "Available")}
+                          </span>
+                        </td>
+                        <td style={tdStyle} title={r.notes}>
+                          <div className="cell-subtle">{r.notes || "—"}</div>
+                        </td>
+                        <td style={tdStyle}>
+                          <div className="actionStack">
+                            <button className="actionBtn btnEdit" onClick={() => startEdit(r)}>
+                              {tr("تعديل ✏️", "Edit ✏️")}
+                            </button>
+                            <button className="actionBtn btnBlock" onClick={() => openQuickBlock(r)}>
+                              {tr("حظر ⛔", "Block ⛔")}
+                            </button>
+                            <button className="actionBtn btnHistory" onClick={() => setHistoryRoomId(r.id)}>
+                              {tr("السجل 📜", "History 📜")}
+                            </button>
+                            <button className="actionBtn btnDelete" onClick={() => void removeRoom(r.id)}>
+                              {tr("حذف 🗑", "Delete 🗑")}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+  );
+
+  const roomsTableRender =
+    roomsTableFullScreen && typeof document !== "undefined"
+      ? createPortal(roomsTableNode, document.body)
+      : roomsTableNode;
+
   return (
-    <div style={pageStyle} ref={topRef} className="rooms12PageRoot rooms12ColoredBordersScope rooms12BlackTextScope rooms12ForceBlackText rooms12NoBlackTableCellsScope">
+    <div style={pageStyle} ref={topRef} className="rooms12PageRoot schoolRoomsOfficialPage rooms12ColoredBordersScope rooms12BlackTextScope rooms12ForceBlackText rooms12NoBlackTableCellsScope">
       <style>{`
         .rooms12NoBlackTableCellsScope table,
         .rooms12NoBlackTableCellsScope table tbody,
@@ -1156,6 +1301,7 @@ export default function Rooms() {
 
       <div style={{ maxWidth: 1500, margin: "0 auto", position: "relative", zIndex: 1 }}>
         <div
+          className="schoolRoomsHeroCard"
           style={{
             display: "grid",
             gap: 18,
@@ -1169,9 +1315,10 @@ export default function Rooms() {
             marginBottom: 18,
           }}
         >
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 18, flexWrap: "wrap", alignItems: "start" }}>
-            <div style={{ display: "grid", gap: 14, maxWidth: 900 }}>
+          <div className="schoolRoomsHeroGrid" style={{ display: "flex", justifyContent: "space-between", gap: 18, flexWrap: "wrap", alignItems: "start" }}>
+            <div className="schoolRoomsHeroContent" style={{ display: "grid", gap: 14, maxWidth: 900 }}>
               <div
+                className="schoolRoomsHeroBadge"
                 style={{
                   display: "inline-flex",
                   width: "fit-content",
@@ -1190,10 +1337,10 @@ export default function Rooms() {
               </div>
 
               <div>
-                <div style={{ fontSize: 18, fontWeight: 900, color: "#6f5100", marginBottom: 10 }}>
+                <div className="schoolRoomsHeroEyebrow" style={{ fontSize: 18, fontWeight: 900, color: "#6f5100", marginBottom: 10 }}>
                   {APP_NAME}
                 </div>
-                <h1
+                <h1 className="schoolRoomsHeroTitle"
                   style={{
                     margin: 0,
                     fontSize: "clamp(34px, 5vw, 64px)",
@@ -1209,6 +1356,7 @@ export default function Rooms() {
               </div>
 
               <p
+                className="schoolRoomsHeroDesc"
                 style={{
                   margin: 0,
                   fontSize: 16,
@@ -1231,6 +1379,7 @@ export default function Rooms() {
                 ].map((item, index) => (
                   <div
                     key={item.label}
+                    className="schoolRoomsInfoChip"
                     style={{
                       border: "3px solid #ea580c",
                       background: "linear-gradient(180deg, rgba(255,255,255,0.78), rgba(255,248,230,0.88))",
@@ -1248,6 +1397,7 @@ export default function Rooms() {
             </div>
 
             <div
+              className="schoolRoomsSidePanel"
               style={{
                 minWidth: 300,
                 maxWidth: 390,
@@ -1279,7 +1429,7 @@ export default function Rooms() {
 
               <div style={{ fontSize: 28, lineHeight: 1.5, fontWeight: 950, color: "#111827" }}>
                 {tr(
-                  "",
+                  "من هنا يتم تنظيم القاعات، إدارة الحظر السريع، متابعة السعة والحالة التشغيلية، واستيراد أو تصدير البيانات ضمن واجهة رسمية واضحة ومنظمة.",
                   "From here you can manage rooms, apply quick blocks, review block history, and import or export data with a premium visual flow that reflects the quality of an institutional product."
                 )}
               </div>
@@ -1638,115 +1788,7 @@ export default function Rooms() {
           </div>
         )}
 
-        <div
-          style={{
-            ...card,
-            padding: 12,
-            borderRadius: 28,
-            background: "linear-gradient(180deg, rgba(255,253,246,0.96), rgba(255,248,230,0.98))",
-            boxShadow: "0 22px 60px rgba(0,0,0,0.42)",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 12,
-              marginBottom: 14,
-              padding: "4px 6px 0 6px",
-            }}
-          >
-            <div style={{ fontWeight: 1000, fontSize: 20, color: "#f2cf63" }}>{tr("القاعات", "Rooms")}</div>
-            <div style={{ fontWeight: 900, color: "#000000", opacity: 0.9 }}>
-              {tr("جدول القاعات", "Rooms Table")}
-            </div>
-          </div>
-          <div className="roomsTableLuxury" style={tableWrap}>
-            <table>
-              <thead>
-                <tr>
-                  <th style={thStyle}>{tr("اسم القاعة", "Room Name")}</th>
-                  <th style={thStyle}>{tr("الكود", "Code")}</th>
-                  <th style={thStyle}>{tr("المبنى", "Building")}</th>
-                  <th style={thStyle}>{tr("النوع", "Type")}</th>
-                  <th style={thStyle}>{tr("السعة", "Capacity")}</th>
-                  <th style={thStyle}>{tr("الحالة", "Status")}</th>
-                  <th style={thStyle}>{tr("الحظر الحالي", "Current Block")}</th>
-                  <th style={thStyle}>{tr("ملاحظات", "Notes")}</th>
-                  <th style={thStyle}>{tr("إجراءات", "Actions")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.length === 0 ? (
-                  <tr>
-                    <td style={tdStyle} className="emptyCell" colSpan={9}>
-                      {tr("لا توجد بيانات", "No data found")}
-                    </td>
-                  </tr>
-                ) : (
-                  filtered.map((r, index) => {
-                    const blockedNow = blockedRoomIdsToday.has(r.id);
-                    const roomStatus = (r.status || "active") === "active" ? tr("نشطة", "Active") : tr("موقوفة", "Inactive");
-                    return (
-                      <tr key={r.id}>
-                        <td style={tdStyle}>
-                          <div className="cell-main">{r.roomName}</div>
-                          <div className="cell-muted">{r.code ? `${tr("رمز القاعة", "Room Code")}: ${r.code}` : tr("بدون كود", "No Code")}</div>
-                        </td>
-                        <td style={tdStyle} className="cell-subtle">
-                          {r.code || "—"}
-                        </td>
-                        <td style={tdStyle} className="cell-subtle">
-                          {r.building}
-                        </td>
-                        <td style={tdStyle} className="cell-subtle">
-                          {r.type}
-                        </td>
-                        <td style={tdStyle}>
-                          <span className="cell-badge badge-capacity">{r.capacity}</span>
-                        </td>
-                        <td style={tdStyle}>
-                          <span
-                            className={`cell-badge ${
-                              (r.status || "active") === "active" ? "badge-active" : "badge-inactive"
-                            }`}
-                          >
-                            {roomStatus}
-                          </span>
-                        </td>
-                        <td style={tdStyle}>
-                          <span className={`cell-badge ${blockedNow ? "badge-blocked" : "badge-open"}`}>
-                            {blockedNow ? tr("محظورة اليوم", "Blocked Today") : tr("متاحة", "Available")}
-                          </span>
-                        </td>
-                        <td style={tdStyle} title={r.notes}>
-                          <div className="cell-subtle">{r.notes || "—"}</div>
-                        </td>
-                        <td style={tdStyle}>
-                          <div className="actionStack">
-                            <button className="actionBtn btnEdit" onClick={() => startEdit(r)}>
-                              {tr("تعديل ✏️", "Edit ✏️")}
-                            </button>
-                            <button className="actionBtn btnBlock" onClick={() => openQuickBlock(r)}>
-                              {tr("حظر ⛔", "Block ⛔")}
-                            </button>
-                            <button className="actionBtn btnHistory" onClick={() => setHistoryRoomId(r.id)}>
-                              {tr("السجل 📜", "History 📜")}
-                            </button>
-                            <button className="actionBtn btnDelete" onClick={() => void removeRoom(r.id)}>
-                              {tr("حذف 🗑", "Delete 🗑")}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        {roomsTableRender}
       </div>
     </div>
   );
