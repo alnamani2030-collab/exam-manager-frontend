@@ -1,5 +1,4 @@
 import React from "react";
-import { useI18n } from "../../../i18n/I18nProvider";
 import type { AddChoice } from "./ResultsEmptyTeacherCell";
 
 type Props = {
@@ -23,9 +22,6 @@ export function ResultsEmptyCellAddMenu({
   showInvigilationHint,
   invigilationHintText,
 }: Props) {
-  const { lang } = useI18n();
-  const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
-
   return (
     <div style={{ display: "grid", gap: 8 }}>
       {addChoices.map((c) => {
@@ -56,7 +52,7 @@ export function ResultsEmptyCellAddMenu({
               onAddChoice?.(c.key);
             }}
           >
-            + {tr("إضافة", "Add")} {c.label}
+            + إضافة {c.label}
           </button>
         );
       })}
@@ -91,7 +87,7 @@ export function ResultsEmptyCellAddMenu({
           onCloseAdd?.();
         }}
       >
-        {tr("إغلاق", "Close")}
+        إغلاق
       </button>
     </div>
   );

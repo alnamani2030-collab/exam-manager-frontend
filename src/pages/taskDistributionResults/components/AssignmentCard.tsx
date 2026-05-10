@@ -1,8 +1,40 @@
 import React from "react";
-import { useI18n } from "../../../i18n/I18nProvider";
 import type { Assignment } from "../../../contracts/taskDistributionContract";
 import { ResultsAssignmentBadge } from "./ResultsAssignmentBadge";
 import { ResultsAssignmentDetails } from "./ResultsAssignmentDetails";
+
+const getAssignmentStyle = (taskType: string) => {
+  switch (taskType) {
+    case 'INVIGILATION':
+      return {
+        border: '3px solid gold',
+        background: 'rgba(255,215,0,0.08)',
+        boxShadow: '0 0 0 1px rgba(255,215,0,0.18) inset',
+        borderRadius: '6px',
+      };
+    case 'REVIEW_FREE':
+      return {
+        border: '3px solid green',
+        background: 'rgba(34,197,94,0.08)',
+        boxShadow: '0 0 0 1px rgba(34,197,94,0.18) inset',
+        borderRadius: '6px',
+      };
+    case 'CORRECTION_FREE':
+      return {
+        border: '3px solid white',
+        background: 'rgba(255,255,255,0.08)',
+        boxShadow: '0 0 0 1px rgba(255,255,255,0.18) inset',
+        borderRadius: '6px',
+      };
+    default:
+      return {
+        border: '1px solid rgba(255,255,255,0.12)',
+        background: 'transparent',
+        borderRadius: '6px',
+      };
+  }
+};
+
 
 function getTaskTypeBorder(taskType: any, fallbackBorder: string) {
   switch (String(taskType || "")) {
@@ -29,32 +61,42 @@ function getTaskTypeBorder(taskType: any, fallbackBorder: string) {
   }
 }
 
+
 export type AssignmentCardProps = {
   teacher: string;
   subColKey: string;
   ass: Assignment & { __uid?: string; invigilatorIndex?: number | null };
   index: number;
+
   taskLabel: (t: any) => string;
   normalizeSubject: (s: string) => string;
   formatPeriod: (p?: string) => string;
   getCommitteeNo: (a: any) => string | undefined;
+
+  // drag
   isDraggable: boolean;
   dragSrcUid: string | null;
   dragOverUid: string | null;
   setDragSrcUid: (v: string | null) => void;
   setDragOverUid: (v: string | null) => void;
   onSwap: (srcUid: string, dstUid: string) => void;
+
+  // ✅ selection (for copy/paste)
   onSelect?: (payload: { uid: string; teacher: string; subColKey: string }) => void;
   isSelected?: boolean;
+
+  // styles
   goldLineSoft: string;
   tableText: string;
+
+  // ✅ conflict flashing
   isConflict?: boolean;
+
+  // ✅ delete
   onDelete?: (uid: string) => void;
 };
 
 export function AssignmentCard(props: AssignmentCardProps) {
-  const { lang } = useI18n();
-  const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
   const { ass } = props;
   const committeeNo = props.getCommitteeNo(ass);
   const invIdx = (ass as any).invigilatorIndex as number | undefined;
@@ -89,22 +131,22 @@ export function AssignmentCard(props: AssignmentCardProps) {
         }}
       >
         <ResultsAssignmentBadge
-          uid={uid}
-          isDraggable={isDrag}
-          isOver={isOver}
-          isDragging={isDragging}
-          isConflict={isConflict}
-          isSelected={props.isSelected}
-          label={props.taskLabel((ass as any).taskType)}
-          teacher={props.teacher}
-          subColKey={props.subColKey}
-          dragOverUid={props.dragOverUid}
-          setDragSrcUid={props.setDragSrcUid}
-          setDragOverUid={props.setDragOverUid}
-          onSwap={props.onSwap}
-          onSelect={props.onSelect}
-          goldLineSoft={props.goldLineSoft}
-        />
+        uid={uid}
+        isDraggable={isDrag}
+        isOver={isOver}
+        isDragging={isDragging}
+        isConflict={isConflict}
+        isSelected={props.isSelected}
+        label={props.taskLabel((ass as any).taskType)}
+        teacher={props.teacher}
+        subColKey={props.subColKey}
+        dragOverUid={props.dragOverUid}
+        setDragSrcUid={props.setDragSrcUid}
+        setDragOverUid={props.setDragOverUid}
+        onSwap={props.onSwap}
+        onSelect={props.onSelect}
+        goldLineSoft={props.goldLineSoft}
+      />
 
         {canDelete ? (
           <button
@@ -112,11 +154,11 @@ export function AssignmentCard(props: AssignmentCardProps) {
             onClick={(e) => {
               e.stopPropagation();
               if (!uid) return;
-              if (window.confirm(tr("هل تريد حذف هذه المراقبة؟", "Do you want to delete this assignment?"))) {
+              if (window.confirm("هل تريد حذف هذه المراقبة؟")) {
                 props.onDelete?.(uid);
               }
             }}
-            title={`${tr("حذف", "Delete")} ${props.taskLabel((ass as any).taskType)}`}
+            title={`حذف ${props.taskLabel((ass as any).taskType)}`}
             style={{
               borderRadius: 10,
               border: `1px solid ${props.goldLineSoft}`,
@@ -130,7 +172,7 @@ export function AssignmentCard(props: AssignmentCardProps) {
               flexShrink: 0,
             }}
           >
-            {tr("حذف التكليف", "Delete Assignment")}
+            حذف المراقبة
           </button>
         ) : null}
       </div>
@@ -148,3 +190,9 @@ export function AssignmentCard(props: AssignmentCardProps) {
     </div>
   );
 }
+
+
+// NEXT_STAGE_VISUAL_REFINEMENT: added subtle task-type backgrounds and inset highlights.
+
+
+// FIXED_ALL_DAYS_AND_MATERIALS: task visuals now depend only on task type, not on day or subject.

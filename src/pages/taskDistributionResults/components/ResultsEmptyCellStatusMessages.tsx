@@ -1,5 +1,4 @@
 import React from "react";
-import { useI18n } from "../../../i18n/I18nProvider";
 
 type Props = {
   blockedMsg?: string | null;
@@ -8,9 +7,6 @@ type Props = {
 };
 
 export function ResultsEmptyCellStatusMessages({ blockedMsg, unavailabilityMsg, openAdd }: Props) {
-  const { lang } = useI18n();
-  const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
-
   if (blockedMsg) {
     return (
       <div
@@ -47,7 +43,7 @@ export function ResultsEmptyCellStatusMessages({ blockedMsg, unavailabilityMsg, 
         }}
         title={unavailabilityMsg}
       >
-        {tr("غير متاح", "Unavailable")}
+        غير متاح
       </div>
     );
   }

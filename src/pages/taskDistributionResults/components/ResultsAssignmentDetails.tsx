@@ -1,5 +1,4 @@
 import React from "react";
-import { useI18n } from "../../../i18n/I18nProvider";
 
 export type ResultsAssignmentDetailsProps = {
   committeeNo?: string;
@@ -13,8 +12,6 @@ export type ResultsAssignmentDetailsProps = {
 };
 
 export function ResultsAssignmentDetails(props: ResultsAssignmentDetailsProps) {
-  const { lang } = useI18n();
-  const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
   const { committeeNo, invigilatorIndex, subject, period, tableText, goldLineSoft, normalizeSubject, formatPeriod } = props;
 
   return (
@@ -40,14 +37,14 @@ export function ResultsAssignmentDetails(props: ResultsAssignmentDetailsProps) {
         >
           {committeeNo && (
             <>
-              <span style={{ opacity: 0.9 }}>{tr("رقم اللجنة:", "Committee No:")}</span>
+              <span style={{ opacity: 0.9 }}>رقم اللجنة:</span>
               <strong style={{ color: tableText }}>{committeeNo}</strong>
             </>
           )}
 
           {invigilatorIndex !== undefined && invigilatorIndex !== null && (
             <>
-              <span style={{ opacity: 0.9 }}>{tr("• رقم المراقب:", "• Invigilator No:")}</span>
+              <span style={{ opacity: 0.9 }}>• رقم المراقب:</span>
               <strong style={{ color: tableText }}>{invigilatorIndex}</strong>
             </>
           )}

@@ -1,5 +1,4 @@
 import React from "react";
-import { useI18n } from "../../../i18n/I18nProvider";
 import { btn, btnDisabled } from "../../../styles/ui";
 
 type Props = {
@@ -11,24 +10,21 @@ type Props = {
 };
 
 export function ResultsFullscreenToolbar({ undoDisabled, onUndo, onClose, showTeacherSidebar, onToggleTeacherSidebar }: Props) {
-  const { lang } = useI18n();
-  const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
-
   return (
     <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
       <button
         style={{ ...btn("soft"), ...(undoDisabled ? btnDisabled : {}) }}
         onClick={onUndo}
         disabled={undoDisabled}
-        title={undoDisabled ? tr("لا يوجد تعديلات للتراجع", "There are no edits to undo") : tr("التراجع عن آخر تعديل", "Undo the last edit")}
+        title={undoDisabled ? "لا يوجد تعديلات للتراجع" : "التراجع عن آخر تعديل"}
       >
-        {tr("تراجع", "Undo")}
+        تراجع
       </button>
       <button style={btn(showTeacherSidebar ? "brand" : "soft")} onClick={onToggleTeacherSidebar}>
-        {showTeacherSidebar ? tr("إخفاء قائمة المعلمين", "Hide Teachers List") : tr("إظهار قائمة المعلمين", "Show Teachers List")}
+        {showTeacherSidebar ? "إخفاء قائمة المعلمين" : "إظهار قائمة المعلمين"}
       </button>
       <button style={btn("danger")} onClick={onClose}>
-        {tr("إغلاق ملء الشاشة", "Close Fullscreen")}
+        إغلاق ملء الشاشة
       </button>
     </div>
   );

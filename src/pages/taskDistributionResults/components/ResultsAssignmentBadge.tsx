@@ -1,5 +1,4 @@
 import React from "react";
-import { useI18n } from "../../../i18n/I18nProvider";
 
 export type ResultsAssignmentBadgeProps = {
   uid: string;
@@ -20,9 +19,6 @@ export type ResultsAssignmentBadgeProps = {
 };
 
 export function ResultsAssignmentBadge(props: ResultsAssignmentBadgeProps) {
-  const { lang } = useI18n();
-  const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
-
   const {
     uid,
     isDraggable,
@@ -74,7 +70,7 @@ export function ResultsAssignmentBadge(props: ResultsAssignmentBadgeProps) {
         if (!srcUid || !uid) return;
         onSwap(srcUid, uid);
       }}
-      title={isDraggable ? tr("اسحب وأسقط فوق نفس نوع المهمة للتبديل", "Drag and drop onto the same task type to swap") : undefined}
+      title={isDraggable ? "اسحب وأسقط فوق نفس نوع المهمة للتبديل" : undefined}
       style={{
         position: "relative",
         display: "inline-flex",
@@ -110,7 +106,7 @@ export function ResultsAssignmentBadge(props: ResultsAssignmentBadgeProps) {
       }}
     >
       <div style={{ fontWeight: 900 }}>{label}</div>
-      {isDraggable && <span style={{ fontSize: 11, opacity: 0.85 }}>{tr("(سحب/إفلات)", "(Drag/Drop)")}</span>}
+      {isDraggable && <span style={{ fontSize: 11, opacity: 0.85 }}>(سحب/إفلات)</span>}
     </div>
   );
 }

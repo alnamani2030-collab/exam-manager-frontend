@@ -1,5 +1,4 @@
 import React from "react";
-import { useI18n } from "../../../i18n/I18nProvider";
 import { ResultsEmptyCellStatusMessages } from "./ResultsEmptyCellStatusMessages";
 import { ResultsEmptyCellAddMenu } from "./ResultsEmptyCellAddMenu";
 
@@ -34,9 +33,6 @@ export type ResultsEmptyTeacherCellProps = {
 };
 
 export function ResultsEmptyTeacherCell(props: ResultsEmptyTeacherCellProps) {
-  const { lang } = useI18n();
-  const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
-
   const cellOuter: React.CSSProperties = {
     padding: "0px",
     border: "none",
@@ -72,7 +68,7 @@ export function ResultsEmptyTeacherCell(props: ResultsEmptyTeacherCellProps) {
           fontWeight: 900,
           position: "relative",
         }}
-        title={props.dragSrcUid ? tr("إفلات هنا لنقل المهمة لهذا المعلم", "Drop here to move the task to this teacher") : undefined}
+        title={props.dragSrcUid ? "إفلات هنا لنقل المهمة لهذا المعلم" : undefined}
       >
         <ResultsEmptyCellStatusMessages
           blockedMsg={props.blockedMsg}
@@ -106,7 +102,7 @@ export function ResultsEmptyTeacherCell(props: ResultsEmptyTeacherCellProps) {
                   fontWeight: 900,
                 }}
               >
-                {tr("اضغط للإضافة", "Click to add")}
+                اضغط للإضافة
               </span>
             ) : null}
           </div>
