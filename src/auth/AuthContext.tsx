@@ -8,6 +8,24 @@ import { useAuthSessionState } from "./hooks/useAuthSessionState";
 import { setAuditContext } from "../services/auditAuto";
 import { buildAuthzSnapshot, canAccessCapability, capsFromRoles, isPlatformOwner, resolveEffectiveRoles, resolvePrimaryRoleLabel } from "../features/authz";
 
+
+function getStoredTenantId() {
+  try {
+    return String(
+      sessionStorage.getItem("selectedTenantId") ||
+      sessionStorage.getItem("effectiveTenantId") ||
+      sessionStorage.getItem("tenantId") ||
+      localStorage.getItem("selectedTenantId") ||
+      localStorage.getItem("effectiveTenantId") ||
+      localStorage.getItem("tenantId") ||
+      ""
+    ).trim();
+  } catch {
+    return "";
+  }
+}
+
+
 const DISABLE_FUNCTIONS = String(import.meta.env.VITE_DISABLE_FUNCTIONS ?? "true") === "true";
 const IS_DEV = Boolean(import.meta.env.DEV);
 
@@ -39,11 +57,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return roleNorm === "super";
   }, [allow?.enabled, allow?.role, user?.email]);
 
+  const isExamSuper = useMemo(() => {
+    const email = String(user?.email ?? "").toLowerCase().trim();
+    if (!allow?.enabled) return false;
+    const roleNorm = normalizeAllowlistRole(allow?.role, email, (allow as any)?.governorate);
+    return roleNorm === "exam_super";
+  }, [allow?.enabled, allow?.role, user?.email]);
+
   const isAdmin = useMemo(() => {
     const email = String(user?.email ?? "").toLowerCase().trim();
     if (!allow?.enabled) return false;
     const roleNorm = normalizeAllowlistRole(allow?.role, email, (allow as any)?.governorate);
-    return roleNorm === "admin";
+    return roleNorm === "admin" || roleNorm === "tenant_admin";
   }, [allow?.enabled, allow?.role, user?.email]);
 
   const support = useSupportSession({ claims, isSuperAdmin });
@@ -69,12 +94,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const effectiveTenantId = useMemo(() => {
     const base = String(allow?.tenantId ?? claims?.tenantId ?? userProfile?.tenantId ?? "").trim();
-    if (!base && !platformOwner) return null;
+    const storedTenantId = getStoredTenantId();
+
     if (platformOwner) {
       return support.isSupportMode && support.supportTenantId ? support.supportTenantId : SUPER_ADMIN_TENANT_ID;
     }
+
+    if (isSuper && storedTenantId) {
+      return storedTenantId;
+    }
+
+    if (!base) return null;
     return base || null;
-  }, [allow?.tenantId, claims?.tenantId, userProfile?.tenantId, platformOwner, support.isSupportMode, support.supportTenantId]);
+  }, [allow?.tenantId, claims?.tenantId, userProfile?.tenantId, platformOwner, support.isSupportMode, support.supportTenantId, isSuper]);
 
   const effectiveRole = useMemo<Role | null>(() => {
     if (!user?.email) return null;

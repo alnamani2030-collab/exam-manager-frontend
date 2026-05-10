@@ -44,6 +44,7 @@ export function tenantPath(tenantId: string | null | undefined, path = '') {
 }
 
 export const LEGACY_TENANT_PATHS = [
+  'dashboard',
   'teachers',
   'team-members',
   'exams',
@@ -63,6 +64,10 @@ export const LEGACY_TENANT_PATHS = [
   'versioning',
   'multi-role',
   'run-details',
+  'distribution',
+  'distribution/full-table',
+  'TaskDistributionRun',
+  'TaskDistributionResults',
   'task-distribution',
   'task-distribution/run',
   'task-distribution/results',

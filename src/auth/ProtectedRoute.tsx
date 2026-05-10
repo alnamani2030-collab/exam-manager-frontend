@@ -43,6 +43,14 @@ function isSystemAdminRoute(snapshot: any) {
   return canAccessCapability(snapshot, "SYSTEM_ADMIN");
 }
 
+function isExamSuperForTenant(auth: any, tenantId?: string | null) {
+  const role = String(auth?.allow?.role || auth?.profile?.role || auth?.userProfile?.role || "").trim().toLowerCase();
+  const linkedTenantId = String(auth?.allow?.tenantId || auth?.effectiveTenantId || auth?.profile?.tenantId || auth?.userProfile?.tenantId || "").trim();
+  const enabled = auth?.allow?.enabled === true || auth?.profile?.enabled === true || auth?.userProfile?.enabled === true;
+  if (!tenantId) return enabled && role === "exam_super";
+  return enabled && role === "exam_super" && linkedTenantId === String(tenantId).trim();
+}
+
 export function ProtectedRoute({ children }: Props) {
   const auth = useAuth() as any;
   const location = useLocation();
@@ -94,13 +102,38 @@ export function SuperAdminRoute({ children }: Props) {
 export function TenantRoute({ children }: Props) {
   const auth = useAuth() as any;
   const { tenantId } = useParams();
+  const location = useLocation();
 
   if (auth?.loading) return null;
   if (!auth?.user) return <Navigate to="/login" replace />;
   if (!isSystemEnabledProfile(auth)) return <Navigate to="/login" replace />;
   if (!tenantId) return <Navigate to="/" replace />;
 
-  const access = canAccessTenantRoute(buildSnapshot(auth), tenantId);
+  const snapshot = buildSnapshot(auth);
+  const requestedPath = String(location.pathname || "").toLowerCase();
+  const currentRole = String(
+    auth?.effectiveRole ||
+    auth?.allow?.role ||
+    auth?.profile?.role ||
+    auth?.userProfile?.role ||
+    ""
+  ).trim().toLowerCase();
+
+  const tenantRoot = `/t/${tenantId}`.toLowerCase();
+
+  // سوبر المحافظة:
+  // - إذا دخل مدرسة من صفحة المدارس يبقى داخل جميع صفحات نفس المدرسة
+  // - وإذا دخل من صفحة سوبر الامتحانات فـ dashboard12 أيضًا ضمن نفس tenant path
+  if (
+    currentRole === "super" &&
+    (requestedPath === tenantRoot ||
+      requestedPath === `${tenantRoot}/` ||
+      requestedPath.startsWith(`${tenantRoot}/`))
+  ) {
+    return <>{children}</>;
+  }
+
+  const access = canAccessTenantRoute(snapshot, tenantId);
   if (!access.allowed) return <Navigate to={access.redirectTo || "/"} replace />;
 
   return <>{children}</>;

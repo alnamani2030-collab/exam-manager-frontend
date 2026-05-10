@@ -23,6 +23,7 @@ export function normalizeAllowlistRole(raw: any, email: string, governorate?: an
   if (["super_admin", "superadmin", "super admin", "super-admin"].includes(r)) return "super_admin";
   if (["ministry_super", "ministry super", "ministry-super", "super_ministry"].includes(r)) return "ministry_super";
   if (r === "super") return "super";
+  if (["exam_super", "exam super", "exam-super", "super_exam", "super-exam"].includes(r)) return "exam_super";
   if (["tenant_admin", "tenant admin", "tenant-admin"].includes(r)) return "tenant_admin";
   if (r === "admin") return "admin";
   return "user";
@@ -81,6 +82,11 @@ export function normalizeStoredSaaSRoles(input: unknown): SaaSRole[] {
       continue;
     }
 
+    if (["exam_super", "exam super", "exam-super", "super_exam", "super-exam"].includes(role)) {
+      out.push("exam_super");
+      continue;
+    }
+
     if (["admin", "tenant_admin", "tenant admin", "tenant-admin"].includes(role)) {
       out.push("tenant_admin");
       continue;
@@ -96,6 +102,7 @@ export function mapAllowRoleToSaaSRoles(params: { allowRole: Role; email: string
   if (r === "super_admin") return ["super_admin"];
   if (r === "ministry_super") return ["ministry_super"];
   if (r === "super") return ["super"];
+  if (r === "exam_super") return ["exam_super"];
   if (r === "tenant_admin" || r === "admin") return ["tenant_admin"];
   return [];
 }

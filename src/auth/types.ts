@@ -5,6 +5,7 @@ export type Role =
   | "super_admin"
   | "ministry_super"
   | "super"
+  | "exam_super"
   | "tenant_admin"
   | "admin" // legacy compatibility
   | "user";
@@ -13,6 +14,7 @@ export type SaaSRole =
   | "super_admin"
   | "ministry_super"
   | "super"
+  | "exam_super"
   | "tenant_admin";
 
 export type AllowDoc = {
