@@ -7,7 +7,7 @@ import {
   signOut,
   type User,
 } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, getDocFromCache } from "firebase/firestore";
 
 import { auth, db } from "../firebase/firebase";
 import { callFn } from "../services/functionsClient";
@@ -26,6 +26,9 @@ import { useI18n } from "../i18n/I18nProvider";
 // Default to disabling Cloud Functions unless explicitly enabled.
 const DISABLE_FUNCTIONS =
   String(import.meta.env.VITE_DISABLE_FUNCTIONS ?? "true") === "true";
+
+const ALLOWLIST_CACHE_PREFIX = "exam-manager:auth:allowlist:";
+const ALLOWLIST_READ_TIMEOUT_MS = 3500;
 
 type AllowlistDoc = {
   email: string;
@@ -85,14 +88,11 @@ const STR = {
   },
 } as const;
 
-async function fetchAllowlist(email: string): Promise<AllowlistDoc | null> {
+function normalizeAllowlistData(email: string, raw: Partial<AllowlistDoc> | null): AllowlistDoc | null {
+  if (!raw) return null;
+
   const key = String(email || "").trim().toLowerCase();
-  const ref = doc(db, "allowlist", key);
-  const snap = await getDoc(ref);
-
-  if (!snap.exists()) return null;
-
-  const data = snap.data() as Partial<AllowlistDoc>;
+  const data: Partial<AllowlistDoc> = { ...raw };
 
   if (!data.email) data.email = key;
   if (typeof data.enabled !== "boolean") data.enabled = false;
@@ -106,14 +106,25 @@ async function fetchAllowlist(email: string): Promise<AllowlistDoc | null> {
     (data as any).role = "super_admin";
   } else if (r === "ministry_super" || r === "ministry super" || r === "ministry-super") {
     (data as any).role = "ministry_super";
-  } else if (r === "super") {
+  } else if (r === "super" || r === "governorate_super" || r === "governorate-super" || r === "سوبر المحافظة" || r === "مشرف المحافظة") {
     (data as any).role = "super";
-  } else if (r === "exam_super" || r === "exam super" || r === "exam-super" || r === "super_exam" || r === "super-exam") {
+  } else if (
+    r === "exam_super" ||
+    r === "exam super" ||
+    r === "exam-super" ||
+    r === "super_exam" ||
+    r === "super-exam" ||
+    r === "exam_center_admin" ||
+    r === "diploma_center_admin" ||
+    r === "diploma_super" ||
+    r === "center_admin" ||
+    r === "control_admin"
+  ) {
     (data as any).role = "exam_super";
-  } else if (r === "tenant_admin" || r === "tenant admin" || r === "tenant-admin") {
+  } else if (r === "tenant_admin" || r === "tenant admin" || r === "tenant-admin" || r === "school_admin" || r === "school-admin") {
     (data as any).role = "tenant_admin";
   } else if (r === "admin") {
-    (data as any).role = "admin"; // legacy compatibility
+    (data as any).role = "admin";
   } else {
     (data as any).role = "user";
   }
@@ -121,6 +132,82 @@ async function fetchAllowlist(email: string): Promise<AllowlistDoc | null> {
   if (!data.tenantId) data.tenantId = "default";
 
   return data as AllowlistDoc;
+}
+
+function cacheKeyForAllowlist(email: string) {
+  return `${ALLOWLIST_CACHE_PREFIX}${String(email || "").trim().toLowerCase()}`;
+}
+
+function readCachedAllowlist(email: string): AllowlistDoc | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.localStorage.getItem(cacheKeyForAllowlist(email));
+    if (!raw) return null;
+    return normalizeAllowlistData(email, JSON.parse(raw) as Partial<AllowlistDoc>);
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedAllowlist(email: string, allow: AllowlistDoc | null) {
+  if (typeof window === "undefined" || !allow) return;
+
+  try {
+    window.localStorage.setItem(
+      cacheKeyForAllowlist(email),
+      JSON.stringify({ ...allow, cachedAt: Date.now() })
+    );
+  } catch {
+    // Cache failure must never block login.
+  }
+}
+
+function withLoginTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const timeout = new Promise<T>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(label)), timeoutMs);
+  });
+
+  // إذا تأخر Firestore ثم فشل بعد انتهاء المهلة لا نريد Unhandled Promise في Console.
+  promise.catch(() => undefined);
+
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer) clearTimeout(timer);
+  }) as Promise<T>;
+}
+
+async function fetchAllowlist(email: string): Promise<AllowlistDoc | null> {
+  const key = String(email || "").trim().toLowerCase();
+  if (!key) return null;
+
+  const ref = doc(db, "allowlist", key);
+  const cached = readCachedAllowlist(key);
+
+  try {
+    const snap = await withLoginTimeout(getDoc(ref), ALLOWLIST_READ_TIMEOUT_MS, "allowlist-read-timeout");
+
+    if (!snap.exists()) return cached;
+
+    const allow = normalizeAllowlistData(key, snap.data() as Partial<AllowlistDoc>);
+    writeCachedAllowlist(key, allow);
+    return allow;
+  } catch {
+    // عند ضعف الاتصال نحاول قراءة نسخة Firestore المحلية ثم كاش البرنامج.
+    try {
+      const cachedSnap = await getDocFromCache(ref);
+      if (cachedSnap.exists()) {
+        const allow = normalizeAllowlistData(key, cachedSnap.data() as Partial<AllowlistDoc>);
+        writeCachedAllowlist(key, allow);
+        return allow;
+      }
+    } catch {
+      // Ignore cache miss.
+    }
+
+    return cached;
+  }
 }
 
 function resolveAllowlistHomePath(user: User | null, allow: AllowlistDoc | null): string {
@@ -198,11 +285,15 @@ export default function Login() {
       setProfile(null);
 
       if (u?.email) {
+        const cached = readCachedAllowlist(u.email);
+        if (cached) setProfile(cached);
+
         try {
           const allow = await fetchAllowlist(u.email);
-          setProfile(allow);
+          setProfile(allow || cached);
+          if (!allow && !cached) setError(t.errGeneric);
         } catch {
-          setError(t.errGeneric);
+          if (!cached) setError(t.errGeneric);
         }
       }
     });
@@ -229,8 +320,11 @@ export default function Login() {
         return;
       }
 
+      const cached = readCachedAllowlist(email);
+      if (cached) setProfile(cached);
+
       const allow = await fetchAllowlist(email);
-      setProfile(allow);
+      setProfile(allow || cached);
 
       if (!DISABLE_FUNCTIONS) {
         try {
@@ -242,10 +336,12 @@ export default function Login() {
         }
       }
 
-      if (!allow?.enabled) {
+      const effectiveAllow = allow || cached;
+
+      if (!effectiveAllow?.enabled) {
         setError(t.errNotAllowed);
       } else {
-        navigate(resolveAllowlistHomePath(res.user, allow), { replace: true });
+        navigate(resolveAllowlistHomePath(res.user, effectiveAllow), { replace: true });
       }
     } catch (e: any) {
       if (e?.code === "auth/popup-closed-by-user") {
@@ -265,8 +361,11 @@ export default function Login() {
     setError("");
 
     try {
+      const cached = readCachedAllowlist(fbUser.email);
+      if (cached) setProfile(cached);
+
       const allow = await fetchAllowlist(fbUser.email);
-      setProfile(allow);
+      setProfile(allow || cached);
 
       if (!DISABLE_FUNCTIONS) {
         try {
@@ -285,8 +384,10 @@ export default function Login() {
         }
       }
 
-      if (allow?.enabled) {
-        navigate(resolveAllowlistHomePath(fbUser, allow), { replace: true });
+      const effectiveAllow = allow || cached;
+
+      if (effectiveAllow?.enabled) {
+        navigate(resolveAllowlistHomePath(fbUser, effectiveAllow), { replace: true });
       }
     } catch {
       setError(t.errGeneric);

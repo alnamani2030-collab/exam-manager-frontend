@@ -1,12 +1,200 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import GoldDropdown from "../components/GoldDropdown";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type Teacher } from "../services/teachers.service";
-import { useTeachersData } from "../hooks/useTeachersData";
 import { useI18n } from "../i18n/I18nProvider";
-import "../styles/schoolTeachersOfficial.css";
+import { useAuth } from "../auth/AuthContext";
+import { loadTenantArray, loadTenantSettings, replaceTenantArray } from "../services/tenantData";
 
 const SUBCOLLECTION = "teachers";
+
+
+const EXAM_CENTER_DATA_KEY = "exam-manager:exam-center-data:v1";
+const EXAM_CENTER_LOGO_KEY = "exam-manager:exam-center-logo:v1";
+const CONTROL_HEAD_NAME_KEY = "exam-manager:control-head-name:v1";
+const DEFAULT_LOGO_URL = "https://i.imgur.com/vdDhSMh.png";
+const DIPLOMA_EXAM_CENTER_SETTINGS_DOC_ID = "diplomaExamCenter";
+const LEGACY_TEACHERS_CACHE_KEY = "exam-manager:teachers12-cache:v1";
+
+type ExamCenterOfficialData = {
+  name: string;
+  examCenterCode?: string;
+  centerCode?: string;
+  governorate: string;
+  semester: string;
+  phone: string;
+  address: string;
+  controlHeadName: string;
+  academicYear?: string;
+  logo?: string;
+};
+
+function getTenantIdFromAuth(auth: any) {
+  return (
+    String(
+      auth?.effectiveTenantId ||
+        auth?.profile?.tenantId ||
+        auth?.userProfile?.tenantId ||
+        auth?.user?.tenantId ||
+        "default"
+    ).trim() || "default"
+  );
+}
+
+function getAcademicYearFromSystemDate(now = new Date()) {
+  const month = now.getMonth() + 1;
+  const year = now.getFullYear();
+  const startYear = month >= 9 ? year : year - 1;
+  const endYear = startYear + 1;
+  return `${startYear} - ${endYear}`;
+}
+
+function buildEmptyOfficialCenterData(): ExamCenterOfficialData {
+  return {
+    name: "",
+    governorate: "",
+    semester: "",
+    phone: "",
+    address: "",
+    controlHeadName: "",
+  };
+}
+
+function readOfficialExamCenterData(): ExamCenterOfficialData {
+  const empty = buildEmptyOfficialCenterData();
+  if (typeof window === "undefined") return empty;
+
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(EXAM_CENTER_DATA_KEY) || "{}") as Partial<ExamCenterOfficialData>;
+    const storedControlHead = String(window.localStorage.getItem(CONTROL_HEAD_NAME_KEY) || "").trim();
+    return {
+      name: String(parsed.name || "").trim(),
+      examCenterCode: String((parsed as any).examCenterCode || (parsed as any).centerCode || "").trim(),
+      centerCode: String((parsed as any).examCenterCode || (parsed as any).centerCode || "").trim(),
+      governorate: String(parsed.governorate || "").trim(),
+      semester: String(parsed.semester || "").trim(),
+      phone: String(parsed.phone || "").trim(),
+      address: String(parsed.address || "").trim(),
+      controlHeadName: String(parsed.controlHeadName || storedControlHead || "").trim(),
+      academicYear: String((parsed as any).academicYear || "").trim(),
+    };
+  } catch {
+    return empty;
+  }
+}
+
+function readOfficialLogo() {
+  if (typeof window === "undefined") return DEFAULT_LOGO_URL;
+  try {
+    return String(window.localStorage.getItem(EXAM_CENTER_LOGO_KEY) || DEFAULT_LOGO_URL).trim() || DEFAULT_LOGO_URL;
+  } catch {
+    return DEFAULT_LOGO_URL;
+  }
+}
+
+function TeachersOfficialHeader({
+  lang,
+  isRTL,
+  centerData,
+  logo,
+  teachersCount,
+  filteredCount,
+}: {
+  lang: "ar" | "en";
+  isRTL: boolean;
+  centerData: ExamCenterOfficialData;
+  logo: string;
+  teachersCount: number;
+  filteredCount: number;
+}) {
+  const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
+  const academicYear = getAcademicYearFromSystemDate();
+  const governorate = centerData.governorate || tr("المديرية العامة للتعليم", "Directorate General of Education");
+  const centerName = centerData.name || tr("مركز الامتحانات", "Exam Center");
+  const semester = centerData.semester || tr("الفصل الدراسي", "Semester");
+  const controlHead = centerData.controlHeadName || tr("رئيس الكنترول", "Control Head");
+
+  return (
+    <section
+      style={{
+        direction: isRTL ? "rtl" : "ltr",
+        background: "linear-gradient(180deg, #fffdf7 0%, #f8f4e8 100%)",
+        border: "5px solid #d4af37",
+        borderRadius: 32,
+        padding: 22,
+        boxShadow: "0 0 0 7px rgba(245,232,170,0.32) inset, 0 14px 30px rgba(190,160,40,0.12)",
+        display: "grid",
+        gap: 16,
+        color: "#000000",
+      }}
+    >
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 130px 1fr",
+          gap: 18,
+          alignItems: "center",
+        }}
+      >
+        <div style={{ textAlign: isRTL ? "right" : "left", display: "grid", gap: 6 }}>
+          <div style={{ fontSize: 23, fontWeight: 1000 }}>سلطنة عمان</div>
+          <div style={{ fontSize: 21, fontWeight: 1000 }}>وزارة التعليم</div>
+          <div style={{ fontSize: 18, fontWeight: 1000, lineHeight: 1.6 }}>{governorate}</div>
+          <div style={{ fontSize: 18, fontWeight: 1000, lineHeight: 1.6 }}>{centerName}</div>
+        </div>
+
+        <div style={{ display: "grid", placeItems: "center" }}>
+          <img
+            src={logo || DEFAULT_LOGO_URL}
+            alt="logo"
+            style={{ width: 112, height: 112, objectFit: "contain" }}
+            onError={(event) => {
+              (event.currentTarget as HTMLImageElement).src = DEFAULT_LOGO_URL;
+            }}
+          />
+        </div>
+
+        <div style={{ textAlign: isRTL ? "left" : "right", display: "grid", gap: 6 }}>
+          <div style={{ fontSize: 27, fontWeight: 1000 }}>{tr("السجل الرسمي للكادر التعليمي", "Official Teaching Staff Register")}</div>
+          <div style={{ fontSize: 18, fontWeight: 1000 }}>{semester}</div>
+          <div style={{ fontSize: 18, fontWeight: 1000 }}>{tr("العام الدراسي", "Academic Year")}: {academicYear}</div>
+          <div style={{ fontSize: 18, fontWeight: 1000 }}>{tr("رئيس الكنترول", "Control Head")}: {controlHead}</div>
+        </div>
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
+          gap: 12,
+          borderTop: "3px solid #111827",
+          paddingTop: 14,
+        }}
+      >
+        {[
+          { label: tr("إجمالي المعلمين", "Total Teachers"), value: String(teachersCount) },
+          { label: tr("المعروض في الجدول", "Displayed Rows"), value: String(filteredCount) },
+          { label: tr("رقم الهاتف", "Phone"), value: centerData.phone || "—" },
+          { label: tr("العنوان", "Address"), value: centerData.address || "—" },
+        ].map((item) => (
+          <div
+            key={item.label}
+            style={{
+              background: "#f8f4e8",
+              border: "3px solid #d4af37",
+              borderRadius: 18,
+              padding: "12px 14px",
+              display: "grid",
+              gap: 6,
+              minHeight: 78,
+            }}
+          >
+            <div style={{ fontSize: 14, fontWeight: 1000, color: "#000000" }}>{item.label}</div>
+            <div style={{ fontSize: 17, fontWeight: 1000, lineHeight: 1.55, color: "#000000" }}>{item.value}</div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 // ✅ قائمة المواد
 const SUBJECT_OPTIONS_RAW = [
@@ -137,6 +325,27 @@ const emptyTeacher: Teacher = {
   notes: "",
 };
 
+type TeacherAccountFields = Teacher & {
+  accountNo?: string;
+  bankAccount?: string;
+  bankAccountNo?: string;
+  iban?: string;
+};
+
+function getTeacherAccountNo(teacher: Partial<TeacherAccountFields> | null | undefined) {
+  return String(
+    teacher?.accountNo ??
+      teacher?.bankAccount ??
+      teacher?.bankAccountNo ??
+      teacher?.iban ??
+      ""
+  ).trim();
+}
+
+function setTeacherAccountNo<T extends Teacher>(teacher: T, value: string): T {
+  return { ...(teacher as any), accountNo: String(value || "").trim() } as T;
+}
+
 function genId() {
   // ✅ متوافق مع المتصفحات الحديثة + fallback
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -161,11 +370,83 @@ function safeParseTeachers(v: string | null): Teacher[] {
         subject4: String(x.subject4 ?? "").trim(),
         grades: String(x.grades ?? "").trim(),
         phone: String(x.phone ?? "").trim(),
+        accountNo: String(x.accountNo ?? x.bankAccount ?? x.bankAccountNo ?? x.iban ?? "").trim(),
         notes: String(x.notes ?? "").trim(),
       }))
       .filter((t) => t.employeeNo || t.fullName);
   } catch {
     return [];
+  }
+}
+
+function normalizeTeachersList(rows: any[]): Teacher[] {
+  return (Array.isArray(rows) ? rows : [])
+    .map((x) => ({
+      id: String(x.id ?? "").trim() || genId(),
+      employeeNo: String(x.employeeNo ?? "").trim(),
+      fullName: String(x.fullName ?? x.name ?? "").trim(),
+      subject1: String(x.subject1 ?? "").trim(),
+      subject2: String(x.subject2 ?? "").trim(),
+      subject3: String(x.subject3 ?? "").trim(),
+      subject4: String(x.subject4 ?? "").trim(),
+      grades: String(x.grades ?? "").trim(),
+      phone: String(x.phone ?? "").trim(),
+      accountNo: String(x.accountNo ?? x.bankAccount ?? x.bankAccountNo ?? x.iban ?? "").trim(),
+      notes: String(x.notes ?? "").trim(),
+    }))
+    .filter((t) => t.employeeNo || t.fullName);
+}
+
+function stableTeachersSignature(rows: Teacher[]) {
+  try {
+    return JSON.stringify(normalizeTeachersList(rows as any[]));
+  } catch {
+    return String((rows || []).length);
+  }
+}
+
+function areTeachersListsEqual(a: Teacher[], b: Teacher[]) {
+  return stableTeachersSignature(a) === stableTeachersSignature(b);
+}
+
+function readLegacyTeachersFromLocalStorage(): Teacher[] {
+  if (typeof window === "undefined") return [];
+
+  const directKeys = [
+    LEGACY_TEACHERS_CACHE_KEY,
+    "teachers",
+    "teachers12",
+    "exam-manager:teachers",
+    "exam-manager:teachers12",
+  ];
+
+  let best: Teacher[] = [];
+
+  for (const key of directKeys) {
+    const parsed = safeParseTeachers(window.localStorage.getItem(key));
+    if (parsed.length > best.length) best = parsed;
+  }
+
+  try {
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i) || "";
+      if (!/teacher|teachers|معلم|كادر/i.test(key)) continue;
+      const parsed = safeParseTeachers(window.localStorage.getItem(key));
+      if (parsed.length > best.length) best = parsed;
+    }
+  } catch {
+    // ignore localStorage scan errors
+  }
+
+  return best;
+}
+
+function cacheTeachersLocally(rows: Teacher[]) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(LEGACY_TEACHERS_CACHE_KEY, JSON.stringify(rows));
+  } catch {
+    // cache failure should not break the page
   }
 }
 
@@ -225,6 +506,7 @@ function parseTeachersFromObjects(rows: any[]): Teacher[] {
       const subject4 = getCell(r, ["المادة 4", "المادة4", "المادة الرابعة", "المادة الرابعه", "subject4"]);
       const grades = getCell(r, ["الصفوف", "الصف", "grades", "grade"]);
       const phone = getCell(r, ["رقم الهاتف", "الهاتف", "الجوال", "رقم الجوال", "phone", "mobile"]);
+      const accountNo = getCell(r, ["رقم الحساب", "الحساب", "الحساب البنكي", "الرقم البنكي", "accountNo", "account", "bankAccount", "bankAccountNo", "iban"]);
       const notes = getCell(r, ["ملاحظات", "notes", "note"]);
 
       return {
@@ -237,6 +519,7 @@ function parseTeachersFromObjects(rows: any[]): Teacher[] {
         subject4: subject4.trim(),
         grades: grades.trim(),
         phone: phone.trim(),
+        accountNo: accountNo.trim(),
         notes: notes.trim(),
       } as Teacher;
     })
@@ -314,8 +597,19 @@ type DupModalState = {
 
 export default function Teachers() {
   const { lang, isRTL } = useI18n();
-  const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
-  const translateSubject = (s: string) => (lang === "ar" ? s : SUBJECT_TRANSLATIONS[s] || s);
+  const auth = useAuth() as any;
+  const tr = useCallback((ar: string, en: string) => (lang === "ar" ? ar : en), [lang]);
+  const translateSubject = useCallback((s: string) => (lang === "ar" ? s : SUBJECT_TRANSLATIONS[s] || s), [lang]);
+  const tenantId = useMemo(
+    () => getTenantIdFromAuth(auth),
+    [
+      auth?.effectiveTenantId,
+      auth?.profile?.tenantId,
+      auth?.userProfile?.tenantId,
+      auth?.user?.tenantId,
+    ]
+  );
+  const currentUserId = String(auth?.user?.email || auth?.user?.uid || "").trim();
 
   const SUBJECT_OPTIONS = useMemo(
     () =>
@@ -323,10 +617,208 @@ export default function Teachers() {
         value: s,
         label: s ? translateSubject(s) : tr("— اختر المادة —", "— Select Subject —"),
       })),
-    [lang]
+    [lang, tr, translateSubject]
   );
 
-  const { tenantId, teachers, setTeachers } = useTeachersData();
+  const [teachers, setTeachersLocal] = useState<Teacher[]>(() => readLegacyTeachersFromLocalStorage());
+  const teachersRef = useRef<Teacher[]>(teachers);
+  const [cloudStatus, setCloudStatus] = useState("");
+  const [cloudLoading, setCloudLoading] = useState(false);
+
+  const setTeachers = React.useCallback(
+    (nextValue: React.SetStateAction<Teacher[]>) => {
+      const previous = teachersRef.current;
+      const next =
+        typeof nextValue === "function"
+          ? (nextValue as (prev: Teacher[]) => Teacher[])(previous)
+          : nextValue;
+
+      const normalized = normalizeTeachersList(next as any[]);
+      const sameAsCurrent = areTeachersListsEqual(previous, normalized);
+      teachersRef.current = normalized;
+      if (!sameAsCurrent) {
+        setTeachersLocal(normalized);
+        cacheTeachersLocally(normalized);
+      }
+
+      setCloudStatus(tr("جاري حفظ بيانات الكادر في السحابة...", "Saving teaching staff data to cloud..."));
+
+      void replaceTenantArray(tenantId, SUBCOLLECTION, normalized as any[], {
+        by: currentUserId || undefined,
+        audit: {
+          entity: SUBCOLLECTION,
+          meta: {
+            summary: "saved teachers collection",
+            count: normalized.length,
+          },
+        },
+      })
+        .then(() => {
+          setCloudStatus(tr("تم حفظ بيانات الكادر في السحابة.", "Teaching staff data saved to cloud."));
+        })
+        .catch(() => {
+          setCloudStatus(
+            tr(
+              "تم تحديث الصفحة محليًا، لكن تعذر الحفظ في السحابة. تحقق من الاتصال والصلاحيات.",
+              "Page updated locally, but cloud save failed. Check connection and permissions."
+            )
+          );
+        });
+    },
+    [tenantId, currentUserId, tr]
+  );
+
+  useEffect(() => {
+    teachersRef.current = teachers;
+  }, [teachers]);
+
+  const [officialCenterData, setOfficialCenterData] = useState<ExamCenterOfficialData>(() => readOfficialExamCenterData());
+  const [officialLogo, setOfficialLogo] = useState<string>(() => readOfficialLogo());
+
+  useEffect(() => {
+    const refreshOfficialData = () => {
+      setOfficialCenterData(readOfficialExamCenterData());
+      setOfficialLogo(readOfficialLogo());
+    };
+
+    async function refreshOfficialDataFromCloud() {
+      try {
+        const cloud = await loadTenantSettings<ExamCenterOfficialData>(
+          tenantId,
+          DIPLOMA_EXAM_CENTER_SETTINGS_DOC_ID,
+          buildEmptyOfficialCenterData()
+        );
+
+        const hasCloudCenter = Boolean(
+          cloud?.name ||
+            cloud?.governorate ||
+            cloud?.semester ||
+            cloud?.phone ||
+            cloud?.address ||
+            cloud?.controlHeadName ||
+            cloud?.logo
+        );
+
+        if (!hasCloudCenter) return;
+
+        const nextCenter = {
+          name: String(cloud.name || "").trim(),
+          examCenterCode: String(cloud.examCenterCode || cloud.centerCode || "").trim(),
+          centerCode: String(cloud.examCenterCode || cloud.centerCode || "").trim(),
+          governorate: String(cloud.governorate || "").trim(),
+          semester: String(cloud.semester || "").trim(),
+          phone: String(cloud.phone || "").trim(),
+          address: String(cloud.address || "").trim(),
+          controlHeadName: String(cloud.controlHeadName || "").trim(),
+          academicYear: String(cloud.academicYear || "").trim(),
+        };
+
+        const nextLogo = String(cloud.logo || readOfficialLogo() || DEFAULT_LOGO_URL).trim() || DEFAULT_LOGO_URL;
+
+        setOfficialCenterData(nextCenter);
+        setOfficialLogo(nextLogo);
+
+        window.localStorage.setItem(EXAM_CENTER_DATA_KEY, JSON.stringify(nextCenter));
+        window.localStorage.setItem(EXAM_CENTER_LOGO_KEY, nextLogo);
+        window.localStorage.setItem(CONTROL_HEAD_NAME_KEY, nextCenter.controlHeadName || "");
+      } catch {
+        refreshOfficialData();
+      }
+    }
+
+    refreshOfficialData();
+    void refreshOfficialDataFromCloud();
+
+    window.addEventListener("storage", refreshOfficialData);
+    window.addEventListener("exam-manager:changed", refreshOfficialData);
+    window.addEventListener("exam-manager:control-head-changed", refreshOfficialData);
+
+    return () => {
+      window.removeEventListener("storage", refreshOfficialData);
+      window.removeEventListener("exam-manager:changed", refreshOfficialData);
+      window.removeEventListener("exam-manager:control-head-changed", refreshOfficialData);
+    };
+  }, [tenantId]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadCloudTeachers() {
+      setCloudLoading(true);
+      setCloudStatus(tr("جاري تحميل الكادر من السحابة...", "Loading teaching staff from cloud..."));
+
+      try {
+        const cloudRows = normalizeTeachersList(
+          await loadTenantArray<Teacher>(tenantId, SUBCOLLECTION, { cacheFallback: true })
+        );
+
+        if (!mounted) return;
+
+        if (cloudRows.length) {
+          const sameAsCurrent = areTeachersListsEqual(teachersRef.current, cloudRows);
+          teachersRef.current = cloudRows;
+          if (!sameAsCurrent) {
+            setTeachersLocal(cloudRows);
+            cacheTeachersLocally(cloudRows);
+          }
+          setCloudStatus(tr("تم تحميل الكادر من السحابة.", "Teaching staff loaded from cloud."));
+        } else {
+          const legacyRows = normalizeTeachersList(readLegacyTeachersFromLocalStorage());
+
+          if (legacyRows.length) {
+            const sameAsCurrent = areTeachersListsEqual(teachersRef.current, legacyRows);
+            teachersRef.current = legacyRows;
+            if (!sameAsCurrent) {
+              setTeachersLocal(legacyRows);
+              cacheTeachersLocally(legacyRows);
+            }
+
+            await replaceTenantArray(tenantId, SUBCOLLECTION, legacyRows as any[], {
+              by: currentUserId || undefined,
+              audit: {
+                entity: SUBCOLLECTION,
+                meta: {
+                  summary: "migrated teachers from localStorage to cloud",
+                  count: legacyRows.length,
+                },
+              },
+            });
+
+            setCloudStatus(tr("تم ترحيل بيانات الكادر من هذا الجهاز إلى السحابة.", "Teaching staff migrated from this device to cloud."));
+          } else {
+            const sameAsCurrent = areTeachersListsEqual(teachersRef.current, []);
+            teachersRef.current = [];
+            if (!sameAsCurrent) {
+              setTeachersLocal([]);
+              cacheTeachersLocally([]);
+            }
+            setCloudStatus(tr("لا توجد بيانات كادر محفوظة بعد.", "No teaching staff data saved yet."));
+          }
+        }
+
+        // Realtime subscription is intentionally disabled on this page.
+        // In some local browser sessions, Firestore onSnapshot caused:
+        // INTERNAL ASSERTION FAILED: Unexpected state
+        // The page now uses safe one-time cloud loading + explicit cloud saving.
+        // Other pages can still use subscribeTenantArray normally.
+      } catch {
+        if (!mounted) return;
+        const legacyRows = normalizeTeachersList(readLegacyTeachersFromLocalStorage());
+        const sameAsCurrent = areTeachersListsEqual(teachersRef.current, legacyRows);
+        teachersRef.current = legacyRows;
+        if (!sameAsCurrent) setTeachersLocal(legacyRows);
+        setCloudStatus(tr("تعذر تحميل السحابة؛ يتم عرض نسخة الجهاز المؤقتة.", "Could not load cloud data; showing local cache."));
+      } finally {
+        if (mounted) setCloudLoading(false);
+      }
+    }
+
+    void loadCloudTeachers();
+
+    return () => {
+      mounted = false;
+    };
+  }, [tenantId, currentUserId, tr]);
 
   const [query, setQuery] = useState("");
   const [adding, setAdding] = useState(false);
@@ -401,13 +893,9 @@ export default function Teachers() {
 
   useEffect(() => {
     const prev = document.body.style.overflow;
-    if (tableFullScreen) {
-      document.body.style.overflow = "hidden";
-      document.body.classList.add("teachers-table-fullscreen-open");
-    }
+    if (tableFullScreen) document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = prev;
-      document.body.classList.remove("teachers-table-fullscreen-open");
     };
   }, [tableFullScreen]);
 
@@ -424,6 +912,7 @@ export default function Teachers() {
         t.subject4,
         t.grades,
         t.phone,
+        getTeacherAccountNo(t as TeacherAccountFields),
         t.notes,
       ].some((x) => String(x).includes(q))
     );
@@ -516,8 +1005,8 @@ export default function Teachers() {
   function toCSV(rows: Teacher[]) {
     const header =
       lang === "ar"
-        ? ["الاسم الكامل", "الرقم الوظيفي", "المادة 1", "المادة 2", "المادة 3", "المادة 4", "الصفوف", "رقم الهاتف", "ملاحظات"]
-        : ["Full Name", "Employee Number", "Subject 1", "Subject 2", "Subject 3", "Subject 4", "Grades", "Phone Number", "Notes"];
+        ? ["الرقم الوظيفي", "اسم المعلم", "التخصص 1", "التخصص 2", "الهاتف", "رقم الحساب"]
+        : ["Employee Number", "Teacher Name", "Specialization 1", "Specialization 2", "Phone", "Account Number"];
 
     const escape = (s: string) => {
       const v = (s ?? "").replace(/\r?\n/g, " ").trim();
@@ -529,15 +1018,12 @@ export default function Teachers() {
       header.join(","),
       ...rows.map((t) =>
         [
-          t.fullName,
           t.employeeNo,
+          t.fullName,
           lang === "ar" ? t.subject1 : translateSubject(t.subject1),
           lang === "ar" ? t.subject2 : translateSubject(t.subject2),
-          lang === "ar" ? t.subject3 : translateSubject(t.subject3),
-          lang === "ar" ? t.subject4 : translateSubject(t.subject4),
-          t.grades,
           t.phone,
-          t.notes,
+          getTeacherAccountNo(t as TeacherAccountFields),
         ].map(escape).join(",")
       ),
     ];
@@ -555,26 +1041,20 @@ export default function Teachers() {
       const rows = teachers.map((t) =>
         lang === "ar"
           ? {
-              "الاسم الكامل": t.fullName,
               "الرقم الوظيفي": t.employeeNo,
-              "المادة 1": t.subject1,
-              "المادة 2": t.subject2,
-              "المادة 3": t.subject3,
-              "المادة 4": t.subject4,
-              "الصفوف": t.grades,
-              "رقم الهاتف": t.phone,
-              "ملاحظات": t.notes,
+              "اسم المعلم": t.fullName,
+              "التخصص 1": t.subject1,
+              "التخصص 2": t.subject2,
+              "الهاتف": t.phone,
+              "رقم الحساب": getTeacherAccountNo(t as TeacherAccountFields),
             }
           : {
-              "Full Name": t.fullName,
               "Employee Number": t.employeeNo,
-              "Subject 1": translateSubject(t.subject1),
-              "Subject 2": translateSubject(t.subject2),
-              "Subject 3": translateSubject(t.subject3),
-              "Subject 4": translateSubject(t.subject4),
-              "Grades": t.grades,
-              "Phone Number": t.phone,
-              "Notes": t.notes,
+              "Teacher Name": t.fullName,
+              "Specialization 1": translateSubject(t.subject1),
+              "Specialization 2": translateSubject(t.subject2),
+              "Phone": t.phone,
+              "Account Number": getTeacherAccountNo(t as TeacherAccountFields),
             }
       );
       const ws = XLSX.utils.json_to_sheet(rows);
@@ -720,7 +1200,7 @@ export default function Teachers() {
 
   const tableStyle3D: React.CSSProperties = {
     width: "100%",
-    minWidth: 1250,
+    minWidth: 980,
     borderCollapse: "separate",
     borderSpacing: 8,
   };
@@ -770,133 +1250,6 @@ export default function Teachers() {
     color: "#000000",
     direction: isRTL ? "rtl" : "ltr",
   };
-
-  const renderTeachersTableSection = () => (
-      <div
-        className={tableFullScreen ? "teachersFullscreenOverlay" : undefined}
-        style={
-          tableFullScreen
-            ? {
-                ...card,
-                position: "fixed",
-                inset: 0,
-                width: "100vw",
-                height: "100dvh",
-                zIndex: 2147483647,
-                marginBottom: 0,
-                borderRadius: 0,
-                padding: "14px 16px 16px",
-                background: "linear-gradient(180deg, #fffdf7 0%, #f6efd9 100%)",
-                overflow: "hidden",
-                border: `6px solid ${GOLD_BORDER}`,
-                boxShadow: "0 30px 90px rgba(0,0,0,0.48)",
-                isolation: "isolate",
-              }
-            : card
-        }
-      >
-        <div
-          className="teachersFullscreenToolbar"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 10,
-            marginBottom: 10,
-            position: tableFullScreen ? "sticky" : "relative",
-            top: tableFullScreen ? 0 : "auto",
-            zIndex: tableFullScreen ? 2147483647 : 1,
-            background: tableFullScreen ? "linear-gradient(180deg, #fffdf7 0%, #fbf3df 100%)" : "transparent",
-            border: tableFullScreen ? `3px solid ${GOLD_BORDER}` : "0",
-            borderRadius: tableFullScreen ? 18 : 0,
-            padding: tableFullScreen ? "10px 12px" : 0,
-            boxShadow: tableFullScreen ? "0 8px 18px rgba(90,70,20,0.16)" : "none",
-          }}
-        >
-          <div style={{ fontWeight: 1000, color: "#000000", fontSize: tableFullScreen ? 18 : 16 }}>{tr("قائمة الكادر التعليمي", "Teaching Staff List")}</div>
-
-          <button
-            style={btn(tableFullScreen ? "#ef4444" : "#fffdf7", "#000000")}
-            onClick={() => setTableFullScreen((v) => !v)}
-            title={tableFullScreen ? tr("عودة للحجم الطبيعي", "Return to normal size") : tr("تكبير الجدول ملء الشاشة", "Fullscreen table")}
-          >
-            {tableFullScreen ? tr("إغلاق ملء الشاشة", "Exit Fullscreen") : tr("ملء الشاشة", "Fullscreen")}
-          </button>
-        </div>
-
-        <div
-          className="teachersTable3D"
-          style={
-            tableFullScreen
-              ? {
-                  height: "calc(100dvh - 96px)",
-                  overflow: "auto",
-                  borderRadius: 18,
-                  border: `4px solid ${GOLD_BORDER}`,
-                  position: "relative",
-                  zIndex: 2147483646,
-                  background: "#fffdf7",
-                  boxShadow: "inset 0 0 0 1px rgba(201,162,39,0.25)",
-                }
-              : {
-                  ...tableWrap,
-                  position: "relative",
-                }
-          }
-        >
-          <table style={tableStyle3D}>
-            <thead>
-              <tr>
-                <th style={thStyle} className="col-name">{tr("الاسم الكامل", "Full Name")}</th>
-                <th style={thStyle} className="col-emp">{tr("الرقم الوظيفي", "Employee Number")}</th>
-                <th style={thStyle}>{tr("المادة 1", "Subject 1")}</th>
-                <th style={thStyle}>{tr("المادة 2", "Subject 2")}</th>
-                <th style={thStyle}>{tr("المادة 3", "Subject 3")}</th>
-                <th style={thStyle}>{tr("المادة 4", "Subject 4")}</th>
-                <th style={thStyle}>{tr("الصفوف", "Grades")}</th>
-                <th style={thStyle}>{tr("الهاتف", "Phone")}</th>
-                <th style={thStyle}>{tr("ملاحظات", "Notes")}</th>
-                <th style={thStyle}>{tr("إجراءات", "Actions")}</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {filtered.length === 0 ? (
-                <tr>
-                  <td style={tdStyle} colSpan={10}>
-                    {tr("لا توجد بيانات.", "No data found.")}
-                  </td>
-                </tr>
-              ) : (
-                filtered.map((t) => (
-                  <tr key={t.id}>
-                    <td style={{ ...tdStyle, color: "#000000", fontWeight: 1000 }} className="col-name"><span style={{ color: "#000000", fontWeight: 900, WebkitTextFillColor: "#000000", textShadow: "none" }}>{t.fullName}</span></td>
-                    <td style={tdStyle} className="col-emp">{t.employeeNo}</td>
-                    <td style={tdStyle}>{translateSubject(t.subject1)}</td>
-                    <td style={tdStyle}>{translateSubject(t.subject2)}</td>
-                    <td style={tdStyle}>{translateSubject(t.subject3)}</td>
-                    <td style={tdStyle}>{translateSubject(t.subject4)}</td>
-                    <td style={tdStyle}>{t.grades}</td>
-                    <td style={tdStyle}>{t.phone}</td>
-                    <td style={tdStyle} title={t.notes}>{t.notes}</td>
-                    <td style={tdStyle}>
-                      <div style={{ display: "flex", gap: 8 }}>
-                        <button style={btn("#60a5fa", "#000000")} onClick={() => startEdit(t)}>
-                          {tr("✏️ تعديل", "✏️ Edit")}
-                        </button>
-                        <button style={btn("#ef4444", "#000000")} onClick={() => removeTeacher(t.id)}>
-                          {tr("🗑 حذف", "🗑 Delete")}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-  );
 
   return (
     <div style={pageStyle} ref={topRef} className="teachers12PageRoot teachers12PreviousChangesScope">
@@ -990,40 +1343,43 @@ export default function Teachers() {
         .teachers12PreviousChangesScope table th:nth-child(10n + 10),
         .teachers12PreviousChangesScope table td:nth-child(10n + 10) { border-color: #059669 !important; }
 
-        /* Phase 58: stop forcing colored borders on every div.
-           This caused the large repeated blue frames around the teachers hero card.
-           Keep color styling for buttons only; cards use their own official borders. */
-        .teachers12PreviousChangesScope button[style*="border"] {
-          border-width: 2px !important;
+        .teachers12PreviousChangesScope div[style*="border"],
+        .teachers12PreviousChangesScope button[style*="border"],
+        .teachers12PreviousChangesScope section[style*="border"],
+        .teachers12PreviousChangesScope article[style*="border"] {
+          border-width: 3px !important;
           border-style: solid !important;
         }
 
+        .teachers12PreviousChangesScope div[style*="border"]:nth-of-type(10n + 1),
         .teachers12PreviousChangesScope button[style*="border"]:nth-of-type(10n + 1) { border-color: #2563eb !important; }
+
+        .teachers12PreviousChangesScope div[style*="border"]:nth-of-type(10n + 2),
         .teachers12PreviousChangesScope button[style*="border"]:nth-of-type(10n + 2) { border-color: #16a34a !important; }
+
+        .teachers12PreviousChangesScope div[style*="border"]:nth-of-type(10n + 3),
         .teachers12PreviousChangesScope button[style*="border"]:nth-of-type(10n + 3) { border-color: #dc2626 !important; }
+
+        .teachers12PreviousChangesScope div[style*="border"]:nth-of-type(10n + 4),
         .teachers12PreviousChangesScope button[style*="border"]:nth-of-type(10n + 4) { border-color: #9333ea !important; }
+
+        .teachers12PreviousChangesScope div[style*="border"]:nth-of-type(10n + 5),
         .teachers12PreviousChangesScope button[style*="border"]:nth-of-type(10n + 5) { border-color: #ea580c !important; }
+
+        .teachers12PreviousChangesScope div[style*="border"]:nth-of-type(10n + 6),
         .teachers12PreviousChangesScope button[style*="border"]:nth-of-type(10n + 6) { border-color: #0891b2 !important; }
+
+        .teachers12PreviousChangesScope div[style*="border"]:nth-of-type(10n + 7),
         .teachers12PreviousChangesScope button[style*="border"]:nth-of-type(10n + 7) { border-color: #4f46e5 !important; }
+
+        .teachers12PreviousChangesScope div[style*="border"]:nth-of-type(10n + 8),
         .teachers12PreviousChangesScope button[style*="border"]:nth-of-type(10n + 8) { border-color: #db2777 !important; }
+
+        .teachers12PreviousChangesScope div[style*="border"]:nth-of-type(10n + 9),
         .teachers12PreviousChangesScope button[style*="border"]:nth-of-type(10n + 9) { border-color: #ca8a04 !important; }
+
+        .teachers12PreviousChangesScope div[style*="border"]:nth-of-type(10n + 10),
         .teachers12PreviousChangesScope button[style*="border"]:nth-of-type(10n + 10) { border-color: #059669 !important; }
-
-        .teachers12PageRoot .teachersHeroCard,
-        .teachers12PageRoot .teachersHeroCard * {
-          text-shadow: none !important;
-        }
-
-        .teachers12PageRoot .teachersHeroCard {
-          border-color: #c9a227 !important;
-          box-shadow: 0 18px 42px rgba(90, 70, 20, 0.16), 0 0 0 6px rgba(201, 162, 39, 0.10) !important;
-        }
-
-        .teachers12PageRoot .teachersHeroInnerShell {
-          border-color: transparent !important;
-          box-shadow: none !important;
-          background: transparent !important;
-        }
       `}</style>
 
       <style>{`
@@ -1043,6 +1399,29 @@ export default function Teachers() {
           font-weight: 900 !important;
         }
 
+
+
+        /* ✅ إجبار القوائم المنسدلة الأصلية على خلفية بيج وخط أسود عريض */
+        .teachers12PreviousChangesScope select {
+          background: #f8f4e8 !important;
+          background-color: #f8f4e8 !important;
+          color: #000000 !important;
+          -webkit-text-fill-color: #000000 !important;
+          font-weight: 1000 !important;
+          border: 3px solid #d4af37 !important;
+          caret-color: #000000 !important;
+          color-scheme: light !important;
+        }
+
+        .teachers12PreviousChangesScope select option,
+        .teachers12PreviousChangesScope select optgroup {
+          background: #f8f4e8 !important;
+          background-color: #f8f4e8 !important;
+          color: #000000 !important;
+          -webkit-text-fill-color: #000000 !important;
+          font-weight: 1000 !important;
+        }
+
         .teachers12PreviousChangesScope input[name*="name"],
         .teachers12PreviousChangesScope input[id*="name"],
         .teachers12PreviousChangesScope input[placeholder*="اسم"],
@@ -1053,6 +1432,84 @@ export default function Teachers() {
           font-weight: 900 !important;
           -webkit-text-fill-color: #000000 !important;
           caret-color: #000000 !important;
+        }
+
+
+        .teachers12PreviousChangesScope [role="button"],
+        .teachers12PreviousChangesScope [role="listbox"],
+        .teachers12PreviousChangesScope [role="option"],
+        .teachers12PreviousChangesScope .gold-dropdown,
+        .teachers12PreviousChangesScope .goldDropdown {
+          color: #000000 !important;
+          font-weight: 900 !important;
+          -webkit-text-fill-color: #000000 !important;
+        }
+      `}</style>
+
+
+      <style>{`
+        /* ✅ تنسيق رسمي ثابت للقوائم المنسدلة: خلفية بيج + خط أسود عريض */
+        .teachers12PreviousChangesScope select,
+        .teachers12PreviousChangesScope select option,
+        .teachers12PreviousChangesScope [role="combobox"],
+        .teachers12PreviousChangesScope [aria-haspopup="listbox"],
+        .teachers12PreviousChangesScope [role="button"][aria-haspopup="listbox"],
+        .teachers12PreviousChangesScope [role="listbox"],
+        .teachers12PreviousChangesScope [role="option"],
+        .teachers12PreviousChangesScope .gold-dropdown,
+        .teachers12PreviousChangesScope .goldDropdown,
+        .teachers12PreviousChangesScope [class*="GoldDropdown"],
+        .teachers12PreviousChangesScope [class*="goldDropdown"],
+        .teachers12PreviousChangesScope [class*="gold-dropdown"] {
+          background: #f8f4e8 !important;
+          background-color: #f8f4e8 !important;
+          color: #000000 !important;
+          -webkit-text-fill-color: #000000 !important;
+          font-weight: 1000 !important;
+          border-color: #d4af37 !important;
+          caret-color: #000000 !important;
+          text-shadow: none !important;
+        }
+
+        .teachers12PreviousChangesScope [role="combobox"] *,
+        .teachers12PreviousChangesScope [aria-haspopup="listbox"] *,
+        .teachers12PreviousChangesScope [role="button"][aria-haspopup="listbox"] *,
+        .teachers12PreviousChangesScope [role="listbox"] *,
+        .teachers12PreviousChangesScope [role="option"] *,
+        .teachers12PreviousChangesScope .gold-dropdown *,
+        .teachers12PreviousChangesScope .goldDropdown *,
+        .teachers12PreviousChangesScope [class*="GoldDropdown"] *,
+        .teachers12PreviousChangesScope [class*="goldDropdown"] *,
+        .teachers12PreviousChangesScope [class*="gold-dropdown"] * {
+          color: #000000 !important;
+          -webkit-text-fill-color: #000000 !important;
+          font-weight: 1000 !important;
+          text-shadow: none !important;
+        }
+
+        body .gold-dropdown,
+        body .goldDropdown,
+        body [class*="GoldDropdown"],
+        body [class*="goldDropdown"],
+        body [class*="gold-dropdown"] {
+          background: #f8f4e8 !important;
+          background-color: #f8f4e8 !important;
+          color: #000000 !important;
+          -webkit-text-fill-color: #000000 !important;
+          font-weight: 1000 !important;
+          border-color: #d4af37 !important;
+          text-shadow: none !important;
+        }
+
+        body .gold-dropdown *,
+        body .goldDropdown *,
+        body [class*="GoldDropdown"] *,
+        body [class*="goldDropdown"] *,
+        body [class*="gold-dropdown"] * {
+          color: #000000 !important;
+          -webkit-text-fill-color: #000000 !important;
+          font-weight: 1000 !important;
+          text-shadow: none !important;
         }
       `}</style>
 
@@ -1091,6 +1548,17 @@ export default function Teachers() {
         }
       `}</style>
       <div className="teachers12FixedLightBg" aria-hidden="true" />
+
+      <div style={{ maxWidth: 1680, margin: "0 auto 18px auto", position: "relative", zIndex: 1 }}>
+        <TeachersOfficialHeader
+          lang={lang}
+          isRTL={isRTL}
+          centerData={officialCenterData}
+          logo={officialLogo}
+          teachersCount={teachers.length}
+          filteredCount={filtered.length}
+        />
+      </div>
 
       {dupModal.open && (
         <div style={modalOverlay} onClick={() => resolveDuplicate("change")}>
@@ -1142,152 +1610,6 @@ export default function Teachers() {
         </div>
       )}
 
-      <div
-        style={{
-          maxWidth: 1680,
-          margin: "0 auto 18px auto",
-          display: "grid",
-          gap: 18,
-          position: "relative",
-          zIndex: 1,
-        }}
-      >
-        <div
-          className="teachersHeroCard"
-          style={{
-            background: "linear-gradient(135deg, #fffdf7 0%, #fbf3df 58%, #fffaf0 100%)",
-            borderRadius: 30,
-            border: "3px solid #c9a227",
-            borderInlineStart: "10px solid #16a34a",
-            boxShadow: "0 18px 42px rgba(90,70,20,0.16), 0 0 0 6px rgba(201,162,39,0.10)",
-            padding: 26,
-          }}
-        >
-          <div
-            className="teachersHeroInnerShell"
-            style={{
-              background: "transparent",
-              borderRadius: 24,
-              border: "0 solid transparent",
-              boxShadow: "none",
-              padding: 0,
-            }}
-          >
-            <div
-              className="teachersHeroInnerShell"
-              style={{
-                background: "transparent",
-                borderRadius: 22,
-                border: "0 solid transparent",
-                boxShadow: "none",
-                padding: 0,
-              }}
-            >
-              <div
-                className="teachersHeroInnerShell"
-                style={{
-                  background: "transparent",
-                  borderRadius: 20,
-                  border: "0 solid transparent",
-                  padding: 4,
-                  display: "grid",
-                  gap: 18,
-                }}
-              >
-                <div
-                  style={{
-                    display: "inline-flex",
-                    width: "fit-content",
-                    alignItems: "center",
-                    gap: 8,
-                    padding: "8px 16px",
-                    borderRadius: 999,
-                    background: "#f0fdf4",
-                    border: "2px solid #16a34a",
-                    color: "#111827",
-                    fontWeight: 900,
-                    fontSize: 15,
-                  }}
-                >
-                  {tr("واجهة تشغيل مخصصة", "Dedicated Operating View")}
-                </div>
-
-                <div style={{ display: "grid", gap: 12 }}>
-                  <h1
-                    style={{
-                      margin: 0,
-                      fontSize: "clamp(30px, 4vw, 48px)",
-                      lineHeight: 1.25,
-                      fontWeight: 900,
-                      color: "#111827",
-                      letterSpacing: "-0.01em",
-                    }}
-                  >
-                    {tr("مركز إدارة الكادر التعليمي", "Teaching Staff Management Center")}
-                  </h1>
-
-                  <div
-                    style={{
-                      fontSize: "clamp(18px, 2.2vw, 26px)",
-                      fontWeight: 850,
-                      color: "#1f2937",
-                    }}
-                  >
-                    {tr("لوحة تحكم إدارة الكادر التعليمي", "Teaching Staff Control Panel")}
-                  </div>
-
-                  <p
-                    style={{
-                      margin: 0,
-                      fontSize: 15,
-                      lineHeight: 1.9,
-                      color: "#1f2937",
-                      fontWeight: 750,
-                      maxWidth: 1380,
-                    }}
-                  >
-                    {tr(
-                      "هذه الصفحة تضبط بيانات المعلمين والمواد والصفوف والاتصال بنفس الهوية المعتمدة لصفحات الدبلوم، بحيث تظهر جميع العناصر بخلفية فاتحة وحدود ذهبية وخط أسود عريض واضح.",
-                      "This page manages teachers, subjects, grades, and contact data using the same approved diploma visual identity, so every element appears with a light background, bold golden borders, and clear black text."
-                    )}
-                  </p>
-                </div>
-
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-                    gap: 18,
-                  }}
-                >
-                  {[
-                    { label: tr("إجمالي المعلمين", "Total Teachers"), value: String(teachers.length) },
-                    { label: tr("المعروض الآن", "Currently Shown"), value: String(filtered.length) },
-                    { label: tr("البحث الحالي", "Current Search"), value: query.trim() || tr("بدون فلترة", "No Filter") },
-                  ].map((item) => (
-                    <div
-                      key={item.label}
-                      style={{
-                        background: "linear-gradient(180deg, #faf7ee 0%, #f6f1e2 100%)",
-                        border: "2px solid #d4af37",
-                        borderRadius: 18,
-                        padding: 14,
-                        display: "grid",
-                        gap: 8,
-                        boxShadow: "0 8px 18px rgba(190,160,40,0.10)",
-                      }}
-                    >
-                      <div style={{ fontSize: 18, color: "#000000", fontWeight: 1000 }}>{item.label}</div>
-                      <div style={{ fontSize: 22, color: "#000000", fontWeight: 1000 }}>{item.value}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <div style={{ ...card, padding: 12 }}>
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           <button style={btn("#fffdf7", "#000000")} onClick={() => history.back()}>
@@ -1303,6 +1625,20 @@ export default function Teachers() {
           <div style={{ marginInlineStart: "auto", fontWeight: 1000, color: "#000000" }}>
             {tr("إدارة بيانات الكادر التعليمي", "Teaching Staff Data Management")}
           </div>
+        </div>
+
+        <div
+          style={{
+            marginTop: 10,
+            border: `3px solid ${GOLD_BORDER}`,
+            borderRadius: 16,
+            padding: "10px 14px",
+            background: "#fffdf7",
+            fontWeight: 1000,
+            color: "#000000",
+          }}
+        >
+          {cloudLoading ? tr("تحميل من السحابة...", "Loading from cloud...") : cloudStatus}
         </div>
       </div>
 
@@ -1358,22 +1694,16 @@ export default function Teachers() {
 
       {(adding || editingId) && (
         <div style={card}>
-          <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(4, minmax(220px, 1fr))" }}>
+          <div
+            style={{
+              display: "grid",
+              gap: 12,
+              gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+              alignItems: "end",
+            }}
+          >
             <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("الاسم الكامل", "Full Name")}</div>
-              <input
-                style={inputStyle}
-                value={adding ? newTeacher.fullName : edit.fullName}
-                onChange={(e) =>
-                  adding
-                    ? setNewTeacher({ ...newTeacher, fullName: e.target.value })
-                    : setEdit({ ...edit, fullName: e.target.value })
-                }
-              />
-            </div>
-
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("الرقم الوظيفي", "Employee Number")}</div>
+              <div style={{ fontWeight: 1000, marginBottom: 6, color: "#000000" }}>{tr("الرقم الوظيفي", "Employee Number")}</div>
               <input
                 style={inputStyle}
                 value={adding ? newTeacher.employeeNo : edit.employeeNo}
@@ -1386,69 +1716,84 @@ export default function Teachers() {
             </div>
 
             <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("المادة 1", "Subject 1")}</div>
-              <GoldDropdown
-                value={adding ? newTeacher.subject1 : edit.subject1}
-                options={SUBJECT_OPTIONS}
-                placeholder={tr("— اختر المادة —", "— Select Subject —")}
-                onChange={(v) =>
-                  adding ? setNewTeacher({ ...newTeacher, subject1: v }) : setEdit({ ...edit, subject1: v })
-                }
-              />
-            </div>
-
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("المادة 2", "Subject 2")}</div>
-              <GoldDropdown
-                value={adding ? newTeacher.subject2 : edit.subject2}
-                options={SUBJECT_OPTIONS}
-                placeholder={tr("— اختر المادة —", "— Select Subject —")}
-                onChange={(v) =>
-                  adding ? setNewTeacher({ ...newTeacher, subject2: v }) : setEdit({ ...edit, subject2: v })
-                }
-              />
-            </div>
-
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("المادة 3", "Subject 3")}</div>
-              <GoldDropdown
-                value={adding ? newTeacher.subject3 : edit.subject3}
-                options={SUBJECT_OPTIONS}
-                placeholder={tr("— اختر المادة —", "— Select Subject —")}
-                onChange={(v) =>
-                  adding ? setNewTeacher({ ...newTeacher, subject3: v }) : setEdit({ ...edit, subject3: v })
-                }
-              />
-            </div>
-
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("المادة 4", "Subject 4")}</div>
-              <GoldDropdown
-                value={adding ? newTeacher.subject4 : edit.subject4}
-                options={SUBJECT_OPTIONS}
-                placeholder={tr("— اختر المادة —", "— Select Subject —")}
-                onChange={(v) =>
-                  adding ? setNewTeacher({ ...newTeacher, subject4: v }) : setEdit({ ...edit, subject4: v })
-                }
-              />
-            </div>
-
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("الصفوف", "Grades")}</div>
+              <div style={{ fontWeight: 1000, marginBottom: 6, color: "#000000" }}>{tr("اسم المعلم", "Teacher Name")}</div>
               <input
                 style={inputStyle}
-                placeholder={tr("مثال: 10-5", "Example: 10-5")}
-                value={adding ? newTeacher.grades : edit.grades}
+                value={adding ? newTeacher.fullName : edit.fullName}
                 onChange={(e) =>
                   adding
-                    ? setNewTeacher({ ...newTeacher, grades: e.target.value })
-                    : setEdit({ ...edit, grades: e.target.value })
+                    ? setNewTeacher({ ...newTeacher, fullName: e.target.value })
+                    : setEdit({ ...edit, fullName: e.target.value })
                 }
               />
             </div>
 
             <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("الهاتف", "Phone")}</div>
+              <div style={{ fontWeight: 1000, marginBottom: 6, color: "#000000" }}>{tr("التخصص 1", "Specialization 1")}</div>
+              <select
+                value={adding ? newTeacher.subject1 : edit.subject1}
+                onChange={(e) =>
+                  adding ? setNewTeacher({ ...newTeacher, subject1: e.target.value }) : setEdit({ ...edit, subject1: e.target.value })
+                }
+                style={{
+                  ...inputStyle,
+                  background: "#f8f4e8",
+                  backgroundColor: "#f8f4e8",
+                  color: "#000000",
+                  WebkitTextFillColor: "#000000",
+                  fontWeight: 1000,
+                  appearance: "auto",
+                  WebkitAppearance: "menulist",
+                  MozAppearance: "menulist",
+                  cursor: "pointer",
+                }}
+              >
+                {SUBJECT_OPTIONS.map((item) => (
+                  <option
+                    key={item.value || "empty-subject1"}
+                    value={item.value}
+                    style={{ backgroundColor: "#f8f4e8", color: "#000000", fontWeight: 1000 }}
+                  >
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <div style={{ fontWeight: 1000, marginBottom: 6, color: "#000000" }}>{tr("التخصص 2", "Specialization 2")}</div>
+              <select
+                value={adding ? newTeacher.subject2 : edit.subject2}
+                onChange={(e) =>
+                  adding ? setNewTeacher({ ...newTeacher, subject2: e.target.value }) : setEdit({ ...edit, subject2: e.target.value })
+                }
+                style={{
+                  ...inputStyle,
+                  background: "#f8f4e8",
+                  backgroundColor: "#f8f4e8",
+                  color: "#000000",
+                  WebkitTextFillColor: "#000000",
+                  fontWeight: 1000,
+                  appearance: "auto",
+                  WebkitAppearance: "menulist",
+                  MozAppearance: "menulist",
+                  cursor: "pointer",
+                }}
+              >
+                {SUBJECT_OPTIONS.map((item) => (
+                  <option
+                    key={item.value || "empty-subject2"}
+                    value={item.value}
+                    style={{ backgroundColor: "#f8f4e8", color: "#000000", fontWeight: 1000 }}
+                  >
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <div style={{ fontWeight: 1000, marginBottom: 6, color: "#000000" }}>{tr("الهاتف", "Phone")}</div>
               <input
                 style={inputStyle}
                 value={adding ? newTeacher.phone : edit.phone}
@@ -1460,21 +1805,29 @@ export default function Teachers() {
               />
             </div>
 
-            <div style={{ gridColumn: "1 / -1" }}>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("ملاحظات", "Notes")}</div>
-              <textarea
-                style={{ ...inputStyle, minHeight: 80 }}
-                value={adding ? newTeacher.notes : edit.notes}
+            <div>
+              <div style={{ fontWeight: 1000, marginBottom: 6, color: "#000000" }}>{tr("رقم الحساب", "Account Number")}</div>
+              <input
+                style={inputStyle}
+                value={adding ? getTeacherAccountNo(newTeacher as TeacherAccountFields) : getTeacherAccountNo(edit as TeacherAccountFields)}
                 onChange={(e) =>
                   adding
-                    ? setNewTeacher({ ...newTeacher, notes: e.target.value })
-                    : setEdit({ ...edit, notes: e.target.value })
+                    ? setNewTeacher(setTeacherAccountNo(newTeacher, e.target.value))
+                    : setEdit(setTeacherAccountNo(edit, e.target.value))
                 }
               />
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              marginTop: 14,
+              flexWrap: "wrap",
+              justifyContent: isRTL ? "flex-start" : "flex-end",
+            }}
+          >
             {adding ? (
               <>
                 <button style={btn("#10b981", "#000000")} onClick={saveAdd}>
@@ -1498,9 +1851,102 @@ export default function Teachers() {
         </div>
       )}
 
-      {tableFullScreen && typeof document !== "undefined"
-        ? createPortal(renderTeachersTableSection(), document.body)
-        : renderTeachersTableSection()}
+      <div
+        style={
+          tableFullScreen
+            ? {
+                ...card,
+                position: "fixed",
+                inset: 0,
+                width: "100vw",
+                height: "100vh",
+                zIndex: 9999,
+                marginBottom: 0,
+                borderRadius: 0,
+                padding: 12,
+                background: PAGE_BG,
+                overflow: "hidden",
+                border: `5px solid ${GOLD_BORDER}`,
+                boxShadow: "0 30px 80px rgba(0,0,0,0.65)",
+              }
+            : card
+        }
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10 }}>
+          <div style={{ fontWeight: 900, color: "#000000" }}>{tr("قائمة الكادر التعليمي", "Teaching Staff List")}</div>
+
+          <button
+            style={btn(tableFullScreen ? "#ef4444" : "#fffdf7", "#000000")}
+            onClick={() => setTableFullScreen((v) => !v)}
+            title={tableFullScreen ? tr("عودة للحجم الطبيعي", "Return to normal size") : tr("تكبير الجدول ملء الشاشة", "Fullscreen table")}
+          >
+            {tableFullScreen ? tr("إغلاق ملء الشاشة", "Exit Fullscreen") : tr("ملء الشاشة", "Fullscreen")}
+          </button>
+        </div>
+
+        <div
+          className="teachersTable3D"
+          style={
+            tableFullScreen
+              ? {
+                  height: "calc(100vh - 70px)",
+                  overflow: "auto",
+                  borderRadius: 16,
+                  border: `4px solid ${GOLD_BORDER}`,
+                  position: "relative",
+                }
+              : {
+                  ...tableWrap,
+                  position: "relative",
+                }
+          }
+        >
+          <table style={tableStyle3D}>
+            <thead>
+              <tr>
+                <th style={thStyle} className="col-emp">{tr("الرقم الوظيفي", "Employee Number")}</th>
+                <th style={thStyle} className="col-name">{tr("اسم المعلم", "Teacher Name")}</th>
+                <th style={thStyle}>{tr("التخصص 1", "Specialization 1")}</th>
+                <th style={thStyle}>{tr("التخصص 2", "Specialization 2")}</th>
+                <th style={thStyle}>{tr("الهاتف", "Phone")}</th>
+                <th style={thStyle}>{tr("رقم الحساب", "Account Number")}</th>
+                <th style={thStyle}>{tr("الإجراءات", "Actions")}</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr>
+                  <td style={tdStyle} colSpan={7}>
+                    {tr("لا توجد بيانات.", "No data found.")}
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((t) => (
+                  <tr key={t.id}>
+                    <td style={tdStyle} className="col-emp">{t.employeeNo}</td>
+                    <td style={{ ...tdStyle, color: "#000000", fontWeight: 1000 }} className="col-name"><span style={{ color: "#000000", fontWeight: 900, WebkitTextFillColor: "#000000", textShadow: "none" }}>{t.fullName}</span></td>
+                    <td style={tdStyle}>{translateSubject(t.subject1)}</td>
+                    <td style={tdStyle}>{translateSubject(t.subject2)}</td>
+                    <td style={tdStyle}>{t.phone}</td>
+                    <td style={tdStyle}>{getTeacherAccountNo(t as TeacherAccountFields)}</td>
+                    <td style={tdStyle}>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button style={btn("#60a5fa", "#000000")} onClick={() => startEdit(t)}>
+                          {tr("✏️ تعديل", "✏️ Edit")}
+                        </button>
+                        <button style={btn("#ef4444", "#000000")} onClick={() => removeTeacher(t.id)}>
+                          {tr("🗑 حذف", "🗑 Delete")}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }

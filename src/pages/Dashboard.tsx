@@ -829,7 +829,7 @@ export default function Dashboard() {
                 }}
               >
                 {tr(
-                  "هذه الصفحة تمنح الإدارة رؤية تنفيذية شاملة لحالة الكادر والامتحانات والقاعات والتنبيهات الذكية، ضمن واجهة مؤسسية فاخرة تساعد على الوصول السريع واتخاذ القرار بثقة من اللحظة الأولى.",
+                  "",
                   "This page gives leadership an executive overview of teachers, exams, rooms, and live smart alerts in a premium interface built for clarity, speed, and confident decision-making from the first moment."
                 )}
               </p>
@@ -897,7 +897,7 @@ export default function Dashboard() {
 
               <div style={{ fontSize: 14, lineHeight: 1.95, color: "#000000" }}>
                 {tr(
-                  "الواجهة المطورة ترفع من جودة الانطباع الأول وتمنح المستخدم تجربة تنقل منظمة بين التوزيع، التقارير، السجلات، والإعدادات.",
+                  "",
                   "The upgraded interface improves first impression quality and gives users a cleaner journey across distribution, reports, records, and settings."
                 )}
               </div>

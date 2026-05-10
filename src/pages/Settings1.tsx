@@ -265,7 +265,7 @@ export default function Settings1() {
 
               <div style={{ fontSize: 14, lineHeight: 1.95, color: "#000000" }}>
                 {tr(
-                  "تم تطوير الصفحة لتجمع بين سهولة إدخال البيانات وجمال المعاينة الرسمية، بحيث يشعر المستخدم بأنه يتعامل مع منتج شركة عالمية من أول لحظة.",
+                  "",
                   "This page was designed to combine easy data entry with a beautiful official preview, so the user feels they are using a world-class product from the very first moment."
                 )}
               </div>

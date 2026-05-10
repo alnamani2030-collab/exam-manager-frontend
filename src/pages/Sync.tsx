@@ -870,6 +870,58 @@ export default function Sync() {
 
             <div
               style={{
+                ...glassCard(
+                  "rgba(52,211,153,0.26)",
+                  "linear-gradient(135deg, rgba(6,78,59,0.28), rgba(15,23,42,0.60))"
+                ),
+                padding: 16,
+                display: "grid",
+                gap: 12,
+              }}
+            >
+              <div style={{ color: "#d1fae5", fontWeight: 950, fontSize: 17 }}>
+                {tr("ربط صفحة النسخ الحالية مع مركز السحابة الجديد", "Connect this backup page with the new cloud center")}
+              </div>
+              <div style={{ color: "rgba(245,231,178,0.82)", lineHeight: 1.85, fontSize: 13 }}>
+                {tr(
+                  "هذه الصفحة القديمة تبقى لإدارة النسخ والاستيراد، وتم ربطها الآن بصفحات السحابة الجديدة للفحص والصيانة والنسخ الاحتياطي السحابي المباشر.",
+                  "This legacy page remains for backup and import management, and is now connected to the new cloud pages for health checks, maintenance, and direct cloud backup."
+                )}
+              </div>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <button
+                  style={{
+                    borderRadius: 14,
+                    padding: "11px 15px",
+                    border: "1px solid rgba(52,211,153,0.45)",
+                    background: "rgba(52,211,153,0.16)",
+                    color: "#d1fae5",
+                    fontWeight: 950,
+                    cursor: "pointer",
+                  }}
+                  onClick={() => nav(`/t/${encodeURIComponent(tenantId)}/cloud-health`)}
+                >
+                  {tr("فتح فحص التخزين السحابي", "Open Cloud Health Check")}
+                </button>
+                <button
+                  style={{
+                    borderRadius: 14,
+                    padding: "11px 15px",
+                    border: "1px solid rgba(96,165,250,0.45)",
+                    background: "rgba(96,165,250,0.16)",
+                    color: "#dbeafe",
+                    fontWeight: 950,
+                    cursor: "pointer",
+                  }}
+                  onClick={() => nav(`/t/${encodeURIComponent(tenantId)}/cloud-backup`)}
+                >
+                  {tr("فتح النسخ الاحتياطي السحابي الجديد", "Open New Cloud Backup")}
+                </button>
+              </div>
+            </div>
+
+            <div
+              style={{
                 display: "grid",
                 gridTemplateColumns: "minmax(0, 1.3fr) minmax(300px, 0.9fr)",
                 gap: 16,

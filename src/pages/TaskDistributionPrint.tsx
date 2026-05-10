@@ -10,7 +10,20 @@ import type { TaskType } from "../contracts/taskDistributionContract";
  * ✅ Keys
  * ------------------------------------------ */
 const SCHOOL_DATA_KEY = "exam-manager:school-data:v1";
+const CENTER_DATA_KEYS = [
+  "exam-manager:school-data:v1",
+  "exam-manager:center-data:v1",
+  "exam-manager:exam-center-data:v1",
+  "exam-manager:control-center-data:v1",
+  "exam-manager:school-control:center-data:v1",
+  "exam-manager:schoolControl:center-data:v1",
+  "exam-manager:settings12:center-data:v1",
+  "exam-manager:center-control-data:v1",
+  "exam-manager:control-data:v1",
+];
 const LOGO_KEY = "exam-manager:app-logo";
+const EXAM_CENTER_LOGO_KEY = "exam-manager:exam-center-logo:v1";
+const LOGO_KEYS = [LOGO_KEY, EXAM_CENTER_LOGO_KEY];
 const DEFAULT_LOGO_URL = "https://i.imgur.com/vdDhSMh.png";
 const EXAMS_SUB = "exams";
 const TEACHERS_SUB = "teachers";
@@ -26,6 +39,126 @@ function readJson<T = any>(key: string): T | null {
   } catch {
     return null;
   }
+}
+
+function firstNonEmpty(...values: any[]) {
+  for (const value of values) {
+    const text = String(value ?? "").replace(/\s+/g, " ").trim();
+    if (text) return text;
+  }
+  return "";
+}
+
+function unwrapCenterPayload(raw: any): any {
+  if (!raw || typeof raw !== "object") return raw || {};
+  return raw.data || raw.centerData || raw.examCenterData || raw.controlData || raw.schoolData || raw.settings || raw.config || raw;
+}
+
+function normalizeCenterData(rawPayload: any): Partial<SchoolData> | null {
+  const data = unwrapCenterPayload(rawPayload);
+  if (!data || typeof data !== "object") return null;
+
+  const name = firstNonEmpty(
+    data.centerName,
+    data.examCenterName,
+    data.examCentreName,
+    data.controlCenterName,
+    data.center,
+    data.examCenter,
+    data.officialCenterName,
+    data.schoolName,
+    data.name,
+  );
+
+  const governorate = firstNonEmpty(
+    data.directorate,
+    data.directorateName,
+    data.educationDirectorate,
+    data.generalDirectorate,
+    data.governorate,
+    data.governorateName,
+    data.region,
+    data.adminRegion,
+    data.educationRegion,
+  );
+
+  const semester = firstNonEmpty(data.semester, data.semesterLabel, data.term, data.termLabel, data.studySemester, data.studyTerm);
+  const phone = firstNonEmpty(data.phone, data.phoneNumber, data.mobile, data.centerPhone, data.controlPhone);
+  const address = firstNonEmpty(data.address, data.officialAddress, data.centerAddress, data.location);
+  const country = firstNonEmpty(data.country, data.countryName, data.sultanate);
+  const ministry = firstNonEmpty(data.ministry, data.ministryName, data.educationMinistry);
+  const centerHead = firstNonEmpty(
+    data.centerHead,
+    data.centerHeadName,
+    data.headOfCenter,
+    data.centerPresident,
+    data.controlHead,
+    data.controlHeadName,
+    data.controllerName,
+    data.chiefName,
+    data.managerName,
+    data.directorName,
+    data.principalName,
+    data.adminName,
+  );
+  const academicYear = firstNonEmpty(data.academicYear, data.yearLabel, data.schoolYear, data.studyYear, data.academicYearLabel);
+  const officialTitle = firstNonEmpty(data.officialTitle, data.officialName, data.title, data.centerOfficialTitle);
+
+  if (!name && !governorate && !semester && !phone && !address && !country && !ministry && !centerHead && !academicYear && !officialTitle) {
+    return null;
+  }
+
+  return { name, governorate, semester, phone, address, country, ministry, centerHead, academicYear, officialTitle };
+}
+
+function readCenterDataFromStorage(): Partial<SchoolData> | null {
+  for (const key of CENTER_DATA_KEYS) {
+    const parsed = readJson<any>(key);
+    const normalized = normalizeCenterData(parsed);
+    if (normalized) return normalized;
+  }
+
+  // Fallback: search any localStorage item that looks like exam/control center data.
+  try {
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i) || "";
+      if (!/(center|control|school|setting|exam|data|مركز|كنترول)/i.test(key)) continue;
+      const parsed = readJson<any>(key);
+      const normalized = normalizeCenterData(parsed);
+      if (normalized) return normalized;
+    }
+  } catch {}
+
+  return null;
+}
+
+function buildEmptyCenterData(): SchoolData {
+  return {
+    name: "",
+    governorate: "",
+    semester: "",
+    phone: "",
+    address: "",
+    country: "",
+    ministry: "",
+    centerHead: "",
+    academicYear: "",
+    officialTitle: "",
+  };
+}
+
+function readEffectiveCenterData(): SchoolData {
+  const legacy = readJson<SchoolData>(SCHOOL_DATA_KEY) || buildEmptyCenterData();
+  const center = readCenterDataFromStorage() || {};
+  return { ...legacy, ...center } as SchoolData;
+}
+
+function readEffectiveLogo() {
+  for (const key of LOGO_KEYS) {
+    const savedLogo = (localStorage.getItem(key) || "").trim();
+    if (savedLogo) return savedLogo;
+  }
+  return DEFAULT_LOGO_URL;
 }
 
 function normalizeText(s: string) {
@@ -157,6 +290,18 @@ function translateSubject(subject: string, lang: "ar" | "en") {
   return SUBJECT_TRANSLATIONS[value] || value;
 }
 
+function subjectMatchesFilter(subject: string, filter: string, lang: "ar" | "en") {
+  const rawSubject = normalizeSubjectText(subject);
+  const rawFilter = normalizeSubjectText(filter);
+  if (!rawFilter) return true;
+
+  const subjectKey = normalizeText(rawSubject);
+  const filterKey = normalizeText(rawFilter);
+  const translatedSubjectKey = normalizeText(translateSubject(rawSubject, lang));
+
+  return subjectKey === filterKey || translatedSubjectKey === filterKey;
+}
+
 function getRowSubject(row: any) {
   return normalizeSubjectText(
     row?.subject ??
@@ -213,6 +358,11 @@ type SchoolData = {
   semester: string;
   phone: string;
   address: string;
+  country?: string;
+  ministry?: string;
+  centerHead?: string;
+  academicYear?: string;
+  officialTitle?: string;
 };
 
 type Exam = {
@@ -240,6 +390,109 @@ function getTeacherName(a: AnyAssignment): string {
 
 function getTaskType(a: AnyAssignment): TaskType | string {
   return (a?.taskType || a?.type || a?.assignmentType || a?.dutyType || "INVIGILATION") as any;
+}
+
+function getAssignmentText(a: AnyAssignment): string {
+  return firstNonEmpty(
+    a?.taskType,
+    a?.type,
+    a?.assignmentType,
+    a?.dutyType,
+    a?.task,
+    a?.role,
+    a?.roleName,
+    a?.job,
+    a?.jobName,
+    a?.mission,
+    a?.missionName,
+    a?.notes,
+    a?.note,
+    a?.status,
+    a?.taskLabel,
+    a?.assignment?.taskType,
+    a?.assignment?.type,
+    a?.assignment?.role,
+    a?.assignment?.roleName,
+    a?.assignment?.notes,
+    a?.duty?.taskType,
+    a?.duty?.type,
+    a?.duty?.role,
+    a?.duty?.roleName,
+    a?.duty?.notes
+  );
+}
+
+function isFloorMonitorAssignment(a: AnyAssignment): boolean {
+  const type = String(
+    a?.taskType ??
+      a?.assignment?.taskType ??
+      a?.duty?.taskType ??
+      a?.type ??
+      a?.assignmentType ??
+      a?.dutyType ??
+      ""
+  )
+    .trim()
+    .toUpperCase();
+
+  // الربط الحقيقي مع صفحة /task-distribution-results12
+  if (type === "DUTY_INVIGILATOR") return true;
+  if (a?.dutyInvigilator === true || a?.assignment?.dutyInvigilator === true || a?.duty?.dutyInvigilator === true) return true;
+
+  // دعم البيانات القديمة إن وجدت
+  const text = normalizeText(getAssignmentText(a));
+  if (!text) return false;
+
+  return (
+    text === "floor_monitor" ||
+    text === "floormonitor" ||
+    text === "floor monitor" ||
+    text === "floor_supervisor" ||
+    text === "floor supervisor" ||
+    text === "hall_monitor" ||
+    text === "hall monitor" ||
+    text === "corridor_monitor" ||
+    text === "corridor monitor" ||
+    text.includes("مراقب دور") ||
+    text.includes("مراقب الدور") ||
+    text.includes("مشرف دور")
+  );
+}
+
+function floorMonitorAppliesToPage(a: AnyAssignment, pageDateISO: string, pagePeriod: string): boolean {
+  const rowDateISO = normalizeISODate(getExamDateISO(a));
+  if (rowDateISO && pageDateISO && rowDateISO !== pageDateISO) return false;
+
+  const wantedPeriod = normalizePeriodKey(pagePeriod);
+  const rowPeriod = normalizePeriodKey(getExamPeriod(a));
+  const coversPeriods = Array.isArray(a?.coversPeriods)
+    ? a.coversPeriods.map((p: any) => normalizePeriodKey(p)).filter(Boolean)
+    : [];
+
+  if (coversPeriods.length && wantedPeriod) return coversPeriods.includes(wantedPeriod);
+  if (rowPeriod && wantedPeriod) return rowPeriod === wantedPeriod;
+  if (a?.fullDay === true || a?.dutyInvigilator === true) return true;
+
+  return !wantedPeriod || !rowPeriod || rowPeriod === wantedPeriod;
+}
+
+function uniqueAssignmentsByTeacher(items: AnyAssignment[]): AnyAssignment[] {
+  const seen = new Set<string>();
+  const out: AnyAssignment[] = [];
+
+  for (const item of items) {
+    const key = normalizeText(
+      item?.uid ||
+        item?.id ||
+        item?.assignmentId ||
+        `${getTeacherName(item)}|${getExamDateISO(item)}|${getExamPeriod(item)}|${getAssignmentText(item)}`
+    );
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(item);
+  }
+
+  return out;
 }
 
 function getRoomNumber(a: AnyAssignment): string {
@@ -642,22 +895,8 @@ export default function TaskDistributionPrint() {
   const printAreaRef = useRef<HTMLDivElement | null>(null);
 
   const [run, setRun] = useState(() => loadRun(tenantId));
-  const [schoolData, setSchoolData] = useState<SchoolData>(() => {
-    const saved = readJson<SchoolData>(SCHOOL_DATA_KEY);
-    return (
-      saved || {
-        name: "",
-        governorate: "",
-        semester: "",
-        phone: "",
-        address: "",
-      }
-    );
-  });
-  const [logoUrl, setLogoUrl] = useState(() => {
-    const savedLogo = (localStorage.getItem(LOGO_KEY) || "").trim();
-    return savedLogo || DEFAULT_LOGO_URL;
-  });
+  const [schoolData, setSchoolData] = useState<SchoolData>(() => readEffectiveCenterData());
+  const [logoUrl, setLogoUrl] = useState(() => readEffectiveLogo());
   const [examsList, setExamsList] = useState<Exam[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
 
@@ -691,8 +930,8 @@ export default function TaskDistributionPrint() {
 
     const keysToWatch = [
       taskDistributionKey(tenantId),
-      SCHOOL_DATA_KEY,
-      LOGO_KEY,
+      ...CENTER_DATA_KEYS,
+      ...LOGO_KEYS,
       "exam-manager:task-distribution:master-table:v1",
       "exam-manager:task-distribution:all-table:v1",
       "exam-manager:task-distribution:results-table:v1",
@@ -709,19 +948,9 @@ export default function TaskDistributionPrint() {
     if (changed) {
       setRun(loadRun(tenantId));
 
-      const sd = readJson<SchoolData>(SCHOOL_DATA_KEY);
-      setSchoolData(
-        sd || {
-          name: "",
-          governorate: "",
-          semester: "",
-          phone: "",
-          address: "",
-        }
-      );
+      setSchoolData(readEffectiveCenterData());
 
-      const nextLogo = (localStorage.getItem(LOGO_KEY) || "").trim() || DEFAULT_LOGO_URL;
-      setLogoUrl(nextLogo);
+      setLogoUrl(readEffectiveLogo());
 
       refreshRosterFromFirestore();
       setStorageTick((x) => x + 1);
@@ -741,8 +970,8 @@ export default function TaskDistributionPrint() {
       if (!e?.key) return;
       if (
         e.key === taskDistributionKey(tenantId) ||
-        e.key === SCHOOL_DATA_KEY ||
-        e.key === LOGO_KEY ||
+        CENTER_DATA_KEYS.includes(e.key) ||
+        LOGO_KEYS.includes(e.key) ||
         e.key === "exam-manager:task-distribution:master-table:v1" ||
         e.key === "exam-manager:task-distribution:all-table:v1" ||
         e.key === "exam-manager:task-distribution:results-table:v1"
@@ -752,6 +981,8 @@ export default function TaskDistributionPrint() {
     };
 
     window.addEventListener(RUN_UPDATED_EVENT, onRunUpdated as any);
+    window.addEventListener("exam-manager:changed", refreshFromStorage);
+    window.addEventListener("exam-manager:control-head-changed", refreshFromStorage);
     window.addEventListener("storage", onStorage);
     window.addEventListener("focus", refreshFromStorage);
 
@@ -762,6 +993,8 @@ export default function TaskDistributionPrint() {
 
     return () => {
       window.removeEventListener(RUN_UPDATED_EVENT, onRunUpdated as any);
+      window.removeEventListener("exam-manager:changed", refreshFromStorage);
+      window.removeEventListener("exam-manager:control-head-changed", refreshFromStorage);
       window.removeEventListener("storage", onStorage);
       window.removeEventListener("focus", refreshFromStorage);
       window.clearInterval(iv);
@@ -777,13 +1010,15 @@ export default function TaskDistributionPrint() {
   const requestedPeriod = (qs.get("period") || "").trim();
 
   const schoolHeader = useMemo(() => {
-    const countryName = lang === "ar" ? "سلطنة عمان" : "Sultanate of Oman";
-    const ministryName = lang === "ar" ? "وزارة التعليم" : "Ministry of Education";
+    const countryName = schoolData.country?.trim() || (lang === "ar" ? "سلطنة عمان" : "Sultanate of Oman");
+    const ministryName = schoolData.ministry?.trim() || (lang === "ar" ? "وزارة التعليم" : "Ministry of Education");
     const directorateName = schoolData.governorate?.trim() || (lang === "ar" ? "المديرية العامة للتعليم" : "General Directorate of Education");
-    const schoolName = schoolData.name?.trim() || (lang === "ar" ? "المدرسة" : "School");
+    const rawCenterName = schoolData.name?.trim() || schoolData.officialTitle?.trim() || "";
+    const schoolName = rawCenterName || (lang === "ar" ? "المركز" : "Center");
     const semesterLabel = schoolData.semester?.trim() || (lang === "ar" ? "الفصل الدراسي الأول" : "First Semester");
-    const yearLabel = "2026/2025";
-    return { countryName, ministryName, directorateName, schoolName, semesterLabel, yearLabel };
+    const yearLabel = schoolData.academicYear?.trim() || "2026/2025";
+    const centerHeadName = schoolData.centerHead?.trim() || "";
+    return { countryName, ministryName, directorateName, schoolName, semesterLabel, yearLabel, centerHeadName };
   }, [schoolData, lang]);
 
   const examsIndex = useMemo(() => {
@@ -865,14 +1100,14 @@ export default function TaskDistributionPrint() {
   }, [masterTableRows, lang]);
 
   const subjectOptions = useMemo(() => {
-    const set = new Map<string, string>();
+    const set = new Map<string, { value: string; label: string }>();
     for (const r of masterTableRows || []) {
       const s = (getExamSubject(r) || "").trim();
       if (!s) continue;
       const n = normalizeText(s);
-      if (!set.has(n)) set.set(n, translateSubject(s, lang));
+      if (!set.has(n)) set.set(n, { value: s, label: translateSubject(s, lang) });
     }
-    return Array.from(set.values()).sort((a, b) => a.localeCompare(b, lang === "ar" ? "ar" : "en"));
+    return Array.from(set.values()).sort((a, b) => a.label.localeCompare(b.label, lang === "ar" ? "ar" : "en"));
   }, [masterTableRows, lang]);
 
   const filteredRows = useMemo(() => {
@@ -887,8 +1122,7 @@ export default function TaskDistributionPrint() {
     }
 
     if (subjectFilter) {
-      const nSub = normalizeText(subjectFilter);
-      rows = rows.filter((r) => normalizeText(getExamSubject(r)) === nSub);
+      rows = rows.filter((r) => subjectMatchesFilter(getExamSubject(r), subjectFilter, lang));
     }
 
     if (reportType === "daily" && requestedPeriod) {
@@ -899,23 +1133,28 @@ export default function TaskDistributionPrint() {
     return rows;
   }, [masterTableRows, reportType, dateISO, teacherNameFilter, subjectFilter, requestedPeriod]);
 
-  function setQueryParam(key: string, value: string) {
+  function setQueryParams(values: Record<string, string>) {
     const sp = new URLSearchParams(loc.search);
-    if (!value) sp.delete(key);
-    else sp.set(key, value);
-    nav(`${loc.pathname}?${sp.toString()}`, { replace: true });
+    for (const [key, value] of Object.entries(values)) {
+      if (!value) sp.delete(key);
+      else sp.set(key, value);
+    }
+    const query = sp.toString();
+    nav(query ? `${loc.pathname}?${query}` : loc.pathname, { replace: true });
+  }
+
+  function setQueryParam(key: string, value: string) {
+    setQueryParams({ [key]: value });
   }
 
   function setTeacherSelection(v: string) {
-    setQueryParam("reportType", "teacher");
-    setQueryParam("teacher", v || "");
+    setQueryParams({ reportType: "teacher", teacher: v || "" });
   }
   function setReportDaily() {
-    setQueryParam("reportType", "daily");
-    setQueryParam("teacher", "");
+    setQueryParams({ reportType: "daily", teacher: "" });
   }
   function setReportTeacher() {
-    setQueryParam("reportType", "teacher");
+    setQueryParams({ reportType: "teacher" });
   }
 
   async function openPrintDialog() {
@@ -952,25 +1191,7 @@ export default function TaskDistributionPrint() {
     await printOnlyElement(el, safeTitle);
   }
 
-  if (!run) {
-    return (
-      <div style={{ ...styles.pageWrapDark, direction: lang === "ar" ? "rtl" : "ltr" }}>
-        <div style={styles.darkCard}>
-          <div style={styles.darkRow}>
-            <div>
-              <div style={{ fontSize: 16, fontWeight: 800, color: "white" }}>{tr("طباعة التقرير", "Print Report")}</div>
-              <div style={{ color: "rgba(255,255,255,.75)", marginTop: 4 }}>{tr("لا يوجد تشغيل محفوظ بعد", "No saved run yet")}</div>
-            </div>
-            <button style={styles.btnSoft} onClick={() => nav("/task-distribution")}>
-              {tr("رجوع", "Back")}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const safeRun = run;
+  const safeRun = run || ({ createdAtISO: "" } as any);
 
   const title =
     reportType === "teacher"
@@ -984,6 +1205,14 @@ export default function TaskDistributionPrint() {
 
     const rows = [...filteredRows];
     if (!rows.length) return [] as any[];
+
+    const floorMonitorRows = (masterTableRows || []).filter((r) => {
+      if (!isFloorMonitorAssignment(r)) return false;
+      if (dateISO && normalizeISODate(getExamDateISO(r)) !== dateISO) return false;
+      if (requestedPeriod && !floorMonitorAppliesToPage(r, normalizeISODate(getExamDateISO(r)), requestedPeriod)) return false;
+      if (teacherNameFilter && getTeacherName(r).trim() !== teacherNameFilter) return false;
+      return true;
+    });
 
     const groups = new Map<string, { subject: string; dISO: string; period: string; dayLabel: string; time: string; rows: AnyAssignment[] }>();
 
@@ -1021,9 +1250,12 @@ export default function TaskDistributionPrint() {
     const pages = Array.from(groups.values())
       .map((g) => ({
         ...g,
-        invigilators: sortInvigilators(g.rows.filter((r) => getTaskType(r) === "INVIGILATION")),
-        reserves: g.rows.filter((r) => getTaskType(r) === "RESERVE"),
-        reviewFree: g.rows.filter((r) => getTaskType(r) === "REVIEW_FREE"),
+        invigilators: sortInvigilators(g.rows.filter((r) => String(getTaskType(r)).toUpperCase() === "INVIGILATION")),
+        reserves: g.rows.filter((r) => String(getTaskType(r)).toUpperCase() === "RESERVE"),
+        reviewFree: uniqueAssignmentsByTeacher([
+          ...g.rows.filter((r) => isFloorMonitorAssignment(r)),
+          ...floorMonitorRows.filter((r) => floorMonitorAppliesToPage(r, g.dISO, g.period)),
+        ]),
       }))
       .sort((a, b) => {
         if (a.dISO !== b.dISO) return a.dISO.localeCompare(b.dISO);
@@ -1044,7 +1276,7 @@ export default function TaskDistributionPrint() {
     }
 
     return pages;
-  }, [reportType, filteredRows, subjectFilter, requestedPeriod, examsIndex, lang]);
+  }, [reportType, filteredRows, masterTableRows, subjectFilter, requestedPeriod, dateISO, teacherNameFilter, examsIndex, lang]);
 
   const shareText = useMemo(() => {
     const base = `${tr("تقرير توزيع المهام", "Task Distribution Report")} - ${schoolHeader.schoolName}
@@ -1068,8 +1300,7 @@ export default function TaskDistributionPrint() {
       let rows = masterTableRows.filter((r) => getTeacherName(r).trim() === tName);
 
       if (subjectFilter) {
-        const nSub = normalizeText(subjectFilter);
-        rows = rows.filter((r) => normalizeText(getExamSubject(r)) === nSub);
+        rows = rows.filter((r) => subjectMatchesFilter(getExamSubject(r), subjectFilter, lang));
       }
 
       rows.sort((a, b) => {
@@ -1089,6 +1320,25 @@ export default function TaskDistributionPrint() {
 
     return pages.filter((p) => p.rows.length > 0);
   }, [reportType, teacherNameFilter, teacherOptions, masterTableRows, subjectFilter, lang]);
+
+  if (!run) {
+    return (
+      <div style={{ ...styles.pageWrapDark, direction: lang === "ar" ? "rtl" : "ltr" }}>
+        <style>{lightPageGlobalCss}</style>
+        <div style={styles.darkCard}>
+          <div style={styles.darkRow}>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: "white" }}>{tr("طباعة التقرير", "Print Report")}</div>
+              <div style={{ color: "rgba(255,255,255,.75)", marginTop: 4 }}>{tr("لا يوجد تشغيل محفوظ بعد", "No saved run yet")}</div>
+            </div>
+            <button style={styles.btnSoft} onClick={() => nav("/task-distribution")}>
+              {tr("رجوع", "Back")}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   function DailySheet(props: {
     subject: string;
@@ -1219,7 +1469,7 @@ export default function TaskDistributionPrint() {
           </table>
 
           <div style={{ marginTop: 8 }}>
-            <div style={styles.reserveTitle}>{tr("المعلمون الفارغون للمراجعة", "Teachers Free for Review")}</div>
+            <div style={styles.reserveTitle}>{tr("اسم معلم مراقب الدور", "Floor Monitor Teacher")}</div>
             <table style={styles.reserveTable}>
               <thead>
                 <tr>
@@ -1236,7 +1486,7 @@ export default function TaskDistributionPrint() {
                       <td style={styles.tdNum}>{idx + 1}</td>
                       <td style={{ ...styles.td, fontWeight: 900 }}>{getTeacherName(r) || "—"}</td>
                       <td style={styles.td}></td>
-                      <td style={styles.td}>{tr("فارغ للمراجعة", "Free for Review")}</td>
+                      <td style={styles.td}>{tr("مراقب دور", "Floor Monitor")}</td>
                     </tr>
                   ))
                 ) : (
@@ -1245,7 +1495,7 @@ export default function TaskDistributionPrint() {
                       <td style={styles.tdNum}>{i + 1}</td>
                       <td style={styles.td}></td>
                       <td style={styles.td}></td>
-                      <td style={styles.td}>{tr("فارغ للمراجعة", "Free for Review")}</td>
+                      <td style={styles.td}>{tr("مراقب دور", "Floor Monitor")}</td>
                     </tr>
                   ))
                 )}
@@ -1255,8 +1505,10 @@ export default function TaskDistributionPrint() {
         </div>
 
         <div style={styles.bottomSigRow}>
-          <div style={styles.bottomSigCell}>{tr("رئيس الكنترول", "Head of Control")}</div>
-          <div style={styles.bottomSigCell}>{tr("مدير المدرسة", "School Principal")}</div>
+          <div style={styles.bottomSigCell}>
+            <div>{tr("رئيس المركز", "Center Head")}</div>
+            {schoolHeader.centerHeadName ? <div style={styles.bottomSigName}>{schoolHeader.centerHeadName}</div> : null}
+          </div>
         </div>
 
         <div style={styles.footerNote}>{tr("تم إنشاء التقرير من نظام توزيع مهام المراقبة", "Report generated from the invigilation task distribution system")} — {props.createdAtISO}</div>
@@ -1371,7 +1623,8 @@ export default function TaskDistributionPrint() {
             </div>
 
             <div style={styles.importantSigCol}>
-              <div style={styles.importantSigLabel}>{tr("مدير المدرسة", "School Principal")}</div>
+              <div style={styles.importantSigLabel}>{tr("رئيس المركز", "Center Head")}</div>
+              {schoolHeader.centerHeadName ? <div style={styles.importantSigName}>{schoolHeader.centerHeadName}</div> : null}
               <div style={styles.importantSigLine} />
             </div>
           </div>
@@ -1405,6 +1658,7 @@ export default function TaskDistributionPrint() {
   return (
     <div style={{ ...styles.outer, direction: lang === "ar" ? "rtl" : "ltr" }}>
       <style>{printCss}</style>
+      <style>{lightPageGlobalCss}</style>
 
       <div className="no-print" style={styles.topActionBar}>
         <div style={styles.topActionTitle}>
@@ -1463,8 +1717,8 @@ export default function TaskDistributionPrint() {
             <select className="td-print-select" value={subjectFilter} onChange={(e) => setQueryParam("subject", e.target.value)} style={styles.filterSelect}>
               <option value="" style={blackGoldDropdownOptionStyle}>{tr("— كل المواد —", "— All Subjects —")}</option>
               {subjectOptions.map((s) => (
-                <option key={s} value={s} style={blackGoldDropdownOptionStyle}>
-                  {s}
+                <option key={s.value} value={s.value} style={blackGoldDropdownOptionStyle}>
+                  {s.label}
                 </option>
               ))}
             </select>
@@ -1553,10 +1807,27 @@ export default function TaskDistributionPrint() {
   );
 }
 
+const LIGHT_PAGE_BACKGROUND =
+  "radial-gradient(1200px 520px at 50% -10%, rgba(212, 175, 55, 0.18), transparent 62%), linear-gradient(180deg, #fffdf7 0%, #f7f3e7 48%, #fffaf0 100%)";
+
+const lightPageGlobalCss = `
+html,
+body,
+#root {
+  margin: 0 !important;
+  min-height: 100% !important;
+  background: ${LIGHT_PAGE_BACKGROUND} !important;
+}
+
+body {
+  background-color: #f7f3e7 !important;
+}
+`;
+
 const styles: Record<string, React.CSSProperties> = {
   outer: {
     minHeight: "100vh",
-    background: "#0b1220",
+    background: LIGHT_PAGE_BACKGROUND,
     padding: 18,
     direction: "rtl",
     fontFamily: 'system-ui, -apple-system, "Segoe UI", Tahoma, Arial, sans-serif',
@@ -1753,8 +2024,9 @@ const styles: Record<string, React.CSSProperties> = {
   reserveTitle: { display: "inline-block", border: "1px solid #111", background: "#f3f4f6", padding: "6px 10px", fontWeight: 900, marginBottom: 0 },
   reserveTable: { width: "100%", borderCollapse: "collapse", tableLayout: "fixed", border: "2px solid #111" },
 
-  bottomSigRow: { marginTop: 14, display: "flex", justifyContent: "space-between", fontWeight: 900, fontSize: 15 },
+  bottomSigRow: { marginTop: 14, display: "flex", justifyContent: "center", fontWeight: 900, fontSize: 15 },
   bottomSigCell: { width: "45%", textAlign: "center" },
+  bottomSigName: { marginTop: 8, fontSize: 14, fontWeight: 900 },
 
   importantSection: { marginTop: 12, paddingTop: 6 },
   importantTitle: { fontSize: 12.5, fontWeight: 900, marginBottom: 8, textAlign: "right" },
@@ -1763,11 +2035,12 @@ const styles: Record<string, React.CSSProperties> = {
   importantSigRow: { marginTop: 24, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 18 },
   importantSigCol: { width: "45%", textAlign: "center" },
   importantSigLabel: { fontSize: 13, fontWeight: 900, marginBottom: 10 },
+  importantSigName: { fontSize: 13, fontWeight: 900, marginBottom: 8 },
   importantSigLine: { height: 0, borderBottom: "2px dotted #111", width: "100%" },
 
   footerNote: { marginTop: 6, fontSize: 9.5, color: "#64748b", fontWeight: 700, textAlign: "center" },
 
-  pageWrapDark: { minHeight: "100vh", background: "#0b1220", padding: 18, direction: "rtl", fontFamily: 'system-ui, -apple-system, "Segoe UI", Tahoma, Arial, sans-serif' },
+  pageWrapDark: { minHeight: "100vh", background: LIGHT_PAGE_BACKGROUND, padding: 18, direction: "rtl", fontFamily: 'system-ui, -apple-system, "Segoe UI", Tahoma, Arial, sans-serif' },
   darkCard: { maxWidth: 900, margin: "0 auto", background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.10)", borderRadius: 16, padding: 16 },
   darkRow: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" },
   btnSoft: { background: "rgba(255,255,255,.10)", color: "white", border: "1px solid rgba(255,255,255,.18)", padding: "10px 14px", borderRadius: 12, cursor: "pointer", fontWeight: 800 },

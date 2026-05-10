@@ -2,11 +2,13 @@ import React, { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { useI18n } from "../i18n/I18nProvider";
+import "./ownerOfficial.theme.css";
 
 const GOLD = "#d4af37";
 const GOLD_SOFT = "rgba(212,175,55,0.22)";
 const CREAM = "#f6f1e3";
 const INK = "#111111";
+const MINISTRY_LOGO_URL = "https://i.imgur.com/vdDhSMh.png";
 
 type ActionCard = {
   key: string;
@@ -73,7 +75,7 @@ export default function ProgramsGateway() {
     if (isOwner || isSchoolAdmin || isGovernorateSuper) {
       list.push({
         key: "school",
-        titleAr: "برنامج إدارة امتحانات النقل",
+        titleAr: "مشرفي إدارة امتحانات النقل",
         titleEn: "School Exams Program",
         descAr:
           isOwner || isGovernorateSuper
@@ -97,7 +99,7 @@ export default function ProgramsGateway() {
     if (isOwner || isGovernorateSuper) {
       list.push({
         key: "gov",
-        titleAr: "مشرف المحافظة",
+        titleAr: "مشرفي إدارة امتحانات الدبلوم العام",
         titleEn: "Governorate Supervisor",
         descAr: isOwner
           ? "فتح صفحة جميع سوبر الامتحانات حسب المحافظة مع زر دخول إلى الصفحة المطلوبة."
@@ -115,6 +117,7 @@ export default function ProgramsGateway() {
 
   return (
     <div
+      className="owner-official-page"
       style={{
         minHeight: "100vh",
         background: "linear-gradient(180deg, #f4efe2 0%, #ebe4d3 100%)",
@@ -158,6 +161,14 @@ export default function ProgramsGateway() {
                   "Choose the operating system that matches your current role. Only permitted cards are shown."
                 )}
               </div>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+              <div style={{ display: "grid", gap: 4, textAlign: isRTL ? "right" : "left" }}>
+                <div style={{ color: "#7a5a13", fontWeight: 1000, fontSize: 24 }}>{tr("وزارة التعليم", "Ministry of Education")}</div>
+                <div style={{ color: "#5c4a24", fontWeight: 850, fontSize: 14 }}>{tr("سلطنة عمان", "Sultanate of Oman")}</div>
+              </div>
+              <img src={MINISTRY_LOGO_URL} alt="وزارة التعليم" style={{ width: 70, height: 70, objectFit: "contain" }} />
             </div>
 
             <button

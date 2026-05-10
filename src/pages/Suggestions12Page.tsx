@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { httpsCallable } from "firebase/functions";
 import { useI18n } from "../i18n/I18nProvider";
-import { db } from "../firebase/firebase";
+import { auth, db, functions } from "../firebase/firebase";
 import { useAuth } from "../auth/AuthContext";
 
 type SuggestionForm = {
@@ -11,6 +12,18 @@ type SuggestionForm = {
   notes: string;
 };
 
+type SendSuggestionEmailRequest = {
+  title: string;
+  schoolName: string;
+  schoolEmail: string;
+  notes: string;
+};
+
+type SendSuggestionEmailResponse = {
+  ok?: boolean;
+  message?: string;
+};
+
 const initialForm: SuggestionForm = {
   title: "",
   schoolName: "",
@@ -18,24 +31,57 @@ const initialForm: SuggestionForm = {
   notes: "",
 };
 
+function cleanText(value: unknown) {
+  return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function getFirebaseErrorMessage(error: any) {
+  const code = cleanText(error?.code);
+  const message = cleanText(error?.message);
+
+  if (code) return `${code}${message ? `: ${message}` : ""}`;
+  return message || "";
+}
+
 export default function SuggestionsPage() {
-  const { tenantId, user } = useAuth() as any;
+  const authContext = useAuth() as any;
+  const tenantId = cleanText(
+    authContext?.tenantId ||
+      authContext?.effectiveTenantId ||
+      authContext?.profile?.tenantId ||
+      authContext?.userProfile?.tenantId ||
+      ""
+  );
+
+  const contextUser = authContext?.user || authContext?.profile || authContext?.userProfile || null;
+
   const { lang, isRTL } = useI18n();
   const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
 
   const [form, setForm] = useState<SuggestionForm>(initialForm);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
-  const [messageType, setMessageType] = useState<"success" | "error" | "">("");
+  const [messageType, setMessageType] = useState<"success" | "error" | "warning" | "">("");
   const [errors, setErrors] = useState<Partial<Record<keyof SuggestionForm, string>>>({});
+
+  const currentFirebaseUser = auth.currentUser;
+  const displayEmail =
+    cleanText(currentFirebaseUser?.email) ||
+    cleanText(contextUser?.email) ||
+    tr("غير معروف", "Unknown");
 
   const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 
   const validate = () => {
     const nextErrors: Partial<Record<keyof SuggestionForm, string>> = {};
 
-    if (!form.title.trim()) nextErrors.title = tr("يرجى إدخال عنوان المقترح", "Please enter the suggestion title");
-    if (!form.schoolName.trim()) nextErrors.schoolName = tr("يرجى إدخال اسم المدرسة", "Please enter the school name");
+    if (!form.title.trim()) {
+      nextErrors.title = tr("يرجى إدخال عنوان المقترح", "Please enter the suggestion title");
+    }
+
+    if (!form.schoolName.trim()) {
+      nextErrors.schoolName = tr("يرجى إدخال اسم المدرسة", "Please enter the school name");
+    }
 
     if (!form.schoolEmail.trim()) {
       nextErrors.schoolEmail = tr("يرجى إدخال إيميل المدرسة", "Please enter the school email");
@@ -43,7 +89,9 @@ export default function SuggestionsPage() {
       nextErrors.schoolEmail = tr("يرجى إدخال بريد إلكتروني صحيح", "Please enter a valid email address");
     }
 
-    if (!form.notes.trim()) nextErrors.notes = tr("يرجى كتابة الملاحظات والاقتراحات", "Please write the notes and suggestions");
+    if (!form.notes.trim()) {
+      nextErrors.notes = tr("يرجى كتابة الملاحظات والاقتراحات", "Please write the notes and suggestions");
+    }
 
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
@@ -73,32 +121,91 @@ export default function SuggestionsPage() {
 
     if (!validate()) return;
 
+    const firebaseUser = auth.currentUser;
+
+    if (!firebaseUser?.uid) {
+      setMessage(tr("يجب تسجيل الدخول قبل إرسال المقترح.", "You must sign in before sending a suggestion."));
+      setMessageType("error");
+      return;
+    }
+
+    const emailPayload: SendSuggestionEmailRequest = {
+      title: form.title.trim(),
+      schoolName: form.schoolName.trim(),
+      schoolEmail: form.schoolEmail.trim(),
+      notes: form.notes.trim(),
+    };
+
     try {
       setLoading(true);
 
-      await addDoc(collection(db, "systemSuggestions"), {
-        title: form.title.trim(),
-        schoolName: form.schoolName.trim(),
-        schoolEmail: form.schoolEmail.trim(),
-        notes: form.notes.trim(),
+      const firestorePayload = {
+        ...emailPayload,
         tenantId: tenantId || null,
-        senderUid: user?.uid || null,
-        senderEmail: user?.email || null,
+        senderUid: firebaseUser.uid,
+        senderEmail: firebaseUser.email || contextUser?.email || null,
+        senderDisplayName: firebaseUser.displayName || contextUser?.displayName || contextUser?.name || null,
         status: "new",
+        source: "suggestions12page",
         createdAt: serverTimestamp(),
-      });
+      };
 
-      setMessage(tr("تم إرسال المقترح بنجاح إلى السوبر أدمن.", "The suggestion was sent successfully to the super admin."));
-      setMessageType("success");
+      await addDoc(collection(db, "systemSuggestions"), firestorePayload);
+
+      try {
+        const sendSuggestionEmail = httpsCallable<
+          SendSuggestionEmailRequest,
+          SendSuggestionEmailResponse
+        >(functions, "sendSuggestionEmailCallable");
+
+        await sendSuggestionEmail(emailPayload);
+
+        setMessage(
+          tr(
+            "تم حفظ المقترح وإرساله بنجاح إلى السوبر أدمن.",
+            "The suggestion was saved and emailed successfully to the super admin."
+          )
+        );
+        setMessageType("success");
+      } catch (emailError: any) {
+        console.error("send suggestion email error:", emailError);
+
+        const detail = getFirebaseErrorMessage(emailError);
+        setMessage(
+          tr(
+            `تم حفظ المقترح بنجاح، لكن تعذر إرسال الإيميل. التفاصيل: ${detail || "غير متوفرة"}`,
+            `The suggestion was saved successfully, but the email could not be sent. Details: ${detail || "Not available"}`
+          )
+        );
+        setMessageType("warning");
+      }
+
       setForm(initialForm);
     } catch (error: any) {
       console.error("save suggestion error:", error);
-      setMessage(error?.message || tr("حدث خطأ أثناء حفظ المقترح.", "An error occurred while saving the suggestion."));
+
+      const code = cleanText(error?.code);
+      const fallbackMessage =
+        code === "permission-denied"
+          ? tr(
+              "تعذر إرسال المقترح بسبب صلاحيات Firestore. تأكد من نشر firestore.rules بعد آخر تعديل.",
+              "Unable to send the suggestion because of Firestore permissions. Make sure firestore.rules was deployed after the latest update."
+            )
+          : tr("حدث خطأ أثناء حفظ المقترح.", "An error occurred while saving the suggestion.");
+
+      setMessage(error?.message || fallbackMessage);
       setMessageType("error");
     } finally {
       setLoading(false);
     }
   };
+
+  const messageBackground =
+    messageType === "success"
+      ? "rgba(34,197,94,0.10)"
+      : messageType === "warning"
+        ? "rgba(245,158,11,0.12)"
+        : "rgba(255,255,255,0.06)";
 
   return (
     <div
@@ -148,8 +255,12 @@ export default function SuggestionsPage() {
           <h1 style={{ margin: "16px 0 0", color: "#fff", fontSize: 34, fontWeight: 900 }}>
             {tr("صفحة الاقتراحات الذكية", "Smart suggestions page")}
           </h1>
+
           <p style={{ marginTop: 12, color: "rgba(255,255,255,0.78)", lineHeight: 1.9, fontSize: 15 }}>
-            {tr("اكتب المقترحات والملاحظات بصورة واضحة ومنظمة، وسيتم إرسالها مباشرة إلى صفحة السوبر أدمن مع ربطها ببيانات الجهة الحالية والمستخدم عند التوفر.", "Write suggestions and notes clearly and in an organized way. They will be sent directly to the super admin page and linked to the current tenant and user data when available.")}
+            {tr(
+              "اكتب المقترحات والملاحظات بصورة واضحة ومنظمة، وسيتم حفظها في Firebase وإرسالها إلى السوبر أدمن عند توفر إعدادات الإيميل.",
+              "Write suggestions and notes clearly. They will be saved in Firebase and emailed to the super admin when email settings are available."
+            )}
           </p>
 
           <div
@@ -162,7 +273,7 @@ export default function SuggestionsPage() {
           >
             {[
               { label: tr("الجهة الحالية", "Current tenant"), value: tenantId || tr("غير مرتبطة", "Not linked") },
-              { label: tr("المستخدم", "User"), value: user?.email || tr("غير معروف", "Unknown") },
+              { label: tr("المستخدم", "User"), value: displayEmail },
               { label: tr("نوع الرسالة", "Message type"), value: tr("اقتراح / ملاحظة", "Suggestion / Note") },
             ].map((item) => (
               <div
@@ -174,8 +285,12 @@ export default function SuggestionsPage() {
                   border: "1px solid rgba(255,255,255,0.06)",
                 }}
               >
-                <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 12, fontWeight: 800 }}>{item.label}</div>
-                <div style={{ color: "#fff8dc", marginTop: 8, fontWeight: 900, fontSize: 15 }}>{item.value}</div>
+                <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 12, fontWeight: 800 }}>
+                  {item.label}
+                </div>
+                <div style={{ color: "#fff8dc", marginTop: 8, fontWeight: 900, fontSize: 15 }}>
+                  {item.value}
+                </div>
               </div>
             ))}
           </div>
@@ -236,7 +351,7 @@ export default function SuggestionsPage() {
                 style={{
                   borderRadius: 16,
                   padding: "14px 16px",
-                  background: messageType === "success" ? "rgba(34,197,94,0.10)" : "rgba(255,255,255,0.06)",
+                  background: messageBackground,
                   color: "#fff",
                   border: "4px solid #d4af37",
                   boxShadow: "0 0 18px rgba(212,175,55,0.35)",

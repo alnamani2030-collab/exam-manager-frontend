@@ -4,13 +4,14 @@ import {
   collection,
   deleteDoc,
   doc,
-  onSnapshot,
+  getDoc,
+  getDocs,
   orderBy,
   query,
   serverTimestamp,
   setDoc,
 } from "firebase/firestore";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { useI18n } from "../i18n/I18nProvider";
 import { db } from "../firebase/firebase";
@@ -70,9 +71,31 @@ type SchoolConfig = {
   logoUrl?: string;
 };
 
-const PAGE_BG = "#ffffff";
+type Lang = "ar" | "en";
+
+type OfficialControlHeaderData = {
+  country: string;
+  ministry: string;
+  directorate: string;
+  centerName: string;
+  semester: string;
+  academicYear: string;
+  controlHeadName: string;
+  logoUrl: string;
+};
+
+const DEFAULT_LOGO_URL = "https://i.imgur.com/vdDhSMh.png";
+const EXAM_CENTER_DATA_KEY = "exam-manager:exam-center-data:v1";
+const EXAM_CENTER_LOGO_KEY = "exam-manager:exam-center-logo:v1";
+const APP_LOGO_KEY = "exam-manager:app-logo";
+const CONTROL_HEAD_NAME_KEY = "exam-manager:control-head-name:v1";
+
+const PAGE_BG =
+  "radial-gradient(1200px 520px at 50% -10%, rgba(212, 175, 55, 0.18), transparent 62%), linear-gradient(180deg, #fffdf7 0%, #f7f3e7 48%, #fffaf0 100%)";
 
 const GOLD = "#d4af37";
+const GOLD_DARK = "#8b6f12";
+const BLACK = "#000000";
 
 const REPORT_TYPE_BUTTON_STYLES = [
   { idle: "#fde68a", active: "#f59e0b", border: "#b45309" },
@@ -150,15 +173,136 @@ const parseCsvLine = (line: string) => {
   return cells;
 };
 
+const safeReadJson = <T,>(key: string): T | null => {
+  try {
+    if (typeof window === "undefined") return null;
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return null;
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+};
+
+const firstText = (...values: unknown[]) => {
+  for (const value of values) {
+    const text = String(value ?? "").replace(/\s+/g, " ").trim();
+    if (text) return text;
+  }
+  return "";
+};
+
+const getAcademicYearFromSystemDate = (now = new Date()) => {
+  const month = now.getMonth() + 1;
+  const year = now.getFullYear();
+  const startYear = month >= 9 ? year : year - 1;
+  return `${startYear} / ${startYear + 1}`;
+};
+
+const normalizeDirectorate = (value: string, lang: Lang) => {
+  const text = firstText(value);
+  if (!text) return lang === "ar" ? "المديرية العامة للتعليم" : "Directorate General of Education";
+  if (lang === "ar" && text.includes("المديرية")) return text;
+  if (lang === "en" && /directorate/i.test(text)) return text;
+  return lang === "ar" ? `المديرية العامة للتعليم بمحافظة ${text}` : `Directorate General of Education in ${text}`;
+};
+
+const buildOfficialControlHeaderData = (schoolConfig: SchoolConfig, lang: Lang): OfficialControlHeaderData => {
+  const centerPayload = safeReadJson<Record<string, any>>(EXAM_CENTER_DATA_KEY) || {};
+  const country = firstText(
+    centerPayload.country,
+    centerPayload.countryName,
+    centerPayload.sultanate,
+    lang === "ar" ? "سلطنة عمان" : "Sultanate of Oman",
+  );
+  const ministry = firstText(
+    centerPayload.ministry,
+    centerPayload.ministryName,
+    centerPayload.educationMinistry,
+    lang === "ar" ? schoolConfig.ministryAr : schoolConfig.ministryEn,
+    schoolConfig.ministryAr,
+    schoolConfig.ministryEn,
+    lang === "ar" ? "وزارة التعليم" : "Ministry of Education",
+  );
+  const rawDirectorate = firstText(
+    centerPayload.governorate,
+    centerPayload.directorate,
+    centerPayload.directorateName,
+    centerPayload.educationDirectorate,
+    centerPayload.generalDirectorate,
+    lang === "ar" ? schoolConfig.regionAr : schoolConfig.regionEn,
+    schoolConfig.regionAr,
+    schoolConfig.regionEn,
+  );
+  const centerName = firstText(
+    centerPayload.name,
+    centerPayload.centerName,
+    centerPayload.examCenterName,
+    centerPayload.controlCenterName,
+    centerPayload.schoolName,
+    lang === "ar" ? schoolConfig.schoolNameAr : schoolConfig.schoolNameEn,
+    schoolConfig.schoolNameAr,
+    schoolConfig.schoolNameEn,
+    lang === "ar" ? "مركز امتحان دبلوم التعليم العام" : "General Education Diploma Exam Center",
+  );
+  const semester = firstText(
+    centerPayload.semester,
+    centerPayload.term,
+    centerPayload.studyTerm,
+    (schoolConfig as any).termAr,
+    (schoolConfig as any).semesterAr,
+    (schoolConfig as any).studyTermAr,
+    (schoolConfig as any).termEn,
+    (schoolConfig as any).semesterEn,
+    (schoolConfig as any).studyTermEn,
+    lang === "ar" ? "الفصل الدراسي" : "Academic term",
+  );
+  const academicYear = firstText(
+    centerPayload.academicYear,
+    centerPayload.yearLabel,
+    centerPayload.schoolYear,
+    centerPayload.studyYear,
+    centerPayload.academicYearLabel,
+    getAcademicYearFromSystemDate(),
+  );
+  const controlHeadName = firstText(
+    centerPayload.controlHeadName,
+    centerPayload.controlHead,
+    centerPayload.centerHead,
+    centerPayload.centerHeadName,
+    typeof window !== "undefined" ? window.localStorage.getItem(CONTROL_HEAD_NAME_KEY) : "",
+  );
+  const logoUrl = firstText(
+    typeof window !== "undefined" ? window.localStorage.getItem(EXAM_CENTER_LOGO_KEY) : "",
+    typeof window !== "undefined" ? window.localStorage.getItem(APP_LOGO_KEY) : "",
+    schoolConfig.logoUrl,
+    DEFAULT_LOGO_URL,
+  );
+
+  return {
+    country,
+    ministry,
+    directorate: normalizeDirectorate(rawDirectorate, lang),
+    centerName,
+    semester,
+    academicYear,
+    controlHeadName,
+    logoUrl,
+  };
+};
+
 export default function SchoolControl() {
   const navigate = useNavigate();
-  const { effectiveTenantId } = useAuth() as any;
+  const authContext = useAuth() as any;
+  const { effectiveTenantId, user, loading: authLoading } = authContext;
+  const { tenantId: routeTenantId } = useParams();
   const { lang, isRTL } = useI18n();
   const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
 
-  const tenantId = String(effectiveTenantId || "").trim();
+  const tenantId = String(routeTenantId || effectiveTenantId || "").trim();
 
   const [schoolConfig, setSchoolConfig] = useState<SchoolConfig>({});
+  const [officialDataVersion, setOfficialDataVersion] = useState(0);
   const [members, setMembers] = useState<ControlMember[]>([]);
   const [reports, setReports] = useState<ControlReport[]>([]);
   const [exams, setExams] = useState<any[]>([]);
@@ -194,63 +338,112 @@ export default function SchoolControl() {
 
   useEffect(() => {
     if (!tenantId) return;
+    if (authLoading) return;
+    if (!user?.uid) return;
 
-    const handleSnapshotError = (label: string) => (error: unknown) => {
-      const code = String((error as any)?.code || "");
-      const message = String((error as any)?.message || error || "");
+    let mounted = true;
 
-      // Permission errors are handled by Firestore rules and should not break the page.
-      // The page stays usable with any already-loaded/local data instead of crashing the console.
-      if (code !== "permission-denied" && !message.toLowerCase().includes("insufficient permissions")) {
-        console.error(`SchoolControl ${label} snapshot error:`, error);
+    async function loadControlData() {
+      const safeLoad = async <T,>(label: string, loader: () => Promise<T>, fallback: T): Promise<T> => {
+        try {
+          return await loader();
+        } catch (error) {
+          const code = String((error as any)?.code || "");
+          const message = String((error as any)?.message || error || "");
+
+          // لا نطبع Permission Denied كخطأ أحمر حتى لا تتوقف تجربة المستخدم.
+          // السبب الحقيقي يعالج من firestore.rules، والصفحة تستخدم fallback آمن عند المنع.
+          if (code !== "permission-denied" && !message.toLowerCase().includes("insufficient permissions")) {
+            console.error(`Control12 ${label} load error:`, error);
+          }
+
+          return fallback;
+        }
+      };
+
+      const configSnap = await safeLoad(
+        "config",
+        () => getDoc(doc(db, "tenants", tenantId, "meta", "config")),
+        null
+      );
+
+      if (mounted && configSnap) {
+        setSchoolConfig((configSnap.data() as SchoolConfig) || {});
+      }
+
+      const membersSnap = await safeLoad(
+        "schoolControlMembers",
+        () => getDocs(query(collection(db, "tenants", tenantId, "schoolControlMembers"), orderBy("name", "asc"))),
+        null
+      );
+
+      if (mounted && membersSnap) {
+        setMembers(
+          membersSnap.docs.map((row) => ({
+            id: row.id,
+            ...(row.data() as Omit<ControlMember, "id">),
+          })),
+        );
+      }
+
+      const reportsSnap = await safeLoad(
+        "schoolControlReports",
+        () => getDocs(query(collection(db, "tenants", tenantId, "schoolControlReports"), orderBy("reportDate", "desc"))),
+        null
+      );
+
+      if (mounted && reportsSnap) {
+        setReports(
+          reportsSnap.docs.map((row) => ({
+            id: row.id,
+            ...(row.data() as Omit<ControlReport, "id">),
+          })),
+        );
+      }
+
+      const examsSnap = await safeLoad(
+        "exams",
+        () => getDocs(query(collection(db, "tenants", tenantId, "exams"), orderBy("date", "asc"))),
+        null
+      );
+
+      if (mounted && examsSnap) {
+        setExams(examsSnap.docs.map((row) => ({ id: row.id, ...(row.data() as any) })));
+      }
+    }
+
+    void loadControlData();
+
+    return () => {
+      mounted = false;
+    };
+  }, [tenantId, authLoading, user?.uid]);
+
+  useEffect(() => {
+    const refreshOfficialData = () => setOfficialDataVersion((value) => value + 1);
+    const onStorage = (event: StorageEvent) => {
+      if (!event.key || [EXAM_CENTER_DATA_KEY, EXAM_CENTER_LOGO_KEY, APP_LOGO_KEY, CONTROL_HEAD_NAME_KEY].includes(event.key)) {
+        refreshOfficialData();
       }
     };
 
-    const unsubscribers = [
-      onSnapshot(
-        doc(db, "tenants", tenantId, "meta", "config"),
-        (snap) => {
-          setSchoolConfig((snap.data() as SchoolConfig) || {});
-        },
-        handleSnapshotError("config")
-      ),
-      onSnapshot(
-        query(collection(db, "tenants", tenantId, "schoolControlMembers"), orderBy("name", "asc")),
-        (snap) => {
-          setMembers(
-            snap.docs.map((row) => ({
-              id: row.id,
-              ...(row.data() as Omit<ControlMember, "id">),
-            })),
-          );
-        },
-        handleSnapshotError("schoolControlMembers")
-      ),
-      onSnapshot(
-        query(collection(db, "tenants", tenantId, "schoolControlReports"), orderBy("reportDate", "desc")),
-        (snap) => {
-          setReports(
-            snap.docs.map((row) => ({
-              id: row.id,
-              ...(row.data() as Omit<ControlReport, "id">),
-            })),
-          );
-        },
-        handleSnapshotError("schoolControlReports")
-      ),
-      onSnapshot(
-        query(collection(db, "tenants", tenantId, "exams"), orderBy("date", "asc")),
-        (snap) => {
-          setExams(snap.docs.map((row) => ({ id: row.id, ...(row.data() as any) })));
-        },
-        handleSnapshotError("exams")
-      ),
-    ];
+    window.addEventListener("focus", refreshOfficialData);
+    window.addEventListener("storage", onStorage);
+    window.addEventListener("exam-manager:changed", refreshOfficialData);
+    window.addEventListener("exam-manager:control-head-changed", refreshOfficialData);
 
     return () => {
-      unsubscribers.forEach((unsub) => unsub());
+      window.removeEventListener("focus", refreshOfficialData);
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("exam-manager:changed", refreshOfficialData);
+      window.removeEventListener("exam-manager:control-head-changed", refreshOfficialData);
     };
-  }, [tenantId]);
+  }, []);
+
+  const officialHeaderData = useMemo(
+    () => buildOfficialControlHeaderData(schoolConfig, lang === "ar" ? "ar" : "en"),
+    [schoolConfig, lang, officialDataVersion],
+  );
 
   const memberMap = useMemo(() => {
     const map = new Map<string, ControlMember>();
@@ -613,39 +806,13 @@ export default function SchoolControl() {
   };
 
   const printReport = (report: ControlReport) => {
-    const schoolName = schoolConfig.schoolNameAr || schoolConfig.schoolNameEn || tr("المدرسة", "School");
-    const region =
-      (lang === "ar" ? schoolConfig.regionAr : schoolConfig.regionEn) ||
-      schoolConfig.regionAr ||
-      schoolConfig.regionEn ||
-      "";
-    const academicTerm =
-      (schoolConfig as any).termAr ||
-      (schoolConfig as any).semesterAr ||
-      (schoolConfig as any).studyTermAr ||
-      (schoolConfig as any).termEn ||
-      (schoolConfig as any).semesterEn ||
-      (schoolConfig as any).studyTermEn ||
-      "";
-
-    const countryLine = lang === "ar" ? "سلطنة عمان" : "Sultanate of Oman";
-    const ministryLine = lang === "ar" ? "وزارة التعليم" : "Ministry of Education";
-    const directorateLine =
-      lang === "ar"
-        ? region
-          ? `المديرية العامة للتعليم بمحافظة ${region}`
-          : "المديرية العامة للتعليم"
-        : region
-          ? `Directorate General of Education in ${region}`
-          : "Directorate General of Education";
-    const termLine = academicTerm
-      ? lang === "ar"
-        ? academicTerm
-        : `Academic term: ${academicTerm}`
-      : "";
-
-    const logo = schoolConfig.logoUrl
-      ? `<img src="${schoolConfig.logoUrl}" alt="logo" style="width:92px;height:92px;object-fit:contain;" />`
+    const schoolName = officialHeaderData.centerName || tr("مركز الامتحانات", "Exam Center");
+    const countryLine = officialHeaderData.country || (lang === "ar" ? "سلطنة عمان" : "Sultanate of Oman");
+    const ministryLine = officialHeaderData.ministry || (lang === "ar" ? "وزارة التعليم" : "Ministry of Education");
+    const directorateLine = officialHeaderData.directorate || (lang === "ar" ? "المديرية العامة للتعليم" : "Directorate General of Education");
+    const termLine = officialHeaderData.semester || "";
+    const logo = officialHeaderData.logoUrl
+      ? `<img src="${officialHeaderData.logoUrl}" alt="logo" style="width:92px;height:92px;object-fit:contain;" />`
       : "";
 
     const title = titleForType(report.type);
@@ -654,9 +821,13 @@ export default function SchoolControl() {
     const currentMonth = now.getMonth() + 1;
     const academicYearStart = currentMonth >= 8 ? currentYear : currentYear - 1;
     const academicYearEnd = academicYearStart + 1;
-    const academicYearLine = lang === "ar"
-      ? `العام الدراسي ${academicYearStart} - ${academicYearEnd} م`
-      : `Academic Year ${academicYearStart} - ${academicYearEnd}`;
+    const academicYearLine = officialHeaderData.academicYear
+      ? lang === "ar"
+        ? `العام الدراسي ${officialHeaderData.academicYear} م`
+        : `Academic Year ${officialHeaderData.academicYear}`
+      : lang === "ar"
+        ? `العام الدراسي ${academicYearStart} - ${academicYearEnd} م`
+        : `Academic Year ${academicYearStart} - ${academicYearEnd}`;
     const printedAt = `${now.toLocaleDateString(lang === "ar" ? "ar-EG" : "en-US")} ${now.toLocaleTimeString(lang === "ar" ? "ar-EG" : "en-US")}`;
     const membersTable = reportMembersTableHtml(report);
 
@@ -666,25 +837,27 @@ export default function SchoolControl() {
 <meta charset="utf-8" />
 <title>${title}</title>
 <style>
-body{font-family:Tahoma,Arial,sans-serif;margin:18px 24px;color:#111827;background:#fff}
-.page-meta{font-size:12px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center}
-.header{padding:4px 0 16px 0;margin-bottom:24px;border-bottom:2px solid #9ca3af}
-.header-row{display:grid;grid-template-columns:1fr 150px 1fr;align-items:center;gap:22px}
+body{font-family:Tahoma,Arial,sans-serif;margin:18px 24px;color:#111827;background:#fff;font-weight:800}
+.page-meta{font-size:12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;color:#111827;font-weight:900}
+.header{padding:12px 18px 16px 18px;margin-bottom:24px;border:3px solid #111827;border-radius:0 0 20px 20px;background:#fffdf2}
+.header-row{display:grid;grid-template-columns:1fr 130px 1fr;align-items:center;gap:22px;border-bottom:2px solid #111827;padding-bottom:14px}
 .header-right{text-align:right}
 .header-center{display:flex;justify-content:center;align-items:center}
 .header-left{text-align:left}
-.line-main{margin:0 0 8px 0;font-size:23px;font-weight:900;line-height:1.25}
-.line-sub{margin:0 0 6px 0;font-size:20px;font-weight:800;line-height:1.35}
-.line-left{margin:0 0 6px 0;font-size:18px;font-weight:800;line-height:1.45}
-.report-title{text-align:center;font-size:34px;font-weight:900;margin:24px 0 8px 0;line-height:1.35}
-.report-academic-year{text-align:center;font-size:20px;font-weight:800;margin:0;line-height:1.5}
-.content{line-height:2.05;font-size:18px}
+.line-main{margin:0 0 8px 0;font-size:22px;font-weight:900;line-height:1.25}
+.line-sub{margin:0 0 6px 0;font-size:18px;font-weight:900;line-height:1.35}
+.line-left{margin:0 0 6px 0;font-size:17px;font-weight:900;line-height:1.45}
+.report-title{text-align:center;font-size:31px;font-weight:900;margin:18px 0 6px 0;line-height:1.35}
+.report-academic-year{text-align:center;font-size:18px;font-weight:900;margin:0;line-height:1.5}
+.info-strip{margin-top:14px;border:2px solid #111827;border-radius:16px;padding:10px 16px;display:flex;justify-content:space-between;gap:12px;font-weight:900;font-size:16px}
+.content{line-height:2.1;font-size:18px;border:2px solid #111827;border-radius:18px;padding:18px;margin-top:16px}
 .members-table-wrap{margin-top:18px}
 .members-table{width:100%;border-collapse:collapse}
-.members-table th,.members-table td{border:1px solid #111827;padding:10px 8px;text-align:center;font-size:16px;vertical-align:middle}
-.members-table th{background:#f3f4f6;font-weight:900}
-.footer{margin-top:54px;display:flex;justify-content:space-between;align-items:flex-end}
-.stamp{border:2px dashed #111827;min-width:190px;min-height:90px;display:flex;align-items:center;justify-content:center}
+.members-table th,.members-table td{border:1.5px solid #111827;padding:10px 8px;text-align:center;font-size:16px;vertical-align:middle;font-weight:900}
+.members-table th{background:#fff2b8;font-weight:900}
+.footer{margin-top:54px;display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:stretch}
+.stamp,.signature{border:2px dashed #111827;min-height:110px;display:grid;place-items:center;text-align:center;font-weight:900;border-radius:16px}
+@media print{body{margin:10mm}.header{break-inside:avoid}.footer{break-inside:avoid}}
 </style>
 </head>
 <body>
@@ -708,17 +881,22 @@ body{font-family:Tahoma,Arial,sans-serif;margin:18px 24px;color:#111827;backgrou
   </div>
   <div class="report-title">${title}</div>
   <div class="report-academic-year">${academicYearLine}</div>
+  <div class="info-strip">
+    <span>${tr("التاريخ", "Date")}: ${report.reportDate || "-"}</span>
+    <span>${tr("اليوم", "Day")}: ${report.dayName || "-"}</span>
+    <span>${tr("الوقت", "Time")}: ${report.reportTime || "-"}</span>
+  </div>
 </div>
 
 <div class="content">${reportNarrative(report)}</div>
 ${membersTable}
 
 <div class="footer">
-  <div>
-    <div style="font-weight:700;">${tr("يعتمد رئيس الكنترول", "Approved by the control head")}</div>
-    <div style="margin-top:40px;">...........................................</div>
+  <div class="signature">
+    <div>${tr("توقيع رئيس المركز", "Center head signature")}</div>
+    <div style="margin-top:18px;">${officialHeaderData.controlHeadName || "..........................................."}</div>
   </div>
-  <div class="stamp">${tr("ختم المدرسة", "School stamp")}</div>
+  <div class="stamp">${tr("ختم المركز", "Center stamp")}</div>
 </div>
 </body>
 </html>`;
@@ -744,18 +922,31 @@ ${membersTable}
       }}
     >
       <div style={{ maxWidth: 1600, margin: "0 auto", display: "grid", gap: 20 }}>
-        <div style={{ ...cardStyle, display: "flex", justifyContent: "space-between", gap: 14, flexWrap: "wrap", alignItems: "center" }}>
+        <OfficialControlHeader
+          data={officialHeaderData}
+          lang={lang === "ar" ? "ar" : "en"}
+          title={tr("ملفات الكنترول الرسمية", "Official Control Files")}
+          subtitle={tr("محاضر واعتمادات مركز الامتحانات", "Exam center minutes and approvals")}
+        />
+
+        <div style={{ ...officialToolbarStyle, display: "flex", justifyContent: "space-between", gap: 14, flexWrap: "wrap", alignItems: "center" }}>
           <div>
-            <div style={{ fontSize: 14, opacity: 0.9, color: GOLD }}>{tr("صفحة تشغيلية مخصصة", "Dedicated operational page")}</div>
-            <div style={{ fontSize: 34, fontWeight: 900, color: "#000000", textShadow: "0 0 12px rgba(212,175,55,0.22)" }}>{tr("الكنترول المدرسي", "School Control")}</div>
-            <div style={{ marginTop: 8, opacity: 0.95, color: GOLD }}>
-              {tr("إدارة أعضاء الكنترول والمحاضر الرسمية والطباعة والاستيراد والتصدير.", "Manage control members, official minutes, printing, import, and export.")}
+            <div style={{ fontSize: 14, opacity: 0.95, color: GOLD_DARK, fontWeight: 900 }}>{tr("صفحة رسمية لمركز الامتحانات", "Official exam-center page")}</div>
+            <div style={{ fontSize: 34, fontWeight: 900, color: "#000000", textShadow: "0 0 12px rgba(212,175,55,0.22)" }}>{tr("إدارة ملفات الكنترول", "Control Files Management")}</div>
+            <div style={{ marginTop: 8, opacity: 0.95, color: "#000000", fontWeight: 900 }}>
+              {tr("إدارة أعضاء الكنترول والمحاضر الرسمية والطباعة والاستيراد والتصدير وفق ترويسة مركز الامتحانات.", "Manage control members, official minutes, printing, import, and export using the exam-center official header.")}
             </div>
           </div>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <button onClick={() => navigate(tenantPath(tenantId, "/dashboard"))} style={buttonStyle("linear-gradient(180deg, #dbeafe 0%, #bfdbfe 100%)")}>
+            <button onClick={() => navigate(tenantPath(tenantId, "/dashboard12"))} style={buttonStyle("linear-gradient(180deg, #dbeafe 0%, #bfdbfe 100%)")}>
               {tr("العودة للوحة الرئيسية", "Back to dashboard")}
+            </button>
+            <button
+              onClick={() => navigate(tenantPath(tenantId, "/student-seat-register12"))}
+              style={buttonStyle("linear-gradient(180deg, #fef3c7 0%, #f59e0b 100%)")}
+            >
+              {tr("سجل أرقام الجلوس", "Seat Numbers Register")}
             </button>
             <button onClick={exportMembers} style={buttonStyle("linear-gradient(180deg, #dcfce7 0%, #bbf7d0 100%)")}>
               {tr("تصدير اكسل", "Export Excel")}
@@ -1070,6 +1261,58 @@ ${membersTable}
   );
 }
 
+function OfficialControlHeader({
+  data,
+  lang,
+  title,
+  subtitle,
+}: {
+  data: OfficialControlHeaderData;
+  lang: Lang;
+  title: string;
+  subtitle: string;
+}) {
+  return (
+    <section style={officialHeaderStyle}>
+      <div style={officialHeaderTopLineStyle} />
+      <div style={officialHeaderGridStyle}>
+        <div style={{ ...officialHeaderSideStyle, textAlign: lang === "ar" ? "right" : "left" }}>
+          <div style={officialHeaderMainLineStyle}>{data.country}</div>
+          <div style={officialHeaderMainLineStyle}>{data.ministry}</div>
+          <div style={officialHeaderSubLineStyle}>{data.directorate}</div>
+          <div style={officialHeaderSubLineStyle}>{data.centerName}</div>
+        </div>
+
+        <div style={officialLogoWrapStyle}>
+          <img
+            src={data.logoUrl || DEFAULT_LOGO_URL}
+            alt="logo"
+            style={officialLogoStyle}
+            onError={(event) => {
+              (event.currentTarget as HTMLImageElement).src = DEFAULT_LOGO_URL;
+            }}
+          />
+        </div>
+
+        <div style={{ ...officialHeaderSideStyle, textAlign: lang === "ar" ? "left" : "right" }}>
+          <div style={officialDocumentTitleStyle}>{title}</div>
+          <div style={officialHeaderSubLineStyle}>{subtitle}</div>
+          <div style={officialHeaderSubLineStyle}>{data.semester}</div>
+          <div style={officialHeaderSubLineStyle}>
+            {lang === "ar" ? "العام الدراسي" : "Academic Year"} {data.academicYear}
+          </div>
+        </div>
+      </div>
+
+      <div style={officialInfoStripStyle}>
+        <span>{lang === "ar" ? "رئيس المركز" : "Center Head"}: {data.controlHeadName || "—"}</span>
+        <span>{lang === "ar" ? "الصفحة" : "Page"}: {title}</span>
+        <span>{new Date().toLocaleDateString(lang === "ar" ? "ar-EG" : "en-US")}</span>
+      </div>
+    </section>
+  );
+}
+
 function Field({
   label,
   value,
@@ -1130,11 +1373,98 @@ function Td({ children, colSpan }: { children: React.ReactNode; colSpan?: number
 }
 
 const cardStyle: React.CSSProperties = {
-  border: "5px solid #e6d27a",
-  borderRadius: 34,
+  border: "4px solid #d6bd55",
+  borderRadius: 28,
   padding: 22,
-  background: "linear-gradient(180deg, #f7f3e7 0%, #f3efdf 100%)",
-  boxShadow: "0 0 0 6px rgba(245,232,170,0.35) inset, 0 10px 28px rgba(190,160,40,0.10)",
+  background: "linear-gradient(180deg, #fffdf6 0%, #f7f0d8 100%)",
+  boxShadow: "0 0 0 5px rgba(245,232,170,0.30) inset, 0 12px 34px rgba(126,98,18,0.12)",
+};
+
+const officialToolbarStyle: React.CSSProperties = {
+  ...cardStyle,
+  borderColor: "#111827",
+  borderWidth: 3,
+  background: "linear-gradient(180deg, #fff9df 0%, #f7edc5 100%)",
+};
+
+const officialHeaderStyle: React.CSSProperties = {
+  position: "relative",
+  overflow: "hidden",
+  border: "4px solid #111827",
+  borderRadius: 28,
+  padding: 22,
+  background: "linear-gradient(180deg, #fffdf2 0%, #f8efca 100%)",
+  boxShadow: "0 18px 42px rgba(0,0,0,0.10), 0 0 0 6px rgba(230,210,122,0.35) inset",
+};
+
+const officialHeaderTopLineStyle: React.CSSProperties = {
+  position: "absolute",
+  top: 0,
+  right: 0,
+  left: 0,
+  height: 8,
+  background: GOLD_SHINE,
+};
+
+const officialHeaderGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "minmax(280px, 1fr) 150px minmax(280px, 1fr)",
+  gap: 22,
+  alignItems: "center",
+  borderBottom: "3px solid #111827",
+  paddingBottom: 18,
+};
+
+const officialHeaderSideStyle: React.CSSProperties = {
+  color: BLACK,
+  fontWeight: 900,
+  lineHeight: 1.6,
+};
+
+const officialHeaderMainLineStyle: React.CSSProperties = {
+  fontSize: 25,
+  fontWeight: 900,
+  color: BLACK,
+};
+
+const officialHeaderSubLineStyle: React.CSSProperties = {
+  fontSize: 18,
+  fontWeight: 900,
+  color: BLACK,
+};
+
+const officialDocumentTitleStyle: React.CSSProperties = {
+  fontSize: 29,
+  fontWeight: 900,
+  color: BLACK,
+  textDecoration: "underline",
+  textUnderlineOffset: 8,
+};
+
+const officialLogoWrapStyle: React.CSSProperties = {
+  display: "grid",
+  placeItems: "center",
+};
+
+const officialLogoStyle: React.CSSProperties = {
+  width: 112,
+  height: 112,
+  objectFit: "contain",
+};
+
+const officialInfoStripStyle: React.CSSProperties = {
+  marginTop: 16,
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 12,
+  flexWrap: "wrap",
+  border: "3px solid #111827",
+  borderRadius: 18,
+  padding: "10px 16px",
+  background: "rgba(255,255,255,0.62)",
+  color: BLACK,
+  fontWeight: 900,
+  fontSize: 16,
 };
 
 const sectionTitleStyle: React.CSSProperties = {
@@ -1154,22 +1484,24 @@ const formGridStyle: React.CSSProperties = {
 const tableStyle: React.CSSProperties = {
   width: "100%",
   borderCollapse: "collapse",
+  border: "2px solid #111827",
+  direction: "rtl",
 };
 
 const cellStyle: React.CSSProperties = {
-  borderBottom: "1px solid rgba(230,210,122,0.8)",
+  border: "1.5px solid rgba(17,24,39,0.85)",
   padding: "12px 10px",
-  textAlign: "start",
+  textAlign: "center",
   color: "#000000",
-  verticalAlign: "top",
+  verticalAlign: "middle",
   fontWeight: 900,
-  background: "rgba(247,243,231,0.72)",
+  background: "rgba(255,253,246,0.82)",
 };
 
 const inputStyle: React.CSSProperties = {
   borderRadius: 22,
-  border: "2px solid #ead98b",
-  background: "linear-gradient(180deg, #faf7ee 0%, #f6f1e2 100%)",
+  border: "2px solid #111827",
+  background: "linear-gradient(180deg, #ffffff 0%, #fff9df 100%)",
   color: "#000000",
   padding: "12px 14px",
   outline: "none",

@@ -1,7 +1,24 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, updateDoc } from "firebase/firestore";
+import { useAuth } from "../auth/AuthContext";
+import { canAccessCapability, isPlatformOwner } from "../features/authz";
 import { db } from "../firebase/firebase";
+
+type TenantScopeRow = {
+  id: string;
+  name?: string;
+  tenantName?: string;
+  schoolName?: string;
+  governorate?: string;
+  tenantGovernorate?: string;
+  regionAr?: string;
+  tenantType?: string;
+  type?: string;
+  entityType?: string;
+  isExamCenter?: boolean;
+  isDiplomaCenter?: boolean;
+};
 
 type SuggestionRow = {
   id: string;
@@ -16,6 +33,9 @@ type SuggestionRow = {
   adminNote?: string;
   createdAt?: any;
   updatedAt?: any;
+  governorate?: string;
+  tenantGovernorate?: string;
+  regionAr?: string;
 };
 
 const GOLD = "#d4af37";
@@ -75,10 +95,47 @@ function statusColor(status?: string) {
   }
 }
 
+function normalizeText(value: any) {
+  return String(value || "")
+    .trim()
+    .replace(/[أإآ]/g, "ا")
+    .replace(/ى/g, "ي")
+    .replace(/ة/g, "ه")
+    .toLowerCase();
+}
+
+function readGovernorate(value: any) {
+  return String(value?.governorate || value?.tenantGovernorate || value?.regionAr || "").trim();
+}
+
+function isSameGovernorate(a: any, b: any) {
+  const aa = normalizeText(a);
+  const bb = normalizeText(b);
+  return Boolean(aa && bb && aa === bb);
+}
+
+function isExamCenterRow(value: any) {
+  const raw = [value?.tenantType, value?.type, value?.entityType].map((x) => normalizeText(x));
+  return Boolean(
+    value?.isExamCenter === true ||
+      value?.isDiplomaCenter === true ||
+      raw.some((x) => ["exam_center", "exam-center", "diploma_center", "diploma-center", "center"].includes(x))
+  );
+}
+
 export default function SuperSuggestions() {
   const navigate = useNavigate();
+  const { profile, authzSnapshot } = useAuth() as any;
+
+  const owner = isPlatformOwner(authzSnapshot);
+  const canAccessSystem = canAccessCapability(authzSnapshot, "SYSTEM_ADMIN");
+  const canManageSuggestions = Boolean(owner || canAccessSystem);
+  const currentGovernorate = readGovernorate(profile);
+  const currentTenantId = String(profile?.tenantId || profile?.tenant || profile?.schoolId || "").trim();
+  const currentRole = normalizeText(profile?.role);
 
   const [rows, setRows] = useState<SuggestionRow[]>([]);
+  const [tenantScope, setTenantScope] = useState<Record<string, TenantScopeRow>>({});
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string>("");
   const [filter, setFilter] = useState<"all" | "new" | "read" | "done">("all");
@@ -86,6 +143,33 @@ export default function SuperSuggestions() {
   const [draftNotes, setDraftNotes] = useState<Record<string, string>>({});
 
   useEffect(() => {
+    if (!canManageSuggestions) {
+      setTenantScope({});
+      return;
+    }
+
+    const unsub = onSnapshot(
+      collection(db, "tenants"),
+      (snap) => {
+        const next: Record<string, TenantScopeRow> = {};
+        snap.docs.forEach((d) => {
+          next[d.id] = { id: d.id, ...(d.data() as any) };
+        });
+        setTenantScope(next);
+      },
+      () => setTenantScope({})
+    );
+
+    return () => unsub();
+  }, [canManageSuggestions]);
+
+  useEffect(() => {
+    if (!canManageSuggestions) {
+      setRows([]);
+      setLoading(false);
+      return;
+    }
+
     const q = query(collection(db, "systemSuggestions"), orderBy("createdAt", "desc"));
 
     const unsub = onSnapshot(
@@ -105,13 +189,38 @@ export default function SuperSuggestions() {
     );
 
     return () => unsub();
-  }, []);
+  }, [canManageSuggestions]);
+
+  const visibleRows = useMemo(() => {
+    return rows.filter((row) => {
+      const tenantId = String(row.tenantId || "").trim();
+      const tenant = tenantId ? tenantScope[tenantId] : undefined;
+      const rowGovernorate = readGovernorate(row) || readGovernorate(tenant);
+
+      if (owner) return true;
+
+      if (currentTenantId) {
+        return tenantId === currentTenantId;
+      }
+
+      if (currentRole === "super" || currentRole === "governorate_super") {
+        return isSameGovernorate(rowGovernorate, currentGovernorate);
+      }
+
+      if (currentRole === "exam_super") {
+        return Boolean(tenant && isExamCenterRow(tenant) && tenantId === currentTenantId);
+      }
+
+      return canAccessSystem && isSameGovernorate(rowGovernorate, currentGovernorate);
+    });
+  }, [rows, tenantScope, owner, currentTenantId, currentRole, currentGovernorate, canAccessSystem]);
 
   const filteredRows = useMemo(() => {
-    const s = search.trim().toLowerCase();
+    const s = normalizeText(search);
 
-    return rows.filter((row) => {
+    return visibleRows.filter((row) => {
       const statusOk = filter === "all" ? true : String(row.status || "new") === filter;
+      const tenant = row.tenantId ? tenantScope[String(row.tenantId)] : undefined;
 
       const text = [
         row.title,
@@ -120,24 +229,26 @@ export default function SuperSuggestions() {
         row.notes,
         row.senderEmail,
         row.tenantId,
+        readGovernorate(row),
+        readGovernorate(tenant),
       ]
-        .join(" ")
-        .toLowerCase();
+        .map(normalizeText)
+        .join(" ");
 
       const searchOk = !s || text.includes(s);
 
       return statusOk && searchOk;
     });
-  }, [rows, filter, search]);
+  }, [visibleRows, filter, search, tenantScope]);
 
   const stats = useMemo(() => {
     return {
-      total: rows.length,
-      newCount: rows.filter((r) => (r.status || "new") === "new").length,
-      readCount: rows.filter((r) => r.status === "read").length,
-      doneCount: rows.filter((r) => r.status === "done").length,
+      total: visibleRows.length,
+      newCount: visibleRows.filter((r) => (r.status || "new") === "new").length,
+      readCount: visibleRows.filter((r) => r.status === "read").length,
+      doneCount: visibleRows.filter((r) => r.status === "done").length,
     };
-  }, [rows]);
+  }, [visibleRows]);
 
   const changeStatus = async (id: string, status: "new" | "read" | "done") => {
     try {
@@ -171,6 +282,11 @@ export default function SuperSuggestions() {
   };
 
   const removeSuggestion = async (id: string) => {
+    if (!owner) {
+      alert("الحذف متاح لمالك المنصة فقط.");
+      return;
+    }
+
     const ok = window.confirm("هل تريد حذف هذه الرسالة نهائيًا؟");
     if (!ok) return;
 
@@ -184,6 +300,8 @@ export default function SuperSuggestions() {
       setBusyId("");
     }
   };
+
+  if (!canManageSuggestions) return <Navigate to="/" replace />;
 
   return (
     <div
@@ -257,7 +375,7 @@ export default function SuperSuggestions() {
               fontSize: 15,
             }}
           >
-            جميع المقترحات المرسلة من المدارس تظهر هنا مباشرة، ويمكنك فرزها وتحديث حالتها وإضافة ملاحظة إدارية.
+            تظهر هنا الرسائل المتاحة حسب صلاحية الحساب فقط. مالك المنصة يرى الكل، ومشرف المحافظة يرى رسائل محافظته فقط.
           </div>
         </div>
 
@@ -419,13 +537,15 @@ export default function SuperSuggestions() {
                           تمت المعالجة
                         </SmallBtn>
 
-                        <SmallBtn
-                          onClick={() => removeSuggestion(row.id)}
-                          disabled={busyId === row.id}
-                          color="#b91c1c"
-                        >
-                          حذف
-                        </SmallBtn>
+                        {owner ? (
+                          <SmallBtn
+                            onClick={() => removeSuggestion(row.id)}
+                            disabled={busyId === row.id}
+                            color="#b91c1c"
+                          >
+                            حذف
+                          </SmallBtn>
+                        ) : null}
                       </div>
                     </div>
 

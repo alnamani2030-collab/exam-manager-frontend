@@ -49,6 +49,62 @@ const safeId = (value: string) =>
 
 const MINISTRY_LOGO_URL = "https://i.imgur.com/vdDhSMh.png";
 
+const normalizeKind = (value: unknown) => String(value || "").trim().toLowerCase();
+
+const isExamCenterTenant = (tenant: any) => {
+  const values = [
+    tenant?.tenantType,
+    tenant?.type,
+    tenant?.entityType,
+    tenant?.kind,
+    tenant?.category,
+  ]
+    .map(normalizeKind)
+    .filter(Boolean);
+
+  return (
+    tenant?.isExamCenter === true ||
+    tenant?.isDiplomaCenter === true ||
+    values.some((v) =>
+      ["exam_center", "exam-center", "examcenter", "diploma_center", "diploma-center"].includes(v),
+    )
+  );
+};
+
+const isSchoolTenant = (tenant: any) => !isExamCenterTenant(tenant);
+
+
+const getGovernorateValue = (...items: any[]) => {
+  for (const item of items) {
+    if (!item) continue;
+    const value =
+      typeof item === "string"
+        ? item
+        : item?.governorate ??
+          item?.tenantGovernorate ??
+          item?.regionAr ??
+          item?.governorateAr ??
+          item?.gov ??
+          item?.scopeGovernorate ??
+          "";
+    const normalized = String(value || "").trim();
+    if (normalized) return normalized;
+  }
+  return "";
+};
+
+const sameGovernorate = (a: unknown, b: unknown) =>
+  String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+
+const withSchoolTenantMarkers = (extra?: Record<string, unknown>) => ({
+  ...(extra || {}),
+  tenantType: "school",
+  type: "school",
+  entityType: "school",
+  isExamCenter: false,
+  isDiplomaCenter: false,
+});
+
 type TenantAdminLinkRow = {
   tenantId: string;
   tenantName: string;
@@ -182,7 +238,7 @@ export default function SuperSystem() {
   if (!allow?.enabled) return <Navigate to="/login" replace />;
   if (!canManageSystem) return <Navigate to="/" replace />;
 
-  const myGov = String(allow?.governorate ?? "").trim();
+  const myGov = getGovernorateValue(allow, authzSnapshot as any);
   const isMinistryViewer = !isOwner && myGov === MINISTRY_SCOPE;
   const isRegionalSuper = !isOwner && !isMinistryViewer;
   const canSeeAllGovs = isOwner || isMinistryViewer;
@@ -194,9 +250,24 @@ export default function SuperSystem() {
     setSearch,
     selectedTenantId,
     setSelectedTenantId,
-    visibleTenants,
-    selectedTenant,
+    visibleTenants: rawVisibleTenants,
+    selectedTenant: rawSelectedTenant,
   } = useSuperSystemTenants({ canSeeAllGovs, myGov });
+
+  const visibleTenants = useMemo(() => {
+    const sourceTenants = Array.isArray(tenants) && tenants.length ? tenants : rawVisibleTenants;
+    return sourceTenants.filter((tenant: any) => {
+      if (!isSchoolTenant(tenant)) return false;
+      if (canSeeAllGovs) return true;
+      const tenantGov = getGovernorateValue(tenant);
+      return sameGovernorate(tenantGov, myGov);
+    });
+  }, [tenants, rawVisibleTenants, canSeeAllGovs, myGov]);
+
+  const selectedTenant = useMemo(() => {
+    if (!rawSelectedTenant) return rawSelectedTenant;
+    return isSchoolTenant(rawSelectedTenant) ? rawSelectedTenant : null;
+  }, [rawSelectedTenant]);
 
   const requestedTenantId = String(searchParams.get("tenantId") || "").trim();
 
@@ -210,78 +281,105 @@ export default function SuperSystem() {
     setSelectedTenantId(requestedTenantId);
   }, [requestedTenantId, visibleTenants, selectedTenantId, setSelectedTenantId]);
 
+  useEffect(() => {
+    if (!selectedTenantId) return;
+    const stillVisibleSchool = visibleTenants.some((t) => String(t.id || "").trim() === String(selectedTenantId || "").trim());
+    if (!stillVisibleSchool) {
+      setSelectedTenantId("");
+    }
+  }, [selectedTenantId, visibleTenants, setSelectedTenantId]);
+
 
   useEffect(() => {
     const styleEl = document.createElement("style");
     styleEl.setAttribute("data-super-system-settings12-theme", "true");
     styleEl.textContent = `
-      .super-system-page{
+      /* التنسيق العام والخط الأسود العريض */
+      .super-system-page {
         background: linear-gradient(180deg, #f7f3e7 0%, #f3edde 100%) !important;
-        color: #111111 !important;
+        color: #000000 !important;
+        font-weight: 900 !important;
       }
-      .super-system-page .super-header{
-        background: linear-gradient(135deg, #8b6a00 0%, #b8860b 48%, #7a5c00 100%) !important;
-        border: 4px solid #d4af37 !important;
-        border-radius: 28px !important;
-        box-shadow: 0 24px 50px rgba(0,0,0,0.18), 0 0 24px rgba(212,175,55,0.18) !important;
-      }
+
+      /* جعل جميع النصوص سوداء وعريضة */
+      .super-system-page *,
       .super-system-page .super-program-title,
       .super-system-page .super-subtitle,
-      .super-system-page .super-brand-ministry,
-      .super-system-page .super-brand-gov,
-      .super-system-page .super-brand-text{
-        color: #fff7d8 !important;
-      }
-      .super-system-page .super-panel,
-      .super-system-page .super-card{
-        background: linear-gradient(180deg, #faf6ec 0%, #f2eddf 100%) !important;
-        color: #111111 !important;
-        border: 3px solid #d4af37 !important;
-        box-shadow: 0 14px 28px rgba(190,160,40,0.12), 0 0 0 4px rgba(245,232,170,0.25) inset !important;
-      }
       .super-system-page .super-card-title,
       .super-system-page .super-panel-title,
       .super-system-page .tenant-name,
-      .super-system-page .super-card-desc,
-      .super-system-page .tenant-id,
-      .super-system-page .tenant-meta,
-      .super-system-page .label{
-        color: #111111 !important;
+      .super-system-page .label,
+      .super-system-page .super-brand-text {
+        color: #000000 !important;
+        font-weight: 900 !important;
       }
-      .super-system-page .tenant-row{
+
+      .super-system-page .super-header {
+        background: linear-gradient(135deg, #8b6a00 0%, #b8860b 48%, #7a5c00 100%) !important;
+        border: 5px solid #000000 !important;
+        border-radius: 28px !important;
+        box-shadow: 0 24px 50px rgba(0,0,0,0.1) !important;
+      }
+
+      /* تنسيق الكروت بحدود عريضة وملونة */
+      .super-system-page .super-card {
+        background: #ffffff !important;
+        border-width: 6px !important;
+        border-style: solid !important;
+        border-radius: 22px !important;
+        transition: transform 0.2s, box-shadow 0.2s;
+        padding: 20px !important;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        text-align: right;
+        cursor: pointer;
+      }
+
+      .super-system-page .super-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 12px 24px rgba(0,0,0,0.15) !important;
+      }
+
+      /* تتابع الألوان لحدود الكروت */
+      .super-system-page .super-card:nth-child(7n+1) { border-color: #e63946 !important; }
+      .super-system-page .super-card:nth-child(7n+2) { border-color: #457b9d !important; }
+      .super-system-page .super-card:nth-child(7n+3) { border-color: #2a9d8f !important; }
+      .super-system-page .super-card:nth-child(7n+4) { border-color: #f4a261 !important; }
+      .super-system-page .super-card:nth-child(7n+5) { border-color: #9b5de5 !important; }
+      .super-system-page .super-card:nth-child(7n+6) { border-color: #00bbf9 !important; }
+      .super-system-page .super-card:nth-child(7n+7) { border-color: #fee440 !important; }
+
+      .super-system-page .super-panel {
+        background: #ffffff !important;
+        border: 5px solid #000000 !important;
+        border-radius: 22px !important;
+      }
+
+      .super-system-page .tenant-row {
+        border: 3px solid #000000 !important;
         background: #fbf8ef !important;
-        border: 2px solid rgba(212,175,55,0.35) !important;
         border-radius: 18px !important;
       }
-      .super-system-page .input,
-      .super-system-page input.input,
-      .super-system-page select.input,
-      .super-system-page textarea.input{
+
+      .super-system-page .input {
+        border: 3px solid #000000 !important;
+        font-weight: 900 !important;
+        color: #000000 !important;
         background: #fffdf7 !important;
-        color: #111111 !important;
-        border: 2px solid rgba(212,175,55,0.35) !important;
-        box-shadow: inset 0 1px 0 rgba(255,255,255,0.9) !important;
       }
-      .super-system-page .input::placeholder{
-        color: #6b7280 !important;
+
+      .super-system-page .btn {
+        border: 3px solid #000000 !important;
+        font-weight: 900 !important;
+        color: #000000 !important;
+        background: #d4af37 !important;
       }
-      .super-system-page .btn,
-      .super-system-page .super-btn,
-      .super-system-page .icon-btn{
-        background: linear-gradient(180deg, #f2dc8a 0%, #d4af37 100%) !important;
-        color: #111111 !important;
-        border: 2px solid #d4af37 !important;
-        box-shadow: 0 10px 20px rgba(150,120,20,0.14) !important;
-      }
-      .super-system-page .btn.btn-ghost{
-        background: rgba(212,175,55,0.08) !important;
-        color: #111111 !important;
-      }
-      .super-system-page .btn.danger,
-      .super-system-page .super-btn.danger{
-        background: linear-gradient(180deg, #fecaca 0%, #fca5a5 100%) !important;
-        border-color: #ef4444 !important;
-        color: #7f1d1d !important;
+
+      .super-system-page .btn.danger {
+        border-color: #000000 !important;
+        background: #ef4444 !important;
+        color: #ffffff !important;
       }
     `;
     document.head.appendChild(styleEl);
@@ -657,9 +755,10 @@ export default function SuperSystem() {
         const tenantDocData = tenantDocSnap.exists() ? (tenantDocSnap.data() as any) : null;
 
         if (!tenantDocData) continue;
+        if (!isSchoolTenant(tenantDocData)) continue;
 
-        const tenantGovernorate = String(tenantDocData?.governorate || "").trim();
-        if (!canSeeAllGovs && tenantGovernorate !== String(myGov || "").trim()) {
+        const tenantGovernorate = getGovernorateValue(tenantDocData);
+        if (!canSeeAllGovs && !sameGovernorate(tenantGovernorate, myGov)) {
           continue;
         }
 
@@ -812,12 +911,12 @@ export default function SuperSystem() {
       try {
         const allowRef = collection(db, "allowlist");
 
-        const tenantsMap = new Map(
-          tenants.map((t) => [
+        const tenantsMap = new Map<string, { tenantName: string; governorate: string }>(
+          tenants.map((t: any) => [
             String(t.id || "").trim(),
             {
               tenantName: String(t.name || t.id || ""),
-              governorate: String((t as any).governorate || ""),
+              governorate: getGovernorateValue(t),
             },
           ]),
         );
@@ -845,17 +944,11 @@ export default function SuperSystem() {
           if (!tenantDocSnap.exists()) continue;
 
           const tenantDocData = tenantDocSnap.data() as any;
-          const effectiveGovernorate = String(
-            tenantDocData?.governorate ||
-              tenantMeta?.governorate ||
-              data?.governorate ||
-              data?.tenantGovernorate ||
-              "",
-          )
-            .trim()
-            .toLowerCase();
+          if (!isSchoolTenant(tenantDocData)) continue;
 
-          if (!canSeeAllGovs && effectiveGovernorate !== String(myGov || "").trim().toLowerCase()) {
+          const effectiveGovernorate = getGovernorateValue(tenantDocData, tenantMeta, data);
+
+          if (!canSeeAllGovs && !sameGovernorate(effectiveGovernorate, myGov)) {
             continue;
           }
 
@@ -897,6 +990,31 @@ export default function SuperSystem() {
         canSeeAllGovs,
         myGov,
       });
+
+      await setDoc(
+        doc(db, "tenants", result.tenantId),
+        withSchoolTenantMarkers({
+          name: newTenantName,
+          governorate: canSeeAllGovs ? undefined : myGov,
+          tenantGovernorate: canSeeAllGovs ? undefined : myGov,
+          regionAr: canSeeAllGovs ? undefined : myGov,
+        }),
+        { merge: true },
+      );
+
+      await setDoc(
+        doc(db, "tenants", result.tenantId, "meta", "config"),
+        withSchoolTenantMarkers({
+          schoolName: newTenantName,
+          schoolNameAr: newTenantName,
+          governorate: canSeeAllGovs ? undefined : myGov,
+          tenantGovernorate: canSeeAllGovs ? undefined : myGov,
+          regionAr: canSeeAllGovs ? undefined : myGov,
+          enabled: newTenantEnabled,
+        }),
+        { merge: true },
+      );
+
       setNewTenantName("");
       setNewTenantId("");
       setNewTenantEnabled(true);
@@ -927,6 +1045,27 @@ export default function SuperSystem() {
         canSeeAllGovs,
         myGov,
       });
+
+      await setDoc(
+        doc(db, "tenants", tenantId),
+        withSchoolTenantMarkers({
+          name,
+        }),
+        { merge: true },
+      );
+
+      await setDoc(
+        doc(db, "tenants", tenantId, "meta", "config"),
+        withSchoolTenantMarkers({
+          schoolName: name,
+          schoolNameAr: name,
+          enabled: editTenantEnabled,
+          wilayat: editWilayatAr,
+          wilayatAr: editWilayatAr,
+          logoUrl: editLogoUrl,
+        }),
+        { merge: true },
+      );
 
       setOriginalEditTenantName(name);
       setTenants((prev) =>
@@ -972,6 +1111,10 @@ export default function SuperSystem() {
       alert("اختر مدرسة أولاً.");
       return;
     }
+    if (selectedTenant && !isSchoolTenant(selectedTenant)) {
+      alert("هذه الصفحة مخصصة للمدارس فقط، ولا يمكن تعديل مركز امتحانات من هنا.");
+      return;
+    }
 
     const name = String(editTenantName || "").trim();
     if (!name) {
@@ -1008,6 +1151,12 @@ export default function SuperSystem() {
     const id = String(tenantId || "").trim();
     if (!id) return;
 
+    const tenant = tenants.find((t) => String(t.id || "").trim() === id);
+    if (tenant && !isSchoolTenant(tenant)) {
+      alert("هذه الصفحة مخصصة للمدارس فقط، ولا يمكن حذف مركز امتحانات من هنا.");
+      return;
+    }
+
     try {
       await archiveAndDeleteTenant({
         tenantId: id,
@@ -1041,6 +1190,11 @@ export default function SuperSystem() {
     const tenant = tenants.find((t) => t.id === tenantId);
     if (!tenant) {
       alert("المدرسة غير موجودة.");
+      return;
+    }
+
+    if (!isSchoolTenant(tenant)) {
+      alert("هذه الصفحة مخصصة لأدمن المدرسة فقط. مراكز الامتحانات تدار من صفحة سوبر الامتحانات.");
       return;
     }
 
@@ -1085,7 +1239,7 @@ export default function SuperSystem() {
         enabled: userEnabled,
         tenantId,
         tenantName: tenant.name,
-        tenantGovernorate: tenant.governorate,
+        tenantGovernorate: getGovernorateValue(tenant),
         canSeeAllGovs,
         myGov,
         userName,
@@ -1222,6 +1376,21 @@ export default function SuperSystem() {
             <div className="super-card-title">فتح البوابة التشغيلية</div>
             <div className="super-card-desc">الانتقال إلى البوابة التشغيلية لاختيار البرنامج أو القوائم الإشرافية.</div>
           </button>
+
+          <button className="super-card" onClick={() => navigate("/system/permissions-audit")}>
+            <div className="super-card-title">فحص الصلاحيات والربط</div>
+            <div className="super-card-desc">مراجعة المستخدمين والأدوار والمحافظة وربط المدارس ومراكز الدبلوم، مع فتح النطاق للمشاهدة فقط عند مشرف المحافظة.</div>
+          </button>
+
+          <button className="super-card" onClick={() => navigate("/system/commercial-readiness")}>
+            <div className="super-card-title">لوحة الجاهزية التجارية</div>
+            <div className="super-card-desc">مراجعة حالة الصلاحيات، السحابة، المشاهدة فقط، النسخ الاحتياطي، وروابط الفحص قبل التشغيل التجاري.</div>
+          </button>
+
+          <button className="super-card" onClick={() => navigate("/system/audit-log")}>
+            <div className="super-card-title">سجل العمليات</div>
+            <div className="super-card-desc">متابعة إجراءات الحفظ والحذف والاستيراد والتوزيع والاستعادة أثناء الاختبار والتشغيل التجاري.</div>
+          </button>
         </div>
 
         <div
@@ -1279,7 +1448,7 @@ export default function SuperSystem() {
                     <div className="tenant-name">{t.name || t.id}</div>
                     <div className="tenant-id">{t.id}</div>
                     <div className="tenant-id" style={{ opacity: 0.8 }}>
-                      {t.governorate ? `المحافظة: ${t.governorate}` : ""}
+                      {getGovernorateValue(t) ? `المحافظة: ${getGovernorateValue(t)}` : ""}
                     </div>
                   </div>
                   <div

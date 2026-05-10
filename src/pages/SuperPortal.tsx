@@ -7,6 +7,72 @@ import SuperPortalCard from "../features/super-admin/components/SuperPortalCard"
 
 const MINISTRY_LOGO_URL = "https://i.imgur.com/vdDhSMh.png";
 
+function normalizeRole(value: any) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function getGovernorateScope(profile: any) {
+  return String(
+    profile?.governorate ||
+      profile?.tenantGovernorate ||
+      profile?.regionAr ||
+      profile?.region ||
+      "",
+  ).trim();
+}
+
+function isOwnerOnlyCard(card: any) {
+  const text = [card?.key, card?.title, card?.label, card?.description, card?.path, card?.route]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return (
+    text.includes("backup") ||
+    text.includes("restore") ||
+    text.includes("supers") ||
+    text.includes("governorates") ||
+    text.includes("adminsupers") ||
+    text.includes("نسخ") ||
+    text.includes("استعادة") ||
+    text.includes("سوبر المحافظات") ||
+    text.includes("مشرفي المحافظات")
+  );
+}
+
+function isSchoolOnlyCard(card: any) {
+  const text = [card?.key, card?.title, card?.label, card?.description, card?.path, card?.route]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return (
+    text.includes("program") ||
+    text.includes("school") ||
+    text.includes("schools") ||
+    text.includes("super-system") ||
+    text.includes("superprogram") ||
+    text.includes("مدرس") ||
+    text.includes("مدارس")
+  );
+}
+
+function isCenterOnlyCard(card: any) {
+  const text = [card?.key, card?.title, card?.label, card?.description, card?.path, card?.route]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return (
+    text.includes("center") ||
+    text.includes("exam") ||
+    text.includes("diploma") ||
+    text.includes("مركز") ||
+    text.includes("امتحانات") ||
+    text.includes("دبلوم")
+  );
+}
+
 export default function SuperPortal() {
   const navigate = useNavigate();
   const { profile, authzSnapshot, logout, primaryRoleLabel } = useAuth() as any;
@@ -19,17 +85,57 @@ export default function SuperPortal() {
   const roleBadge = resolveRoleBadgeStyle(authzSnapshot);
   const owner = isPlatformOwner(authzSnapshot);
   const canAccessSystem = canAccessCapability(authzSnapshot, "SYSTEM_ADMIN");
-  const normalizedRole = String(profile?.role || "").trim().toLowerCase();
-  const isMinistrySuper = normalizedRole === "ministry_super";
-  const isGovernoratesSuper = normalizedRole === "super";
+  const normalizedRole = normalizeRole(profile?.role);
+  const normalizedLegacyRole = normalizeRole(profile?.legacyRole);
+  const normalizedRoleScope = normalizeRole(profile?.roleScope);
+  const governorateScope = getGovernorateScope(profile);
+
+  const isMinistrySuper = [normalizedRole, normalizedLegacyRole].includes("ministry_super");
+  const isGovernoratesSuper =
+    [normalizedRole, normalizedLegacyRole].includes("super") ||
+    normalizedRoleScope === "governorate" ||
+    Boolean(profile?.isGovernorateSuper);
+  const isSchoolAdmin =
+    [normalizedRole, normalizedLegacyRole].includes("admin") ||
+    [normalizedRole, normalizedLegacyRole].includes("school_admin") ||
+    normalizedRoleScope === "school";
+  const isDiplomaCenterAdmin =
+    [normalizedRole, normalizedLegacyRole].includes("exam_center_admin") ||
+    [normalizedRole, normalizedLegacyRole].includes("diploma_center_admin") ||
+    [normalizedRole, normalizedLegacyRole].includes("center_admin") ||
+    normalizedRoleScope === "exam_center";
+
   const isScopeAdmin = Boolean(owner || isMinistrySuper || isGovernoratesSuper);
+  const canOpenPortal = Boolean(canAccessSystem && isScopeAdmin);
 
-  const cards = useMemo(
-    () => buildSuperPortalCards({ owner, isScopeAdmin, navigate }),
-    [owner, isScopeAdmin, navigate],
-  );
+  const cards = useMemo(() => {
+    const portalCards = buildSuperPortalCards({ owner, isScopeAdmin, navigate }) as any[];
 
-  if (!canAccessSystem) return <Navigate to="/" replace />;
+    if (owner) return portalCards;
+
+    if (isMinistrySuper) {
+      return portalCards.filter((card) => !isOwnerOnlyCard(card));
+    }
+
+    if (isGovernoratesSuper) {
+      return portalCards.filter((card) => {
+        if (isOwnerOnlyCard(card)) return false;
+        return isSchoolOnlyCard(card) || isCenterOnlyCard(card);
+      });
+    }
+
+    if (isSchoolAdmin) {
+      return portalCards.filter((card) => isSchoolOnlyCard(card) && !isOwnerOnlyCard(card));
+    }
+
+    if (isDiplomaCenterAdmin) {
+      return portalCards.filter((card) => isCenterOnlyCard(card) && !isOwnerOnlyCard(card));
+    }
+
+    return [];
+  }, [owner, isScopeAdmin, navigate, isMinistrySuper, isGovernoratesSuper, isSchoolAdmin, isDiplomaCenterAdmin]);
+
+  if (!canOpenPortal) return <Navigate to="/" replace />;
 
   const handleLogout = () => {
     logout();
@@ -75,7 +181,11 @@ export default function SuperPortal() {
             <div style={{ color: "#fff", fontWeight: 800, fontSize: 34, lineHeight: 1.2 }}>نظام إدارة الامتحانات المطور</div>
             <div style={{ color: "rgba(255,255,255,0.82)", marginTop: 8, fontSize: 16 }}>
               تم تسجيل الدخول بصلاحيات <b style={{ color: "#d4af37" }}>{roleBadge.label}</b>.
-              {owner ? " لديك وصول كامل بصفة مالك المنصة." : " اختر طريقة الدخول المتاحة لك ضمن نطاقك."}
+              {owner
+                ? " لديك وصول كامل بصفة مالك المنصة."
+                : governorateScope
+                ? ` اختر طريقة الدخول المتاحة لك داخل نطاق محافظة ${governorateScope}.`
+                : " اختر طريقة الدخول المتاحة لك ضمن نطاقك."}
             </div>
           </div>
 
@@ -96,7 +206,23 @@ export default function SuperPortal() {
             marginTop: 18,
           }}
         >
-          {cards.map((card) => <SuperPortalCard key={card.key} card={card} />)}
+          {cards.length === 0 ? (
+            <div
+              style={{
+                gridColumn: "1 / -1",
+                border: "1px solid rgba(212,175,55,0.35)",
+                borderRadius: 18,
+                padding: 18,
+                color: "rgba(255,255,255,0.82)",
+                textAlign: "center",
+                fontWeight: 800,
+              }}
+            >
+              لا توجد أدوات متاحة لهذا الحساب داخل نطاقه الحالي.
+            </div>
+          ) : (
+            cards.map((card: any) => <SuperPortalCard key={card.key} card={card} />)
+          )}
         </div>
 
         <div style={{ marginTop: 18, textAlign: "center" }}>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { collection, doc, getDoc, getDocs, orderBy, query } from "firebase/firestore";
 import { db } from "../firebase/firebase";
 import { useAuth } from "../auth/AuthContext";
@@ -7,8 +7,36 @@ import { canAccessCapability, isPlatformOwner } from "../features/authz";
 import type { SuperProgramTenantRow as TenantRow } from "../features/super-admin/types";
 import { buildProgramEnterState } from "../features/super-admin/services/superProgramEnterService";
 
+function normalizeTenantType(value: any) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function getTenantEntityType(tenant: any) {
+  const values = [
+    tenant?.tenantType,
+    tenant?.type,
+    tenant?.entityType,
+    tenant?.kind,
+    tenant?.category,
+  ].map(normalizeTenantType);
+
+  if (tenant?.isExamCenter === true || tenant?.isDiplomaCenter === true) return "exam_center";
+  if (values.some((v) => ["exam_center", "examcenter", "diploma_center", "diplomacenter", "center"].includes(v))) {
+    return "exam_center";
+  }
+  if (values.some((v) => ["school", "tenant", "مدرسة"].includes(v))) return "school";
+
+  // توافق مع البيانات القديمة: أي جهة غير معلّمة كمركز امتحانات تُعامل كمدرسة.
+  return "school";
+}
+
+function isSchoolTenant(tenant: any) {
+  return getTenantEntityType(tenant) === "school";
+}
+
 export default function SuperProgramEnter() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { profile, authzSnapshot, startSupportForTenant, primaryRoleLabel } = useAuth() as any;
   const owner = isPlatformOwner(authzSnapshot);
   const canAccessSystem = canAccessCapability(authzSnapshot, "SYSTEM_ADMIN");
@@ -17,6 +45,20 @@ export default function SuperProgramEnter() {
   const [error, setError] = useState<string>("");
   const [tenants, setTenants] = useState<TenantRow[]>([]);
   const [busyTenant, setBusyTenant] = useState<string>("");
+
+  const routeText = `${location.pathname || ""} ${location.search || ""} ${location.hash || ""}`.toLowerCase();
+  const centerEntryMode =
+    routeText.includes("center") ||
+    routeText.includes("exam") ||
+    routeText.includes("diploma") ||
+    routeText.includes("dashboard12") ||
+    routeText.includes("mode=center") ||
+    routeText.includes("type=center");
+
+  const targetTenantAllowed = (tenant: any) => {
+    const kind = getTenantEntityType(tenant);
+    return centerEntryMode ? kind === "exam_center" : kind === "school";
+  };
 
   useEffect(() => {
     let alive = true;
@@ -31,16 +73,35 @@ export default function SuperProgramEnter() {
           baseList.map(async (tenant) => {
             try {
               const cfg = await getDoc(doc(db, "tenants", tenant.id, "meta", "config"));
-              const governorate = cfg.exists() ? String((cfg.data() as any)?.governorate ?? "").trim() : "";
-              return { ...tenant, governorate } as TenantRow;
+              const cfgData = cfg.exists() ? (cfg.data() as any) : null;
+              const governorate = String(
+                cfgData?.governorate ??
+                  cfgData?.tenantGovernorate ??
+                  cfgData?.regionAr ??
+                  (tenant as any)?.governorate ??
+                  (tenant as any)?.tenantGovernorate ??
+                  (tenant as any)?.regionAr ??
+                  "",
+              ).trim();
+
+              return {
+                ...tenant,
+                ...(cfgData || {}),
+                governorate,
+                tenantType: cfgData?.tenantType ?? (tenant as any)?.tenantType ?? (tenant as any)?.type ?? "school",
+                type: cfgData?.type ?? (tenant as any)?.type ?? cfgData?.tenantType ?? "school",
+                entityType: cfgData?.entityType ?? (tenant as any)?.entityType ?? cfgData?.tenantType ?? "school",
+                isExamCenter: Boolean(cfgData?.isExamCenter ?? (tenant as any)?.isExamCenter ?? false),
+                isDiplomaCenter: Boolean(cfgData?.isDiplomaCenter ?? (tenant as any)?.isDiplomaCenter ?? false),
+              } as TenantRow;
             } catch {
-              return tenant;
+              return { ...tenant, tenantType: (tenant as any)?.tenantType ?? (tenant as any)?.type ?? "school" } as TenantRow;
             }
           }),
         );
         if (!alive) return;
         const state = buildProgramEnterState({
-          tenants: list,
+          tenants: list.filter(targetTenantAllowed),
           owner,
           canAccessSystem,
           userGovernorate: String((profile as any)?.governorate ?? ""),
@@ -60,7 +121,7 @@ export default function SuperProgramEnter() {
     };
   }, [owner, canAccessSystem, profile, primaryRoleLabel]);
 
-  const enabledTenants = useMemo(() => tenants.filter((t) => t.enabled !== false), [tenants]);
+  const enabledTenants = useMemo(() => tenants.filter((t) => t.enabled !== false && targetTenantAllowed(t)), [tenants, centerEntryMode]);
   const accessDescription = useMemo(
     () =>
       buildProgramEnterState({
@@ -76,6 +137,12 @@ export default function SuperProgramEnter() {
   if (!canAccessSystem) return <Navigate to="/" replace />;
 
   const onPick = async (tenantId: string) => {
+    const pickedTenant = enabledTenants.find((t) => t.id === tenantId);
+    if (!pickedTenant || !targetTenantAllowed(pickedTenant)) {
+      setError(centerEntryMode ? "هذه الصفحة مخصصة للدخول إلى مراكز امتحانات الدبلوم فقط." : "هذه الصفحة مخصصة للدخول إلى المدارس فقط، وليس مراكز امتحانات الدبلوم.");
+      return;
+    }
+
     try {
       setBusyTenant(tenantId);
       setError("");
@@ -114,9 +181,9 @@ export default function SuperProgramEnter() {
       >
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
           <div>
-            <div style={{ color: "#d4af37", fontWeight: 900, fontSize: 26 }}>اختر مدرسة للدخول</div>
+            <div style={{ color: "#d4af37", fontWeight: 900, fontSize: 26 }}>{centerEntryMode ? "اختر مركز امتحانات للدخول" : "اختر مدرسة للدخول"}</div>
             <div style={{ color: "rgba(255,255,255,0.80)", marginTop: 6, lineHeight: 1.7 }}>
-              سيتم تفعيل وضع الدعم لهذه المدرسة ثم فتح البرنامج. {accessDescription}
+              سيتم تفعيل وضع الدعم لهذه الجهة ثم فتح البرنامج. {accessDescription}
             </div>
           </div>
 
@@ -154,9 +221,9 @@ export default function SuperProgramEnter() {
 
         <div style={{ marginTop: 14, display: "grid", gap: 12 }}>
           {loading ? (
-            <div style={{ color: "rgba(255,255,255,0.75)", padding: 10 }}>جاري تحميل المدارس…</div>
+            <div style={{ color: "rgba(255,255,255,0.75)", padding: 10 }}>{centerEntryMode ? "جاري تحميل مراكز الامتحانات…" : "جاري تحميل المدارس…"}</div>
           ) : enabledTenants.length === 0 ? (
-            <div style={{ color: "rgba(255,255,255,0.75)", padding: 10 }}>لا توجد مدارس بعد.</div>
+            <div style={{ color: "rgba(255,255,255,0.75)", padding: 10 }}>{centerEntryMode ? "لا توجد مراكز امتحانات مفعّلة بعد." : "لا توجد مدارس بعد."}</div>
           ) : (
             enabledTenants.map((tenant) => {
               const title = tenant.schoolName || tenant.name || tenant.id;

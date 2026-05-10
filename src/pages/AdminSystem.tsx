@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import "./adminSystem.theme.css";
+import "./ownerOfficial.theme.css";
 import AdminTenantsSection from "../features/system-admin/components/AdminTenantsSection";
 import AdminUsersSection from "../features/system-admin/components/AdminUsersSection";
 import AdminOwnerToolsSection from "../features/system-admin/components/AdminOwnerToolsSection";
@@ -57,6 +58,78 @@ export default function AdminSystem() {
   const isPlatformOwner = canAccessCapability(authzSnapshot, "PLATFORM_OWNER");
   const canManageUsers = canAccessCapability(authzSnapshot, "USERS_MANAGE");
 
+  // Commercial permission scope - client side guard only.
+  // The final protection remains inside Cloud Functions / Firestore rules.
+  const myRole = String((profile as any)?.role || "").trim().toLowerCase();
+  const myGovernorate = String((profile as any)?.governorate || (profile as any)?.tenantGovernorate || "").trim();
+  const myTenantId = String((profile as any)?.tenantId || "").trim();
+  const isGovernorateSupervisor = myRole === "super" || Boolean(isSuper && myGovernorate && !myTenantId);
+  const isExamCenterAdmin = myRole === "exam_super" || myRole === "exam_center_admin" || myRole === "diploma_center_admin";
+  const isSchoolAdmin = myRole === "tenant_admin" || myRole === "admin";
+
+  const getTenantKind = (tenant: any): "school" | "exam_center" | "unknown" => {
+    const raw = String(
+      tenant?.tenantType ||
+        tenant?.type ||
+        tenant?.kind ||
+        tenant?.category ||
+        tenant?.entityType ||
+        ""
+    )
+      .trim()
+      .toLowerCase();
+
+    if (["exam_center", "exam-centre", "exam_center_admin", "diploma_center", "diploma-centre", "center", "centre"].includes(raw)) {
+      return "exam_center";
+    }
+    if (["school", "tenant", "مدرسة"].includes(raw)) return "school";
+    if (tenant?.isExamCenter === true || tenant?.examCenter === true || tenant?.isDiplomaCenter === true) return "exam_center";
+    return "unknown";
+  };
+
+  const isTenantInsideMyCommercialScope = (tenant: any) => {
+    const tenantId = String(tenant?.id || tenant?.tenantId || "").trim();
+    const tenantGovernorate = String(tenant?.governorate || tenant?.tenantGovernorate || tenant?.regionAr || "").trim();
+
+    if (isPlatformOwner) return true;
+    if (isGovernorateSupervisor) return Boolean(myGovernorate && tenantGovernorate === myGovernorate);
+    if ((isSchoolAdmin || isExamCenterAdmin) && myTenantId) return tenantId === myTenantId;
+    return false;
+  };
+
+  const isUserInsideMyCommercialScope = (row: any) => {
+    const rowRole = String(row?.role || "").trim().toLowerCase();
+    const rowTenantId = String(row?.tenantId || "").trim();
+    const rowGovernorate = String(row?.governorate || row?.tenantGovernorate || "").trim();
+
+    if (isPlatformOwner) return true;
+
+    if (isGovernorateSupervisor) {
+      if (!myGovernorate || rowGovernorate !== myGovernorate) return false;
+      return ["tenant_admin", "admin", "exam_super", "exam_center_admin", "diploma_center_admin", "user"].includes(rowRole);
+    }
+
+    if ((isSchoolAdmin || isExamCenterAdmin) && myTenantId) {
+      return rowTenantId === myTenantId && ["tenant_admin", "admin", "exam_super", "exam_center_admin", "diploma_center_admin", "user"].includes(rowRole);
+    }
+
+    return false;
+  };
+
+  const canWriteTenantData = (tenantId: string) => {
+    const targetTenant = visibleTenants.find((t: any) => String(t?.id || "").trim() === String(tenantId || "").trim());
+    if (isPlatformOwner) return true;
+    if (!targetTenant) return false;
+
+    const targetKind = getTenantKind(targetTenant);
+
+    if (isSchoolAdmin && myTenantId === tenantId) return targetKind === "school" || targetKind === "unknown";
+    if (isExamCenterAdmin && myTenantId === tenantId) return targetKind === "exam_center" || targetKind === "unknown";
+
+    // Governorate supervisors can see schools/centers in their governorate, but cannot edit their files here.
+    return false;
+  };
+
   const {
     visibleTenants,
     selectedTenantId,
@@ -104,6 +177,26 @@ export default function AdminSystem() {
     setSearch,
   } = useAdminUsers();
 
+  const commercialVisibleTenants = useMemo(
+    () => (visibleTenants || []).filter((tenant: any) => isTenantInsideMyCommercialScope(tenant)),
+    [visibleTenants, isPlatformOwner, isGovernorateSupervisor, isSchoolAdmin, isExamCenterAdmin, myGovernorate, myTenantId]
+  );
+
+  const commercialUsers = useMemo(
+    () => (users || []).filter((row: any) => isUserInsideMyCommercialScope(row)),
+    [users, isPlatformOwner, isGovernorateSupervisor, isSchoolAdmin, isExamCenterAdmin, myGovernorate, myTenantId]
+  );
+
+  const commercialFilteredUsers = useMemo(
+    () => (filteredUsers || []).filter((row: any) => isUserInsideMyCommercialScope(row)),
+    [filteredUsers, isPlatformOwner, isGovernorateSupervisor, isSchoolAdmin, isExamCenterAdmin, myGovernorate, myTenantId]
+  );
+
+  const selectedTenantIsWritable = useMemo(
+    () => canWriteTenantData(String(selectedTenantId || "")),
+    [selectedTenantId, visibleTenants, isPlatformOwner, isSchoolAdmin, isExamCenterAdmin, myTenantId]
+  );
+
   const [supportError, setSupportError] = useState<string>("");
   const [deleteTenantModal, setDeleteTenantModal] = useState<{
     open: boolean;
@@ -121,19 +214,54 @@ export default function AdminSystem() {
     const tid = String(selectedTenantId || "").trim();
     if (!tid) return "";
 
-    const row = (users || []).find((u: any) => {
+    const row = (commercialUsers || []).find((u: any) => {
       const role = String(u?.role || "").trim().toLowerCase();
       const tenantId = String(u?.tenantId || "").trim();
       return tenantId === tid && (role === "tenant_admin" || role === "admin");
     });
 
     return String(row?.email || "").trim();
-  }, [users, selectedTenantId]);
+  }, [commercialUsers, selectedTenantId]);
 
   const selectedTenantResolvedId = useMemo(
     () => String(selectedTenantId || "").trim(),
     [selectedTenantId]
   );
+
+  useEffect(() => {
+    if (isPlatformOwner) return;
+
+    const selectedStillAllowed = commercialVisibleTenants.some(
+      (tenant: any) => String(tenant?.id || "").trim() === String(selectedTenantId || "").trim()
+    );
+
+    if (!selectedStillAllowed) {
+      setSelectedTenantId(String(commercialVisibleTenants?.[0]?.id || ""));
+    }
+  }, [isPlatformOwner, commercialVisibleTenants, selectedTenantId, setSelectedTenantId]);
+
+  useEffect(() => {
+    if (isPlatformOwner) return;
+
+    if (isGovernorateSupervisor && myGovernorate && newUserGovernorate !== myGovernorate) {
+      setNewUserGovernorate(myGovernorate);
+    }
+
+    if ((isSchoolAdmin || isExamCenterAdmin) && myTenantId && newUserTenantId !== myTenantId) {
+      setNewUserTenantId(myTenantId);
+    }
+  }, [
+    isPlatformOwner,
+    isGovernorateSupervisor,
+    isSchoolAdmin,
+    isExamCenterAdmin,
+    myGovernorate,
+    myTenantId,
+    newUserGovernorate,
+    newUserTenantId,
+    setNewUserGovernorate,
+    setNewUserTenantId,
+  ]);
 
   useEffect(() => {
     const q = query(collection(db, "systemSuggestions"), where("status", "==", "new"));
@@ -174,11 +302,49 @@ export default function AdminSystem() {
 
   const canCreateUser = useMemo(() => {
     const em = newUserEmail.trim().toLowerCase();
+    const role = normalizeRoleClient(newUserRole, newUserGovernorate);
+    const targetTenant = commercialVisibleTenants.find((t: any) => String(t?.id || "").trim() === String(newUserTenantId || "").trim()) as any;
+    const targetKind = getTenantKind(targetTenant);
+
     if (!canManageUsers) return false;
     if (!em.includes("@")) return false;
-    if (!newUserTenantId) return false;
+    if (!newUserTenantId || !targetTenant) return false;
+
+    if (!isPlatformOwner && isGovernorateSupervisor) {
+      const targetGovernorate = String(targetTenant?.governorate || targetTenant?.tenantGovernorate || targetTenant?.regionAr || "").trim();
+      if (!myGovernorate || targetGovernorate !== myGovernorate) return false;
+      if (!["tenant_admin", "admin", "exam_super", "exam_center_admin", "diploma_center_admin"].includes(role)) return false;
+    }
+
+    if (!isPlatformOwner && (isSchoolAdmin || isExamCenterAdmin)) {
+      // School and exam-center admins can only add ordinary users inside their own tenant.
+      if (String(newUserTenantId || "").trim() !== myTenantId) return false;
+      if (role !== "user") return false;
+    }
+
+    if (["tenant_admin", "admin"].includes(role)) {
+      return targetKind === "school" || targetKind === "unknown";
+    }
+
+    if (["exam_super", "exam_center_admin", "diploma_center_admin"].includes(role)) {
+      return targetKind === "exam_center" || targetKind === "unknown";
+    }
+
     return true;
-  }, [canManageUsers, newUserEmail, newUserTenantId]);
+  }, [
+    canManageUsers,
+    newUserEmail,
+    newUserTenantId,
+    newUserRole,
+    newUserGovernorate,
+    commercialVisibleTenants,
+    isPlatformOwner,
+    isGovernorateSupervisor,
+    isSchoolAdmin,
+    isExamCenterAdmin,
+    myGovernorate,
+    myTenantId,
+  ]);
 
   const canAssignNewUserRole = useMemo(
     () => canManageAdminSystemRole(authzSnapshot, normalizeRoleClient(newUserRole, newUserGovernorate)),
@@ -186,7 +352,7 @@ export default function AdminSystem() {
   );
 
   const createTenant = async () => {
-    if (!user || !canSaveTenant) return;
+    if (!user || !isPlatformOwner || !canSaveTenant) return;
     try {
       await createTenantAction({
         user,
@@ -204,7 +370,7 @@ export default function AdminSystem() {
   };
 
   const saveTenantConfig = async () => {
-    if (!user || !selectedTenantId) return;
+    if (!user || !selectedTenantId || !selectedTenantIsWritable) return;
     try {
       await saveTenantConfigAction({
         user,
@@ -218,7 +384,7 @@ export default function AdminSystem() {
   };
 
   const toggleTenantEnabled = async (tenantId: string, enabled: boolean) => {
-    if (!user) return;
+    if (!user || !isPlatformOwner) return;
     try {
       await toggleTenantEnabledAction({ user, tenantId, enabled });
     } catch (e: any) {
@@ -227,7 +393,7 @@ export default function AdminSystem() {
   };
 
   const deleteTenant = async (tenantId: string) => {
-    if (!user) return;
+    if (!user || !isPlatformOwner) return;
     if (tenantId === "system") {
       alert("لا يمكن حذف Tenant النظام.");
       return;
@@ -285,7 +451,7 @@ export default function AdminSystem() {
         authzSnapshot,
         isSuper,
         profile,
-        users,
+        users: commercialUsers,
         newUserEmail,
         newUserTenantId,
         newUserRole,
@@ -311,13 +477,13 @@ export default function AdminSystem() {
   const updateUser = async (email: string, patch: Partial<AllowUser>, forceTransfer = false) => {
     if (!user) return;
 
-    const current = users.find(
+    const current = commercialUsers.find(
       (u: any) => String(u.email || "").toLowerCase() === String(email || "").toLowerCase()
     );
     const targetTenantId = String((patch as any)?.tenantId || (current as any)?.tenantId || "").trim();
-    const targetTenant = visibleTenants.find((t: any) => String(t.id || "").trim() === targetTenantId);
+    const targetTenant = commercialVisibleTenants.find((t: any) => String(t.id || "").trim() === targetTenantId);
     const currentTenantId = String((current as any)?.tenantId || "").trim();
-    const currentTenant = visibleTenants.find((t: any) => String(t.id || "").trim() === currentTenantId);
+    const currentTenant = commercialVisibleTenants.find((t: any) => String(t.id || "").trim() === currentTenantId);
     const currentSchoolName = String(
       (current as any)?.schoolName || (current as any)?.tenantName || currentTenant?.name || currentTenantId || ""
     ).trim();
@@ -328,7 +494,7 @@ export default function AdminSystem() {
     try {
       await updateAllowUserAction({
         user,
-        users,
+        users: commercialUsers,
         authzSnapshot,
         isSuper,
         resolveTenantGovernorate,
@@ -362,7 +528,7 @@ export default function AdminSystem() {
     const ok = window.confirm(`هل تريد حذف المستخدم: ${email} ؟`);
     if (!ok) return;
     try {
-      await removeAllowUserAction({ user, users, authzSnapshot, email });
+      await removeAllowUserAction({ user, users: commercialUsers, authzSnapshot, email });
       await refreshMyPermissions();
     } catch (e: any) {
       alert(getActionErrorMessage(e, "تعذر حذف المستخدم."));
@@ -393,7 +559,7 @@ export default function AdminSystem() {
 
   return (
     <div
-      className="system-shell"
+      className="system-shell owner-official-page"
       style={{
         minHeight: "100vh",
         background:
@@ -574,20 +740,50 @@ export default function AdminSystem() {
               البوابة التشغيلية
             </Button>
 
-            <Button variant="ghost" className="btn-luxury-blue" onClick={() => navigate("/system/supers")} style={{ padding: "8px 10px" }}>
-              إدارة سوبر المحافظات
-            </Button>
+            {isPlatformOwner ? (
+              <>
+                <Button variant="ghost" className="btn-luxury-blue" onClick={() => navigate("/system/supers")} style={{ padding: "8px 10px" }}>
+                  إدارة سوبر المحافظات
+                </Button>
 
-            <Button variant="ghost" className="btn-luxury-purple" onClick={() => navigate("/system/add-supers")} style={{ padding: "8px 10px" }}>
-              إضافة سوبر المحافظات
-            </Button>
-            <Button variant="ghost" className="btn-luxury-blue" onClick={() => navigate("/system/governorate-tenants")} style={{ padding: "8px 10px" }}>
-              المدارس حسب المحافظات
-            </Button>
+                <Button variant="ghost" className="btn-luxury-purple" onClick={() => navigate("/system/add-supers")} style={{ padding: "8px 10px" }}>
+                  إضافة سوبر المحافظات
+                </Button>
+                <Button variant="ghost" className="btn-luxury-blue" onClick={() => navigate("/system/governorate-tenants")} style={{ padding: "8px 10px" }}>
+                  المدارس حسب المحافظات
+                </Button>
 
-            <Button variant="ghost" className="btn-luxury-green" onClick={() => navigate("/super-system")} style={{ padding: "8px 10px" }}>
-              صفحة السوبر (المحافظات)
-            </Button>
+                <Button variant="ghost" className="btn-luxury-purple" onClick={() => navigate("/system/audit-log")} style={{ padding: "8px 10px" }}>
+                  سجل العمليات
+                </Button>
+
+                <Button variant="ghost" className="btn-luxury-red" onClick={() => navigate("/system/error-log")} style={{ padding: "8px 10px" }}>
+                  سجل الأخطاء
+                </Button>
+
+                <Button variant="ghost" className="btn-luxury-green" onClick={() => navigate("/system/monitoring")} style={{ padding: "8px 10px" }}>
+                  مركز مراقبة النظام
+                </Button>
+
+                <Button variant="ghost" className="btn-luxury-gold" onClick={() => navigate("/system/maintenance")} style={{ padding: "8px 10px" }}>
+                  مركز صيانة النظام
+                </Button>
+
+                <Button variant="ghost" className="btn-luxury-blue" onClick={() => navigate("/system/release-center")} style={{ padding: "8px 10px" }}>
+                  مركز الإصدارات
+                </Button>
+
+                <Button variant="ghost" className="btn-luxury-green" onClick={() => navigate("/system/commercial-test-suite")} style={{ padding: "8px 10px" }}>
+                  حزمة الاختبار التجاري
+                </Button>
+              </>
+            ) : null}
+
+            {isGovernorateSupervisor ? (
+              <Button variant="ghost" className="btn-luxury-green" onClick={() => navigate("/super-system")} style={{ padding: "8px 10px" }}>
+                صفحة السوبر (المحافظات)
+              </Button>
+            ) : null}
 
             <Button variant="ghost" className="btn-luxury-gold" onClick={() => navigate("/super")} style={{ padding: "8px 10px" }}>
               العودة إلى صفحة Super
@@ -634,12 +830,40 @@ export default function AdminSystem() {
                 هنا تستطيع إنشاء مدارس جديدة (Tenants)، وربط المستخدمين بها بشكل صحيح، ومتابعة الصلاحيات العليا بثقة وتنظيم.
                 <br />
                 <b style={{ color: GOLD }}>مهم:</b> tenantId يجب أن يكون إنجليزي صغير + أرقام + "-" فقط.
+                {isPlatformOwner ? (
+                  <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <Button variant="ghost" className="btn-luxury-purple" onClick={() => navigate("/system/audit-log")}>
+                      فتح سجل العمليات
+                    </Button>
+                    <Button variant="ghost" className="btn-luxury-red" onClick={() => navigate("/system/error-log")}>
+                      فتح سجل الأخطاء
+                    </Button>
+                    <Button variant="ghost" className="btn-luxury-gold" onClick={() => navigate("/system/permissions-audit")}>
+                      فحص الصلاحيات والربط
+                    </Button>
+                    <Button variant="ghost" className="btn-luxury-blue" onClick={() => navigate("/system/commercial-readiness")}>
+                      لوحة الجاهزية التجارية
+                    </Button>
+                    <Button variant="ghost" className="btn-luxury-green" onClick={() => navigate("/system/monitoring")}>
+                      مركز مراقبة النظام
+                    </Button>
+                    <Button variant="ghost" className="btn-luxury-gold" onClick={() => navigate("/system/maintenance")}>
+                      مركز صيانة النظام
+                    </Button>
+                    <Button variant="ghost" className="btn-luxury-blue" onClick={() => navigate("/system/release-center")}>
+                      مركز الإصدارات والتطوير
+                    </Button>
+                    <Button variant="ghost" className="btn-luxury-green" onClick={() => navigate("/system/commercial-test-suite")}>
+                      حزمة الاختبار التجاري النهائي
+                    </Button>
+                  </div>
+                ) : null}
               </div>
             </Card>
             </div>
 
             <AdminTenantsSection
-              visibleTenants={visibleTenants}
+              visibleTenants={commercialVisibleTenants}
               selectedTenantId={selectedTenantId}
               setSelectedTenantId={setSelectedTenantId}
               supportError={supportError}
@@ -663,13 +887,13 @@ export default function AdminSystem() {
               newTenantEnabled={newTenantEnabled}
               setNewTenantEnabled={setNewTenantEnabled}
               createTenant={createTenant}
-              canSaveTenant={canSaveTenant}
+              canSaveTenant={isPlatformOwner && canSaveTenant}
               toggleTenantEnabled={toggleTenantEnabled}
             />
 
             <AdminUsersSection
               authzSnapshot={authzSnapshot}
-              visibleTenants={visibleTenants}
+              visibleTenants={commercialVisibleTenants}
               newUserEmail={newUserEmail}
               setNewUserEmail={setNewUserEmail}
               newUserName={newUserName}
@@ -689,7 +913,7 @@ export default function AdminSystem() {
               canAssignNewUserRole={canAssignNewUserRole}
               search={search}
               setSearch={setSearch}
-              filteredUsers={filteredUsers}
+              filteredUsers={commercialFilteredUsers}
               editDrafts={editDrafts}
               setDraft={setDraft}
               updateUser={updateUser}
@@ -697,16 +921,18 @@ export default function AdminSystem() {
               removeUser={removeUser}
             />
 
-            <AdminOwnerToolsSection
-              ownerTenantId={ownerTenantId}
-              setOwnerTenantId={setOwnerTenantId}
-              ownerEmail={ownerEmail}
-              setOwnerEmail={setOwnerEmail}
-              inviteSingleOwner={inviteSingleOwner}
-              loadOwnerForTenant={loadOwnerForTenant}
-              ownerDocLoading={ownerDocLoading}
-              ownerDoc={ownerDoc}
-            />
+            {isPlatformOwner ? (
+              <AdminOwnerToolsSection
+                ownerTenantId={ownerTenantId}
+                setOwnerTenantId={setOwnerTenantId}
+                ownerEmail={ownerEmail}
+                setOwnerEmail={setOwnerEmail}
+                inviteSingleOwner={inviteSingleOwner}
+                loadOwnerForTenant={loadOwnerForTenant}
+                ownerDocLoading={ownerDocLoading}
+                ownerDoc={ownerDoc}
+              />
+            ) : null}
           </div>
         </div>
 

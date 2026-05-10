@@ -12,10 +12,11 @@ import {
 } from "firebase/firestore";
 
 import "./adminSystem.theme.css";
+import "./ownerOfficial.theme.css";
 
 import { db } from "../firebase/firebase";
 import { useAuth } from "../auth/AuthContext";
-import { buildAuthzSnapshot, isPlatformOwner } from "../features/authz";
+import { buildAuthzSnapshot, canAccessCapability, isPlatformOwner } from "../features/authz";
 import { callFn } from "../services/functionsClient";
 import { DIRECTORATES, MINISTRY_SCOPE, normalizeText, isSameDirectorate } from "../constants/directorates";
 
@@ -35,6 +36,58 @@ type TenantLite = {
   governorate?: string;
   wilayat?: string;
   enabled?: boolean;
+  tenantType?: string;
+  type?: string;
+  entityType?: string;
+  isExamCenter?: boolean;
+  isDiplomaCenter?: boolean;
+};
+
+const getTenantKind = (tenant: Partial<TenantLite> | any): "exam_center" | "school" => {
+  const raw = String(
+    tenant?.tenantType ||
+      tenant?.entityType ||
+      tenant?.type ||
+      tenant?.kind ||
+      ""
+  ).toLowerCase();
+
+  if (
+    raw.includes("exam") ||
+    raw.includes("center") ||
+    raw.includes("diploma") ||
+    tenant?.isExamCenter === true ||
+    tenant?.isDiplomaCenter === true
+  ) {
+    return "exam_center";
+  }
+
+  return "school";
+};
+
+const isSchoolTenant = (tenant: Partial<TenantLite> | any) => getTenantKind(tenant) === "school";
+
+const normalizeRoleValue = (value: any) => String(value || "").trim().toLowerCase();
+
+const hasOwnerAccess = (auth: any, authzSnapshot: any) => {
+  const profile = auth?.profile || {};
+  const user = auth?.user || {};
+  const values = [
+    profile?.role,
+    profile?.legacyRole,
+    profile?.roleScope,
+    profile?.accountType,
+    user?.role,
+    user?.legacyRole,
+  ].map(normalizeRoleValue);
+
+  return (
+    isPlatformOwner(authzSnapshot) ||
+    canAccessCapability(authzSnapshot, "PLATFORM_OWNER") ||
+    (canAccessCapability(authzSnapshot, "SYSTEM_ADMIN") && Boolean(auth?.isSuperAdmin)) ||
+    Boolean(profile?.isPlatformOwner || profile?.platformOwner || user?.isPlatformOwner || user?.platformOwner) ||
+    values.some((v) => ["platform_owner", "owner", "super_admin", "superadmin", "مالك_المنصة", "مالك المنصة"].includes(v))
+  );
 };
 
 export default function SuperGovernorates() {
@@ -44,7 +97,7 @@ export default function SuperGovernorates() {
   const authzSnapshot = buildAuthzSnapshot(auth);
 
   if (!user) return <Navigate to="/login" replace />;
-  if (!isPlatformOwner(authzSnapshot)) return <Navigate to="/super" replace />;
+  if (!hasOwnerAccess(auth, authzSnapshot)) return <Navigate to="/super" replace />;
 
   // ===== Supers list =====
   const [supers, setSupers] = useState<AllowlistRow[]>([]);
@@ -99,8 +152,7 @@ export default function SuperGovernorates() {
     );
   }, []);
 
-  // Fallback: some databases store "super" only; the above query uses "in".
-  // If "in" needs an index and fails silently, we also subscribe to role==super.
+  // Fallback آمن: إعادة الاشتراك عند عدم وصول بيانات من الاشتراك الأول.
   useEffect(() => {
     if (supers.length > 0) return;
     const qy = query(collection(db, "allowlist"), where("role", "==", "super"), orderBy("email"));
@@ -158,23 +210,45 @@ export default function SuperGovernorates() {
                 cfg = null;
               }
 
-              const tGov = String(cfg?.governorate || "").trim();
+              const rootData = (docSnap.data() as any) || {};
+              const merged = { ...rootData, ...(cfg || {}) };
+              const tGov = String(
+                merged?.governorate ||
+                  merged?.tenantGovernorate ||
+                  merged?.regionAr ||
+                  ""
+              ).trim();
+
               return {
                 id,
-                name: cfg?.schoolNameAr || cfg?.schoolName || (docSnap.data() as any)?.name,
+                name:
+                  merged?.schoolNameAr ||
+                  merged?.schoolName ||
+                  merged?.nameAr ||
+                  merged?.name ||
+                  id,
                 governorate: tGov,
-                wilayat: cfg?.wilayat,
-                enabled: cfg?.enabled,
+                wilayat: merged?.wilayat,
+                enabled: merged?.enabled,
+                tenantType: merged?.tenantType,
+                type: merged?.type,
+                entityType: merged?.entityType,
+                isExamCenter: merged?.isExamCenter,
+                isDiplomaCenter: merged?.isDiplomaCenter,
               } as TenantLite;
             })
           );
 
           const out: TenantLite[] = [];
           for (const t of mapped) {
+            // هذه الصفحة خاصة بمدارس سوبر المحافظات فقط.
+            // مراكز امتحانات الدبلوم لها مسار منفصل ولا تظهر هنا.
+            if (!isSchoolTenant(t)) continue;
+
             if (gov === MINISTRY_SCOPE || normalizeText(gov) === normalizeText(MINISTRY_SCOPE)) {
               out.push(t);
-            } else {
-              if (isSameDirectorate(String(t.governorate || ""), gov)) out.push(t);
+            } else if (isSameDirectorate(String(t.governorate || ""), gov)) {
+              out.push(t);
             }
           }
 
@@ -228,7 +302,10 @@ export default function SuperGovernorates() {
         role: "super",
         tenantId: "system",
         name: name.trim() || e,
+        userName: name.trim() || e,
         governorate: String(governorate).trim(),
+        tenantGovernorate: String(governorate).trim(),
+        roleScope: "governorate",
       });
       setEmail("");
       setName("");
@@ -254,10 +331,11 @@ export default function SuperGovernorates() {
   };
 
   return (
-    <div className="system-shell">
+    <div className="system-shell owner-official-page">
       <header className="system-header">
         <div className="system-header-inner">
           <div className="system-brand">
+            <img src="https://i.imgur.com/vdDhSMh.png" alt="وزارة التعليم" />
             <div className="system-brand-title">إدارة السوبر للمحافظات</div>
           </div>
           <div className="system-program">لوحة السوبر أدمن</div>

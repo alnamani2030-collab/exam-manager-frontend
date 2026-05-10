@@ -1,197 +1,145 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import GoldDropdown from "../components/GoldDropdown";
 import { type Exam } from "../services/exams.service";
 import type { Room } from "../services/rooms.service";
+import type { RoomBlock } from "../services/roomBlocks.service";
 import { useAuth } from "../auth/AuthContext";
 import { useI18n } from "../i18n/I18nProvider";
-import { useExamsData } from "../hooks/useExamsData";
-import { useRoomsData } from "../hooks/useRoomsData";
-import { useRoomBlocksData } from "../hooks/useRoomBlocksData";
-import { useExamRoomAssignmentsData } from "../hooks/useExamRoomAssignmentsData";
+import { loadTenantArray, loadTenantSettings, replaceTenantArray } from "../services/tenantData";
 import { createId, isRoomBlockedForExam } from "../lib/roomScheduling";
-import "../styles/schoolExamsOfficial.css";
 
 const APP_NAME_AR = "نظام إدارة الامتحانات المطوّر";
 const APP_NAME_EN = "Advanced Exam Management System";
 const SUBCOLLECTION = "exams";
+const ROOMS12_SUBCOLLECTION = "rooms";
+const ROOM_BLOCKS12_SUBCOLLECTION = "roomBlocks";
+const EXAM_ROOM_ASSIGNMENTS12_SUBCOLLECTION = "examRoomAssignments";
 const ASSIGNMENTS_STORAGE_PREFIX = "exam_room_assignments";
+const EXAMS12_LEGACY_EXAMS_CACHE_KEY = "exam-manager:exams12-cache:v1";
+const EXAMS12_LEGACY_ROOMS_CACHE_KEY = "exam-manager:rooms12-cache:v1";
+const EXAMS12_LEGACY_ROOM_BLOCKS_CACHE_KEY = "exam-manager:roomBlocks12-cache:v1";
+const DIPLOMA_EXAM_CENTER_SETTINGS_DOC_ID = "diplomaExamCenter";
+
+const EXAMS12_EXAM_CENTER_DATA_KEY = "exam-manager:exam-center-data:v1";
+const EXAMS12_EXAM_CENTER_LOGO_KEY = "exam-manager:exam-center-logo:v1";
+const EXAMS12_CONTROL_HEAD_NAME_KEY = "exam-manager:control-head-name:v1";
+const EXAMS12_DEFAULT_LOGO_URL = "https://i.imgur.com/vdDhSMh.png";
+
+type Exams12ExamCenterData = {
+  name?: string;
+  examCenterCode?: string;
+  centerCode?: string;
+  governorate?: string;
+  semester?: string;
+  phone?: string;
+  address?: string;
+  controlHeadName?: string;
+  academicYear?: string;
+  logo?: string;
+};
+
+function exams12Clean(value: unknown) {
+  return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function exams12TenantIdFromAuth(auth: any) {
+  return (
+    String(
+      auth?.effectiveTenantId ||
+        auth?.profile?.tenantId ||
+        auth?.userProfile?.tenantId ||
+        auth?.user?.tenantId ||
+        "default"
+    ).trim() || "default"
+  );
+}
+
+function exams12SafeJson<T>(raw: string | null, fallback: T): T {
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function exams12AcademicYearFromSystemDate(now = new Date()) {
+  const month = now.getMonth() + 1;
+  const year = now.getFullYear();
+  const startYear = month >= 9 ? year : year - 1;
+  return `${startYear} / ${startYear + 1}`;
+}
+
+function exams12ReadExamCenterData(): Exams12ExamCenterData {
+  const saved = exams12SafeJson<Exams12ExamCenterData>(
+    localStorage.getItem(EXAMS12_EXAM_CENTER_DATA_KEY),
+    {}
+  );
+
+  return {
+    ...saved,
+    examCenterCode: exams12Clean(saved.examCenterCode || saved.centerCode || ""),
+    controlHeadName: exams12Clean(
+      saved.controlHeadName || localStorage.getItem(EXAMS12_CONTROL_HEAD_NAME_KEY) || ""
+    ),
+  };
+}
+
+function exams12ReadOfficialLogo() {
+  return exams12Clean(localStorage.getItem(EXAMS12_EXAM_CENTER_LOGO_KEY)) || EXAMS12_DEFAULT_LOGO_URL;
+}
 
 const SUBJECT_OPTIONS_RAW = [
   "",
-  "التربية الإسلامية 5",
-  "التربية الإسلامية 6",
-  "التربية الإسلامية 7",
-  "التربية الإسلامية 8",
-  "التربية الإسلامية 9",
-  "التربية الإسلامية 10",
-  "التربية الإسلامية 11",
-  "التربية الإسلامية 12",
-  "اللغة العربية 6",
-  "اللغة العربية 7",
-  "اللغة العربية 8",
-  "اللغة العربية 9",
-  "اللغة العربية 10",
-  "اللغة العربية 11",
-  "اللغة العربية 12",
-  "اللغة الإنجليزية 6",
-  "اللغة الإنجليزية 7",
-  "اللغة الإنجليزية 8",
-  "اللغة الإنجليزية 9",
-  "اللغة الإنجليزية 10",
-  "اللغة الإنجليزية 11",
-  "اللغة الإنجليزية 12",
-  "الرياضيات 5",
-  "الرياضيات 6",
-  "الرياضيات 7",
-  "الرياضيات 8",
-  "الرياضيات 9",
-  "الرياضيات 10",
-  "الرياضيات 11",
-  "الرياضيات 12",
-  "الرياضيات الأساسية 11",
-  "الرياضيات المتقدمة 11",
-  "الرياضيات الأساسية 12",
-  "الرياضيات المتقدمة 12",
-  "الدراسات الاجتماعية 5",
-  "الدراسات الاجتماعية 6",
-  "الدراسات الاجتماعية 7",
-  "الدراسات الاجتماعية 8",
-  "الدراسات الاجتماعية 9",
-  "الدراسات الاجتماعية 10",
-  "التاريخ والحضارة الإسلامية 11",
-  "الجغرافيا البشرية 11",
-  "هذا وطني 11",
-  "التاريخ والحضارة الإسلامية 12",
-  "الجغرافيا البشرية 12",
-  "هذا وطني 12",
-  "العلوم 5",
-  "العلوم 6",
-  "العلوم 7",
-  "العلوم 8",
-  "الفيزياء 9",
-  "الفيزياء 10",
-  "الفيزياء 11",
-  "الفيزياء 12",
-  "الكيمياء 9",
-  "الكيمياء 10",
-  "الكيمياء 11",
-  "الكيمياء 12",
-  "الأحياء 9",
-  "الأحياء 10",
-  "الأحياء 11",
-  "الأحياء 12",
-  "الرياضة المدرسية 11",
-  "الفنون التشكيلية 11",
-  "المهارات الموسيقية 11",
-  "الرياضة المدرسية 12",
-  "الفنون التشكيلية 12",
-  "المهارات الموسيقية 12",
-  "مواد التخصصات الهندسية والصناعية 12",
-  "مهارات اللغة الإنجليزية 11",
-  "مهارات اللغة الإنجليزية 12",
-  "تقنية المعلومات 11",
-  "تقنية المعلومات 12",
-  "السفر و السياحة و إدارة الأعمال و تقنية المعلومات 12",
-  "اللغة الفرنسية 10",
-  "اللغة الألمانية 10",
-  "اللغة الصينية 10",
-  "اللغة الفرنسية 11",
-  "اللغة الألمانية 11",
-  "اللغة الصينية 11",
-  "اللغة الفرنسية 12",
-  "اللغة الألمانية 12",
-  "اللغة الصينية 12",
-  "العلوم البيئية 11",
-  "العلوم البيئية 12",
+  "التربية الإسلامية ",
+   "اللغة العربية ",
+   "اللغة الإنجليزية ",
+  "الرياضيات الأساسية ",
+  "الرياضيات المتقدمة ",
+    "الدراسات الاجتماعية ",
+  " التاريخ (العالم من حولي)",
+  "الجغرافيا البشرية ",
+  "هذا وطني ",
+  "الفيزياء ",
+   "الكيمياء ",
+   "الأحياء ",
+  "الرياضة المدرسية ",
+  "الفنون التشكيلية ",
+  "المهارات الموسيقية ",
+    "مواد التخصصات الهندسية والصناعية ",
+   "مهارات اللغة الإنجليزية ",
+    "تقنية المعلومات ",
+  "السفر و السياحة و إدارة الأعمال و تقنية المعلومات ",
+    "اللغة الفرنسية ",
+  "اللغة الألمانية ",
+  "اللغة الصينية ",
+  "العلوم البيئية ",
+  
 ];
 
 const SUBJECT_TRANSLATIONS: Record<string, string> = {
-  "التربية الإسلامية 5": "Islamic Education 5",
-  "التربية الإسلامية 6": "Islamic Education 6",
-  "التربية الإسلامية 7": "Islamic Education 7",
-  "التربية الإسلامية 8": "Islamic Education 8",
-  "التربية الإسلامية 9": "Islamic Education 9",
-  "التربية الإسلامية 10": "Islamic Education 10",
-  "التربية الإسلامية 11": "Islamic Education 11",
-  "التربية الإسلامية 12": "Islamic Education 12",
-  "اللغة العربية 6": "Arabic Language 6",
-  "اللغة العربية 7": "Arabic Language 7",
-  "اللغة العربية 8": "Arabic Language 8",
-  "اللغة العربية 9": "Arabic Language 9",
-  "اللغة العربية 10": "Arabic Language 10",
-  "اللغة العربية 11": "Arabic Language 11",
-  "اللغة العربية 12": "Arabic Language 12",
-  "اللغة الإنجليزية 6": "English Language 6",
-  "اللغة الإنجليزية 7": "English Language 7",
-  "اللغة الإنجليزية 8": "English Language 8",
-  "اللغة الإنجليزية 9": "English Language 9",
-  "اللغة الإنجليزية 10": "English Language 10",
-  "اللغة الإنجليزية 11": "English Language 11",
-  "اللغة الإنجليزية 12": "English Language 12",
-  "الرياضيات 5": "Mathematics 5",
-  "الرياضيات 6": "Mathematics 6",
-  "الرياضيات 7": "Mathematics 7",
-  "الرياضيات 8": "Mathematics 8",
-  "الرياضيات 9": "Mathematics 9",
-  "الرياضيات 10": "Mathematics 10",
-  "الرياضيات 11": "Mathematics 11",
-  "الرياضيات 12": "Mathematics 12",
-  "الرياضيات الأساسية 11": "Basic Mathematics 11",
-  "الرياضيات المتقدمة 11": "Advanced Mathematics 11",
-  "الرياضيات الأساسية 12": "Basic Mathematics 12",
-  "الرياضيات المتقدمة 12": "Advanced Mathematics 12",
-  "الدراسات الاجتماعية 5": "Social Studies 5",
-  "الدراسات الاجتماعية 6": "Social Studies 6",
-  "الدراسات الاجتماعية 7": "Social Studies 7",
-  "الدراسات الاجتماعية 8": "Social Studies 8",
-  "الدراسات الاجتماعية 9": "Social Studies 9",
-  "الدراسات الاجتماعية 10": "Social Studies 10",
-  "التاريخ والحضارة الإسلامية 11": "Islamic History and Civilization 11",
-  "الجغرافيا البشرية 11": "Human Geography 11",
-  "هذا وطني 11": "This Is My Nation 11",
-  "التاريخ والحضارة الإسلامية 12": "Islamic History and Civilization 12",
-  "الجغرافيا البشرية 12": "Human Geography 12",
-  "هذا وطني 12": "This Is My Nation 12",
-  "العلوم 5": "Science 5",
-  "العلوم 6": "Science 6",
-  "العلوم 7": "Science 7",
-  "العلوم 8": "Science 8",
-  "الفيزياء 9": "Physics 9",
-  "الفيزياء 10": "Physics 10",
-  "الفيزياء 11": "Physics 11",
-  "الفيزياء 12": "Physics 12",
-  "الكيمياء 9": "Chemistry 9",
-  "الكيمياء 10": "Chemistry 10",
-  "الكيمياء 11": "Chemistry 11",
-  "الكيمياء 12": "Chemistry 12",
-  "الأحياء 9": "Biology 9",
-  "الأحياء 10": "Biology 10",
-  "الأحياء 11": "Biology 11",
-  "الأحياء 12": "Biology 12",
-  "الرياضة المدرسية 11": "School Sports 11",
-  "الفنون التشكيلية 11": "Visual Arts 11",
-  "المهارات الموسيقية 11": "Music Skills 11",
-  "الرياضة المدرسية 12": "School Sports 12",
-  "الفنون التشكيلية 12": "Visual Arts 12",
-  "المهارات الموسيقية 12": "Music Skills 12",
-  "مواد التخصصات الهندسية والصناعية 12": "Engineering and Industrial Specializations 12",
-  "مهارات اللغة الإنجليزية 11": "English Skills 11",
-  "مهارات اللغة الإنجليزية 12": "English Skills 12",
-  "تقنية المعلومات 11": "Information Technology 11",
-  "تقنية المعلومات 12": "Information Technology 12",
-  "السفر و السياحة و إدارة الأعمال و تقنية المعلومات 12": "Travel, Tourism, Business Administration and IT 12",
-  "اللغة الفرنسية 10": "French Language 10",
-  "اللغة الألمانية 10": "German Language 10",
-  "اللغة الصينية 10": "Chinese Language 10",
-  "اللغة الفرنسية 11": "French Language 11",
-  "اللغة الألمانية 11": "German Language 11",
-  "اللغة الصينية 11": "Chinese Language 11",
-  "اللغة الفرنسية 12": "French Language 12",
-  "اللغة الألمانية 12": "German Language 12",
-  "اللغة الصينية 12": "Chinese Language 12",
-  "العلوم البيئية 11": "Environmental Science 11",
-  "العلوم البيئية 12": "Environmental Science 12",
+  "التربية الإسلامية ": "Islamic Education ",
+  "اللغة العربية ": "Arabic Language ",
+  "اللغة الإنجليزية ": "English Language ",
+  "الرياضيات الأساسية ": "Basic Mathematics ",
+  "الرياضيات المتقدمة ": "Advanced Mathematics ",
+  "الدراسات الاجتماعية ": "Social Studies ",
+  "التاريخ والحضارة الإسلامية ": "Islamic History and Civilization ",
+  "الجغرافيا الاقتصادية ": "Human Geography ",
+  "هذا وطني ": "This Is My Nation ",
+  "الفيزياء ": "Physics ",
+  "الكيمياء ": "Chemistry ",
+  "الأحياء ": "Biology ",
+  "الرياضة المدرسية ": "School Sports ",
+  "الفنون التشكيلية ": "Visual Arts ",
+  "المهارات الموسيقية ": "Music Skills ",
+  "مواد التخصصات الهندسية والصناعية ": "Engineering and Industrial Specializations ",
+  "مهارات اللغة الإنجليزية ": "English Skills ",
+   "تقنية المعلومات ": "Information Technology ",
+  "السفر و السياحة و إدارة الأعمال و تقنية المعلومات ": "Travel, Tourism, Business Administration and IT 12",
+   "اللغة الألمانية ": "German Language ",
+  "اللغة الصينية ": "Chinese Language ",
+   "العلوم البيئية ": "Environmental Science ",
 };
 
 const PERIOD_OPTIONS_AR = [
@@ -275,6 +223,241 @@ function safeParseExamRoomAssignments(v: string | null): PersistedExamRoomAssign
       .filter((x) => x.examId && x.roomId);
   } catch {
     return [];
+  }
+}
+
+function exams12SafeParseArray<T>(key: string): T[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function exams12NormalizeExam(value: any): Exam {
+  const rooms = Number(value?.roomsCount ?? 0) || 1;
+  return {
+    id: exams12Clean(value?.id) || genId(),
+    subject: exams12Clean(value?.subject),
+    dateISO: exams12Clean(value?.dateISO),
+    dayLabel: exams12Clean(value?.dayLabel),
+    time: exams12Clean(value?.time) || "08:00",
+    durationMinutes: Number(value?.durationMinutes ?? 0) || 120,
+    period: exams12Clean(value?.period) || "الفترة الأولى",
+    roomsCount: rooms < 1 ? 1 : rooms,
+  } as Exam;
+}
+
+function exams12NormalizeExams(rows: any[]): Exam[] {
+  return (Array.isArray(rows) ? rows : [])
+    .map(exams12NormalizeExam)
+    .filter((exam) => exam.subject || exam.dateISO);
+}
+
+function exams12NormalizeRoom(value: any): Room {
+  return {
+    id: exams12Clean(value?.id) || createId("room"),
+    roomName: exams12Clean(value?.roomName || value?.name || value?.room),
+    code: exams12Clean(value?.code || value?.roomCode),
+    building: exams12Clean(value?.building),
+    type: exams12Clean(value?.type),
+    capacity: Number(value?.capacity) || 0,
+    status: value?.status === "inactive" ? "inactive" : "active",
+    notes: exams12Clean(value?.notes),
+  } as Room;
+}
+
+function exams12NormalizeRooms(rows: any[]): Room[] {
+  return (Array.isArray(rows) ? rows : [])
+    .map(exams12NormalizeRoom)
+    .filter((room) => room.roomName);
+}
+
+function exams12NormalizeRoomBlock(value: any): RoomBlock {
+  const session =
+    value?.session === "الفترة الأولى" || value?.session === "الفترة الثانية" || value?.session === "full-day"
+      ? value.session
+      : "full-day";
+
+  const status =
+    value?.status === "cancelled" || value?.status === "expired" || value?.status === "active"
+      ? value.status
+      : "active";
+
+  return {
+    id: exams12Clean(value?.id) || createId("block"),
+    roomId: exams12Clean(value?.roomId),
+    roomName: exams12Clean(value?.roomName),
+    reason: exams12Clean(value?.reason),
+    reasonType: exams12Clean(value?.reasonType) || "maintenance",
+    blockType: value?.blockType === "partial" ? "partial" : "full",
+    startDate: exams12Clean(value?.startDate) || new Date().toISOString().slice(0, 10),
+    endDate: exams12Clean(value?.endDate) || exams12Clean(value?.startDate) || new Date().toISOString().slice(0, 10),
+    session,
+    status,
+    createdBy: exams12Clean(value?.createdBy) || undefined,
+  } as RoomBlock;
+}
+
+function exams12NormalizeRoomBlocks(rows: any[]): RoomBlock[] {
+  return (Array.isArray(rows) ? rows : [])
+    .map(exams12NormalizeRoomBlock)
+    .filter((block) => block.roomId);
+}
+
+function exams12NormalizeExamRoomAssignment(value: any): PersistedExamRoomAssignment {
+  return {
+    id: exams12Clean(value?.id) || createId("exam_room"),
+    examId: exams12Clean(value?.examId),
+    roomId: exams12Clean(value?.roomId),
+    roomName: exams12Clean(value?.roomName),
+    dateISO: exams12Clean(value?.dateISO),
+    time: exams12Clean(value?.time),
+    period: exams12Clean(value?.period),
+    createdBy: exams12Clean(value?.createdBy) || undefined,
+  };
+}
+
+function exams12NormalizeExamRoomAssignments(rows: any[]): PersistedExamRoomAssignment[] {
+  return (Array.isArray(rows) ? rows : [])
+    .map(exams12NormalizeExamRoomAssignment)
+    .filter((row) => row.examId && row.roomId);
+}
+
+function exams12ReadLegacyExams(): Exam[] {
+  if (typeof window === "undefined") return [];
+
+  const keys = [
+    EXAMS12_LEGACY_EXAMS_CACHE_KEY,
+    "exams",
+    "exams12",
+    "exam-manager:exams",
+    "exam-manager:exams12",
+  ];
+
+  let best: Exam[] = [];
+
+  for (const key of keys) {
+    const parsed = exams12NormalizeExams(safeParseExams(window.localStorage.getItem(key)));
+    if (parsed.length > best.length) best = parsed;
+  }
+
+  try {
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i) || "";
+      if (!/exam|exams|امتحان|امتحانات/i.test(key)) continue;
+      const parsed = exams12NormalizeExams(safeParseExams(window.localStorage.getItem(key)));
+      if (parsed.length > best.length) best = parsed;
+    }
+  } catch {
+    // ignore localStorage scan errors
+  }
+
+  return best;
+}
+
+function exams12ReadLegacyRooms(): Room[] {
+  if (typeof window === "undefined") return [];
+
+  const keys = [
+    EXAMS12_LEGACY_ROOMS_CACHE_KEY,
+    "rooms",
+    "rooms12",
+    "exam-manager:rooms",
+    "exam-manager:rooms12",
+  ];
+
+  let best: Room[] = [];
+
+  for (const key of keys) {
+    const parsed = exams12NormalizeRooms(exams12SafeParseArray<any>(key));
+    if (parsed.length > best.length) best = parsed;
+  }
+
+  return best;
+}
+
+function exams12ReadLegacyRoomBlocks(): RoomBlock[] {
+  if (typeof window === "undefined") return [];
+
+  const keys = [
+    EXAMS12_LEGACY_ROOM_BLOCKS_CACHE_KEY,
+    "roomBlocks",
+    "roomBlocks12",
+    "exam-manager:roomBlocks",
+    "exam-manager:roomBlocks12",
+  ];
+
+  let best: RoomBlock[] = [];
+
+  for (const key of keys) {
+    const parsed = exams12NormalizeRoomBlocks(exams12SafeParseArray<any>(key));
+    if (parsed.length > best.length) best = parsed;
+  }
+
+  return best;
+}
+
+function exams12ReadLegacyAssignments(storageKey?: string): PersistedExamRoomAssignment[] {
+  if (typeof window === "undefined") return [];
+
+  const keys = [
+    storageKey || "",
+    `${ASSIGNMENTS_STORAGE_PREFIX}_default`,
+    "examRoomAssignments",
+    "examRoomAssignments12",
+    "exam-manager:examRoomAssignments",
+    "exam-manager:examRoomAssignments12",
+  ].filter(Boolean);
+
+  let best: PersistedExamRoomAssignment[] = [];
+
+  for (const key of keys) {
+    const parsed = exams12NormalizeExamRoomAssignments(safeParseExamRoomAssignments(window.localStorage.getItem(key)));
+    if (parsed.length > best.length) best = parsed;
+  }
+
+  return best;
+}
+
+function exams12CacheExams(rows: Exam[]) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(EXAMS12_LEGACY_EXAMS_CACHE_KEY, JSON.stringify(rows));
+  } catch {
+    // cache should not break the page
+  }
+}
+
+function exams12CacheRooms(rows: Room[]) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(EXAMS12_LEGACY_ROOMS_CACHE_KEY, JSON.stringify(rows));
+  } catch {
+    // cache should not break the page
+  }
+}
+
+function exams12CacheRoomBlocks(rows: RoomBlock[]) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(EXAMS12_LEGACY_ROOM_BLOCKS_CACHE_KEY, JSON.stringify(rows));
+  } catch {
+    // cache should not break the page
+  }
+}
+
+function exams12CacheAssignments(rows: PersistedExamRoomAssignment[], storageKey?: string) {
+  if (typeof window === "undefined") return;
+  try {
+    if (storageKey) window.localStorage.setItem(storageKey, JSON.stringify(rows));
+    window.localStorage.setItem("exam-manager:examRoomAssignments12", JSON.stringify(rows));
+  } catch {
+    // cache should not break the page
   }
 }
 
@@ -520,9 +703,18 @@ type AvailableRoomRow = Room & {
 
 export default function Exams() {
   const { lang, isRTL } = useI18n();
-  const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
-  const translateSubject = (s: string) => (lang === "ar" ? s : SUBJECT_TRANSLATIONS[s] || s);
+  const auth = useAuth() as any;
+  const user = auth?.user;
+  const tr = React.useCallback((ar: string, en: string) => (lang === "ar" ? ar : en), [lang]);
+  const translateSubject = React.useCallback((s: string) => (lang === "ar" ? s : SUBJECT_TRANSLATIONS[s] || s), [lang]);
   const APP_NAME = lang === "ar" ? APP_NAME_AR : APP_NAME_EN;
+  const tenantId = useMemo(() => exams12TenantIdFromAuth(auth), [auth]);
+  const currentUserId = String(user?.email || user?.uid || "").trim();
+
+  const [officialCenterData, setOfficialCenterData] = useState<Exams12ExamCenterData>(() =>
+    exams12ReadExamCenterData()
+  );
+  const [officialLogo, setOfficialLogo] = useState<string>(() => exams12ReadOfficialLogo());
 
   const SUBJECT_OPTIONS = useMemo(
     () =>
@@ -530,7 +722,7 @@ export default function Exams() {
         value: s,
         label: s ? translateSubject(s) : tr("— اختر المادة —", "— Select Subject —"),
       })),
-    [lang]
+    [translateSubject, tr]
   );
 
   const PERIOD_OPTIONS = useMemo(
@@ -538,7 +730,118 @@ export default function Exams() {
     [lang]
   );
 
-  const { tenantId, exams, setExams } = useExamsData();
+  const assignmentsStorageKey = useMemo(() => {
+    const suffix = String(tenantId || "default").trim() || "default";
+    return `${ASSIGNMENTS_STORAGE_PREFIX}_${suffix}`;
+  }, [tenantId]);
+
+  const [exams, setExamsLocal] = useState<Exam[]>(() => exams12ReadLegacyExams());
+  const examsRef = useRef<Exam[]>(exams);
+
+  const [rooms, setRoomsLocal] = useState<Room[]>(() => exams12ReadLegacyRooms());
+  const roomsRef = useRef<Room[]>(rooms);
+
+  const [roomBlocks, setRoomBlocksLocal] = useState<RoomBlock[]>(() => exams12ReadLegacyRoomBlocks());
+  const roomBlocksRef = useRef<RoomBlock[]>(roomBlocks);
+
+  const [examRoomAssignments, setExamRoomAssignmentsLocal] = useState<PersistedExamRoomAssignment[]>(() =>
+    exams12ReadLegacyAssignments(assignmentsStorageKey)
+  );
+  const examRoomAssignmentsRef = useRef<PersistedExamRoomAssignment[]>(examRoomAssignments);
+
+  const [cloudLoading, setCloudLoading] = useState(false);
+  const [savingCloud, setSavingCloud] = useState(false);
+  const [syncMessage, setSyncMessage] = useState("");
+  const [cloudError, setCloudError] = useState("");
+
+  const persistExams = React.useCallback(
+    async (nextExams: Exam[], summary = "saved exams collection") => {
+      const normalized = exams12NormalizeExams(nextExams).sort(sortExams);
+      examsRef.current = normalized;
+      setExamsLocal(normalized);
+      exams12CacheExams(normalized);
+
+      setSavingCloud(true);
+      setSyncMessage(tr("جاري حفظ جدول الامتحانات في السحابة...", "Saving exams schedule to cloud..."));
+
+      try {
+        await replaceTenantArray(tenantId, SUBCOLLECTION, normalized as any[], {
+          by: currentUserId || undefined,
+          audit: {
+            entity: SUBCOLLECTION,
+            meta: {
+              summary,
+              count: normalized.length,
+            },
+          },
+        });
+
+        setSyncMessage(tr("تم حفظ جدول الامتحانات في السحابة.", "Exams schedule saved to cloud."));
+      } catch (error) {
+        setCloudError(tr("تعذر حفظ جدول الامتحانات في السحابة. تحقق من الاتصال والصلاحيات.", "Could not save exams schedule to cloud. Check connection and permissions."));
+        throw error;
+      } finally {
+        setSavingCloud(false);
+      }
+    },
+    [tenantId, currentUserId, tr]
+  );
+
+  const persistExamRoomAssignmentsNow = React.useCallback(
+    async (nextAssignments: PersistedExamRoomAssignment[]) => {
+      const normalized = exams12NormalizeExamRoomAssignments(nextAssignments);
+      examRoomAssignmentsRef.current = normalized;
+      setExamRoomAssignmentsLocal(normalized);
+      exams12CacheAssignments(normalized, assignmentsStorageKey);
+
+      setSavingCloud(true);
+
+      try {
+        await replaceTenantArray(tenantId, EXAM_ROOM_ASSIGNMENTS12_SUBCOLLECTION, normalized as any[], {
+          by: currentUserId || undefined,
+          audit: {
+            entity: EXAM_ROOM_ASSIGNMENTS12_SUBCOLLECTION,
+            meta: {
+              summary: "saved exam room assignments",
+              count: normalized.length,
+            },
+          },
+        });
+      } finally {
+        setSavingCloud(false);
+      }
+    },
+    [tenantId, currentUserId, assignmentsStorageKey]
+  );
+
+  const setExams = React.useCallback(
+    (nextValue: React.SetStateAction<Exam[]>) => {
+      const previous = examsRef.current;
+      const next =
+        typeof nextValue === "function"
+          ? (nextValue as (prev: Exam[]) => Exam[])(previous)
+          : nextValue;
+
+      void persistExams(next, "updated exams collection").catch(() => undefined);
+    },
+    [persistExams]
+  );
+
+  const setExamRoomAssignments = React.useCallback(
+    (nextValue: React.SetStateAction<PersistedExamRoomAssignment[]>) => {
+      const previous = examRoomAssignmentsRef.current;
+      const next =
+        typeof nextValue === "function"
+          ? (nextValue as (prev: PersistedExamRoomAssignment[]) => PersistedExamRoomAssignment[])(previous)
+          : nextValue;
+
+      void persistExamRoomAssignmentsNow(next).catch(() => {
+        setCloudError(tr("تعذر حفظ ربط القاعات في السحابة.", "Could not save room assignments to cloud."));
+      });
+    },
+    [persistExamRoomAssignmentsNow, tr]
+  );
+
   const [query, setQuery] = useState("");
   const [adding, setAdding] = useState(false);
   const [row, setRow] = useState<Exam>({ ...emptyExam, id: genId() });
@@ -558,22 +861,201 @@ export default function Exams() {
 
   const topRef = useRef<HTMLDivElement>(null);
   const [tableFullScreen, setTableFullScreen] = useState(false);
-  const { user } = useAuth() as any;
-  const { rooms } = useRoomsData();
-  const { roomBlocks } = useRoomBlocksData();
-  const {
-    examRoomAssignments,
-    setExamRoomAssignments,
-    persistExamRoomAssignmentsNow,
-  } = useExamRoomAssignmentsData();
   const [roomManager, setRoomManager] = useState<RoomManagerState>({ open: false, examId: "", selectedRoomIds: [] });
-  const assignmentsHydratedRef = useRef(false);
-  const assignmentsHydrationKeyRef = useRef("");
 
-  const assignmentsStorageKey = useMemo(() => {
-    const suffix = String(tenantId || "default").trim() || "default";
-    return `${ASSIGNMENTS_STORAGE_PREFIX}_${suffix}`;
+  useEffect(() => {
+    const refreshOfficialHeader = () => {
+      setOfficialCenterData(exams12ReadExamCenterData());
+      setOfficialLogo(exams12ReadOfficialLogo());
+    };
+
+    async function refreshOfficialHeaderFromCloud() {
+      try {
+        const cloud = await loadTenantSettings<Exams12ExamCenterData>(
+          tenantId,
+          DIPLOMA_EXAM_CENTER_SETTINGS_DOC_ID,
+          {}
+        );
+
+        const hasCloudData = Boolean(
+          cloud?.name ||
+            cloud?.examCenterCode ||
+            cloud?.centerCode ||
+            cloud?.governorate ||
+            cloud?.semester ||
+            cloud?.phone ||
+            cloud?.address ||
+            cloud?.controlHeadName ||
+            cloud?.academicYear ||
+            cloud?.logo
+        );
+
+        if (!hasCloudData) return;
+
+        const nextData: Exams12ExamCenterData = {
+          ...cloud,
+          examCenterCode: exams12Clean(cloud.examCenterCode || cloud.centerCode || ""),
+          centerCode: exams12Clean(cloud.examCenterCode || cloud.centerCode || ""),
+          controlHeadName: exams12Clean(cloud.controlHeadName || ""),
+        };
+
+        const nextLogo = exams12Clean(cloud.logo || exams12ReadOfficialLogo()) || EXAMS12_DEFAULT_LOGO_URL;
+
+        setOfficialCenterData(nextData);
+        setOfficialLogo(nextLogo);
+
+        localStorage.setItem(EXAMS12_EXAM_CENTER_DATA_KEY, JSON.stringify(nextData));
+        localStorage.setItem(EXAMS12_EXAM_CENTER_LOGO_KEY, nextLogo);
+        localStorage.setItem(EXAMS12_CONTROL_HEAD_NAME_KEY, nextData.controlHeadName || "");
+      } catch {
+        refreshOfficialHeader();
+      }
+    }
+
+    refreshOfficialHeader();
+    void refreshOfficialHeaderFromCloud();
+
+    window.addEventListener("storage", refreshOfficialHeader);
+    window.addEventListener("exam-manager:changed", refreshOfficialHeader);
+    window.addEventListener("exam-manager:control-head-changed", refreshOfficialHeader);
+
+    return () => {
+      window.removeEventListener("storage", refreshOfficialHeader);
+      window.removeEventListener("exam-manager:changed", refreshOfficialHeader);
+      window.removeEventListener("exam-manager:control-head-changed", refreshOfficialHeader);
+    };
   }, [tenantId]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadCloudData() {
+      setCloudLoading(true);
+      setCloudError("");
+      setSyncMessage(tr("جاري تحميل جدول الامتحانات من السحابة...", "Loading exams schedule from cloud..."));
+
+      try {
+        const cloudExams = exams12NormalizeExams(
+          await loadTenantArray<Exam>(tenantId, SUBCOLLECTION, { cacheFallback: true })
+        ).sort(sortExams);
+
+        const cloudRooms = exams12NormalizeRooms(
+          await loadTenantArray<Room>(tenantId, ROOMS12_SUBCOLLECTION, { cacheFallback: true })
+        );
+
+        const cloudBlocks = exams12NormalizeRoomBlocks(
+          await loadTenantArray<RoomBlock>(tenantId, ROOM_BLOCKS12_SUBCOLLECTION, { cacheFallback: true })
+        );
+
+        const cloudAssignments = exams12NormalizeExamRoomAssignments(
+          await loadTenantArray<PersistedExamRoomAssignment>(tenantId, EXAM_ROOM_ASSIGNMENTS12_SUBCOLLECTION, { cacheFallback: true })
+        );
+
+        if (!mounted) return;
+
+        if (cloudExams.length) {
+          examsRef.current = cloudExams;
+          setExamsLocal(cloudExams);
+          exams12CacheExams(cloudExams);
+          setSyncMessage(tr("تم تحميل جدول الامتحانات من السحابة.", "Exams schedule loaded from cloud."));
+        } else {
+          const legacyExams = exams12NormalizeExams(exams12ReadLegacyExams()).sort(sortExams);
+
+          if (legacyExams.length) {
+            examsRef.current = legacyExams;
+            setExamsLocal(legacyExams);
+            exams12CacheExams(legacyExams);
+
+            await replaceTenantArray(tenantId, SUBCOLLECTION, legacyExams as any[], {
+              by: currentUserId || undefined,
+              audit: {
+                entity: SUBCOLLECTION,
+                meta: {
+                  summary: "migrated exams from localStorage to cloud",
+                  count: legacyExams.length,
+                },
+              },
+            });
+
+            setSyncMessage(tr("تم ترحيل جدول الامتحانات من هذا الجهاز إلى السحابة.", "Exams schedule migrated from this device to cloud."));
+          } else {
+            examsRef.current = [];
+            setExamsLocal([]);
+            exams12CacheExams([]);
+            setSyncMessage(tr("لا يوجد جدول امتحانات محفوظ بعد.", "No exams schedule saved yet."));
+          }
+        }
+
+        roomsRef.current = cloudRooms.length ? cloudRooms : exams12NormalizeRooms(exams12ReadLegacyRooms());
+        setRoomsLocal(roomsRef.current);
+        exams12CacheRooms(roomsRef.current);
+
+        roomBlocksRef.current = cloudBlocks.length ? cloudBlocks : exams12NormalizeRoomBlocks(exams12ReadLegacyRoomBlocks());
+        setRoomBlocksLocal(roomBlocksRef.current);
+        exams12CacheRoomBlocks(roomBlocksRef.current);
+
+        if (cloudAssignments.length) {
+          examRoomAssignmentsRef.current = cloudAssignments;
+          setExamRoomAssignmentsLocal(cloudAssignments);
+          exams12CacheAssignments(cloudAssignments, assignmentsStorageKey);
+        } else {
+          const legacyAssignments = exams12NormalizeExamRoomAssignments(exams12ReadLegacyAssignments(assignmentsStorageKey));
+
+          if (legacyAssignments.length) {
+            examRoomAssignmentsRef.current = legacyAssignments;
+            setExamRoomAssignmentsLocal(legacyAssignments);
+            exams12CacheAssignments(legacyAssignments, assignmentsStorageKey);
+
+            await replaceTenantArray(tenantId, EXAM_ROOM_ASSIGNMENTS12_SUBCOLLECTION, legacyAssignments as any[], {
+              by: currentUserId || undefined,
+              audit: {
+                entity: EXAM_ROOM_ASSIGNMENTS12_SUBCOLLECTION,
+                meta: {
+                  summary: "migrated exam room assignments from localStorage to cloud",
+                  count: legacyAssignments.length,
+                },
+              },
+            });
+          } else {
+            examRoomAssignmentsRef.current = [];
+            setExamRoomAssignmentsLocal([]);
+            exams12CacheAssignments([], assignmentsStorageKey);
+          }
+        }
+
+        // Realtime subscriptions are intentionally disabled on this page.
+        // In some local browser sessions, Firestore onSnapshot caused:
+        // INTERNAL ASSERTION FAILED: Unexpected state
+        // The page now uses safe one-time cloud loading + explicit cloud saving.
+        // Other pages can still use subscribeTenantArray normally.
+      } catch {
+        if (!mounted) return;
+        const legacyExams = exams12NormalizeExams(exams12ReadLegacyExams()).sort(sortExams);
+        const legacyRooms = exams12NormalizeRooms(exams12ReadLegacyRooms());
+        const legacyBlocks = exams12NormalizeRoomBlocks(exams12ReadLegacyRoomBlocks());
+        const legacyAssignments = exams12NormalizeExamRoomAssignments(exams12ReadLegacyAssignments(assignmentsStorageKey));
+
+        examsRef.current = legacyExams;
+        setExamsLocal(legacyExams);
+        roomsRef.current = legacyRooms;
+        setRoomsLocal(legacyRooms);
+        roomBlocksRef.current = legacyBlocks;
+        setRoomBlocksLocal(legacyBlocks);
+        examRoomAssignmentsRef.current = legacyAssignments;
+        setExamRoomAssignmentsLocal(legacyAssignments);
+
+        setCloudError(tr("تعذر تحميل جدول الامتحانات من السحابة؛ يتم عرض نسخة الجهاز المؤقتة.", "Could not load exams schedule from cloud; showing local cache."));
+      } finally {
+        if (mounted) setCloudLoading(false);
+      }
+    }
+
+    void loadCloudData();
+
+    return () => {
+      mounted = false;
+    };
+  }, [tenantId, currentUserId, assignmentsStorageKey, tr]);
 
   useEffect(() => {
     const prev = document.body.style.overflow;
@@ -584,46 +1066,14 @@ export default function Exams() {
   }, [tableFullScreen]);
 
   useEffect(() => {
-    if (assignmentsHydrationKeyRef.current !== assignmentsStorageKey) {
-      assignmentsHydrationKeyRef.current = assignmentsStorageKey;
-      assignmentsHydratedRef.current = false;
-    }
-  }, [assignmentsStorageKey]);
-
-  useEffect(() => {
-    if (assignmentsHydratedRef.current) return;
-
-    try {
-      const savedAssignments = safeParseExamRoomAssignments(
-        localStorage.getItem(assignmentsStorageKey)
-      );
-
-      if (!examRoomAssignments.length && savedAssignments.length) {
-        setExamRoomAssignments(savedAssignments as any);
-      }
-    } catch {
-    } finally {
-      assignmentsHydratedRef.current = true;
-    }
-  }, [assignmentsStorageKey, examRoomAssignments.length, setExamRoomAssignments]);
-
-  useEffect(() => {
-    if (!assignmentsHydratedRef.current) return;
-    try {
-      localStorage.setItem(assignmentsStorageKey, JSON.stringify(examRoomAssignments));
-    } catch {
-    }
-  }, [assignmentsStorageKey, examRoomAssignments]);
-
-  useEffect(() => {
     const style = document.createElement("style");
     style.innerHTML = `
       .examTable3D {
         position: relative;
-        background: linear-gradient(180deg, #fffdf6, #f8f2df);
+        background: linear-gradient(145deg, #111, #1a1a1a);
         border-radius: 16px;
         padding: 12px;
-        box-shadow: 0 18px 35px rgba(86,63,0,0.16), inset 0 0 0 4px rgba(255,255,255,0.65);
+        box-shadow: 0 18px 35px rgba(0,0,0,0.6), inset 0 2px 0 rgba(255,255,255,0.05);
         overflow: hidden;
       }
 
@@ -653,18 +1103,17 @@ export default function Exams() {
       }
 
       .examTable3D tbody td {
-        background: linear-gradient(180deg,#fffdf7,#f7efd9) !important;
-        color: #050505 !important;
-        font-weight: 900;
+        background: linear-gradient(145deg,#181818,#101010) !important;
+        color: #d4af37 !important;
         border-bottom: none !important;
         border-radius: 14px;
-        box-shadow: none;
+        box-shadow: 0 10px 22px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,255,255,0.06);
         transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
       }
 
       .examTable3D tbody tr:hover td {
         transform: translateY(-3px);
-        box-shadow: none;
+        box-shadow: 0 14px 30px rgba(0,0,0,0.75), inset 0 1px 0 rgba(255,255,255,0.10);
         filter: brightness(1.03);
       }
 
@@ -1094,8 +1543,6 @@ export default function Exams() {
         })),
     ];
 
-    setExamRoomAssignments(next as any);
-
     try {
       await persistExamRoomAssignmentsNow(next as any);
     } catch (error) {
@@ -1107,12 +1554,25 @@ export default function Exams() {
     closeRoomManager();
   }
 
+  const officialAcademicYear =
+    officialCenterData.academicYear || exams12AcademicYearFromSystemDate(new Date());
+  const officialGovernorate =
+    officialCenterData.governorate || tr("المديرية العامة للتعليم", "Directorate General of Education");
+  const officialCenterName =
+    officialCenterData.name || tr("مركز الامتحانات", "Exam Center");
+  const officialCenterCode =
+    officialCenterData.examCenterCode || officialCenterData.centerCode || "—";
+  const officialSemester =
+    officialCenterData.semester || tr("الفصل الدراسي", "Semester");
+  const officialCenterHead =
+    officialCenterData.controlHeadName || tr("رئيس المركز", "Center Head");
+
   const pageStyle: React.CSSProperties = {
     padding: 18,
-    color: "#0b0b0b",
+    color: "#000000",
     minHeight: "100vh",
     background:
-      "radial-gradient(circle at 50% -10%, rgba(212,175,55,0.20), transparent 28%), linear-gradient(180deg, #fffdf6 0%, #f8f2df 45%, #fffaf0 100%)",
+      "radial-gradient(1200px 520px at 50% -10%, rgba(212,175,55,0.18), transparent 62%), linear-gradient(180deg, #fffdf7 0%, #f7f3e7 48%, #fffaf0 100%)",
     position: "relative",
     overflowX: "hidden",
     direction: isRTL ? "rtl" : "ltr",
@@ -1123,85 +1583,89 @@ export default function Exams() {
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
-    background: "linear-gradient(135deg, #f1d27a, #d4af37, #b8962e)",
-    color: "#0b1220",
-    borderRadius: 22,
-    padding: 16,
-    boxShadow: "0 18px 60px rgba(212,175,55,0.25)",
-    marginBottom: 14,
+    background: "linear-gradient(180deg, #f2dc8a 0%, #d4af37 100%)",
+    color: "#000000",
+    border: "4px solid #111827",
+    borderRadius: 24,
+    padding: 18,
+    boxShadow: "0 14px 30px rgba(126,98,18,0.16)",
+    marginBottom: 16,
   };
 
   const card: React.CSSProperties = {
-    background: "linear-gradient(180deg, #fffdf6 0%, #f8f2df 100%)",
+    background: "linear-gradient(180deg, #fffaf0 0%, #f3e8c5 100%)",
     border: "4px solid #d4af37",
-    borderRadius: 30,
-    padding: 18,
-    boxShadow: "0 22px 50px rgba(86,63,0,0.16), inset 0 0 0 7px rgba(255,255,255,0.72)",
-    marginBottom: 18,
-    color: "#050505",
+    borderRadius: 28,
+    padding: 20,
+    boxShadow: "0 0 0 5px rgba(212,175,55,0.13) inset, 0 16px 34px rgba(126,98,18,0.12)",
+    marginBottom: 16,
+    color: "#000000",
   };
 
   const fullScreenOverlay: React.CSSProperties = {
     position: "fixed",
     inset: 0,
-    zIndex: 2147483647,
-    padding: 18,
-    background: "linear-gradient(180deg, rgba(250,246,232,0.985), rgba(242,232,202,0.985))",
-    overflow: "hidden",
-    isolation: "isolate",
-    direction: isRTL ? "rtl" : "ltr",
+    zIndex: 10000,
+    padding: 14,
+    background: "linear-gradient(180deg, #050a14, #070d1a)",
   };
 
-  const btn = (bg: string, fg = "#0b1220"): React.CSSProperties => ({
+  const btn = (bg: string, fg = "#000000"): React.CSSProperties => ({
     background: bg,
-    color: fg,
-    border: "1px solid rgba(255,255,255,0.08)",
-    borderRadius: 14,
-    padding: "10px 14px",
+    color: "#000000",
+    border: "3px solid #d4af37",
+    borderRadius: 16,
+    padding: "11px 16px",
     cursor: "pointer",
-    fontWeight: 800,
-    boxShadow: "0 10px 24px rgba(0,0,0,0.25)",
+    fontWeight: 1000,
+    boxShadow: "0 10px 22px rgba(126,98,18,0.13)",
+    textShadow: "none",
   });
 
   const inputStyle: React.CSSProperties = {
-    background: "#fffdf6",
-    color: "#050505",
-    border: "2px solid rgba(212,175,55,0.78)",
-    borderRadius: 14,
-    padding: "10px 12px",
+    background: "linear-gradient(180deg, #fffaf0 0%, #f3e8c5 100%)",
+    color: "#000000",
+    WebkitTextFillColor: "#000000",
+    border: "3px solid #d4af37",
+    borderRadius: 16,
+    padding: "12px 14px",
     outline: "none",
     width: "100%",
-    fontWeight: 800,
+    fontWeight: 1000,
+    fontSize: 16,
   };
 
   const tableWrap: React.CSSProperties = {
     maxHeight: "55vh",
     overflow: "auto",
-    borderRadius: 24,
-    border: "3px solid #d4af37",
-    background: "linear-gradient(180deg, #fffdf6 0%, #f8f2df 100%)",
-    boxShadow: "0 18px 38px rgba(86,63,0,0.16)",
+    borderRadius: 26,
+    border: "4px solid #d4af37",
+    background: "linear-gradient(180deg, #fffaf0 0%, #f3e8c5 100%)",
+    boxShadow: "0 0 0 5px rgba(212,175,55,0.13) inset, 0 16px 34px rgba(126,98,18,0.12)",
   };
 
   const thStyle: React.CSSProperties = {
     position: "sticky",
     top: 0,
-    background: "linear-gradient(180deg, #6f5300, #4f3900)",
-    color: "#fff7d7",
+    background: "linear-gradient(180deg, #f2dc8a 0%, #d4af37 100%)",
+    color: "#000000",
+    WebkitTextFillColor: "#000000",
     zIndex: 2,
-    padding: 10,
+    padding: 12,
     textAlign: isRTL ? "right" : "left",
     fontWeight: 1000,
-    borderBottom: "2px solid rgba(212,175,55,0.75)",
+    border: "2px solid #111827",
     whiteSpace: "nowrap",
   };
 
   const tdStyle: React.CSSProperties = {
-    padding: 10,
-    borderBottom: "2px solid rgba(212,175,55,0.32)",
+    padding: 12,
+    border: "2px solid #d4af37",
     whiteSpace: "nowrap",
-    color: "#050505",
-    fontWeight: 800,
+    color: "#000000",
+    WebkitTextFillColor: "#000000",
+    fontWeight: 1000,
+    background: "#fffaf0",
   };
 
   const current = editingId ? edit : row;
@@ -1223,186 +1687,157 @@ export default function Exams() {
 
   const modalCard: React.CSSProperties = {
     width: "min(860px, 96vw)",
-    background: "linear-gradient(180deg, #fffdf7, #f6edd2)",
-    border: "3px solid rgba(197,158,43,0.85)",
-    borderRadius: 22,
+    background: "linear-gradient(180deg, #fffaf0 0%, #f3e8c5 100%)",
+    border: "4px solid #d4af37",
+    borderRadius: 24,
     padding: 18,
-    boxShadow: "0 26px 80px rgba(79,57,0,0.24)",
-    color: "#101827",
+    boxShadow: "0 22px 80px rgba(108,82,12,0.22)",
+    color: "#000000",
     direction: isRTL ? "rtl" : "ltr",
   };
 
-  const examsTableNode = (
-<div
-    className={tableFullScreen ? "schoolExamsFullscreenPortal" : "schoolExamsTableBlock"}
-    style={tableFullScreen ? fullScreenOverlay : undefined}
-  >
-  <div
-    style={{
-      ...card,
-      height: tableFullScreen ? "100%" : undefined,
-      marginBottom: tableFullScreen ? 0 : (card.marginBottom as any),
-    }}
-  >
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: 12,
-        marginBottom: 14,
-        padding: "6px 8px 2px 8px",
-        flexWrap: "wrap",
-      }}
-    >
-      <div>
-        <div style={{ fontWeight: 1000, fontSize: 22, color: "#101827" }}>{tr("الجدول التنفيذي للامتحانات", "Executive Exams Table")}</div>
-        <div style={{ fontWeight: 800, color: "#374151", marginTop: 4 }}>
-          {tr("عرض احترافي يوضح المادة والتاريخ والفترة وربط القاعات والإجراءات بصورة مؤسسية أنيقة", "A professional view showing subject, date, period, room assignments, and actions in an elegant institutional format")}
-        </div>
-      </div>
-      <div style={{ fontWeight: 900, color: "#725200", opacity: 1 }}>
-        {tr("عدد الصفوف المعروضة", "Rows Shown")}: {filtered.length}
-      </div>
-    </div>
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: 10,
-        marginBottom: 10,
-        flexWrap: "wrap",
-      }}
-    >
-      <div style={{ fontWeight: 1000, color: "#111827" }}>📅 {tr("جدول الامتحانات", "Exams Schedule")}</div>
-
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button
-          style={btn("#eab308", "#07101f")}
-          onClick={() => setDateSortOrder((prev) => (prev === "asc" ? "desc" : "asc"))}
-        >
-          {dateSortOrder === "asc" ? tr("ترتيب التاريخ: تصاعدي ↑", "Date Sort: Ascending ↑") : tr("ترتيب التاريخ: تنازلي ↓", "Date Sort: Descending ↓")}
-        </button>
-
-        <button
-          style={btn(tableFullScreen ? "#334155" : "#f59e0b", tableFullScreen ? "#e6c76a" : "#0b1220")}
-          onClick={() => setTableFullScreen((v) => !v)}
-        >
-          {tableFullScreen ? tr("⤢ إغلاق ملء الشاشة", "⤢ Exit Fullscreen") : tr("⤢ ملء الشاشة", "⤢ Fullscreen")}
-        </button>
-      </div>
-    </div>
-
-    <div
-      className="examTable3D"
-      style={{
-        ...tableWrap,
-        maxHeight: tableFullScreen ? "calc(100vh - 140px)" : (tableWrap.maxHeight as any),
-      }}
-    >
-      <table style={{ width: "100%", minWidth: 1100 }}>
-        <thead>
-          <tr>
-            <th style={thStyle}>{tr("المادة", "Subject")}</th>
-            <th style={thStyle} className="col-date">
-              {tr("التاريخ", "Date")}
-            </th>
-            <th style={thStyle}>{tr("اليوم", "Day")}</th>
-            <th style={thStyle}>{tr("الوقت", "Time")}</th>
-            <th style={thStyle}>{tr("الفترة", "Period")}</th>
-            <th style={thStyle}>{tr("القاعات", "Rooms")}</th>
-            <th style={thStyle}>{tr("إجراءات", "Actions")}</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {filtered.length === 0 ? (
-            <tr>
-              <td style={tdStyle} colSpan={7}>
-                {tr("لا توجد بيانات.", "No data found.")}
-              </td>
-            </tr>
-          ) : (
-            filtered.map((e) => (
-              <tr key={e.id} className={e.dateISO === todayISO ? "row-today" : undefined}>
-                <td style={tdStyle}>{lang === "ar" ? e.subject : translateSubject(e.subject)}</td>
-                <td style={tdStyle} className="col-date">
-                  {e.dateISO}
-                </td>
-                <td style={tdStyle}>{e.dayLabel || dayFromISO(e.dateISO, lang)}</td>
-                <td style={tdStyle}>{e.time}</td>
-                <td style={tdStyle}>
-                  {e.period === "الفترة الأولى" ? tr("الفترة الأولى", "First Period") : e.period === "الفترة الثانية" ? tr("الفترة الثانية", "Second Period") : e.period}
-                </td>
-                <td style={tdStyle}>
-                  {(() => {
-                    const assigned = assignmentsByExamId.get(e.id) || [];
-                    const blockedAssigned = assigned.filter((row) =>
-                      isRoomBlockedForExam(row.roomId, e, activeBlocks)
-                    ).length;
-                    const complete = assigned.length === e.roomsCount && blockedAssigned === 0;
-                    return (
-                      <button
-                        style={{
-                          ...btn(
-                            complete ? "#10b981" : assigned.length === 0 ? "#ef4444" : "#f59e0b",
-                            "#07101f"
-                          ),
-                          padding: "8px 12px",
-                        }}
-                        onClick={() => openRoomManager(e)}
-                        title={blockedAssigned > 0 ? tr(`يوجد ${blockedAssigned} قاعات محظورة ضمن الربط الحالي`, `There are ${blockedAssigned} blocked rooms in the current assignment`) : tr("إدارة ربط القاعات", "Manage room assignments")}
-                      >
-                        {assigned.length} / {e.roomsCount}
-                      </button>
-                    );
-                  })()}
-                </td>
-                <td style={tdStyle}>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button style={btn("#60a5fa", "#07101f")} onClick={() => startEditById(e.id)}>
-                      {tr("✏️ تعديل", "✏️ Edit")}
-                    </button>
-                    <button style={btn("#ef4444", "#07101f")} onClick={() => removeExamById(e.id)}>
-                      {tr("🗑 حذف", "🗑 Delete")}
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-    </div>
-  </div>
-</div>
-  );
-
-  const examsTableRender =
-    tableFullScreen && typeof document !== "undefined"
-      ? createPortal(examsTableNode, document.body)
-      : examsTableNode;
-
   return (
-    <div style={pageStyle} ref={topRef} className="examsScheduleOuterCardTextBlackOnly schoolExamsOfficialPage">
+    <div style={pageStyle} ref={topRef} className="exams12PageRoot exams12OfficialTheme exams12OutsideBlackTableGold exams12ScheduleOuterCardTextBlackOnly">
       <style>{`
-        .examsScheduleOuterCardTextBlackOnly .scheduleOuterCardText,
-        .examsScheduleOuterCardTextBlackOnly .scheduleOuterCardText * {
+        .exams12ScheduleOuterCardTextBlackOnly .scheduleOuterCardText,
+        .exams12ScheduleOuterCardTextBlackOnly .scheduleOuterCardText * {
           color: #000000 !important;
           font-weight: 900 !important;
           text-shadow: none !important;
           -webkit-text-fill-color: #000000 !important;
         }
 
-        .examsScheduleOuterCardTextBlackOnly table,
-        .examsScheduleOuterCardTextBlackOnly table *,
-        .examsScheduleOuterCardTextBlackOnly th,
-        .examsScheduleOuterCardTextBlackOnly td {
+        .exams12ScheduleOuterCardTextBlackOnly table,
+        .exams12ScheduleOuterCardTextBlackOnly table *,
+        .exams12ScheduleOuterCardTextBlackOnly th,
+        .exams12ScheduleOuterCardTextBlackOnly td {
           color: inherit;
           -webkit-text-fill-color: initial;
         }
       `}</style>
+
+      <style>{`
+        .exams12OutsideBlackTableGold h1,
+        .exams12OutsideBlackTableGold h2,
+        .exams12OutsideBlackTableGold h3,
+        .exams12OutsideBlackTableGold h4,
+        .exams12OutsideBlackTableGold p,
+        .exams12OutsideBlackTableGold label,
+        .exams12OutsideBlackTableGold button,
+        .exams12OutsideBlackTableGold input,
+        .exams12OutsideBlackTableGold select,
+        .exams12OutsideBlackTableGold textarea,
+        .exams12OutsideBlackTableGold option,
+        .exams12OutsideBlackTableGold strong,
+        .exams12OutsideBlackTableGold b {
+          color: #000000 !important;
+          font-weight: 900 !important;
+          text-shadow: none !important;
+          -webkit-text-fill-color: #000000 !important;
+        }
+
+        .exams12OutsideBlackTableGold > div,
+        .exams12OutsideBlackTableGold > section,
+        .exams12OutsideBlackTableGold > article,
+        .exams12OutsideBlackTableGold > header,
+        .exams12OutsideBlackTableGold > main {
+          color: #000000 !important;
+          font-weight: 900 !important;
+          text-shadow: none !important;
+        }
+
+        .exams12OutsideBlackTableGold table,
+        .exams12OutsideBlackTableGold table *,
+        .exams12OutsideBlackTableGold th,
+        .exams12OutsideBlackTableGold td {
+          color: #d4af37 !important;
+          font-weight: 900 !important;
+          -webkit-text-fill-color: #d4af37 !important;
+        }
+      `}</style>
+
+      <style>{`
+        html,
+        body,
+        #root {
+          margin: 0 !important;
+          min-height: 100% !important;
+          background:
+            radial-gradient(1200px 520px at 50% -10%, rgba(212, 175, 55, 0.18), transparent 62%),
+            linear-gradient(180deg, #fffdf7 0%, #f7f3e7 48%, #fffaf0 100%) !important;
+        }
+
+        body {
+          background-color: #f7f3e7 !important;
+        }
+
+        .exams12PageRoot {
+          position: relative;
+          z-index: 1;
+          background:
+            radial-gradient(1200px 520px at 50% -10%, rgba(212, 175, 55, 0.18), transparent 62%),
+            linear-gradient(180deg, #fffdf7 0%, #f7f3e7 48%, #fffaf0 100%) !important;
+        }
+
+        .exams12FixedLightBg {
+          position: fixed;
+          inset: 0;
+          z-index: -1;
+          pointer-events: none;
+          background:
+            radial-gradient(1200px 520px at 50% -10%, rgba(212, 175, 55, 0.18), transparent 62%),
+            linear-gradient(180deg, #fffdf7 0%, #f7f3e7 48%, #fffaf0 100%) !important;
+        }
+      `}</style>
+      <style>{`
+        .exams12OfficialTheme,
+        .exams12OfficialTheme * {
+          color: #000000 !important;
+          -webkit-text-fill-color: #000000 !important;
+          text-shadow: none !important;
+          font-weight: 900 !important;
+          font-family: Tahoma, Arial, sans-serif !important;
+        }
+
+        .exams12OfficialTheme input,
+        .exams12OfficialTheme select,
+        .exams12OfficialTheme textarea,
+        .exams12OfficialTheme option {
+          color: #000000 !important;
+          -webkit-text-fill-color: #000000 !important;
+          background: #fffaf0 !important;
+          font-weight: 1000 !important;
+        }
+
+        .exams12OfficialTheme .examTable3D {
+          background: linear-gradient(180deg, #fffaf0 0%, #f3e8c5 100%) !important;
+          border: 4px solid #d4af37 !important;
+          box-shadow: 0 0 0 5px rgba(212,175,55,0.13) inset, 0 16px 34px rgba(126,98,18,0.12) !important;
+        }
+
+        .exams12OfficialTheme .examTable3D thead th {
+          background: linear-gradient(180deg, #f2dc8a 0%, #d4af37 100%) !important;
+          color: #000000 !important;
+          -webkit-text-fill-color: #000000 !important;
+          border: 2px solid #111827 !important;
+          box-shadow: none !important;
+        }
+
+        .exams12OfficialTheme .examTable3D tbody td,
+        .exams12OfficialTheme .examTable3D .col-date {
+          background: #fffaf0 !important;
+          color: #000000 !important;
+          -webkit-text-fill-color: #000000 !important;
+          border: 2px solid #d4af37 !important;
+          box-shadow: none !important;
+        }
+
+        .exams12OfficialTheme .examTable3D::before {
+          display: none !important;
+        }
+      `}</style>
+
+      <div className="exams12FixedLightBg" aria-hidden="true" />
 
       <div
         style={{
@@ -1434,125 +1869,98 @@ export default function Exams() {
       />
 
       <div style={{ maxWidth: 1500, margin: "0 auto", position: "relative", zIndex: 1 }}>
-        <div
-          className="schoolExamsHeroCard"
+        <section
           style={{
-            display: "grid",
-            gap: 18,
-            border: "5px solid #d4af37",
-            borderRadius: 36,
-            padding: 26,
-            background: "linear-gradient(180deg, #fffdf7 0%, #f8f2df 100%)",
-            boxShadow: "0 22px 50px rgba(88,64,0,0.18), inset 0 0 0 8px rgba(255,255,255,0.78)",
-            marginBottom: 26,
-            color: "#050505",
+            background: "linear-gradient(180deg, #fffaf0 0%, #f4ead0 100%)",
+            border: "5px solid #111827",
+            borderRadius: 30,
+            padding: "22px 26px",
+            boxShadow:
+              "0 0 0 6px rgba(212,175,55,0.26) inset, 0 18px 38px rgba(150,120,20,0.16)",
+            marginBottom: 20,
           }}
         >
           <div
-            className="schoolExamsHeroGrid"
             style={{
               display: "grid",
-              gridTemplateColumns: isRTL ? "minmax(0, 1.45fr) minmax(320px, 0.75fr)" : "minmax(320px, 0.75fr) minmax(0, 1.45fr)",
-              gap: 28,
+              gridTemplateColumns: "minmax(260px, 1fr) 150px minmax(260px, 1fr)",
+              gap: 22,
               alignItems: "center",
+              borderBottom: "3px solid #111827",
+              paddingBottom: 18,
             }}
           >
+            <div style={{ display: "grid", gap: 6, textAlign: "right", lineHeight: 1.45 }}>
+              <div style={{ fontSize: 24, fontWeight: 1000 }}>سلطنة عمان</div>
+              <div style={{ fontSize: 24, fontWeight: 1000 }}>وزارة التعليم</div>
+              <div style={{ fontSize: 17, fontWeight: 1000 }}>{officialGovernorate}</div>
+              <div style={{ fontSize: 21, fontWeight: 1000 }}>{officialCenterName}</div>
+            </div>
+
             <div
-              className="schoolExamsStatsColumn"
               style={{
-                order: isRTL ? 2 : 1,
+                width: 132,
+                height: 132,
+                margin: "0 auto",
+                borderRadius: 28,
                 border: "4px solid #d4af37",
-                borderRadius: 30,
-                padding: 24,
-                background: "rgba(255,253,246,0.76)",
-                boxShadow: "inset 0 0 0 4px rgba(255,255,255,0.68)",
+                background: "#ffffff",
                 display: "grid",
-                gap: 16,
+                placeItems: "center",
+                boxShadow: "0 14px 28px rgba(150,120,20,0.14)",
               }}
             >
-              {[
-                { label: tr("إجمالي الامتحانات", "Total Exams"), value: exams.length },
-                { label: tr("المعروض الآن", "Currently Shown"), value: filtered.length },
-                { label: tr("قاعات الربط", "Assigned Rooms"), value: examRoomAssignments.length },
-              ].map((item) => (
-                <div
-                  key={item.label}
-                  className="schoolExamsStatCard"
-                  style={{
-                    border: "3px solid #d4af37",
-                    borderRadius: 22,
-                    padding: "18px 22px",
-                    background: "linear-gradient(180deg, #fffdf8, #f7f0dd)",
-                    color: "#050505",
-                    textAlign: isRTL ? "right" : "left",
-                  }}
-                >
-                  <div style={{ fontSize: 14, color: "#050505", fontWeight: 1000 }}>{item.label}</div>
-                  <div style={{ marginTop: 8, fontSize: 23, color: "#050505", fontWeight: 1000 }}>{item.value}</div>
-                </div>
-              ))}
+              <img
+                src={officialLogo || EXAMS12_DEFAULT_LOGO_URL}
+                alt="official logo"
+                style={{ width: "82%", height: "82%", objectFit: "contain" }}
+              />
             </div>
 
-            <div className="schoolExamsHeroContent" style={{ order: isRTL ? 1 : 2, display: "grid", gap: 18, textAlign: isRTL ? "right" : "left" }}>
+            <div style={{ display: "grid", gap: 6, textAlign: "left", lineHeight: 1.45 }}>
               <div
-                className="schoolExamsHeroBadge"
                 style={{
-                  display: "inline-flex",
-                  justifySelf: isRTL ? "end" : "start",
-                  width: "fit-content",
-                  alignItems: "center",
-                  gap: 8,
-                  padding: "11px 22px",
-                  borderRadius: 999,
-                  background: "#eaf2ff",
-                  border: "4px solid #d4af37",
-                  color: "#050505",
+                  fontSize: 28,
                   fontWeight: 1000,
-                  fontSize: 15,
+                  textDecoration: "underline",
+                  textUnderlineOffset: 8,
                 }}
               >
-                {tr("إدارة مركزية لجدول الامتحانات والقاعات", "Central management for exams schedule and rooms")}
+                جدول امتحانات دبلوم التعليم العام
               </div>
-
-              <div>
-                <div className="schoolExamsHeroEyebrow" style={{ fontSize: 16, fontWeight: 1000, color: "#172033", marginBottom: 8 }}>
-                  {APP_NAME}
-                </div>
-                <h1 className="schoolExamsHeroTitle"
-                  style={{
-                    margin: 0,
-                    fontSize: "clamp(30px, 4.4vw, 52px)",
-                    lineHeight: 1.08,
-                    fontWeight: 1000,
-                    color: "#050505",
-                    letterSpacing: "-0.03em",
-                    textShadow: "0 10px 24px rgba(0,0,0,0.08)",
-                  }}
-                >
-                  {tr("مركز إدارة الامتحانات", "Exams Management Center")}
-                </h1>
+              <div style={{ fontSize: 17, fontWeight: 1000 }}>{officialSemester}</div>
+              <div style={{ fontSize: 17, fontWeight: 1000 }}>
+                العام الدراسي {officialAcademicYear} م
               </div>
-
-              <p
-                className="schoolExamsHeroDesc"
-                style={{
-                  margin: 0,
-                  fontSize: 15,
-                  lineHeight: 1.9,
-                  color: "#050505",
-                  fontWeight: 900,
-                  maxWidth: 980,
-                }}
-              >
-                {tr(
-                  "تمنح هذه الصفحة الإدارة واجهة تنفيذية فاخرة لإدارة المواد والمواعيد والفترات وعدد القاعات، مع ربط ذكي بالقاعات المتاحة والمحظورة، وتجربة إدخال واستعراض منظمة تعكس جودة منتج مؤسسي متقن.",
-                  "This page gives the administration a premium executive interface to manage subjects, dates, periods, and room counts, with smart linking to available and blocked rooms, and an organized entry and review experience that reflects the quality of a refined institutional product."
-                )}
-              </p>
-
+              <div style={{ fontSize: 17, fontWeight: 1000 }}>
+                رمز مركز الامتحان: {officialCenterCode}
+              </div>
+              <div style={{ fontSize: 17, fontWeight: 1000 }}>
+                رئيس المركز: {officialCenterHead}
+              </div>
             </div>
           </div>
-        </div>
+
+          <div
+            style={{
+              marginTop: 16,
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: 12,
+              border: "3px solid #111827",
+              borderRadius: 18,
+              padding: "10px 16px",
+              background: "rgba(255,255,255,0.62)",
+              fontWeight: 1000,
+              fontSize: 16,
+            }}
+          >
+            <span>إجمالي الامتحانات: {exams.length}</span>
+            <span>المعروض الآن: {filtered.length}</span>
+            <span>قاعات الربط: {examRoomAssignments.length}</span>
+            <span>اسم المركز: {officialCenterName}</span>
+          </div>
+        </section>
 
         {dupModal.open && (
           <div style={modalOverlay} onClick={() => resolveDuplicate("change")}>
@@ -1722,13 +2130,27 @@ export default function Exams() {
             <button style={btn("#1f2937", "#d4af37")} onClick={() => history.back()}>
               {tr("← رجوع", "← Back")}
             </button>
-            <button style={btn("#f59e0b", "#07101f")} onClick={startAdd}>
+            <button style={btn("#f59e0b", "#07101f")} onClick={startAdd} disabled={savingCloud}>
               {tr("+ إضافة", "+ Add")}
             </button>
-            <button style={btn("#ef4444", "#07101f")} onClick={deleteAll}>
+            <button style={btn("#ef4444", "#07101f")} onClick={deleteAll} disabled={savingCloud}>
               {tr("🗑 حذف الجدول كاملًا", "🗑 Delete Entire Table")}
             </button>
           </div>
+        </div>
+
+        <div
+          style={{
+            ...card,
+            marginBottom: 12,
+            padding: "12px 16px",
+            fontWeight: 1000,
+            border: "3px solid #111827",
+          }}
+        >
+          {cloudLoading
+            ? tr("تحميل جدول الامتحانات من السحابة...", "Loading exams schedule from cloud...")
+            : cloudError || syncMessage}
         </div>
 
         <div style={card}>
@@ -1785,7 +2207,7 @@ export default function Exams() {
           <div style={card}>
             <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(4, minmax(220px, 1fr))" }}>
               <div>
-                <div style={{ fontWeight: 950, marginBottom: 7, color: "#111827" }}>{tr("المادة", "Subject")}</div>
+                <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("المادة", "Subject")}</div>
                 <GoldDropdown
                   value={current.subject}
                   options={SUBJECT_OPTIONS}
@@ -1795,7 +2217,7 @@ export default function Exams() {
               </div>
 
               <div>
-                <div style={{ fontWeight: 950, marginBottom: 7, color: "#111827" }}>{tr("التاريخ", "Date")}</div>
+                <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("التاريخ", "Date")}</div>
                 <input
                   style={inputStyle}
                   type="date"
@@ -1811,7 +2233,7 @@ export default function Exams() {
               </div>
 
               <div>
-                <div style={{ fontWeight: 950, marginBottom: 7, color: "#111827" }}>{tr("اليوم", "Day")}</div>
+                <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("اليوم", "Day")}</div>
                 <input
                   style={inputStyle}
                   placeholder={tr("يُحسب تلقائيًا إن تركت فارغًا", "Calculated automatically if left blank")}
@@ -1821,12 +2243,12 @@ export default function Exams() {
               </div>
 
               <div>
-                <div style={{ fontWeight: 950, marginBottom: 7, color: "#111827" }}>{tr("الوقت", "Time")}</div>
+                <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("الوقت", "Time")}</div>
                 <input style={inputStyle} value={current.time} onChange={(e) => setCurrent({ time: e.target.value })} />
               </div>
 
               <div>
-                <div style={{ fontWeight: 950, marginBottom: 7, color: "#111827" }}>{tr("الفترة", "Period")}</div>
+                <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("الفترة", "Period")}</div>
                 <GoldDropdown
                   value={current.period}
                   options={PERIOD_OPTIONS}
@@ -1836,7 +2258,7 @@ export default function Exams() {
               </div>
 
               <div>
-                <div style={{ fontWeight: 950, marginBottom: 7, color: "#111827" }}>{tr("المدة (دقيقة)", "Duration (Minutes)")}</div>
+                <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("المدة (دقيقة)", "Duration (Minutes)")}</div>
                 <input
                   style={inputStyle}
                   type="number"
@@ -1846,7 +2268,7 @@ export default function Exams() {
               </div>
 
               <div>
-                <div style={{ fontWeight: 950, marginBottom: 7, color: "#111827" }}>{tr("القاعات", "Rooms")}</div>
+                <div style={{ fontWeight: 900, marginBottom: 6, color: "#d4af37" }}>{tr("القاعات", "Rooms")}</div>
                 <input
                   style={inputStyle}
                   type="number"
@@ -1881,7 +2303,147 @@ export default function Exams() {
           </div>
         )}
 
-        {examsTableRender}
+        <div style={tableFullScreen ? fullScreenOverlay : undefined}>
+          <div
+            style={{
+              ...card,
+              height: tableFullScreen ? "100%" : undefined,
+              marginBottom: tableFullScreen ? 0 : (card.marginBottom as any),
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                marginBottom: 14,
+                padding: "6px 8px 2px 8px",
+                flexWrap: "wrap",
+              }}
+            >
+              <div>
+                <div style={{ fontWeight: 1000, fontSize: 22, color: "#f2cf63" }}>{tr("الجدول التنفيذي للامتحانات", "Executive Exams Table")}</div>
+                <div style={{ fontWeight: 800, color: "rgba(230,199,106,0.74)", marginTop: 4 }}>
+                  {tr("عرض احترافي يوضح المادة والتاريخ والفترة وربط القاعات والإجراءات بصورة مؤسسية أنيقة", "A professional view showing subject, date, period, room assignments, and actions in an elegant institutional format")}
+                </div>
+              </div>
+              <div style={{ fontWeight: 900, color: "#d4af37", opacity: 0.9 }}>
+                {tr("عدد الصفوف المعروضة", "Rows Shown")}: {filtered.length}
+              </div>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 10,
+                marginBottom: 10,
+                flexWrap: "wrap",
+              }}
+            >
+              <div style={{ fontWeight: 1000, color: "#d4af37" }}>📅 {tr("جدول الامتحانات", "Exams Schedule")}</div>
+
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button
+                  style={btn("#eab308", "#07101f")}
+                  onClick={() => setDateSortOrder((prev) => (prev === "asc" ? "desc" : "asc"))}
+                >
+                  {dateSortOrder === "asc" ? tr("ترتيب التاريخ: تصاعدي ↑", "Date Sort: Ascending ↑") : tr("ترتيب التاريخ: تنازلي ↓", "Date Sort: Descending ↓")}
+                </button>
+
+                <button
+                  style={btn(tableFullScreen ? "#334155" : "#f59e0b", tableFullScreen ? "#e6c76a" : "#0b1220")}
+                  onClick={() => setTableFullScreen((v) => !v)}
+                >
+                  {tableFullScreen ? tr("⤢ إغلاق ملء الشاشة", "⤢ Exit Fullscreen") : tr("⤢ ملء الشاشة", "⤢ Fullscreen")}
+                </button>
+              </div>
+            </div>
+
+            <div
+              className="examTable3D"
+              style={{
+                ...tableWrap,
+                maxHeight: tableFullScreen ? "calc(100vh - 140px)" : (tableWrap.maxHeight as any),
+              }}
+            >
+              <table style={{ width: "100%", minWidth: 1100 }}>
+                <thead>
+                  <tr>
+                    <th style={thStyle}>{tr("المادة", "Subject")}</th>
+                    <th style={thStyle} className="col-date">
+                      {tr("التاريخ", "Date")}
+                    </th>
+                    <th style={thStyle}>{tr("اليوم", "Day")}</th>
+                    <th style={thStyle}>{tr("الوقت", "Time")}</th>
+                    <th style={thStyle}>{tr("الفترة", "Period")}</th>
+                    <th style={thStyle}>{tr("القاعات", "Rooms")}</th>
+                    <th style={thStyle}>{tr("إجراءات", "Actions")}</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {filtered.length === 0 ? (
+                    <tr>
+                      <td style={tdStyle} colSpan={7}>
+                        {tr("لا توجد بيانات.", "No data found.")}
+                      </td>
+                    </tr>
+                  ) : (
+                    filtered.map((e) => (
+                      <tr key={e.id} className={e.dateISO === todayISO ? "row-today" : undefined}>
+                        <td style={tdStyle}>{lang === "ar" ? e.subject : translateSubject(e.subject)}</td>
+                        <td style={tdStyle} className="col-date">
+                          {e.dateISO}
+                        </td>
+                        <td style={tdStyle}>{e.dayLabel || dayFromISO(e.dateISO, lang)}</td>
+                        <td style={tdStyle}>{e.time}</td>
+                        <td style={tdStyle}>
+                          {e.period === "الفترة الأولى" ? tr("الفترة الأولى", "First Period") : e.period === "الفترة الثانية" ? tr("الفترة الثانية", "Second Period") : e.period}
+                        </td>
+                        <td style={tdStyle}>
+                          {(() => {
+                            const assigned = assignmentsByExamId.get(e.id) || [];
+                            const blockedAssigned = assigned.filter((row) =>
+                              isRoomBlockedForExam(row.roomId, e, activeBlocks)
+                            ).length;
+                            const complete = assigned.length === e.roomsCount && blockedAssigned === 0;
+                            return (
+                              <button
+                                style={{
+                                  ...btn(
+                                    complete ? "#10b981" : assigned.length === 0 ? "#ef4444" : "#f59e0b",
+                                    "#07101f"
+                                  ),
+                                  padding: "8px 12px",
+                                }}
+                                onClick={() => openRoomManager(e)}
+                                title={blockedAssigned > 0 ? tr(`يوجد ${blockedAssigned} قاعات محظورة ضمن الربط الحالي`, `There are ${blockedAssigned} blocked rooms in the current assignment`) : tr("إدارة ربط القاعات", "Manage room assignments")}
+                              >
+                                {assigned.length} / {e.roomsCount}
+                              </button>
+                            );
+                          })()}
+                        </td>
+                        <td style={tdStyle}>
+                          <div style={{ display: "flex", gap: 8 }}>
+                            <button style={btn("#60a5fa", "#07101f")} onClick={() => startEditById(e.id)}>
+                              {tr("✏️ تعديل", "✏️ Edit")}
+                            </button>
+                            <button style={btn("#ef4444", "#07101f")} onClick={() => removeExamById(e.id)}>
+                              {tr("🗑 حذف", "🗑 Delete")}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

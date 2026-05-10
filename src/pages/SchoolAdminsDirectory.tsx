@@ -9,6 +9,7 @@ const GOLD = "#d4af37";
 const SOFT = "rgba(212,175,55,0.18)";
 const BG = "linear-gradient(180deg, #f4efe2 0%, #ebe4d3 100%)";
 const CARD = "linear-gradient(180deg, #f8f4e8 0%, #f2eddf 100%)";
+const MINISTRY_LOGO_URL = "https://i.imgur.com/vdDhSMh.png";
 
 type AllowDoc = {
   email?: string;
@@ -205,9 +206,18 @@ export default function SchoolAdminsDirectory() {
     >
       <div style={{ maxWidth: 1700, margin: "0 auto", display: "grid", gap: 24 }}>
         <section style={heroStyle}>
-          <button type="button" onClick={() => navigate("/programs-gateway")} style={backBtn}>
-            {tr("العودة إلى البوابة التشغيلية", "Back to Operational Gateway")}
-          </button>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 18, flexWrap: "wrap" }}>
+            <button type="button" onClick={() => navigate("/programs-gateway")} style={backBtn}>
+              {tr("العودة إلى البوابة التشغيلية", "Back to Operational Gateway")}
+            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+              <div style={{ display: "grid", gap: 4, textAlign: isRTL ? "right" : "left" }}>
+                <div style={{ color: "#7a5a13", fontWeight: 1000, fontSize: 26 }}>{tr("وزارة التعليم", "Ministry of Education")}</div>
+                <div style={{ color: "#5c4a24", fontWeight: 800, fontSize: 15 }}>{tr("واجهة إشرافية رسمية", "Official supervisory interface")}</div>
+              </div>
+              <img src={MINISTRY_LOGO_URL} alt="وزارة التعليم" style={{ width: 64, height: 64, objectFit: "contain" }} />
+            </div>
+          </div>
           <div style={{ display: "grid", gap: 10 }}>
             <div style={pillGreen}>{tr("قائمة إشرافية", "Supervision Directory")}</div>
             <h1 style={h1}>{tr("جميع أدمنات المدارس حسب المحافظات", "All School Admins by Governorate")}</h1>
@@ -308,12 +318,12 @@ function DeniedCard({ title, desc }: { title: string; desc: string }) {
 }
 
 const heroStyle: React.CSSProperties = {
-  background: "linear-gradient(135deg, #8b6a00 0%, #b8860b 48%, #7a5c00 100%)",
+  background: "linear-gradient(180deg, #fffdf7 0%, #f4ecd6 100%)",
   borderRadius: 38,
   border: `4px solid ${GOLD}`,
   boxShadow: `0 24px 50px rgba(0,0,0,0.25), 0 0 28px ${SOFT}`,
   padding: "28px 30px",
-  color: "#fff7d8",
+  color: "#2f2615",
   display: "grid",
   gap: 18,
 };
@@ -332,8 +342,8 @@ const backBtn: React.CSSProperties = {
   padding: "0 20px",
   borderRadius: 18,
   border: `3px solid ${GOLD}`,
-  background: "rgba(255,255,255,0.12)",
-  color: "#fff",
+  background: "linear-gradient(180deg, #f7e4a8 0%, #d4af37 100%)",
+  color: "#3f2d07",
   fontWeight: 1000,
   fontSize: 17,
   cursor: "pointer",

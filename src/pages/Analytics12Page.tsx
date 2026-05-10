@@ -1,23 +1,53 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useAuth } from "../auth/AuthContext";
 import { useI18n } from "../i18n/I18nProvider";
+import { loadRun, RUN_UPDATED_EVENT, MASTER_TABLE_UPDATED_EVENT, taskDistributionKey } from "../utils/taskDistributionStorage";
 
 type Lang = "ar" | "en";
-type TaskType = "INVIGILATION" | "RESERVE" | "REVIEW_FREE" | "CORRECTION_FREE";
+type TaskType = "INVIGILATION" | "RESERVE" | "FLOOR_MONITOR";
+
+type TeacherLike = {
+  name?: string;
+  fullName?: string;
+  teacherName?: string;
+  displayName?: string;
+};
 
 type Assignment = {
   teacherName?: string;
-  teacher?: { name?: string } | string;
+  teacherFullName?: string;
+  employeeName?: string;
+  teacher?: TeacherLike | string;
   name?: string;
+  fullName?: string;
   taskType?: string;
   type?: string;
+  task?: string;
+  role?: string;
+  dutyType?: string;
+  assignmentType?: string;
+  category?: string;
+  monitoring?: number | string;
+  invigilation?: number | string;
+  invigilationCount?: number | string;
+  monitoringCount?: number | string;
+  reserve?: number | string;
+  reserveCount?: number | string;
+  backup?: number | string;
+  floorMonitor?: number | string;
+  floorMonitoring?: number | string;
+  floorMonitorCount?: number | string;
+  hallMonitor?: number | string;
+  corridorMonitor?: number | string;
+  roleMonitor?: number | string;
+  [key: string]: unknown;
 };
 
 type TeacherAnalyticsRow = {
   teacher: string;
   monitoring: number;
   reserve: number;
-  review: number;
-  correction: number;
+  floorMonitor: number;
   total: number;
 };
 
@@ -36,22 +66,127 @@ type DistributionItem = {
   color: string;
 };
 
+
+type ExamCenterData = {
+  name: string;
+  governorate: string;
+  semester: string;
+  phone: string;
+  address: string;
+  controlHeadName?: string;
+  country?: string;
+  ministry?: string;
+  academicYear?: string;
+};
+
+type AnalyticsSourceMeta = {
+  tenantId: string;
+  centerName: string;
+  governorate: string;
+  semester: string;
+  controlHeadName: string;
+  logoUrl: string;
+  runId: string;
+  createdAtISO: string;
+  assignmentsCount: number;
+  sourceLabelAr: string;
+  sourceLabelEn: string;
+};
+
 const MASTER_TABLE_KEY = "exam-manager:task-distribution:master-table:v1";
-const RUN_STORAGE_KEYS = [
+const RESULTS_TABLE_KEY = "exam-manager:task-distribution:results-table:v1";
+const ALL_TABLE_KEY = "exam-manager:task-distribution:all-table:v1";
+const EXAM_CENTER_DATA_KEY = "exam-manager:exam-center-data:v1";
+const EXAM_CENTER_LOGO_KEY = "exam-manager:exam-center-logo:v1";
+const APP_LOGO_KEY = "exam-manager:app-logo";
+const CONTROL_HEAD_NAME_KEY = "exam-manager:control-head-name:v1";
+const DEFAULT_LOGO_URL = "https://i.imgur.com/vdDhSMh.png";
+
+const CENTER_DATA_KEYS = [
+  EXAM_CENTER_DATA_KEY,
+  "exam-manager:school-data:v1",
+  "exam-manager:center-data:v1",
+  "exam-manager:control-center-data:v1",
+  "exam-manager:school-control:center-data:v1",
+  "exam-manager:schoolControl:center-data:v1",
+  "exam-manager:settings12:center-data:v1",
+  "exam-manager:center-control-data:v1",
+  "exam-manager:control-data:v1",
+];
+
+const STATIC_TASK_DISTRIBUTION_RESULTS12_KEYS = [
+  "exam-manager:task-distribution-results12:v1",
+  "exam-manager:task-distribution-results12:current-run:v1",
+  "exam-manager:task-distribution-results12:last-run:v1",
+  "exam-manager:task-distribution-results12:results:v1",
+  "exam-manager:task-distribution-results12:all-data:v1",
+  "exam-manager:task-distribution-results:v1",
+  "exam-manager:task-distribution:results:v1",
   "exam-manager:task-distribution:current-run:v1",
   "exam-manager:task-distribution:run:v1",
   "exam-manager:dist-stats:last-run:v1",
+  MASTER_TABLE_KEY,
+  RESULTS_TABLE_KEY,
+  ALL_TABLE_KEY,
+];
+
+const RELATED_STORAGE_KEY_PARTS = [
+  "task-distribution-results12",
+  "task-distribution-results",
+  "task-distribution",
+  "dist-stats",
+  "exam-center-data",
+  "exam-center-logo",
+  "control-head-name",
+];
+
+const DATA_UPDATED_EVENTS = [
+  RUN_UPDATED_EVENT,
+  MASTER_TABLE_UPDATED_EVENT,
+  "exam-manager:task-distribution-results12:updated",
+  "exam-manager:task-distribution:updated",
+  "exam-manager:distribution-updated",
+  "exam-manager:changed",
+  "exam-manager:control-head-changed",
 ];
 
 const COLORS: Record<TaskType, string> = {
   INVIGILATION: "#facc15",
   RESERVE: "#fb923c",
-  REVIEW_FREE: "#4ade80",
-  CORRECTION_FREE: "#e5e7eb",
+  FLOOR_MONITOR: "#60a5fa",
 };
 
 function tr(lang: Lang, ar: string, en: string) {
   return lang === "ar" ? ar : en;
+}
+
+function firstNonEmpty(...values: unknown[]): string {
+  for (const value of values) {
+    const text = String(value ?? "").replace(/\s+/g, " ").trim();
+    if (text) return text;
+  }
+  return "";
+}
+
+function getTenantIdFromAuth(auth: any): string {
+  return (
+    String(
+      auth?.effectiveTenantId ||
+        auth?.profile?.tenantId ||
+        auth?.userProfile?.tenantId ||
+        auth?.user?.tenantId ||
+        "default"
+    ).trim() || "default"
+  );
+}
+
+function getTaskDistributionStorageKeys(tenantId: string): string[] {
+  const dynamicKeys: string[] = [];
+  try {
+    dynamicKeys.push(taskDistributionKey(tenantId));
+  } catch {}
+
+  return Array.from(new Set([...dynamicKeys, ...STATIC_TASK_DISTRIBUTION_RESULTS12_KEYS]));
 }
 
 function safeParseJson<T>(value: string | null): T | null {
@@ -63,39 +198,379 @@ function safeParseJson<T>(value: string | null): T | null {
   }
 }
 
+function normalizeText(value: unknown): string {
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/[إأآ]/g, "ا")
+    .replace(/ة/g, "ه");
+}
+
+function normalizeTeacherName(value: unknown): string {
+  return String(value || "").trim().replace(/\s+/g, " ");
+}
+
 function getTeacherName(item: Assignment): string {
-  if (typeof item.teacher === "string") return item.teacher.trim();
-  return String(item.teacherName || item.teacher?.name || item.name || "").trim();
+  const teacher = item.teacher;
+  if (typeof teacher === "string") return normalizeTeacherName(teacher);
+
+  return normalizeTeacherName(
+    item.teacherName ||
+      item.teacherFullName ||
+      item.employeeName ||
+      teacher?.name ||
+      teacher?.fullName ||
+      teacher?.teacherName ||
+      teacher?.displayName ||
+      item.name ||
+      item.fullName ||
+      ""
+  );
+}
+
+function getRawTaskType(item: Assignment): string {
+  return normalizeText(
+    item.taskType ||
+      (item as any).taskTypeLabelAr ||
+      (item as any).taskTypeLabel ||
+      item.type ||
+      item.task ||
+      (item as any).taskLabel ||
+      item.role ||
+      (item as any).roleName ||
+      item.dutyType ||
+      item.assignmentType ||
+      item.category ||
+      (item as any).mission ||
+      (item as any).missionName ||
+      ""
+  );
 }
 
 function getTaskType(item: Assignment): TaskType | "" {
-  const raw = String(item.taskType || item.type || "").trim();
-  if (raw === "INVIGILATION" || raw === "مراقبة") return "INVIGILATION";
-  if (raw === "RESERVE" || raw === "احتياط") return "RESERVE";
-  if (raw === "REVIEW_FREE" || raw === "مراجعة") return "REVIEW_FREE";
-  if (raw === "CORRECTION_FREE" || raw === "تصحيح") return "CORRECTION_FREE";
+  const raw = getRawTaskType(item);
+  const upper = raw.toUpperCase().replace(/[\s-]+/g, "_");
+  const lower = raw.toLowerCase();
+
+  if (
+    upper === "INVIGILATION" ||
+    raw === "مراقبه" ||
+    raw === "مراقبة" ||
+    lower === "invigilation" ||
+    lower === "monitoring"
+  ) {
+    return "INVIGILATION";
+  }
+
+  if (
+    upper === "RESERVE" ||
+    raw === "احتياط" ||
+    lower === "reserve" ||
+    lower === "backup"
+  ) {
+    return "RESERVE";
+  }
+
+  if (
+    upper === "DUTY_INVIGILATOR" ||
+    upper === "FLOOR_MONITOR" ||
+    upper === "HALL_MONITOR" ||
+    upper === "CORRIDOR_MONITOR" ||
+    upper === "ROLE_MONITOR" ||
+    upper === "DUTY_MONITOR" ||
+    upper === "FLOOR_SUPERVISOR" ||
+    upper === "HALL_SUPERVISOR" ||
+    (item as any).dutyInvigilator === true ||
+    raw === "مراقب دور" ||
+    raw === "مراقب_دور" ||
+    raw === "مراقب الدور" ||
+    (raw.includes("دور") && (raw.includes("مراقب") || raw.includes("مراقبه"))) ||
+    lower.includes("floor monitor") ||
+    lower.includes("hall monitor") ||
+    lower.includes("corridor monitor")
+  ) {
+    return "FLOOR_MONITOR";
+  }
+
   return "";
 }
 
-function readAssignmentsFromStorage(): Assignment[] {
-  if (typeof window === "undefined") return [];
+function toNumber(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
 
-  for (const key of RUN_STORAGE_KEYS) {
-    const parsed = safeParseJson<{ assignments?: Assignment[] }>(window.localStorage.getItem(key));
-    if (Array.isArray(parsed?.assignments) && parsed.assignments.length) return parsed.assignments;
+function readCount(item: Assignment, keys: string[]): number {
+  return keys.reduce((sum, key) => sum + toNumber(item[key]), 0);
+}
+
+function hasSupportedTaskData(value: unknown): value is Assignment {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const item = value as Assignment;
+  const teacher = getTeacherName(item);
+  if (!teacher) return false;
+  if (getTaskType(item)) return true;
+
+  const monitoring = readCount(item, ["monitoring", "invigilation", "invigilationCount", "monitoringCount", "مراقبة"]);
+  const reserve = readCount(item, ["reserve", "reserveCount", "backup", "احتياط"]);
+  const floorMonitor = readCount(item, [
+    "floorMonitor",
+    "floorMonitoring",
+    "floorMonitorCount",
+    "hallMonitor",
+    "corridorMonitor",
+    "roleMonitor",
+    "dutyInvigilator",
+    "dutyInvigilatorCount",
+    "duty",
+    "مراقب دور",
+    "مراقب_دور",
+  ]);
+
+  return monitoring + reserve + floorMonitor > 0;
+}
+
+function collectAssignments(value: unknown, output: Assignment[] = [], depth = 0): Assignment[] {
+  if (!value || depth > 6) return output;
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      if (hasSupportedTaskData(item)) output.push(item);
+      else collectAssignments(item, output, depth + 1);
+    }
+    return output;
   }
 
-  const masterData = safeParseJson<{ rows?: Assignment[]; data?: Assignment[] }>(
-    window.localStorage.getItem(MASTER_TABLE_KEY)
-  );
-  const rows = Array.isArray(masterData?.rows)
-    ? masterData.rows
-    : Array.isArray(masterData?.data)
-    ? masterData.data
-    : [];
-  if (rows.length) return rows;
+  if (typeof value === "object") {
+    const objectValue = value as Record<string, unknown>;
+    const preferredKeys = [
+      "assignments",
+      "rows",
+      "data",
+      "results",
+      "items",
+      "teachers",
+      "distribution",
+      "allData",
+      "tableData",
+      "resultRows",
+      "currentRun",
+      "lastRun",
+    ];
 
-  return [];
+    for (const key of preferredKeys) {
+      collectAssignments(objectValue[key], output, depth + 1);
+    }
+
+    for (const nested of Object.values(objectValue)) {
+      collectAssignments(nested, output, depth + 1);
+    }
+  }
+
+  return output;
+}
+
+function makeAssignmentSignature(item: Assignment): string {
+  const teacher = getTeacherName(item);
+  const taskType = getTaskType(item);
+  const date = String(item.date || item.examDate || item.day || "");
+  const period = String(item.period || item.session || item.time || "");
+  const room = String(item.room || item.classroom || item.hall || "");
+  const subject = String(item.subject || item.course || "");
+
+  if (taskType) return [teacher, taskType, date, period, room, subject].join("|");
+  return JSON.stringify(item);
+}
+
+function dedupeAssignments(assignments: Assignment[]): Assignment[] {
+  const seen = new Set<string>();
+  const result: Assignment[] = [];
+
+  for (const assignment of assignments) {
+    const signature = makeAssignmentSignature(assignment);
+    if (seen.has(signature)) continue;
+    seen.add(signature);
+    result.push(assignment);
+  }
+
+  return result;
+}
+
+function isRelatedStorageKey(key: string | null): boolean {
+  if (!key) return true;
+  return RELATED_STORAGE_KEY_PARTS.some((part) => key.includes(part));
+}
+
+function isWatchedStorageKey(key: string | null, tenantId: string): boolean {
+  if (!key) return true;
+  return (
+    isRelatedStorageKey(key) ||
+    getTaskDistributionStorageKeys(tenantId).includes(key) ||
+    CENTER_DATA_KEYS.includes(key) ||
+    key === APP_LOGO_KEY ||
+    key === EXAM_CENTER_LOGO_KEY ||
+    key === CONTROL_HEAD_NAME_KEY
+  );
+}
+
+function readRunSafely(tenantId: string): any | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return loadRun(tenantId) || null;
+  } catch {
+    return null;
+  }
+}
+
+function readAssignmentsFromStorage(tenantId = "default"): Assignment[] {
+  if (typeof window === "undefined") return [];
+
+  const collected: Assignment[] = [];
+  const visitedKeys = new Set<string>();
+
+  const directRun = readRunSafely(tenantId);
+  collectAssignments(directRun, collected);
+
+  const readKey = (key: string) => {
+    if (visitedKeys.has(key)) return;
+    visitedKeys.add(key);
+    const parsed = safeParseJson<unknown>(window.localStorage.getItem(key));
+    collectAssignments(parsed, collected);
+  };
+
+  for (const key of getTaskDistributionStorageKeys(tenantId)) readKey(key);
+
+  for (let index = 0; index < window.localStorage.length; index += 1) {
+    const key = window.localStorage.key(index);
+    if (key && isRelatedStorageKey(key)) readKey(key);
+  }
+
+  return dedupeAssignments(collected);
+}
+
+function unwrapCenterPayload(raw: any): any {
+  if (!raw || typeof raw !== "object") return raw || {};
+  return raw.data || raw.centerData || raw.examCenterData || raw.controlData || raw.schoolData || raw.settings || raw.config || raw;
+}
+
+function normalizeCenterData(rawPayload: any): Partial<ExamCenterData> | null {
+  const data = unwrapCenterPayload(rawPayload);
+  if (!data || typeof data !== "object") return null;
+
+  const name = firstNonEmpty(
+    data.centerName,
+    data.examCenterName,
+    data.examCentreName,
+    data.controlCenterName,
+    data.center,
+    data.examCenter,
+    data.officialCenterName,
+    data.schoolName,
+    data.name
+  );
+
+  const governorate = firstNonEmpty(
+    data.directorate,
+    data.directorateName,
+    data.educationDirectorate,
+    data.generalDirectorate,
+    data.governorate,
+    data.governorateName,
+    data.region,
+    data.adminRegion,
+    data.educationRegion
+  );
+
+  const semester = firstNonEmpty(data.semester, data.semesterLabel, data.term, data.termLabel, data.studySemester, data.studyTerm);
+  const phone = firstNonEmpty(data.phone, data.phoneNumber, data.mobile, data.centerPhone, data.controlPhone);
+  const address = firstNonEmpty(data.address, data.officialAddress, data.centerAddress, data.location);
+  const controlHeadName = firstNonEmpty(
+    data.controlHeadName,
+    data.controlHead,
+    data.centerHead,
+    data.centerHeadName,
+    data.headOfCenter,
+    data.centerPresident,
+    data.controllerName,
+    data.chiefName,
+    data.managerName,
+    data.directorName,
+    data.principalName,
+    window.localStorage.getItem(CONTROL_HEAD_NAME_KEY)
+  );
+  const country = firstNonEmpty(data.country, data.countryName, data.sultanate);
+  const ministry = firstNonEmpty(data.ministry, data.ministryName, data.educationMinistry);
+  const academicYear = firstNonEmpty(data.academicYear, data.yearLabel, data.schoolYear, data.studyYear, data.academicYearLabel);
+
+  if (!name && !governorate && !semester && !phone && !address && !controlHeadName && !country && !ministry && !academicYear) {
+    return null;
+  }
+
+  return { name, governorate, semester, phone, address, controlHeadName, country, ministry, academicYear };
+}
+
+function readCenterDataFromStorage(): ExamCenterData {
+  const fallback: ExamCenterData = {
+    name: "",
+    governorate: "",
+    semester: "",
+    phone: "",
+    address: "",
+    controlHeadName: "",
+    country: "",
+    ministry: "",
+    academicYear: "",
+  };
+
+  if (typeof window === "undefined") return fallback;
+
+  for (const key of CENTER_DATA_KEYS) {
+    const normalized = normalizeCenterData(safeParseJson<unknown>(window.localStorage.getItem(key)));
+    if (normalized) return { ...fallback, ...normalized };
+  }
+
+  return {
+    ...fallback,
+    controlHeadName: String(window.localStorage.getItem(CONTROL_HEAD_NAME_KEY) || "").trim(),
+  };
+}
+
+function readLogoUrlFromStorage(): string {
+  if (typeof window === "undefined") return DEFAULT_LOGO_URL;
+  return (
+    String(window.localStorage.getItem(EXAM_CENTER_LOGO_KEY) || "").trim() ||
+    String(window.localStorage.getItem(APP_LOGO_KEY) || "").trim() ||
+    DEFAULT_LOGO_URL
+  );
+}
+
+function readAnalyticsSourceMeta(tenantId = "default", assignmentsCount?: number): AnalyticsSourceMeta {
+  const center = readCenterDataFromStorage();
+  const run = readRunSafely(tenantId);
+  const count =
+    typeof assignmentsCount === "number"
+      ? assignmentsCount
+      : Array.isArray(run?.assignments)
+      ? run.assignments.length
+      : readAssignmentsFromStorage(tenantId).length;
+
+  return {
+    tenantId,
+    centerName: center.name || "",
+    governorate: center.governorate || "",
+    semester: center.semester || "",
+    controlHeadName: center.controlHeadName || "",
+    logoUrl: readLogoUrlFromStorage(),
+    runId: String(run?.runId || ""),
+    createdAtISO: String(run?.createdAtISO || ""),
+    assignmentsCount: count,
+    sourceLabelAr: run ? "تشغيل التوزيع الحالي" : "الجداول المحفوظة",
+    sourceLabelEn: run ? "Current distribution run" : "Saved distribution tables",
+  };
 }
 
 function buildTeacherAnalytics(assignments: Assignment[]): TeacherAnalyticsRow[] {
@@ -105,22 +580,40 @@ function buildTeacherAnalytics(assignments: Assignment[]): TeacherAnalyticsRow[]
     const teacher = getTeacherName(assignment);
     if (!teacher) continue;
 
+    const taskType = getTaskType(assignment);
+    const monitoringCount = readCount(assignment, ["monitoring", "invigilation", "invigilationCount", "monitoringCount", "مراقبة"]);
+    const reserveCount = readCount(assignment, ["reserve", "reserveCount", "backup", "احتياط"]);
+    const floorMonitorCount = readCount(assignment, [
+      "floorMonitor",
+      "floorMonitoring",
+      "floorMonitorCount",
+      "hallMonitor",
+      "corridorMonitor",
+      "roleMonitor",
+      "مراقب دور",
+      "مراقب_دور",
+    ]);
+
+    if (!taskType && monitoringCount + reserveCount + floorMonitorCount === 0) continue;
+
     const current = map.get(teacher) || {
       teacher,
       monitoring: 0,
       reserve: 0,
-      review: 0,
-      correction: 0,
+      floorMonitor: 0,
       total: 0,
     };
 
-    const taskType = getTaskType(assignment);
     if (taskType === "INVIGILATION") current.monitoring += 1;
     else if (taskType === "RESERVE") current.reserve += 1;
-    else if (taskType === "REVIEW_FREE") current.review += 1;
-    else if (taskType === "CORRECTION_FREE") current.correction += 1;
+    else if (taskType === "FLOOR_MONITOR") current.floorMonitor += 1;
+    else {
+      current.monitoring += monitoringCount;
+      current.reserve += reserveCount;
+      current.floorMonitor += floorMonitorCount;
+    }
 
-    current.total = current.monitoring + current.reserve + current.review;
+    current.total = current.monitoring + current.reserve + current.floorMonitor;
     map.set(teacher, current);
   }
 
@@ -132,8 +625,7 @@ function buildTeacherAnalytics(assignments: Assignment[]): TeacherAnalyticsRow[]
 function buildTaskDistribution(rows: TeacherAnalyticsRow[]): DistributionItem[] {
   const monitoring = rows.reduce((sum, row) => sum + row.monitoring, 0);
   const reserve = rows.reduce((sum, row) => sum + row.reserve, 0);
-  const review = rows.reduce((sum, row) => sum + row.review, 0);
-  const correction = rows.reduce((sum, row) => sum + row.correction, 0);
+  const floorMonitor = rows.reduce((sum, row) => sum + row.floorMonitor, 0);
 
   return [
     {
@@ -151,18 +643,11 @@ function buildTaskDistribution(rows: TeacherAnalyticsRow[]): DistributionItem[] 
       color: COLORS.RESERVE,
     },
     {
-      key: "REVIEW_FREE",
-      nameAr: "مراجعة",
-      nameEn: "Review",
-      value: review,
-      color: COLORS.REVIEW_FREE,
-    },
-    {
-      key: "CORRECTION_FREE",
-      nameAr: "تصحيح",
-      nameEn: "Correction",
-      value: correction,
-      color: COLORS.CORRECTION_FREE,
+      key: "FLOOR_MONITOR",
+      nameAr: "مراقب دور",
+      nameEn: "Floor monitor",
+      value: floorMonitor,
+      color: COLORS.FLOOR_MONITOR,
     },
   ];
 }
@@ -182,8 +667,7 @@ function labelTaskType(type: TaskType, lang: Lang): string {
   const map: Record<TaskType, { ar: string; en: string }> = {
     INVIGILATION: { ar: "مراقبة", en: "Invigilation" },
     RESERVE: { ar: "احتياط", en: "Reserve" },
-    REVIEW_FREE: { ar: "مراجعة", en: "Review" },
-    CORRECTION_FREE: { ar: "تصحيح", en: "Correction" },
+    FLOOR_MONITOR: { ar: "مراقب دور", en: "Floor monitor" },
   };
   return lang === "ar" ? map[type].ar : map[type].en;
 }
@@ -193,13 +677,12 @@ function buildAutoRedistributionSuggestions(
   lang: Lang
 ): TransferSuggestion[] {
   const suggestions: TransferSuggestion[] = [];
-  const taskTypes: TaskType[] = ["INVIGILATION", "RESERVE", "REVIEW_FREE"];
+  const taskTypes: TaskType[] = ["INVIGILATION", "RESERVE", "FLOOR_MONITOR"];
 
   const getValue = (row: TeacherAnalyticsRow, taskType: TaskType) => {
     if (taskType === "INVIGILATION") return row.monitoring;
     if (taskType === "RESERVE") return row.reserve;
-    if (taskType === "REVIEW_FREE") return row.review;
-    return row.correction;
+    return row.floorMonitor;
   };
 
   const highestTotal = [...rows].sort((a, b) => b.total - a.total)[0];
@@ -211,14 +694,18 @@ function buildAutoRedistributionSuggestions(
     highestTotal.teacher !== lowestTotal.teacher &&
     highestTotal.total - lowestTotal.total >= 3
   ) {
+    const mostLoadedType = taskTypes
+      .map((taskType) => ({ taskType, value: getValue(highestTotal, taskType) }))
+      .sort((a, b) => b.value - a.value)[0]?.taskType || "INVIGILATION";
+
     suggestions.push({
-      taskType: "INVIGILATION",
+      taskType: mostLoadedType,
       from: highestTotal.teacher,
       to: lowestTotal.teacher,
       reason: tr(
         lang,
-        `إجمالي الحمل على ${highestTotal.teacher} أعلى بوضوح من ${lowestTotal.teacher}، لذلك يفضّل نقل مهمة عامة أو أكثر بالتدرج.`,
-        `${highestTotal.teacher} has a clearly heavier total workload than ${lowestTotal.teacher}, so gradually moving one or more general tasks is recommended.`
+        `إجمالي الحمل على ${highestTotal.teacher} أعلى بوضوح من ${lowestTotal.teacher}، لذلك يفضّل نقل مهمة ${labelTaskType(mostLoadedType, lang)} أو أكثر بالتدرج.`,
+        `${highestTotal.teacher} has a clearly heavier total workload than ${lowestTotal.teacher}, so gradually moving one or more ${labelTaskType(mostLoadedType, lang)} tasks is recommended.`
       ),
     });
   }
@@ -261,7 +748,7 @@ function buildInsights(rows: TeacherAnalyticsRow[], lang: Lang): string[] {
   const lowest = [...rows].sort((a, b) => a.total - b.total)[0];
   const fairness = scoreFairness(rows);
   const withoutReserve = rows.filter((row) => row.reserve === 0).length;
-  const withoutReview = rows.filter((row) => row.review === 0).length;
+  const withoutFloorMonitor = rows.filter((row) => row.floorMonitor === 0).length;
 
   return [
     tr(
@@ -281,8 +768,8 @@ function buildInsights(rows: TeacherAnalyticsRow[], lang: Lang): string[] {
     ),
     tr(
       lang,
-      `عدد المعلمين بدون احتياط: ${withoutReserve}، وبدون مراجعة: ${withoutReview}.`,
-      `${withoutReserve} teachers have no reserve tasks, and ${withoutReview} have no review tasks.`
+      `عدد المعلمين بدون احتياط: ${withoutReserve}، وبدون مراقب دور: ${withoutFloorMonitor}.`,
+      `${withoutReserve} teachers have no reserve tasks, and ${withoutFloorMonitor} have no floor monitor tasks.`
     ),
   ];
 }
@@ -291,28 +778,39 @@ function runSelfTests(): void {
   const sample: Assignment[] = [
     { teacherName: "A", taskType: "INVIGILATION" },
     { teacherName: "A", taskType: "RESERVE" },
-    { teacherName: "B", taskType: "CORRECTION_FREE" },
-    { teacherName: "B", taskType: "CORRECTION_FREE" },
-    { teacherName: "B", taskType: "REVIEW_FREE" },
+    { teacherName: "B", taskType: "FLOOR_MONITOR" },
+    { teacherName: "B", taskType: "مراقب دور" },
+    { teacherName: "C", monitoring: 2, reserve: 1, floorMonitor: 1 },
+    { teacherName: "D", taskType: "OTHER_TASK" },
   ];
 
   const rows = buildTeacherAnalytics(sample);
   const tests = [
     {
-      name: "aggregates total tasks per teacher excluding correction",
+      name: "aggregates total tasks per teacher using monitoring reserve and floor monitor only",
       pass: rows.find((row) => row.teacher === "A")?.total === 2,
     },
     {
-      name: "correction is counted visually but excluded from total",
+      name: "floor monitor is counted",
       pass:
-        rows.find((row) => row.teacher === "B")?.correction === 2 &&
-        rows.find((row) => row.teacher === "B")?.total === 1,
+        rows.find((row) => row.teacher === "B")?.floorMonitor === 2 &&
+        rows.find((row) => row.teacher === "B")?.total === 2,
     },
     {
-      name: "distribution total equals all visual task categories",
+      name: "aggregated result rows are imported",
+      pass:
+        rows.find((row) => row.teacher === "C")?.monitoring === 2 &&
+        rows.find((row) => row.teacher === "C")?.total === 4,
+    },
+    {
+      name: "unsupported task types are ignored",
+      pass: !rows.some((row) => row.teacher === "D"),
+    },
+    {
+      name: "distribution total equals rows total",
       pass:
         buildTaskDistribution(rows).reduce((sum, item) => sum + item.value, 0) ===
-        rows.reduce((sum, row) => sum + row.total + row.correction, 0),
+        rows.reduce((sum, row) => sum + row.total, 0),
     },
     {
       name: "fairness score is bounded",
@@ -359,7 +857,13 @@ function ProgressBar({
 }) {
   const width = max > 0 ? Math.max(8, (value / max) * 100) : 0;
   return (
-    <div style={styles.progressTrack}>
+    <div
+      role="progressbar"
+      aria-valuenow={value}
+      aria-valuemin={0}
+      aria-valuemax={max}
+      style={styles.progressTrack}
+    >
       {value > 0 ? (
         <div style={{ ...styles.progressFill, width: `${width}%`, background: color }} />
       ) : null}
@@ -395,11 +899,12 @@ function PieLikeChart({ data, lang }: { data: DistributionItem[]; lang: Lang }) 
     return { ...item, start, end };
   });
 
-  const gradient = segments.length
+  const hasData = data.some((item) => item.value > 0);
+  const gradient = hasData
     ? segments
         .map((segment) => `${segment.color} ${segment.start * 100}% ${segment.end * 100}%`)
         .join(", ")
-    : "#333 0% 100%";
+    : "rgba(255,255,255,0.08) 0% 100%";
 
   return (
     <div style={styles.panel}>
@@ -412,7 +917,11 @@ function PieLikeChart({ data, lang }: { data: DistributionItem[]; lang: Lang }) 
         )}
       />
       <div style={styles.chartWrap}>
-        <div style={{ ...styles.pieCircle, background: `conic-gradient(${gradient})` }}>
+        <div
+          role="img"
+          aria-label={tr(lang, "توزيع أنواع المهام", "Task-type distribution")}
+          style={{ ...styles.pieCircle, background: `conic-gradient(${gradient})` }}
+        >
           <div style={styles.pieHole}>
             <div style={styles.pieLabel}>{tr(lang, "الإجمالي", "Total")}</div>
             <div style={styles.pieValue}>
@@ -438,6 +947,9 @@ function PieLikeChart({ data, lang }: { data: DistributionItem[]; lang: Lang }) 
 function TeacherBars({ rows, lang }: { rows: TeacherAnalyticsRow[]; lang: Lang }) {
   const topRows = rows.slice(0, 8);
   const maxTotal = Math.max(1, ...topRows.map((row) => row.total));
+  const monitoringTotal = rows.reduce((sum, row) => sum + row.monitoring, 0);
+  const reserveTotal = rows.reduce((sum, row) => sum + row.reserve, 0);
+  const floorMonitorTotal = rows.reduce((sum, row) => sum + row.floorMonitor, 0);
 
   return (
     <div style={styles.panel}>
@@ -457,9 +969,9 @@ function TeacherBars({ rows, lang }: { rows: TeacherAnalyticsRow[]; lang: Lang }
         ))}
       </div>
       <div style={styles.legendRow}>
-        <LegendItem color={COLORS.INVIGILATION} label={tr(lang, "مراقبة", "Invigilation")} value={0} />
-        <LegendItem color={COLORS.RESERVE} label={tr(lang, "احتياط", "Reserve")} value={0} />
-        <LegendItem color={COLORS.REVIEW_FREE} label={tr(lang, "مراجعة", "Review")} value={0} />
+        <LegendItem color={COLORS.INVIGILATION} label={tr(lang, "مراقبة", "Invigilation")} value={monitoringTotal} />
+        <LegendItem color={COLORS.RESERVE} label={tr(lang, "احتياط", "Reserve")} value={reserveTotal} />
+        <LegendItem color={COLORS.FLOOR_MONITOR} label={tr(lang, "مراقب دور", "Floor monitor")} value={floorMonitorTotal} />
       </div>
     </div>
   );
@@ -523,39 +1035,6 @@ function SummaryTile({
   );
 }
 
-function StatusChip({
-  label,
-  tone = "gold",
-}: {
-  label: string;
-  tone?: "gold" | "green" | "blue" | "slate";
-}) {
-  const toneStyles: Record<string, React.CSSProperties> = {
-    gold: {
-      background: "rgba(245, 158, 11, 0.12)",
-      color: "#fde68a",
-      border: "1px solid rgba(245, 158, 11, 0.22)",
-    },
-    green: {
-      background: "rgba(16, 185, 129, 0.12)",
-      color: "#a7f3d0",
-      border: "1px solid rgba(16, 185, 129, 0.22)",
-    },
-    blue: {
-      background: "rgba(59, 130, 246, 0.12)",
-      color: "#bfdbfe",
-      border: "1px solid rgba(59, 130, 246, 0.22)",
-    },
-    slate: {
-      background: "rgba(148, 163, 184, 0.12)",
-      color: "#e2e8f0",
-      border: "1px solid rgba(148, 163, 184, 0.2)",
-    },
-  };
-
-  return <span style={{ ...styles.statusChip, ...toneStyles[tone] }}>{label}</span>;
-}
-
 function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
     <div style={styles.sectionHeaderWrap}>
@@ -570,27 +1049,41 @@ function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }
 
 export default function AnalyticsDashboardProductionGrade() {
   const { lang } = useI18n();
-  const [assignments, setAssignments] = useState<Assignment[]>(() => readAssignmentsFromStorage());
+  const auth = useAuth();
+  const tenantId = useMemo(() => getTenantIdFromAuth(auth), [auth]);
+  const [assignments, setAssignments] = useState<Assignment[]>(() => readAssignmentsFromStorage(tenantId));
+  const [sourceMeta, setSourceMeta] = useState<AnalyticsSourceMeta>(() => readAnalyticsSourceMeta(tenantId));
   const [showSuggestions, setShowSuggestions] = useState(true);
+
+  const refreshAnalytics = React.useCallback(() => {
+    const nextAssignments = readAssignmentsFromStorage(tenantId);
+    setAssignments(nextAssignments);
+    setSourceMeta(readAnalyticsSourceMeta(tenantId, nextAssignments.length));
+  }, [tenantId]);
 
   useEffect(() => {
     runSelfTests();
+    refreshAnalytics();
 
-    const refresh = () => setAssignments(readAssignmentsFromStorage());
     const onStorage = (event: StorageEvent) => {
-      if (!event.key || event.key === MASTER_TABLE_KEY || RUN_STORAGE_KEYS.includes(event.key)) {
-        refresh();
-      }
+      if (isWatchedStorageKey(event.key, tenantId)) refreshAnalytics();
     };
 
-    window.addEventListener("focus", refresh);
+    const onDataEvent = (event: Event) => {
+      const detailTenantId = String((event as CustomEvent)?.detail?.tenantId || "").trim();
+      if (!detailTenantId || detailTenantId === tenantId) refreshAnalytics();
+    };
+
+    window.addEventListener("focus", refreshAnalytics);
     window.addEventListener("storage", onStorage);
+    DATA_UPDATED_EVENTS.forEach((eventName) => window.addEventListener(eventName, onDataEvent as EventListener));
 
     return () => {
-      window.removeEventListener("focus", refresh);
+      window.removeEventListener("focus", refreshAnalytics);
       window.removeEventListener("storage", onStorage);
+      DATA_UPDATED_EVENTS.forEach((eventName) => window.removeEventListener(eventName, onDataEvent as EventListener));
     };
-  }, []);
+  }, [refreshAnalytics, tenantId]);
 
   const isRTL = lang === "ar";
   const rows = useMemo(() => buildTeacherAnalytics(assignments), [assignments]);
@@ -614,8 +1107,7 @@ export default function AnalyticsDashboardProductionGrade() {
   const activeTaskTypes = taskDistribution.filter((item) => item.value > 0).length;
   const maxMonitoring = Math.max(1, ...rows.map((row) => row.monitoring));
   const maxReserve = Math.max(1, ...rows.map((row) => row.reserve));
-  const maxReview = Math.max(1, ...rows.map((row) => row.review));
-  const maxCorrection = Math.max(1, ...rows.map((row) => row.correction));
+  const maxFloorMonitor = Math.max(1, ...rows.map((row) => row.floorMonitor));
 
   return (
     <div dir={isRTL ? "rtl" : "ltr"} style={styles.page}>
@@ -625,22 +1117,29 @@ export default function AnalyticsDashboardProductionGrade() {
       <div style={styles.container}>
         <div style={styles.topBar}>
           <div style={styles.topBarBrandWrap}>
-            <div style={styles.brandMark}>EM</div>
+            <div style={styles.brandMark}>
+              {sourceMeta.logoUrl ? (
+                <img src={sourceMeta.logoUrl} alt="Exam center logo" style={styles.brandLogo} />
+              ) : (
+                "EM"
+              )}
+            </div>
             <div>
               <div style={styles.topBarTitle}>
-                {tr(lang, "مركز قيادة التحليلات", "Ultra Analytics Command Center")}
+                {sourceMeta.centerName || tr(lang, "مركز قيادة التحليلات", "Ultra Analytics Command Center")}
               </div>
               <div style={styles.topBarSub}>
                 {tr(
                   lang,
-                  "لوحة تنفيذية فائقة الفخامة لقراءة الأحمال واتخاذ القرار",
-                  "Ultra-premium executive dashboard for workload visibility and decision support"
+                  sourceMeta.governorate || "لوحة تنفيذية فائقة الفخامة لقراءة أحمال المراقبة والاحتياط ومراقب الدور",
+                  sourceMeta.governorate || "Ultra-premium executive dashboard for invigilation, reserve, and floor monitor workload visibility"
                 )}
               </div>
             </div>
           </div>
           <div style={styles.topBarBadges}>
-            <StatusBadge label={tr(lang, "بيانات حقيقية فقط", "Real data only")} tone="green" />
+            <StatusBadge label={lang === "ar" ? sourceMeta.sourceLabelAr : sourceMeta.sourceLabelEn} tone="green" />
+            <StatusBadge label={tr(lang, `Tenant: ${sourceMeta.tenantId}`, `Tenant: ${sourceMeta.tenantId}`)} tone="blue" />
             <StatusBadge
               label={tr(lang, `حالة التوازن: ${fairnessLabel}`, `Balance status: ${fairnessLabel}`)}
               tone={fairness >= 70 ? "gold" : "blue"}
@@ -650,15 +1149,15 @@ export default function AnalyticsDashboardProductionGrade() {
 
         <div style={styles.premiumRibbon}>
           <div style={styles.premiumRibbonItem}>
-            {tr(lang, "رؤية تنفيذية فورية", "Instant executive visibility")}
+            {tr(lang, "مرتبط بصفحة التشغيل والنتائج والطباعة", "Linked to run, results, and print pages")}
           </div>
           <div style={styles.premiumRibbonDivider} />
           <div style={styles.premiumRibbonItem}>
-            {tr(lang, "تحليلات مباشرة من النظام", "Direct analytics from the system")}
+            {tr(lang, "مراقبة + احتياط + مراقب دور", "Invigilation + Reserve + Floor monitor")}
           </div>
           <div style={styles.premiumRibbonDivider} />
           <div style={styles.premiumRibbonItem}>
-            {tr(lang, "قرار أسرع بثقة أعلى", "Faster decisions with higher confidence")}
+            {sourceMeta.runId ? tr(lang, `Run ID: ${sourceMeta.runId}`, `Run ID: ${sourceMeta.runId}`) : tr(lang, "قراءة تلقائية من التخزين الحالي", "Automatic read from current storage")}
           </div>
         </div>
 
@@ -669,13 +1168,13 @@ export default function AnalyticsDashboardProductionGrade() {
                 {tr(lang, "نظام إدارة الامتحانات المطور", "Enhanced Exam Management System")}
               </div>
               <h1 style={styles.heroTitle}>
-                {tr(lang, "لوحة التحليل الذكي", "Smart Analytics Dashboard")}
+                {tr(lang, "لوحة تحليل التوزيع", "Distribution Analytics Dashboard")}
               </h1>
               <p style={styles.heroText}>
                 {tr(
                   lang,
-                  "واجهة تحليل متقدمة تمنح المسؤول رؤية فورية لحالة توزيع المهام، وتعرض العدالة والفجوات والتوصيات بشكل بصري احترافي يعكس قوة النظام من أول لحظة دخول.",
-                  "An advanced analytics experience that gives administrators an immediate view of task distribution, fairness, workload gaps, and smart recommendations in a premium visual presentation."
+                  "تعرض هذه الصفحة أحمال المعلمين من تشغيل التوزيع الحالي وجداول النتائج والطباعة وبيانات مركز الامتحان المحفوظة في صفحة الإعدادات.",
+                  "This page reads teacher workloads from the current distribution run, results/print tables, and exam-center settings saved from the settings page."
                 )}
               </p>
 
@@ -697,26 +1196,26 @@ export default function AnalyticsDashboardProductionGrade() {
 
             <div style={styles.heroSpotlight}>
               <div style={styles.heroSpotlightBadge}>
-                {tr(lang, "تحليل مباشر من بيانات البرنامج", "Live analytics from program data")}
+                {tr(lang, "تحليل مباشر من task-distribution-results12", "Live analytics from task-distribution-results12")}
               </div>
               <div style={styles.heroSpotlightTitle}>
                 {tr(
                   lang,
-                  "رؤية أوضح. قرار أسرع. واجهة عالمية تبهر المستخدم من اللحظة الأولى.",
-                  "Sharper visibility. Faster decisions. A dashboard that impresses."
+                  "مراقبة أوضح للأحمال بعد اعتماد مراقب الدور في التحليل.",
+                  "Clearer workload visibility after including floor monitor in analytics."
                 )}
               </div>
               <div style={styles.heroSpotlightText}>
                 {tr(
                   lang,
-                  "الواجهة تعرض المؤشرات الأساسية والرسوم التحليلية والملاحظات واقتراحات إعادة التوزيع ضمن تجربة مرئية فاخرة، مع الحفاظ الكامل على منطق الصفحة ومصدر البيانات الحقيقي فقط.",
-                  "The interface presents KPIs, visual analytics, insights, and redistribution suggestions in a polished premium experience while preserving the original logic and real data source only."
+                  "تم ربط التحليل بمفتاح التشغيل الفعلي حسب المستأجر، وبجداول master/results/all، وبأحداث التحديث الصادرة من صفحات التشغيل والنتائج والإعدادات.",
+                  "Analytics is now linked to the tenant-specific run key, master/results/all tables, and update events from run, results, and settings pages."
                 )}
               </div>
               <div style={styles.heroButtons}>
                 <button
                   style={styles.primaryButton}
-                  onClick={() => setAssignments(readAssignmentsFromStorage())}
+                  onClick={refreshAnalytics}
                 >
                   {tr(lang, "تحديث الآن", "Refresh now")}
                 </button>
@@ -725,8 +1224,8 @@ export default function AnalyticsDashboardProductionGrade() {
                   onClick={() => setShowSuggestions((value) => !value)}
                 >
                   {showSuggestions
-                    ? tr(lang, "إخفاء اقتراحات AI", "Hide AI suggestions")
-                    : tr(lang, "إظهار اقتراحات AI", "Show AI suggestions")}
+                    ? tr(lang, "إخفاء الاقتراحات", "Hide suggestions")
+                    : tr(lang, "إظهار الاقتراحات", "Show suggestions")}
                 </button>
               </div>
             </div>
@@ -773,7 +1272,7 @@ export default function AnalyticsDashboardProductionGrade() {
           </div>
           <div style={styles.executiveItem}>
             <div style={styles.executiveLabel}>{tr(lang, "مصدر البيانات", "Data source")}</div>
-            <div style={styles.executiveValue}>{tr(lang, "النظام فقط", "System only")}</div>
+            <div style={styles.executiveValue}>{tr(lang, "صفحة النتائج", "Results page")}</div>
           </div>
           <div style={styles.executiveItem}>
             <div style={styles.executiveLabel}>{tr(lang, "المعلم الأعلى حملاً", "Top loaded teacher")}</div>
@@ -794,7 +1293,7 @@ export default function AnalyticsDashboardProductionGrade() {
           <KpiCard
             title={tr(lang, "إجمالي الأحمال", "Total workload")}
             value={totalTasks}
-            subtitle={tr(lang, "مراقبة + احتياط + مراجعة فقط", "Invigilation + reserve + review only")}
+            subtitle={tr(lang, "مراقبة + احتياط + مراقب دور فقط", "Invigilation + reserve + floor monitor only")}
           />
           <KpiCard
             title={tr(lang, "درجة العدالة", "Fairness score")}
@@ -823,8 +1322,8 @@ export default function AnalyticsDashboardProductionGrade() {
               title={tr(lang, "التحليل التفصيلي للمعلمين", "Detailed teacher analytics")}
               subtitle={tr(
                 lang,
-                "عرض تفصيلي لكل معلم حسب نوع المهمة وإجمالي الحمل",
-                "Detailed teacher-by-teacher breakdown by task type and total load."
+                "عرض تفصيلي لكل معلم حسب المراقبة والاحتياط ومراقب الدور",
+                "Detailed teacher-by-teacher breakdown by invigilation, reserve, and floor monitor."
               )}
             />
             <div style={styles.teacherList}>
@@ -837,7 +1336,7 @@ export default function AnalyticsDashboardProductionGrade() {
                           {index + 1}. {row.teacher}
                         </div>
                         <div style={styles.teacherSub}>
-                          {tr(lang, "إجمالي الحمل (بدون التصحيح)", "Total load (excluding correction)")}: {row.total}
+                          {tr(lang, "إجمالي الحمل", "Total load")}: {row.total}
                         </div>
                       </div>
                       <div style={styles.pillsWrap}>
@@ -862,20 +1361,11 @@ export default function AnalyticsDashboardProductionGrade() {
                         <span
                           style={{
                             ...styles.pill,
-                            background: "rgba(74,222,128,0.18)",
-                            color: COLORS.REVIEW_FREE,
+                            background: "rgba(96,165,250,0.18)",
+                            color: COLORS.FLOOR_MONITOR,
                           }}
                         >
-                          {tr(lang, "مراجعة", "Review")}: {row.review}
-                        </span>
-                        <span
-                          style={{
-                            ...styles.pill,
-                            background: "rgba(229,231,235,0.18)",
-                            color: COLORS.CORRECTION_FREE,
-                          }}
-                        >
-                          {tr(lang, "تصحيح", "Correction")}: {row.correction}
+                          {tr(lang, "مراقب دور", "Floor monitor")}: {row.floorMonitor}
                         </span>
                       </div>
                     </div>
@@ -894,19 +1384,9 @@ export default function AnalyticsDashboardProductionGrade() {
                       </div>
                       <div>
                         <div style={styles.metricLabel}>
-                          {tr(lang, "مراجعة", "Review")} — {row.review}
+                          {tr(lang, "مراقب دور", "Floor monitor")} — {row.floorMonitor}
                         </div>
-                        <ProgressBar value={row.review} max={maxReview} color={COLORS.REVIEW_FREE} />
-                      </div>
-                      <div>
-                        <div style={styles.metricLabel}>
-                          {tr(lang, "تصحيح", "Correction")} — {row.correction}
-                        </div>
-                        <ProgressBar
-                          value={row.correction}
-                          max={maxCorrection}
-                          color={COLORS.CORRECTION_FREE}
-                        />
+                        <ProgressBar value={row.floorMonitor} max={maxFloorMonitor} color={COLORS.FLOOR_MONITOR} />
                       </div>
                     </div>
                   </div>
@@ -920,8 +1400,8 @@ export default function AnalyticsDashboardProductionGrade() {
                   <div style={styles.emptyStateText}>
                     {tr(
                       lang,
-                      "يرجى تنفيذ التوزيع من داخل البرنامج أولاً، ثم العودة إلى هذه الصفحة لعرض التحليلات الفعلية المستمدة من النظام فقط.",
-                      "Please run the distribution from within the program first, then return to this page to view the actual analytics generated only from system data."
+                      "يرجى تنفيذ التوزيع أو فتح صفحة task-distribution-results12 أولاً، ثم العودة إلى هذه الصفحة لعرض التحليلات الفعلية.",
+                      "Please run the distribution or open task-distribution-results12 first, then return to this page to view the actual analytics."
                     )}
                   </div>
                   <div style={styles.emptyStateHint}>
@@ -958,7 +1438,7 @@ export default function AnalyticsDashboardProductionGrade() {
         {showSuggestions && (
           <div style={{ ...styles.panel, borderColor: "rgba(16,185,129,0.28)" }}>
             <SectionHeader
-              title={tr(lang, "اقتراحات AI لإعادة التوزيع", "AI redistribution suggestions")}
+              title={tr(lang, "اقتراحات إعادة التوزيع", "Redistribution suggestions")}
               subtitle={tr(
                 lang,
                 "اقتراحات استرشادية لتحسين التوازن دون تنفيذ تلقائي",
@@ -968,8 +1448,8 @@ export default function AnalyticsDashboardProductionGrade() {
             <div style={styles.sectionSub}>
               {tr(
                 lang,
-                "اقتراحات ذكية مبنية على الفروقات الحالية بين المعلمين وأنواع المهام. الاقتراحات استرشادية وتساعد المسؤول على اتخاذ قرار أسرع.",
-                "Smart suggestions based on current workload differences between teachers and task types. They are advisory and help the administrator make faster decisions."
+                "اقتراحات مبنية على الفروقات الحالية بين المعلمين في المراقبة والاحتياط ومراقب الدور فقط.",
+                "Suggestions based only on current gaps in invigilation, reserve, and floor monitor tasks."
               )}
             </div>
             {suggestions.length ? (
@@ -1160,6 +1640,13 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#111",
     background: "linear-gradient(135deg, #fff1a6, #f59e0b)",
     boxShadow: "0 12px 28px rgba(245,158,11,0.22)",
+    overflow: "hidden",
+  },
+  brandLogo: {
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+    display: "block",
   },
   topBarTitle: {
     fontSize: 18,
