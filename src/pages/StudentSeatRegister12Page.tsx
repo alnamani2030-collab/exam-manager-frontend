@@ -1152,6 +1152,19 @@ export default function StudentSeatRegister12Page() {
             : cloudError || cloudStatus || "جاهز للعمل المتزامن من أي جهاز."}
         </div>
 
+        <div style={importToolbarStyle}>
+          <button
+            type="button"
+            style={importStudentExcelButtonStyle}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            📥 استيراد بيانات الطالب Excel
+          </button>
+          <span style={importToolbarHintStyle}>
+            يدعم أعمدة رقم الطالب، رقم الجلوس، الاسم، المدرسة، المواد، أرقام المسلسل، القاعات، وحالة الحضور.
+          </span>
+        </div>
+
         <div style={studentGridStyle}>
           <LabeledInput label="رقم الطالب" value={form.studentNo} onChange={(v) => updateField("studentNo", v)} />
           <LabeledInput label="رقم البطاقة" value={form.cardNo} onChange={(v) => updateField("cardNo", v)} />
@@ -1193,7 +1206,7 @@ export default function StudentSeatRegister12Page() {
               <button type="button" style={actionButton("#22c55e")} onClick={saveCurrent}>حفظ</button>
               <button type="button" style={actionButton("#60a5fa")} onClick={newRecord}>جديد</button>
               <button type="button" style={actionButton("#ef4444")} onClick={deleteCurrent}>حذف</button>
-              <button type="button" style={actionButton("#f59e0b")} onClick={() => fileInputRef.current?.click()}>استيراد Excel</button>
+              <button type="button" style={actionButton("#f59e0b")} onClick={() => fileInputRef.current?.click()}>استيراد بيانات الطالب Excel</button>
               <button type="button" style={actionButton("#16a34a")} onClick={exportExcel}>تصدير Excel</button>
               <button type="button" style={actionButton("#f97316")} onClick={printCurrent}>طباعة</button>
               <input
@@ -1561,6 +1574,38 @@ const cloudStatusStyle: React.CSSProperties = {
   borderRadius: 18,
   boxShadow: "0 10px 22px rgba(150,120,20,0.12)",
   fontWeight: 1000,
+};
+
+const importToolbarStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "minmax(260px, 360px) 1fr",
+  alignItems: "center",
+  gap: 14,
+  background: "linear-gradient(180deg, #fffaf0 0%, #f3e8c5 100%)",
+  border: "3px solid #d4af37",
+  borderRadius: 22,
+  padding: "12px 16px",
+  boxShadow: "0 10px 22px rgba(150,120,20,0.12)",
+};
+
+const importStudentExcelButtonStyle: React.CSSProperties = {
+  minHeight: 58,
+  border: "3px solid #14532d",
+  borderRadius: 18,
+  background: "linear-gradient(180deg, #bbf7d0 0%, #22c55e 100%)",
+  color: "#000",
+  fontSize: 18,
+  fontWeight: 1000,
+  cursor: "pointer",
+  boxShadow: "0 10px 20px rgba(20,83,45,0.16), inset 0 1px 0 rgba(255,255,255,0.65)",
+};
+
+const importToolbarHintStyle: React.CSSProperties = {
+  color: "#000",
+  fontSize: 15,
+  fontWeight: 900,
+  lineHeight: 1.8,
+  textAlign: "right",
 };
 
 const contentGridStyle: React.CSSProperties = {
