@@ -1315,6 +1315,15 @@ export default function SuperSystem() {
 
           <button
             className="super-card"
+            disabled={isMinistryViewer}
+            onClick={() => navigate(isOwner ? "/platform-super-system/add-exam-super12" : "/super-system/add-exam-super12")}
+          >
+            <div className="super-card-title">إضافة سوبر امتحانات لمركز دبلوم</div>
+            <div className="super-card-desc">إضافة سوبر امتحانات وربطه بمركز امتحانات الدبلوم داخل نطاق المحافظة.</div>
+          </button>
+
+          <button
+            className="super-card"
             onClick={() => navigate("/school-admins")}
           >
             <div className="super-card-title">أدمنات المدارس في المحافظة</div>
