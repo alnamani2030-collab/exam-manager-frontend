@@ -643,6 +643,7 @@ export default function App() {
         {/* مسارات خاصة بمركز الدبلوم حتى لا تفتح أدوات السحابة داخل Layout المدرسة */}
         <Route path="cloud-health12" element={<CloudStorageHealth />} />
         <Route path="cloud-backup12" element={<CloudBackup />} />
+        <Route path="sync12" element={<Sync />} />
         <Route path="suggestions12page" element={<Suggestions12Page />} />
         <Route path="about12" element={<About12 />} />
       </Route>
