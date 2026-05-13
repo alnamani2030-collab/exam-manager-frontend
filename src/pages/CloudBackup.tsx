@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import {
@@ -168,26 +168,25 @@ export default function CloudBackup() {
   const location = useLocation();
   const auth = useAuth() as any;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const isDiplomaBackupRoute = String(location.pathname || "")
-    .toLowerCase()
-    .includes("cloud-backup12");
-  const [mode, setMode] = useState<"school" | "diploma" | "mixed">(
-    isDiplomaBackupRoute ? "diploma" : "mixed",
-  );
+  const isDiplomaBackupPage = location.pathname.includes("cloud-backup12");
+  const forcedBackupMode: "school" | "diploma" = isDiplomaBackupPage ? "diploma" : "school";
+  const [mode, setMode] = useState<"school" | "diploma" | "mixed">(forcedBackupMode);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [preview, setPreview] = useState<BackupPayload | null>(null);
   const [selectedCollections, setSelectedCollections] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    setMode(forcedBackupMode);
+  }, [forcedBackupMode]);
 
   const tid = clean(tenantId);
   const email = safeEmail(auth);
   const readOnly = Boolean(auth?.readOnly || auth?.allow?.readOnly || getStoredReadOnlyFlag(tid));
 
   const collections = useMemo(() => {
-    if (mode === "school") return SCHOOL_COLLECTIONS;
-    if (mode === "diploma") return DIPLOMA_COLLECTIONS;
-    return Array.from(new Set([...SCHOOL_COLLECTIONS, ...DIPLOMA_COLLECTIONS]));
-  }, [mode]);
+    return forcedBackupMode === "diploma" ? DIPLOMA_COLLECTIONS : SCHOOL_COLLECTIONS;
+  }, [forcedBackupMode]);
 
   async function createBackup() {
     if (!tid) return;
@@ -217,7 +216,7 @@ export default function CloudBackup() {
         createdAt: new Date().toISOString(),
         tenantId: tid,
         createdBy: email,
-        mode,
+        mode: forcedBackupMode,
         collections: collectionsOut,
         settings: settingsOut,
       };
@@ -357,23 +356,38 @@ export default function CloudBackup() {
 
       <OfficialCard title="إنشاء نسخة احتياطية">
         <div style={{ display: "flex", flexWrap: "wrap", gap: 14, alignItems: "center" }}>
-          <select
-            value={mode}
-            onChange={(e) => setMode(e.target.value as any)}
+          <div
+            role="status"
+            aria-label="نوع النسخة الاحتياطية"
             style={{
-              minWidth: 260,
+              minWidth: 300,
               padding: "12px 14px",
               borderRadius: 16,
               border: "2px solid #d4af37",
               background: "#fffaf0",
-              fontWeight: 900,
+              color: "#111827",
+              fontWeight: 1000,
+              textAlign: "center",
+              boxShadow: "inset 0 0 0 1px rgba(212, 175, 55, 0.18)",
             }}
           >
-            <option value="mixed">كل البيانات المتاحة</option>
-            <option value="school">بيانات المدرسة فقط</option>
-            <option value="diploma">بيانات مركز الدبلوم فقط</option>
-            
-          </select>
+            {isDiplomaBackupPage ? "بيانات مركز الدبلوم فقط" : "بيانات المدرسة فقط"}
+          </div>
+          <div
+            style={{
+              background: isDiplomaBackupPage ? "#eff6ff" : "#ecfdf5",
+              border: `2px solid ${isDiplomaBackupPage ? "#60a5fa" : "#34d399"}`,
+              color: isDiplomaBackupPage ? "#1e3a8a" : "#065f46",
+              borderRadius: 16,
+              padding: "10px 14px",
+              fontWeight: 1000,
+              lineHeight: 1.6,
+            }}
+          >
+            {isDiplomaBackupPage
+              ? "سيتم إنشاء نسخة من بيانات مركز الدبلوم الحالي فقط."
+              : "سيتم إنشاء نسخة من بيانات المدرسة الحالية فقط."}
+          </div>
           <OfficialButton onClick={createBackup} disabled={busy || !tid}>إنشاء وتحميل نسخة</OfficialButton>
           <OfficialButton secondary onClick={() => fileInputRef.current?.click()} disabled={busy}>
             رفع ملف نسخة للاستعادة

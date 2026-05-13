@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState, useEffect } from "react";
 
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { useTenant } from "../tenant/TenantContext";
 import { useI18n } from "../i18n/I18nProvider";
@@ -289,6 +289,7 @@ function ActionCard(props: {
 
 export default function Sync() {
   const nav = useNavigate();
+  const location = useLocation();
   const { user } = useAuth() as any;
   const { lang } = useI18n();
   const tr = React.useCallback((ar: string, en: string) => (lang === "ar" ? ar : en), [lang]);
@@ -296,6 +297,12 @@ export default function Sync() {
   const { reloadAll } = useAppData() as any;
 
   const tenantId = String(tenantFromContext || user?.tenantId || "default").trim() || "default";
+  const isDiploma12Sync = React.useMemo(
+    () => String(location?.pathname || "").includes("/sync12"),
+    [location?.pathname],
+  );
+  const cloudHealthRoute = isDiploma12Sync ? "cloud-health12" : "cloud-health";
+  const cloudBackupRoute = isDiploma12Sync ? "cloud-backup12" : "cloud-backup";
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   const [busy, setBusy] = useState<SyncBusy>(null);
@@ -1016,7 +1023,7 @@ export default function Sync() {
                     fontWeight: 950,
                     cursor: "pointer",
                   }}
-                  onClick={() => nav(`/t/${encodeURIComponent(tenantId)}/cloud-health`)}
+                  onClick={() => nav(`/t/${encodeURIComponent(tenantId)}/${cloudHealthRoute}`)}
                 >
                   {tr("فتح فحص التخزين السحابي", "Open Cloud Health Check")}
                 </button>
@@ -1030,7 +1037,7 @@ export default function Sync() {
                     fontWeight: 950,
                     cursor: "pointer",
                   }}
-                  onClick={() => nav(`/t/${encodeURIComponent(tenantId)}/cloud-backup`)}
+                  onClick={() => nav(`/t/${encodeURIComponent(tenantId)}/${cloudBackupRoute}`)}
                 >
                   {tr("فتح النسخ الاحتياطي السحابي الجديد", "Open New Cloud Backup")}
                 </button>
