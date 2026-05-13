@@ -150,7 +150,7 @@ export default function ProgramsGateway() {
           >
             <div style={{ display: "grid", gap: 8 }}>
               <div style={{ fontSize: 18, fontWeight: 900 }}>
-                {tr("وزارة التربية والتعليم", "Ministry of Education")}
+                {tr("وزارة التعليم", "Ministry of Education")}
               </div>
               <div style={{ fontSize: "clamp(28px, 5vw, 56px)", fontWeight: 1000, lineHeight: 1.15 }}>
                 {tr("البوابة التشغيلية", "Operational Gateway")}
