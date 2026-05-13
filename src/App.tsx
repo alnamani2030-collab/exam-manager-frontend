@@ -23,6 +23,8 @@ import TaskDistributionResults12 from "./pages/TaskDistributionResults12";
 import TaskDistributionPrint12 from "./pages/TaskDistributionPrint12";
 import Analytics12Page from "./pages/Analytics12Page";
 import Control12 from "./pages/Control12";
+import CandidateViolationReportForm12 from "./pages/CandidateViolationReportForm12";
+import CandidateWrittenWarning12 from "./pages/CandidateWrittenWarning12";
 import About12 from "./pages/About12";
 import Suggestions12Page from "./pages/Suggestions12Page";
 import StudentSeatRegister12Page from "./pages/StudentSeatRegister12Page";
@@ -500,6 +502,38 @@ export default function App() {
         }
       />
 
+
+      {/* =========================
+          Explicit Diploma Candidate Forms
+          These routes must stay above the generic /t/:tenantId school layout
+          so they always open inside Layout12.
+         ========================= */}
+      <Route
+        path="/t/:tenantId/candidate-violation-report12"
+        element={
+          <TenantRoute>
+            <TenantCloudStorageBridgeGate>
+              <Layout12 />
+            </TenantCloudStorageBridgeGate>
+          </TenantRoute>
+        }
+      >
+        <Route index element={<CandidateViolationReportForm12 />} />
+      </Route>
+
+      <Route
+        path="/t/:tenantId/candidate-written-warning12"
+        element={
+          <TenantRoute>
+            <TenantCloudStorageBridgeGate>
+              <Layout12 />
+            </TenantCloudStorageBridgeGate>
+          </TenantRoute>
+        }
+      >
+        <Route index element={<CandidateWrittenWarning12 />} />
+      </Route>
+
       {/* =========================
           Tenant Area (School)
          ========================= */}
@@ -581,6 +615,8 @@ export default function App() {
         <Route path="task-distribution-print12" element={<TaskDistributionPrint12 />} />
         <Route path="analytics12" element={<Analytics12Page />} />
         <Route path="control12" element={<Control12 />} />
+        <Route path="candidate-violation-report12" element={<CandidateViolationReportForm12 />} />
+        <Route path="candidate-written-warning12" element={<CandidateWrittenWarning12 />} />
         <Route path="student-seat-register12" element={<StudentSeatRegister12Page />} />
         {/* مسارات خاصة بمركز الدبلوم حتى لا تفتح أدوات السحابة داخل Layout المدرسة */}
         <Route path="cloud-health12" element={<CloudStorageHealth />} />
