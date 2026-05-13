@@ -84,10 +84,9 @@ export default function Layout() {
       path.includes("/student-seat-register12") ||
       path.includes("/cloud-health12") ||
       path.includes("/cloud-backup12") ||
+      path.includes("/sync12") ||
       path.includes("/suggestions12page") ||
-      path.includes("/about12") ||
-      path.includes("/candidate-violation-report12") ||
-      path.includes("/candidate-written-warning12")
+      path.includes("/about12")
     );
   }, [location.pathname]);
 
@@ -140,7 +139,8 @@ export default function Layout() {
       { to: tp("control12"), label: tr("ملفات الكنترول", "Control Files"), icon: "🗂️" },
       { to: tp("student-seat-register12"), label: tr("سجل أرقام الجلوس", "Seat Numbers Register"), icon: "🔎" },
       { to: tp("cloud-health12"), label: tr("فحص التخزين السحابي", "Cloud Health"), icon: "☁️" },
-      { to: tp("cloud-backup12"), label: tr("النسخ الاحتياطي السحابي", "Cloud Backup"), icon: "🛡️", adminOnly: true },
+      { to: tp("cloud-backup12"), label: tr("النسخ الاحتياطي السحابي", "Cloud Backup"), icon: "🛡️" },
+      { to: tp("sync12"), label: tr("قاعدة البيانات و النسخ الاحتياطي و السحابي", "Database / Backup / Cloud Sync"), icon: "💾" },
       { to: tp("suggestions12page"), label: tr("تطوير البرنامج", "Suggestions"), icon: "💡" },
       { to: tp("about12"), label: tr("مصمم البرنامج", "About Developer"), icon: "🛠️" },
     ];
