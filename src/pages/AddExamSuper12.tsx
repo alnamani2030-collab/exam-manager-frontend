@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import {
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -68,6 +69,8 @@ const BLACK_FORM_CSS = `
   -webkit-text-fill-color: #111827 !important;
   background: #ffffff !important;
   font-weight: 850 !important;
+  width: 100% !important;
+  max-width: 100% !important;
 }
 .add-exam-super12-page input::placeholder,
 .add-exam-super12-page textarea::placeholder {
@@ -79,6 +82,32 @@ const BLACK_FORM_CSS = `
   color: #374151 !important;
   -webkit-text-fill-color: #374151 !important;
   background: #f3ead0 !important;
+}
+.add-exam-super12-page section,
+.add-exam-super12-page .exam-super12-shell,
+.add-exam-super12-page .exam-super12-form-card,
+.add-exam-super12-page .exam-super12-table-card {
+  min-width: 0 !important;
+  max-width: 100% !important;
+  overflow: hidden !important;
+}
+.add-exam-super12-content-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.45fr);
+  gap: 18px;
+  align-items: start;
+  width: 100%;
+  max-width: 100%;
+}
+.add-exam-super12-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+}
+@media (max-width: 1180px) {
+  .add-exam-super12-content-grid {
+    grid-template-columns: 1fr;
+  }
 }
 `;
 
@@ -166,6 +195,7 @@ type ExamSuperRow = {
   centerName: string;
   governorate: string;
   enabled: boolean;
+  source?: string;
 };
 
 const buildExamSuperPayload = (params: {
@@ -233,6 +263,7 @@ export default function AddExamSuper12() {
   const [centers, setCenters] = useState<ExamCenterRow[]>([]);
   const [rows, setRows] = useState<ExamSuperRow[]>([]);
   const [rowsWarning, setRowsWarning] = useState("");
+  const [editingRow, setEditingRow] = useState<ExamSuperRow | null>(null);
 
   const selectedCenter = useMemo(
     () => centers.find((center) => center.id === selectedCenterId) || null,
@@ -281,7 +312,7 @@ export default function AddExamSuper12() {
     const merged = new Map<string, ExamSuperRow>();
     const warnings: string[] = [];
 
-    const addRow = (id: string, data: any, forceInclude = false) => {
+    const addRow = (id: string, data: any, forceInclude = false, source = "unknown") => {
       if (!forceInclude && !isExamSuperRecord(data)) return;
 
       const email = String(data?.email || id || "").trim().toLowerCase();
@@ -307,6 +338,7 @@ export default function AddExamSuper12() {
         ),
         governorate,
         enabled: data?.enabled !== false && data?.active !== false,
+        source,
       });
     };
 
@@ -319,7 +351,7 @@ export default function AddExamSuper12() {
         : await getDocs(query(linksBase, where("governorate", "==", currentGovernorate)));
 
       linksSnap.forEach((docSnap) => {
-        addRow(docSnap.id, docSnap.data() as any, true);
+        addRow(docSnap.id, docSnap.data() as any, true, EXAM_SUPER_LINKS_COLLECTION);
       });
     } catch (error) {
       console.warn("Cannot load governorate exam supers links", error);
@@ -343,7 +375,7 @@ export default function AddExamSuper12() {
       }
 
       allowlistSnap.forEach((docSnap) => {
-        addRow(docSnap.id, docSnap.data() as any, false);
+        addRow(docSnap.id, docSnap.data() as any, false, "allowlist");
       });
     } catch (error) {
       console.warn("Cannot load old exam supers from allowlist", error);
@@ -446,6 +478,183 @@ export default function AddExamSuper12() {
     return createdCenter;
   };
 
+  const resetForm = () => {
+    setEmail("");
+    setName("");
+    setSelectedCenterId("");
+    setCenterMode("existing");
+    setNewCenterName("");
+    setNewCenterId("");
+    setNewCenterGovernorate(currentGovernorate || "");
+    setEnabled(true);
+    setEditingRow(null);
+  };
+
+  const startEditExamSuper = (row: ExamSuperRow) => {
+    setEditingRow(row);
+    setEmail(row.email || "");
+    setName(row.name || "");
+    setEnabled(row.enabled !== false);
+    setCenterMode("existing");
+    setNewCenterName("");
+    setNewCenterId("");
+    setNewCenterGovernorate(row.governorate || currentGovernorate || "");
+
+    if (row.tenantId) {
+      const exists = centers.some((center) => center.id === row.tenantId);
+      if (!exists) {
+        setCenters((prev) =>
+          prev.concat({
+            id: row.tenantId,
+            name: row.centerName || row.tenantId,
+            governorate: row.governorate || currentGovernorate || "",
+            enabled: true,
+          }),
+        );
+      }
+      setSelectedCenterId(row.tenantId);
+    } else {
+      setSelectedCenterId("");
+    }
+
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const deleteExamSuper = async (row: ExamSuperRow) => {
+    if (!canUsePage) {
+      alert("هذه العملية متاحة لمالك المنصة أو مشرف المحافظة فقط.");
+      return;
+    }
+    if (!owner && !sameGovernorate(row.governorate, currentGovernorate)) {
+      alert("لا يمكن حذف سوبر امتحانات خارج نطاق محافظتك.");
+      return;
+    }
+
+    const ok = window.confirm(
+      `هل تريد حذف سوبر الامتحانات (${row.email || row.name || "بدون بريد"}) من هذا المركز؟`,
+    );
+    if (!ok) return;
+
+    setBusy(true);
+    try {
+      const normalizedEmail = String(row.email || "").trim().toLowerCase();
+      const normalizedTenantId = String(row.tenantId || "").trim();
+
+      if (normalizedEmail && normalizedTenantId) {
+        await deleteDoc(
+          doc(db, EXAM_SUPER_LINKS_COLLECTION, safeLinkId(normalizedEmail, normalizedTenantId)),
+        ).catch((error) => console.warn("Cannot delete exam super link", error));
+      }
+
+      if (normalizedEmail) {
+        const allowRef = doc(db, "allowlist", normalizedEmail);
+        const allowSnap = await getDoc(allowRef).catch(() => null as any);
+        const allowData = allowSnap?.exists?.() ? (allowSnap.data() as any) : null;
+        const allowTenantId = String(allowData?.tenantId || "").trim();
+        const canDeleteAllowlist =
+          allowData &&
+          isExamSuperRecord(allowData) &&
+          (!normalizedTenantId || !allowTenantId || allowTenantId === normalizedTenantId);
+
+        if (canDeleteAllowlist) {
+          await deleteDoc(allowRef).catch((error) => console.warn("Cannot delete allowlist row", error));
+        }
+      }
+
+      if (editingRow?.email === row.email && editingRow?.tenantId === row.tenantId) {
+        resetForm();
+      }
+
+      await loadExamSupers();
+      alert("تم حذف سوبر الامتحانات بنجاح.");
+    } catch (error) {
+      console.error(error);
+      alert("تعذر حذف سوبر الامتحانات. تأكد من الصلاحيات ثم جرّب مرة أخرى.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deleteAllExamSupers = async () => {
+    if (!canUsePage) {
+      alert("هذه العملية متاحة لمالك المنصة أو مشرف المحافظة فقط.");
+      return;
+    }
+
+    const visibleRows = rows.filter((row) =>
+      owner || sameGovernorate(row.governorate, currentGovernorate),
+    );
+
+    if (!visibleRows.length) {
+      alert("لا توجد سجلات سوبر امتحانات دبلوم لحذفها.");
+      return;
+    }
+
+    const scopeLabel = owner ? "جميع السجلات الظاهرة" : `سجلات محافظة ${currentGovernorate}`;
+    const firstConfirm = window.confirm(
+      `سيتم حذف ${visibleRows.length} سجل من سوبر امتحانات الدبلوم ضمن ${scopeLabel}. هل تريد المتابعة؟`,
+    );
+    if (!firstConfirm) return;
+
+    const secondConfirm = window.confirm(
+      "تأكيد نهائي: هذه العملية ستحذف روابط سوبر الامتحانات من جدول الربط ومن allowlist عندما تكون الصلاحية خاصة بسوبر امتحانات فقط. هل أنت متأكد؟",
+    );
+    if (!secondConfirm) return;
+
+    setBusy(true);
+    try {
+      for (const row of visibleRows) {
+        const normalizedEmail = String(row.email || "").trim().toLowerCase();
+        const normalizedTenantId = String(row.tenantId || "").trim();
+
+        if (!owner && !sameGovernorate(row.governorate, currentGovernorate)) {
+          continue;
+        }
+
+        const possibleLinkIds = new Set<string>();
+        if (row.id) possibleLinkIds.add(String(row.id));
+        if (normalizedEmail && normalizedTenantId) {
+          possibleLinkIds.add(safeLinkId(normalizedEmail, normalizedTenantId));
+        }
+
+        for (const linkId of Array.from(possibleLinkIds)) {
+          if (!linkId) continue;
+          await deleteDoc(doc(db, EXAM_SUPER_LINKS_COLLECTION, linkId)).catch((error) =>
+            console.warn("Cannot delete exam super link during bulk delete", error),
+          );
+        }
+
+        if (normalizedEmail) {
+          const allowRef = doc(db, "allowlist", normalizedEmail);
+          const allowSnap = await getDoc(allowRef).catch(() => null as any);
+          const allowData = allowSnap?.exists?.() ? (allowSnap.data() as any) : null;
+          const allowTenantId = String(allowData?.tenantId || "").trim();
+          const allowGovernorate = getGovernorateValue(allowData);
+          const canDeleteAllowlist =
+            allowData &&
+            isExamSuperRecord(allowData) &&
+            (owner || sameGovernorate(allowGovernorate, currentGovernorate)) &&
+            (!normalizedTenantId || !allowTenantId || allowTenantId === normalizedTenantId);
+
+          if (canDeleteAllowlist) {
+            await deleteDoc(allowRef).catch((error) =>
+              console.warn("Cannot delete allowlist row during bulk delete", error),
+            );
+          }
+        }
+      }
+
+      resetForm();
+      await loadExamSupers();
+      alert("تم حذف جميع سجلات سوبر امتحانات الدبلوم الظاهرة بنجاح.");
+    } catch (error) {
+      console.error(error);
+      alert("تعذر حذف جميع سجلات سوبر امتحانات الدبلوم. تأكد من الصلاحيات ثم جرّب مرة أخرى.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const saveExamSuper = async () => {
     if (!canUsePage) {
       alert("هذه الصفحة متاحة لمالك المنصة أو مشرف المحافظة فقط.");
@@ -525,16 +734,33 @@ export default function AddExamSuper12() {
         { merge: true },
       );
 
-      setEmail("");
-      setName("");
-      setSelectedCenterId("");
-      setCenterMode("existing");
-      setNewCenterName("");
-      setNewCenterId("");
-      setNewCenterGovernorate(currentGovernorate || "");
-      setEnabled(true);
+      if (editingRow) {
+        const oldEmail = String(editingRow.email || "").trim().toLowerCase();
+        const oldTenantId = String(editingRow.tenantId || "").trim();
+        const newLinkId = safeLinkId(normalizedEmail, centerForSave.id);
+        const oldLinkId = safeLinkId(oldEmail, oldTenantId);
+
+        if (oldEmail && oldTenantId && oldLinkId !== newLinkId) {
+          await deleteDoc(doc(db, EXAM_SUPER_LINKS_COLLECTION, oldLinkId)).catch((error) =>
+            console.warn("Cannot delete old exam super link", error),
+          );
+        }
+
+        if (oldEmail && oldEmail !== normalizedEmail) {
+          const oldAllowRef = doc(db, "allowlist", oldEmail);
+          const oldAllowSnap = await getDoc(oldAllowRef).catch(() => null as any);
+          const oldAllowData = oldAllowSnap?.exists?.() ? (oldAllowSnap.data() as any) : null;
+          if (oldAllowData && isExamSuperRecord(oldAllowData)) {
+            await deleteDoc(oldAllowRef).catch((error) =>
+              console.warn("Cannot delete old allowlist row", error),
+            );
+          }
+        }
+      }
+
+      resetForm();
       await loadExamSupers();
-      alert("تم حفظ سوبر الامتحانات وربطه بمركز الدبلوم بنجاح.");
+      alert(editingRow ? "تم تعديل بيانات سوبر الامتحانات بنجاح." : "تم حفظ سوبر الامتحانات وربطه بمركز الدبلوم بنجاح.");
     } catch (error) {
       console.error(error);
       const message = error instanceof Error ? error.message : "";
@@ -558,8 +784,10 @@ export default function AddExamSuper12() {
     >
       <style>{BLACK_FORM_CSS}</style>
       <div
+        className="exam-super12-shell"
         style={{
-          maxWidth: 1180,
+          width: "100%",
+          maxWidth: 1480,
           margin: "0 auto",
           display: "grid",
           gap: 18,
@@ -567,38 +795,107 @@ export default function AddExamSuper12() {
       >
         <div
           style={{
-            border: "1.5px solid #c9aa55",
-            borderRadius: 22,
-            background: "rgba(255, 252, 242, 0.96)",
-            boxShadow: "0 16px 36px rgba(80, 60, 20, 0.12)",
-            padding: 22,
+            border: "2px solid #c9aa55",
+            borderRadius: 26,
+            background:
+              "linear-gradient(180deg, rgba(255,253,247,0.98), rgba(247,239,218,0.98))",
+            boxShadow: "0 18px 42px rgba(80, 60, 20, 0.13)",
+            padding: 24,
             display: "grid",
-            gridTemplateColumns: "auto 1fr auto",
             gap: 18,
-            alignItems: "center",
           }}
         >
-          <img src={MINISTRY_LOGO_URL} alt="وزارة التربية والتعليم" style={{ width: 76, height: 76, objectFit: "contain" }} />
-          <div>
-            <div style={{ fontSize: 28, fontWeight: 950 }}>إضافة سوبر امتحانات لمركز دبلوم</div>
-            <div style={{ marginTop: 6, color: "#374151", fontWeight: 800 }}>
-              ربط سوبر امتحانات بمركز امتحانات دبلوم داخل نطاق المحافظة.
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => navigate("/super-system")}
+          <div
             style={{
-              border: "1px solid #b8870b",
-              borderRadius: 12,
-              background: "#fff7df",
-              padding: "12px 18px",
-              fontWeight: 900,
-              cursor: "pointer",
+              display: "grid",
+              gridTemplateColumns: "minmax(300px, 0.9fr) auto minmax(300px, 0.9fr)",
+              gap: 22,
+              alignItems: "center",
+              border: "1.5px solid #d7bf74",
+              borderRadius: 22,
+              background: "#fffaf0",
+              padding: "18px 24px",
             }}
           >
-            العودة للبوابة الإشرافية
-          </button>
+            <div style={{ display: "grid", gap: 6, fontWeight: 950, textAlign: "right" }}>
+              <div style={{ fontSize: 22 }}>سلطنة عمان</div>
+              <div style={{ fontSize: 20 }}>وزارة  التعليم</div>
+              <div style={{ fontSize: 16, color: "#374151", lineHeight: 1.7 }}>
+                {currentGovernorate
+                  ? `المديرية العامة للتربية والتعليم بمحافظة ${currentGovernorate}`
+                  : "نطاق إدارة الامتحانات"}
+              </div>
+            </div>
+
+            <img
+              src={MINISTRY_LOGO_URL}
+              alt="وزارة التربية والتعليم"
+              style={{
+                width: 92,
+                height: 92,
+                objectFit: "contain",
+                border: "1.5px solid #c9aa55",
+                borderRadius: 18,
+                background: "#fffdf7",
+                padding: 8,
+              }}
+            />
+
+            <div style={{ display: "grid", gap: 8, textAlign: "left", direction: "ltr" }}>
+              <div
+                style={{
+                  border: "1px solid #d7bf74",
+                  borderRadius: 14,
+                  padding: "10px 14px",
+                  background: "#fffdf7",
+                  fontWeight: 900,
+                  textAlign: "center",
+                }}
+              >
+                نظام إدارة الامتحانات المطور
+              </div>
+              <div style={{ fontWeight: 850, color: "#374151", textAlign: "center" }}>
+                إضافة وربط سوبر امتحانات الدبلوم
+              </div>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr auto",
+              gap: 16,
+              alignItems: "center",
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 30, fontWeight: 1000, color: "#111827" }}>
+                إضافة سوبر امتحانات لمركز دبلوم
+              </div>
+              <div style={{ marginTop: 8, color: "#374151", fontWeight: 850, lineHeight: 1.8 }}>
+                ربط سوبر امتحانات بمركز امتحانات دبلوم داخل نطاق المحافظة، مع إمكانية اختيار مركز موجود أو إنشاء مركز جديد.
+              </div>
+              <div style={{ marginTop: 8, color: "#6b4f08", fontWeight: 850 }}>
+                المستخدم الحالي: {String(user?.email || "—")}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => navigate(owner ? "/platform-super-system" : "/super-system")}
+              style={{
+                border: "1.5px solid #b8870b",
+                borderRadius: 14,
+                background: "#fff7df",
+                padding: "13px 22px",
+                fontWeight: 950,
+                cursor: "pointer",
+                minWidth: 190,
+              }}
+            >
+              العودة للبوابة الإشرافية
+            </button>
+          </div>
         </div>
 
         {!canUsePage ? (
@@ -616,19 +913,16 @@ export default function AddExamSuper12() {
           </div>
         ) : null}
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.1fr)",
-            gap: 18,
-          }}
-        >
+        <div className="add-exam-super12-content-grid">
           <section
+            className="exam-super12-form-card"
             style={{
+              width: "100%",
+              maxWidth: "100%",
               border: "1.5px solid #c9aa55",
               borderRadius: 20,
               background: "#fffdf7",
-              padding: 20,
+              padding: 24,
               boxShadow: "0 10px 24px rgba(80,60,20,0.08)",
             }}
           >
@@ -771,6 +1065,28 @@ export default function AddExamSuper12() {
                 مفعل
               </label>
 
+              {editingRow ? (
+                <div
+                  style={{
+                    border: "1px solid #60a5fa",
+                    borderRadius: 12,
+                    background: "#eff6ff",
+                    padding: "10px 12px",
+                    fontWeight: 900,
+                    color: "#1e3a8a",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 12,
+                    alignItems: "center",
+                  }}
+                >
+                  <span>وضع التعديل: {editingRow.email}</span>
+                  <button type="button" onClick={resetForm} disabled={busy} style={smallButtonStyle}>
+                    إلغاء التعديل
+                  </button>
+                </div>
+              ) : null}
+
               <button
                 type="button"
                 disabled={!canUsePage || busy}
@@ -784,25 +1100,43 @@ export default function AddExamSuper12() {
                   cursor: busy ? "not-allowed" : "pointer",
                 }}
               >
-                {busy ? "جارٍ الحفظ..." : "حفظ سوبر الامتحانات"}
+                {busy ? "جارٍ الحفظ..." : editingRow ? "حفظ التعديل" : "حفظ سوبر الامتحانات"}
               </button>
             </div>
           </section>
 
           <section
+            className="exam-super12-table-card"
             style={{
+              width: "100%",
+              maxWidth: "100%",
               border: "1.5px solid #c9aa55",
               borderRadius: 20,
               background: "#fffdf7",
-              padding: 20,
+              padding: 24,
               boxShadow: "0 10px 24px rgba(80,60,20,0.08)",
             }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
               <h2 style={{ marginTop: 0, fontSize: 22 }}>سوبر الامتحانات المسجلون</h2>
-              <button type="button" onClick={() => void loadExamSupers()} style={smallButtonStyle}>
-                تحديث
-              </button>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button type="button" onClick={() => void loadExamSupers()} disabled={busy} style={smallButtonStyle}>
+                  تحديث
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void deleteAllExamSupers()}
+                  disabled={!canUsePage || busy || !rows.length}
+                  style={{
+                    ...dangerButtonStyle,
+                    opacity: !canUsePage || busy || !rows.length ? 0.55 : 1,
+                    cursor: !canUsePage || busy || !rows.length ? "not-allowed" : "pointer",
+                  }}
+                  title="حذف جميع سجلات سوبر امتحانات الدبلوم الظاهرة في الجدول"
+                >
+                  حذف جميع سوبر الامتحانات
+                </button>
+              </div>
             </div>
 
 
@@ -823,8 +1157,8 @@ export default function AddExamSuper12() {
                 </div>
               ) : null}
 
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
+            <div className="add-exam-super12-table-wrap">
+              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 900 }}>
                 <thead>
                   <tr style={{ background: "#f3e5b6" }}>
                     <th style={thStyle}>البريد</th>
@@ -832,6 +1166,7 @@ export default function AddExamSuper12() {
                     <th style={thStyle}>مركز الدبلوم</th>
                     <th style={thStyle}>المحافظة</th>
                     <th style={thStyle}>الحالة</th>
+                    <th style={thStyle}>الإجراءات</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -843,11 +1178,31 @@ export default function AddExamSuper12() {
                         <td style={tdStyle}>{row.centerName || row.tenantId}</td>
                         <td style={tdStyle}>{row.governorate || "—"}</td>
                         <td style={tdStyle}>{row.enabled ? "مفعل" : "غير مفعل"}</td>
+                        <td style={tdStyle}>
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <button
+                              type="button"
+                              onClick={() => startEditExamSuper(row)}
+                              disabled={!canUsePage || busy}
+                              style={smallButtonStyle}
+                            >
+                              تعديل
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void deleteExamSuper(row)}
+                              disabled={!canUsePage || busy}
+                              style={dangerButtonStyle}
+                            >
+                              حذف
+                            </button>
+                          </div>
+                        </td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={5} style={{ ...tdStyle, textAlign: "center", padding: 18 }}>
+                      <td colSpan={6} style={{ ...tdStyle, textAlign: "center", padding: 18 }}>
                         لا توجد سجلات حتى الآن، أو أن السجلات القديمة محفوظة بصلاحية مختلفة. اضغط تحديث بعد التأكد من الصلاحيات.
                       </td>
                     </tr>
@@ -863,9 +1218,12 @@ export default function AddExamSuper12() {
 }
 
 const fieldStyle: React.CSSProperties = {
+  width: "100%",
+  maxWidth: "100%",
+  minWidth: 0,
   border: "1.5px solid #c9aa55",
   borderRadius: 12,
-  padding: "12px 14px",
+  padding: "13px 15px",
   background: "#ffffff",
   color: "#111827",
   fontWeight: 850,
@@ -897,9 +1255,19 @@ const smallButtonStyle: React.CSSProperties = {
   cursor: "pointer",
 };
 
+const dangerButtonStyle: React.CSSProperties = {
+  border: "1px solid #dc2626",
+  borderRadius: 10,
+  background: "#fff1f2",
+  color: "#7f1d1d",
+  padding: "9px 13px",
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
 const thStyle: React.CSSProperties = {
   border: "1px solid #d6c58a",
-  padding: 10,
+  padding: "10px 12px",
   textAlign: "right",
   color: "#111827",
   fontWeight: 950,
@@ -907,7 +1275,10 @@ const thStyle: React.CSSProperties = {
 
 const tdStyle: React.CSSProperties = {
   border: "1px solid #e2d3a3",
-  padding: 10,
+  padding: "10px 12px",
   color: "#111827",
   fontWeight: 800,
+  verticalAlign: "top",
+  lineHeight: 1.7,
+  wordBreak: "break-word",
 };
