@@ -822,14 +822,14 @@ export default function AddExamSuper12() {
               <div style={{ fontSize: 20 }}>وزارة  التعليم</div>
               <div style={{ fontSize: 16, color: "#374151", lineHeight: 1.7 }}>
                 {currentGovernorate
-                  ? `المديرية العامة للتربية والتعليم بمحافظة ${currentGovernorate}`
+                  ? `${currentGovernorate}`
                   : "نطاق إدارة الامتحانات"}
               </div>
             </div>
 
             <img
               src={MINISTRY_LOGO_URL}
-              alt="وزارة التربية والتعليم"
+              alt="وزارة  التعليم"
               style={{
                 width: 92,
                 height: 92,
