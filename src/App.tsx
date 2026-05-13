@@ -53,9 +53,10 @@ import TeamMembers from "./pages/TeamMembers";
 import DistributionVersions from "./pages/DistributionVersions";
 import AdminSystem from "./pages/AdminSystem";
 import SuperSystem from "./pages/SuperSystem";
+import AddSchoolAdminByGovernorate from "./pages/AddSchoolAdminByGovernorate";
+import AddExamSuper12 from "./pages/AddExamSuper12";
 import SuperGovernorates from "./pages/SuperGovernorates";
 import AdminSupersPage from "./pages/AdminSupersPage";
-import AddExamSuper12 from "./pages/AddExamSuper12";
 import Migrate from "./pages/Migrate";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import Analytics1Page from "./pages/Analytics1Page";
@@ -375,32 +376,34 @@ export default function App() {
         }
       />
 
+
       <Route
-        path="/platform-governorate-supers"
+        path="/super-system/add-school-admin"
+        element={
+          <SuperRoute>
+            <AddSchoolAdminByGovernorate />
+          </SuperRoute>
+        }
+      />
+
+      <Route
+        path="/platform-super-system/add-school-admin"
         element={
           <SuperAdminRoute>
-            <PlatformGovernorateSupersDirectory />
+            <AddSchoolAdminByGovernorate />
           </SuperAdminRoute>
         }
       />
 
       <Route
-        path="/system/supers"
+        path="/system/add-school-admin"
         element={
           <SuperAdminRoute>
-            <SuperGovernorates />
+            <AddSchoolAdminByGovernorate />
           </SuperAdminRoute>
         }
       />
 
-      <Route
-        path="/system/add-supers"
-        element={
-          <ProtectedRoute>
-            <AdminSupersPage />
-          </ProtectedRoute>
-        }
-      />
 
       <Route
         path="/super-system/add-exam-super12"
@@ -426,6 +429,33 @@ export default function App() {
           <SuperAdminRoute>
             <AddExamSuper12 />
           </SuperAdminRoute>
+        }
+      />
+
+      <Route
+        path="/platform-governorate-supers"
+        element={
+          <SuperAdminRoute>
+            <PlatformGovernorateSupersDirectory />
+          </SuperAdminRoute>
+        }
+      />
+
+      <Route
+        path="/system/supers"
+        element={
+          <SuperAdminRoute>
+            <SuperGovernorates />
+          </SuperAdminRoute>
+        }
+      />
+
+      <Route
+        path="/system/add-supers"
+        element={
+          <ProtectedRoute>
+            <AdminSupersPage />
+          </ProtectedRoute>
         }
       />
 
