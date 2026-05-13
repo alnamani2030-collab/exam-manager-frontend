@@ -3417,12 +3417,12 @@ const GOLD_SUB = "rgba(0,0,0,0.82)";
   ];
 
   const page: React.CSSProperties = {
-    color: GOLD_2,
-    fontWeight: 900,
+    color: "#0f172a",
+    fontWeight: 850,
     direction: isRTL ? "rtl" : "ltr",
     minHeight: "100vh",
     background:
-      "radial-gradient(circle at top, rgba(245,158,11,0.20), transparent 26%), radial-gradient(circle at 88% 18%, rgba(59,130,246,0.12), transparent 24%), linear-gradient(180deg, #fffdf2 0%, #fff7d6 46%, #fff3c4 100%)",
+      "radial-gradient(circle at top, rgba(212,175,55,0.16), transparent 28%), radial-gradient(circle at 90% 18%, rgba(22,163,74,0.10), transparent 24%), linear-gradient(180deg, #fbf8ed 0%, #efe8d6 100%)",
     padding: 18,
     boxSizing: "border-box",
     position: "relative",
@@ -3430,15 +3430,16 @@ const GOLD_SUB = "rgba(0,0,0,0.82)";
   };
 
   const header: React.CSSProperties = {
-    background: `linear-gradient(135deg, ${DARK_BLUE}, ${DARK_BLUE_2})`,
-    borderRadius: 22,
-    padding: 18,
+    background: "linear-gradient(180deg, #fffdf7 0%, #f6efdc 100%)",
+    borderRadius: 28,
+    padding: 20,
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 14,
-    boxShadow: "0 18px 36px rgba(146,101,0,.14)",
-    border: `1px solid ${LINE}`,
+    boxShadow: "0 0 0 6px rgba(212,175,55,0.08) inset, 0 12px 24px rgba(150,120,20,0.10)",
+    border: "3px solid #d4af37",
+    borderInlineStart: "8px solid #16a34a",
   };
 
   const headerLeft: React.CSSProperties = {
@@ -3449,30 +3450,34 @@ const GOLD_SUB = "rgba(0,0,0,0.82)";
   };
 
   const hBtn: React.CSSProperties = {
-    border: `1px solid ${LINE}`,
+    border: `2px solid ${LINE}`,
     background: BUTTON_GRADIENTS[0],
-    color: "#1f2937",
+    color: "#0f172a",
     borderRadius: 14,
-    padding: "10px 14px",
-    fontWeight: 950,
+    padding: "9px 13px",
+    fontWeight: 1000,
     cursor: "pointer",
     display: "inline-flex",
     gap: 8,
     alignItems: "center",
+    fontSize: 13,
+    boxShadow: "0 8px 18px rgba(15,23,42,0.10)",
   };
 
   const btnMini: React.CSSProperties = {
-    border: `1px solid ${LINE}`,
+    border: `2px solid ${LINE}`,
     background: BUTTON_GRADIENTS[1],
-    color: "#1f2937",
+    color: "#0f172a",
     borderRadius: 14,
-    padding: "10px 14px",
-    fontWeight: 950,
+    padding: "9px 13px",
+    fontWeight: 1000,
     cursor: "pointer",
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
+    fontSize: 13,
+    boxShadow: "0 8px 18px rgba(15,23,42,0.10)",
   };
 
   const titleBox: React.CSSProperties = {
@@ -3489,35 +3494,37 @@ const GOLD_SUB = "rgba(0,0,0,0.82)";
   };
 
   const title: React.CSSProperties = {
-    fontSize: 22,
-    fontWeight: 950,
+    fontSize: "clamp(26px, 3.5vw, 44px)",
+    fontWeight: 1000,
     margin: 0,
-    lineHeight: 1.2,
-    color: GOLD_2,
+    lineHeight: 1.22,
+    color: "#0f172a",
+    textShadow: "0 8px 18px rgba(212,175,55,0.08)",
   };
 
   const subtitle: React.CSSProperties = {
-    opacity: 0.9,
-    fontWeight: 800,
-    marginTop: 2,
-    color: "#000000",
-    fontSize: 12,
+    opacity: 1,
+    fontWeight: 850,
+    marginTop: 4,
+    color: "#374151",
+    fontSize: 13,
+    lineHeight: 1.8,
   };
 
   const grid3: React.CSSProperties = {
     display: "grid",
-    gridTemplateColumns: "repeat(3, minmax(260px, 1fr))",
+    gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
     gap: 16,
     marginTop: 16,
   };
 
   const card: React.CSSProperties = {
-    background: "linear-gradient(180deg,#fff8da,#fff1bd)",
-    borderRadius: 20,
+    background: "linear-gradient(180deg,#fffdf7 0%, #f6efdc 100%)",
+    borderRadius: 24,
     padding: 16,
-    boxShadow: "0 14px 30px rgba(146,101,0,.14)",
-    border: `2px solid ${CARD_BORDERS[0]}`,
-    color: GOLD_2,
+    boxShadow: "0 12px 24px rgba(150,120,20,.10)",
+    border: `3px solid ${CARD_BORDERS[0]}`,
+    color: "#0f172a",
   };
 
   const cardHead: React.CSSProperties = {
@@ -3527,12 +3534,14 @@ const GOLD_SUB = "rgba(0,0,0,0.82)";
     gap: 12,
   };
 
-  const cardTitle: React.CSSProperties = { fontWeight: 950, color: GOLD_2, fontSize: 16 };
+  const cardTitle: React.CSSProperties = { fontWeight: 1000, color: "#0f172a", fontSize: 16 };
+
   const cardSub: React.CSSProperties = {
     marginTop: 4,
-    color: "#000000",
-    fontWeight: 800,
+    color: "#374151",
+    fontWeight: 850,
     fontSize: 12,
+    lineHeight: 1.7,
   };
 
   const row: React.CSSProperties = {
@@ -3544,18 +3553,26 @@ const GOLD_SUB = "rgba(0,0,0,0.82)";
     borderBottom: `1px solid ${LINE}`,
   };
 
-  const label: React.CSSProperties = { color: GOLD_2, fontWeight: 950, fontSize: 13 };
-  const note: React.CSSProperties = { color: "#000000", fontWeight: 950, fontSize: 12, marginTop: 2 };
+  const label: React.CSSProperties = { color: "#111827", fontWeight: 1000, fontSize: 13 };
+
+  const note: React.CSSProperties = {
+    color: "#374151",
+    fontWeight: 850,
+    fontSize: 12,
+    marginTop: 2,
+    lineHeight: 1.65,
+  };
 
   const toggle: React.CSSProperties = {
     width: 56,
     height: 30,
     borderRadius: 999,
-    background: "rgba(255,255,255,.10)",
+    background: "linear-gradient(180deg,#fffdf7,#f1e4bf)",
     position: "relative",
-    border: `1px solid ${LINE}`,
+    border: `2px solid ${LINE}`,
     cursor: "pointer",
     flexShrink: 0,
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.85), 0 6px 14px rgba(150,120,20,0.10)",
   };
 
   const knob: React.CSSProperties = {
@@ -3573,65 +3590,67 @@ const GOLD_SUB = "rgba(0,0,0,0.82)";
   const statusChip: React.CSSProperties = {
     padding: "6px 10px",
     borderRadius: 999,
-    fontWeight: 950,
+    fontWeight: 1000,
     fontSize: 12,
-    border: `1px solid ${LINE}`,
+    border: `2px solid ${LINE}`,
     background: BUTTON_GRADIENTS[0],
     color: "#1f2937",
     whiteSpace: "nowrap",
   };
 
   const miniBtn: React.CSSProperties = {
-    border: `1px solid ${LINE}`,
+    border: `2px solid ${LINE}`,
     background: BUTTON_GRADIENTS[0],
     color: "#1f2937",
     borderRadius: 12,
     padding: "8px 12px",
-    fontWeight: 950,
+    fontWeight: 1000,
     cursor: "pointer",
+    fontSize: 13,
   };
 
   const input: React.CSSProperties = {
     width: 130,
     padding: "10px 12px",
     borderRadius: 14,
-    border: `1px solid ${LINE}`,
+    border: `2px solid ${LINE}`,
     outline: "none",
-    fontWeight: 950,
-    color: "#1f2937",
+    fontWeight: 900,
+    color: "#0f172a",
     background: "linear-gradient(180deg,#ffffff,#fff7d6)",
     textAlign: "center",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.75), 0 6px 14px rgba(150,120,20,0.08)",
   };
 
   const bigRun: React.CSSProperties = {
     marginTop: 18,
     width: "100%",
-    padding: "18px 18px",
+    padding: "17px 18px",
     borderRadius: 18,
-    border: `1px solid ${LINE}`,
+    border: "3px solid #16a34a",
     cursor: "pointer",
-    fontWeight: 950,
+    fontWeight: 1000,
     fontSize: 18,
-    color: GOLD_2,
-    background: BUTTON_GRADIENTS[2],
-    boxShadow: "0 14px 34px rgba(146,101,0,.18)",
+    color: "#065f46",
+    background: "linear-gradient(180deg,#dcfce7,#86efac)",
+    boxShadow: "0 14px 30px rgba(22,163,74,.16)",
   };
 
   const errorsBox: React.CSSProperties = { marginTop: 12, display: "grid", gap: 8 };
 
   const errChip: React.CSSProperties = {
-    background: "rgba(239,68,68,.12)",
-    border: "1px solid rgba(239,68,68,.28)",
-    color: "#fecaca",
+    background: "#fff1f2",
+    border: "2px solid rgba(220,38,38,.42)",
+    color: "#b91c1c",
     borderRadius: 14,
     padding: "10px 12px",
     fontWeight: 900,
   };
 
   const warnChip: React.CSSProperties = {
-    background: "rgba(245,158,11,.12)",
-    border: "1px solid rgba(245,158,11,.28)",
-    color: "#000000",
+    background: "#fffbeb",
+    border: "2px solid rgba(245,158,11,.42)",
+    color: "#92400e",
     borderRadius: 14,
     padding: "10px 12px",
     fontWeight: 900,
@@ -3639,12 +3658,12 @@ const GOLD_SUB = "rgba(0,0,0,0.82)";
 
   const fairnessWrap: React.CSSProperties = {
     marginTop: 18,
-    background: "linear-gradient(180deg,#fff8da,#fff1bd)",
-    borderRadius: 20,
+    background: "linear-gradient(180deg,#fffdf7,#f6efdc)",
+    borderRadius: 24,
     overflow: "hidden",
-    boxShadow: "0 14px 30px rgba(146,101,0,.14)",
-    border: `2px solid ${CARD_BORDERS[1]}`,
-    color: GOLD_2,
+    boxShadow: "0 12px 24px rgba(150,120,20,.10)",
+    border: `3px solid ${CARD_BORDERS[1]}`,
+    color: "#0f172a",
   };
 
   const fairnessHeader: React.CSSProperties = {
@@ -3656,12 +3675,14 @@ const GOLD_SUB = "rgba(0,0,0,0.82)";
     flexWrap: "wrap",
   };
 
-  const fairnessTitle: React.CSSProperties = { fontWeight: 950, fontSize: 18, color: GOLD_2 };
+  const fairnessTitle: React.CSSProperties = { fontWeight: 1000, fontSize: 18, color: "#0f172a" };
+
   const fairnessSub: React.CSSProperties = {
-    fontWeight: 800,
+    fontWeight: 850,
     fontSize: 12,
-    color: "#000000",
+    color: "#374151",
     marginTop: 4,
+    lineHeight: 1.7,
   };
 
   const table2: React.CSSProperties = { width: "100%", borderCollapse: "separate", borderSpacing: 0 };
@@ -3670,41 +3691,43 @@ const GOLD_SUB = "rgba(0,0,0,0.82)";
     position: "sticky",
     top: 0,
     textAlign: "center",
-    padding: "14px 10px",
-    fontWeight: 950,
+    padding: "13px 10px",
+    fontWeight: 1000,
     fontSize: 13,
-    background: "linear-gradient(180deg,#dbeafe,#bfdbfe)",
-    color: "#000000",
-    borderTop: `3px solid ${CELL_BORDERS[0]}`,
-    borderBottom: `3px solid ${CELL_BORDERS[1]}`,
-    borderInlineStart: `3px solid ${CELL_BORDERS[2]}`,
-    borderInlineEnd: `3px solid ${CELL_BORDERS[3]}`,
+    background: "linear-gradient(180deg,#f4e6b5,#d8bd62)",
+    color: "#0f172a",
+    borderTop: `5px solid ${CELL_BORDERS[0]}`,
+    borderBottom: `2px solid ${CELL_BORDERS[1]}`,
+    borderInlineStart: `2px solid ${CELL_BORDERS[2]}`,
+    borderInlineEnd: `2px solid ${CELL_BORDERS[3]}`,
     zIndex: 2,
   };
 
   const td2: React.CSSProperties = {
     textAlign: "center",
-    padding: "16px 10px",
-    borderTop: `3px solid ${CELL_BORDERS[1]}`,
-    borderBottom: `3px solid ${CELL_BORDERS[4]}`,
-    borderInlineStart: `3px solid ${CELL_BORDERS[3]}`,
-    borderInlineEnd: `3px solid ${CELL_BORDERS[2]}`,
-    fontWeight: 950,
-    color: "#000000",
-    background: "linear-gradient(180deg,#fffef7,#fff4c9)",
+    padding: "13px 10px",
+    borderTop: `1px solid ${CELL_BORDERS[1]}`,
+    borderBottom: `1px solid ${CELL_BORDERS[4]}`,
+    borderInlineStart: `2px solid ${CELL_BORDERS[3]}`,
+    borderInlineEnd: `1px solid ${CELL_BORDERS[2]}`,
+    fontWeight: 900,
+    color: "#0f172a",
+    background: "linear-gradient(180deg,#fffef7,#fff8dc)",
+    fontSize: 13,
+    lineHeight: 1.7,
   };
 
   const totalBadge: React.CSSProperties = {
     display: "inline-flex",
-    width: 40,
-    height: 40,
+    width: 38,
+    height: 38,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
     background: "linear-gradient(135deg,#fef3c7,#fde68a)",
     border: `2px solid ${CELL_BORDERS[4]}`,
     color: "#1f2937",
-    boxShadow: "0 10px 20px rgba(0,0,0,.25)",
+    boxShadow: "0 8px 18px rgba(150,120,20,.16)",
   };
 
   const pill: React.CSSProperties = {
@@ -3729,14 +3752,84 @@ const GOLD_SUB = "rgba(0,0,0,0.82)";
     width: 260,
     padding: "10px 12px",
     borderRadius: 14,
-    border: `1px solid ${LINE}`,
+    border: `2px solid ${LINE}`,
     outline: "none",
     fontWeight: 900,
-    color: GOLD_2,
-    background: "rgba(255,255,255,.06)",
+    color: "#0f172a",
+    background: "linear-gradient(180deg,#ffffff,#fff7d6)",
   };
 
   const grid3Responsive = grid3;
+
+  const smartFairnessPanel: React.CSSProperties = {
+    marginTop: 16,
+    background: "linear-gradient(180deg,#fffdf7 0%, #f6efdc 100%)",
+    border: "3px solid #d4af37",
+    borderInlineStart: "8px solid #2563eb",
+    borderRadius: 24,
+    padding: 16,
+    display: "grid",
+    gridTemplateColumns: "minmax(280px, 1fr) minmax(320px, 1.2fr)",
+    gap: 14,
+    alignItems: "center",
+    boxShadow: "0 12px 24px rgba(150,120,20,.10)",
+  };
+
+  const smartFairnessBadge: React.CSSProperties = {
+    width: "fit-content",
+    padding: "7px 12px",
+    borderRadius: 999,
+    border: "2px solid rgba(37,99,235,.25)",
+    background: "rgba(37,99,235,.10)",
+    color: "#1d4ed8",
+    fontSize: 12,
+    fontWeight: 1000,
+  };
+
+  const smartFairnessTitle: React.CSSProperties = {
+    marginTop: 8,
+    fontSize: "clamp(22px, 2.8vw, 34px)",
+    lineHeight: 1.25,
+    fontWeight: 1000,
+    color: "#0f172a",
+  };
+
+  const smartFairnessSub: React.CSSProperties = {
+    marginTop: 6,
+    color: "#374151",
+    fontSize: 13,
+    lineHeight: 1.8,
+    fontWeight: 850,
+  };
+
+  const smartFairnessGrid: React.CSSProperties = {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+    gap: 10,
+  };
+
+  const smartMetricCard: React.CSSProperties = {
+    minHeight: 88,
+    border: "2px solid #d4af37",
+    borderRadius: 18,
+    padding: 12,
+    display: "grid",
+    alignContent: "center",
+    gap: 4,
+    boxShadow: "0 8px 18px rgba(15,23,42,.08)",
+  };
+
+  const smartMetricLabel: React.CSSProperties = {
+    fontSize: 12,
+    fontWeight: 1000,
+  };
+
+  const smartMetricValue: React.CSSProperties = {
+    fontSize: 24,
+    fontWeight: 1000,
+    color: "#0f172a",
+    lineHeight: 1.2,
+  };
 
   const boolText = (v: boolean) => (v ? tr("مفعل","Enabled") : tr("غير مفعل","Disabled"));
 
@@ -3784,14 +3877,34 @@ const GOLD_SUB = "rgba(0,0,0,0.82)";
 
   const correctionByTeacher: any[] = Array.isArray(debug?.correctionByTeacher) ? debug.correctionByTeacher : [];
 
+  const fairnessTotals = fairnessRowsBase
+    .map((r) => Number(r.total || 0))
+    .filter((value) => Number.isFinite(value));
+
+  const fairnessMin = fairnessTotals.length ? Math.min(...fairnessTotals) : 0;
+  const fairnessMax = fairnessTotals.length ? Math.max(...fairnessTotals) : 0;
+  const fairnessGap = fairnessMax - fairnessMin;
+  const fairnessAverage =
+    fairnessTotals.length > 0
+      ? Number((fairnessTotals.reduce((sum, value) => sum + value, 0) / fairnessTotals.length).toFixed(2))
+      : 0;
+
+  const fairnessSmartStatus =
+    fairnessTotals.length === 0
+      ? tr("لا توجد بيانات عدالة بعد", "No fairness data yet")
+      : fairnessGap <= 1
+        ? tr("عدالة ممتازة", "Excellent fairness")
+        : fairnessGap <= 2
+          ? tr("عدالة جيدة", "Good fairness")
+          : tr("تحتاج مراجعة", "Needs review");
+
   return (
     <div style={page} className="task-run-black-text-scope">
 
       <style>{`
         .task-run-black-text-scope,
         .task-run-black-text-scope * {
-          color: #000000 !important;
-          font-weight: 900;
+          font-weight: 850;
         }
         .task-run-black-text-scope table th,
         .task-run-black-text-scope table td {
@@ -3886,6 +3999,35 @@ const GOLD_SUB = "rgba(0,0,0,0.82)";
         .task-run-black-text-scope table td:nth-child(6n+6) {
           background: linear-gradient(180deg,#ecfeff,#cffafe) !important;
         }
+
+        .task-run-black-text-scope input,
+        .task-run-black-text-scope select,
+        .task-run-black-text-scope textarea {
+          border-radius: 14px !important;
+          border: 2px solid rgba(212,175,55,.70) !important;
+          background: linear-gradient(180deg,#fffef9,#f8f1dc) !important;
+          color: #0f172a !important;
+          font-size: 13px !important;
+        }
+
+        .task-run-black-text-scope [style*="background: rgba(255,255,255,.06)"] {
+          background: linear-gradient(180deg,#ffffff,#fff7d6) !important;
+        }
+
+        @media (max-width: 980px) {
+          .task-run-black-text-scope > div:first-of-type {
+            gap: 12px !important;
+          }
+
+          .task-run-black-text-scope table {
+            min-width: 820px;
+          }
+
+          .task-run-black-text-scope div[style*="grid-template-columns: minmax(280px, 1fr) minmax(320px, 1.2fr)"] {
+            grid-template-columns: 1fr !important;
+          }
+        }
+
       `}</style>
       <div
         style={{
@@ -3962,7 +4104,7 @@ const GOLD_SUB = "rgba(0,0,0,0.82)";
                   <h1
                     style={{
                       margin: 0,
-                      fontSize: "clamp(34px, 5vw, 64px)",
+                      fontSize: "clamp(34px, 5vw, 50px)",
                       lineHeight: 1.02,
                       fontWeight: 950,
                       color: "#1f2937",
@@ -3983,7 +4125,7 @@ const GOLD_SUB = "rgba(0,0,0,0.82)";
                     maxWidth: 900,
                   }}
                 >
-                  {tr("هذه الصفحة تمثل مركز التشغيل التنفيذي للتوزيع، حيث تُحمّل بيانات الكادر والامتحانات والقيود الفعلية، ثم تُنتج توزيعًا ذكيًا ومنظمًا مع قياس العدالة والعجز والتنبيهات في واجهة مؤسسية فاخرة تساعد الإدارة على الانطلاق بسرعة وثقة.","This page represents the executive run center for distribution, loading teaching staff, exams, and live constraints, then producing an organized smart distribution with fairness, shortage, and alerts in a premium institutional interface that helps administration move quickly and confidently.")}
+                  {tr("","This page represents the executive run center for distribution, loading teaching staff, exams, and live constraints, then producing an organized smart distribution with fairness, shortage, and alerts in a premium institutional interface that helps administration move quickly and confidently.")}
                 </p>
 
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -4040,14 +4182,14 @@ const GOLD_SUB = "rgba(0,0,0,0.82)";
                   {runtimeError || errors.length ? tr("يحتاج مراجعة قبل التشغيل","Needs review before running") : tr("الوضع التشغيلي جاهز","Operational status is ready")}
                 </div>
 
-                <div style={{ fontSize: 30, lineHeight: 1.45, fontWeight: 950, color: "#1f2937" }}>
+                <div style={{ fontSize: 25, lineHeight: 1.45, fontWeight: 950, color: "#1f2937" }}>
                   {runOut
                     ? tr("تم ربط الصفحة بآخر تشغيل محفوظ ويمكنك مراجعة العدالة والعجز والتحسينات مباشرة.","The page is linked to the latest saved run and you can review fairness, shortages, and improvements directly.")
                     : tr("ابدأ تشغيل التوزيع من هنا وشاهد النتائج والعدالة والتنبيهات في تدفق واحد منظم.","Start the distribution run here and review results, fairness, and alerts in one organized flow.")}
                 </div>
 
                 <div style={{ fontSize: 14, lineHeight: 1.95, color: "#000000" }}>
-                  {tr("الواجهة المطورة تبرز حالة الجاهزية، وعدد البيانات الأساسية، وإجمالي التكليفات، مع انتقال بصري أنيق من لوحة التشغيل إلى أقسام العدالة والجاهزية والتفاصيل.","The enhanced interface highlights readiness, core data counts, and total assignments, with an elegant visual transition from the run panel to fairness, readiness, and detail sections.")}
+                  {tr("","The enhanced interface highlights readiness, core data counts, and total assignments, with an elegant visual transition from the run panel to fairness, readiness, and detail sections.")}
                 </div>
               </div>
             </div>

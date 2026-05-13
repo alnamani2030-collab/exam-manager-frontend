@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useLocation, useParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import {
   loadTenantArray,
@@ -165,9 +165,15 @@ function OfficialButton({
 
 export default function CloudBackup() {
   const { tenantId } = useParams();
+  const location = useLocation();
   const auth = useAuth() as any;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [mode, setMode] = useState<"school" | "diploma" | "mixed">("mixed");
+  const isDiplomaBackupRoute = String(location.pathname || "")
+    .toLowerCase()
+    .includes("cloud-backup12");
+  const [mode, setMode] = useState<"school" | "diploma" | "mixed">(
+    isDiplomaBackupRoute ? "diploma" : "mixed",
+  );
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [preview, setPreview] = useState<BackupPayload | null>(null);
@@ -366,6 +372,7 @@ export default function CloudBackup() {
             <option value="mixed">كل البيانات المتاحة</option>
             <option value="school">بيانات المدرسة فقط</option>
             <option value="diploma">بيانات مركز الدبلوم فقط</option>
+            
           </select>
           <OfficialButton onClick={createBackup} disabled={busy || !tid}>إنشاء وتحميل نسخة</OfficialButton>
           <OfficialButton secondary onClick={() => fileInputRef.current?.click()} disabled={busy}>

@@ -17,6 +17,35 @@ import {
 
 const TEACHERS_SUB = "teachers";
 
+const SCHOOL_DATA_KEY = "exam-manager:school-data:v1";
+const LOGO_KEY = "exam-manager:app-logo";
+const DEFAULT_LOGO_URL = "https://i.imgur.com/vdDhSMh.png";
+
+type SchoolOfficialData = {
+  name?: string;
+  governorate?: string;
+  semester?: string;
+  phone?: string;
+  address?: string;
+};
+
+function readSchoolOfficialData(): SchoolOfficialData {
+  try {
+    const raw = localStorage.getItem(SCHOOL_DATA_KEY);
+    return raw ? (JSON.parse(raw) as SchoolOfficialData) : {};
+  } catch {
+    return {};
+  }
+}
+
+function readSchoolOfficialLogo() {
+  try {
+    return localStorage.getItem(LOGO_KEY) || DEFAULT_LOGO_URL;
+  } catch {
+    return DEFAULT_LOGO_URL;
+  }
+}
+
 type PeriodChoice = UnavailabilityPeriod | "FULL_DAY";
 
 type DisplayRule = {
@@ -106,6 +135,27 @@ const TEXT = {
   },
 } as const;
 
+
+function OfficialSchoolHeader({
+  lang,
+  data,
+  logo,
+}: {
+  lang: "ar" | "en";
+  data: SchoolOfficialData;
+  logo: string;
+}) {
+  const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
+  const schoolName = String(data?.name || tr("اسم المدرسة", "School Name")).trim();
+  const governorate = String(data?.governorate || tr("المحافظة / المديرية", "Governorate / Directorate")).trim();
+  return (
+    <section className="schoolOfficialHeaderCard">
+         
+    </section>
+  );
+}
+
+
 export default function Unavailability() {
   const { effectiveTenantId, user } = useAuth() as any;
   const { lang, isRTL } = useI18n();
@@ -127,6 +177,24 @@ export default function Unavailability() {
   const [period, setPeriod] = useState<PeriodChoice>("AM");
   const [blocks, setBlocks] = useState<UnavailabilityBlock[]>(["INVIGILATION", "RESERVE"]);
   const [reason, setReason] = useState<string>("");
+  const [officialSchoolData, setOfficialSchoolData] = useState<SchoolOfficialData>(() => readSchoolOfficialData());
+  const [officialLogo, setOfficialLogo] = useState<string>(() => readSchoolOfficialLogo());
+
+  useEffect(() => {
+    const refreshOfficialHeader = () => {
+      setOfficialSchoolData(readSchoolOfficialData());
+      setOfficialLogo(readSchoolOfficialLogo());
+    };
+
+    refreshOfficialHeader();
+    window.addEventListener("exam-manager:changed", refreshOfficialHeader);
+    window.addEventListener("storage", refreshOfficialHeader);
+
+    return () => {
+      window.removeEventListener("exam-manager:changed", refreshOfficialHeader);
+      window.removeEventListener("storage", refreshOfficialHeader);
+    };
+  }, []);
 
   async function refreshRulesFromTenant(targetTenantId = tenantId) {
     const rows = await syncUnavailabilityFromTenant(targetTenantId).catch(() => loadUnavailability(targetTenantId));
@@ -219,117 +287,295 @@ export default function Unavailability() {
   }, [rules, t, lang]);
 
   const fieldStyle: React.CSSProperties = {
-    padding: 10,
-    borderRadius: 10,
-    border: "1px solid rgba(212,175,55,0.40)",
-    background: "rgba(0,0,0,0.42)",
-    color: "#d4af37",
+    width: "100%",
+    minHeight: 48,
+    borderRadius: 16,
+    border: "2px solid rgba(212,175,55,0.88)",
+    background: "#fffdf7",
+    color: "#111827",
+    fontWeight: 900,
+    fontSize: 15,
+    padding: "10px 14px",
     outline: "none",
+    boxSizing: "border-box",
+    boxShadow: "0 8px 18px rgba(150,120,20,0.08)",
   };
 
   const dropdownStyle: React.CSSProperties = {
     ...fieldStyle,
-    background: "#000000",
-    color: "#FFD700",
-    border: "1px solid rgba(255,215,0,0.62)",
-    boxShadow: "0 0 0 1px rgba(255,215,0,0.08) inset",
+    cursor: "pointer",
     appearance: "none",
     WebkitAppearance: "none",
     MozAppearance: "none",
   };
 
   const dropdownOptionStyle: React.CSSProperties = {
-    background: "#000000",
-    color: "#FFD700",
+    background: "#fffdf7",
+    color: "#111827",
+    fontWeight: 900,
   };
 
   useEffect(() => {
     const style = document.createElement("style");
     style.innerHTML = `
-      @keyframes goldGlow {
-        0% { box-shadow: 0 0 14px rgba(184,134,11,0.38), 0 14px 28px rgba(0,0,0,0.55); }
-        50% { box-shadow: 0 0 30px rgba(255,215,0,0.46), 0 16px 34px rgba(0,0,0,0.62); }
-        100% { box-shadow: 0 0 14px rgba(184,134,11,0.38), 0 14px 28px rgba(0,0,0,0.55); }
-      }
       @keyframes floatUp {
-        from { opacity: 0; transform: translateY(14px); }
+        from { opacity: 0; transform: translateY(10px); }
         to { opacity: 1; transform: translateY(0); }
       }
-      @keyframes shineSweep {
-        0% { transform: translateX(-120%) skewX(-12deg); }
-        100% { transform: translateX(220%) skewX(-12deg); }
+
+      .unavailOfficialPage {
+        --school-gold: #d4af37;
+        --school-green: #0f7a46;
+        --school-blue: #2563eb;
+        --school-red: #dc2626;
+        --school-purple: #7c3aed;
+        --school-orange: #ea580c;
+        --school-ink: #111827;
+        --school-muted: #374151;
       }
+
+      .unavailOfficialPage * {
+        box-sizing: border-box;
+        text-shadow: none !important;
+      }
+
+      .schoolOfficialHeaderCard {
+        background: linear-gradient(180deg, #fffdf7 0%, #f7f0df 100%);
+        border: 3px solid rgba(212, 175, 55, 0.92);
+        border-radius: 30px;
+        padding: 18px;
+        box-shadow: 0 0 0 6px rgba(212,175,55,0.09) inset, 0 14px 28px rgba(150,120,20,0.12);
+        margin-bottom: 18px;
+      }
+
+      .schoolOfficialHeaderGrid {
+        display: grid;
+        grid-template-columns: minmax(320px, 1fr) 112px;
+        gap: 18px;
+        align-items: center;
+      }
+
+      .schoolOfficialHeaderText {
+        display: grid;
+        gap: 5px;
+      }
+
+      .schoolOfficialHeaderText .country {
+        font-size: clamp(18px, 2.4vw, 28px);
+        line-height: 1.35;
+        color: #0f172a;
+        font-weight: 1000;
+      }
+
+      .schoolOfficialHeaderText .line {
+        font-size: clamp(13px, 1.5vw, 18px);
+        line-height: 1.55;
+        color: #1f2937;
+        font-weight: 900;
+      }
+
+      .schoolOfficialHeaderText .schoolName {
+        font-size: clamp(16px, 1.9vw, 22px);
+        line-height: 1.55;
+        color: #0f172a;
+        font-weight: 1000;
+      }
+
+      .schoolOfficialHeaderLogoBox {
+        width: 96px;
+        height: 96px;
+        border-radius: 22px;
+        border: 3px solid #d4af37;
+        background: #fffef9;
+        display: grid;
+        place-items: center;
+        justify-self: center;
+        box-shadow: 0 10px 22px rgba(150,120,20,0.12);
+      }
+
+      .schoolOfficialHeaderLogoBox img {
+        width: 72%;
+        height: 72%;
+        object-fit: contain;
+      }
+
+
+      @media (max-width: 900px) {
+        .schoolOfficialHeaderGrid {
+          grid-template-columns: 1fr !important;
+          text-align: center;
+        }
+
+        .schoolOfficialHeaderLogoBox {
+          justify-self: center;
+        }
+      }
+
       .header3d {
         position: relative;
         overflow: hidden;
-        border-radius: 28px;
-        animation: goldGlow 4s infinite;
+        border-radius: 28px !important;
+        background: linear-gradient(180deg, #fffdf7 0%, #f6edd7 100%) !important;
+        border: 3px solid rgba(212,175,55,0.92) !important;
+        box-shadow: 0 0 0 6px rgba(212,175,55,0.08) inset, 0 12px 26px rgba(150,120,20,0.12) !important;
+        color: #111827 !important;
       }
+
       .shineOverlay {
-        position: absolute;
-        top: 0;
-        left: -120%;
-        width: 55%;
-        height: 100%;
-        background: linear-gradient(120deg, transparent 0%, rgba(255,255,255,0.35) 50%, transparent 100%);
-        animation: shineSweep 5.5s infinite;
-        pointer-events: none;
-        opacity: 0.9;
+        display: none !important;
       }
+
+      .header3d div,
+      .header3d span {
+        color: #111827 !important;
+        text-shadow: none !important;
+      }
+
+      .header3d > div {
+        position: relative;
+        padding-inline-start: 16px;
+      }
+
+      .header3d > div::before {
+        content: "";
+        position: absolute;
+        inset-inline-start: 0;
+        top: 4px;
+        bottom: 4px;
+        width: 6px;
+        border-radius: 999px;
+        background: linear-gradient(180deg, #d4af37, #16a34a);
+      }
+
+      .statCard {
+        border: 2px solid #d4af37 !important;
+        border-radius: 22px !important;
+        padding: 16px 18px !important;
+        background: linear-gradient(180deg, #fffdf7 0%, #f7f0df 100%) !important;
+        box-shadow: 0 12px 24px rgba(150,120,20,0.10) !important;
+      }
+
+      .statCard:nth-child(2) {
+        border-color: #2563eb !important;
+        background: linear-gradient(180deg, #f8fbff 0%, #eef4ff 100%) !important;
+      }
+
+      .statCard:nth-child(3) {
+        border-color: #16a34a !important;
+        background: linear-gradient(180deg, #f7fff9 0%, #effcf4 100%) !important;
+      }
+
+      .statCard div {
+        color: #111827 !important;
+        text-shadow: none !important;
+      }
+
+      .softBorder {
+        border: 3px solid rgba(212,175,55,0.88) !important;
+        border-radius: 28px !important;
+        background: linear-gradient(180deg, #fffdf7 0%, #f7f0df 100%) !important;
+        box-shadow: 0 14px 30px rgba(150,120,20,0.12) !important;
+        color: #111827 !important;
+      }
+
+      .softBorder div,
+      .softBorder span,
+      .softBorder label {
+        color: #111827 !important;
+        text-shadow: none !important;
+      }
+
+      .softBorder label span {
+        font-size: 14px;
+        font-weight: 1000;
+      }
+
       .goldBtn {
-        background: linear-gradient(135deg,#6b5200,#b8860b);
-        border: 1px solid rgba(255,255,255,0.14);
-        color: #fff;
+        background: linear-gradient(180deg, #dcfce7 0%, #86efac 100%) !important;
+        border: 3px solid #16a34a !important;
+        color: #065f46 !important;
         cursor: pointer;
-        border-radius: 10px;
-        padding: 10px 14px;
+        border-radius: 14px;
+        padding: 10px 16px;
+        font-weight: 1000;
+        box-shadow: 0 10px 20px rgba(22,163,74,0.14) !important;
         transition: transform .12s ease, filter .12s ease;
       }
-      .goldBtn:hover { transform: translateY(-1px); filter: brightness(1.05); }
+
+      .goldBtn:hover { transform: translateY(-1px); filter: brightness(1.03); }
+      .dangerBtn { background: linear-gradient(180deg, #fee2e2 0%, #fca5a5 100%) !important; border-color: #dc2626 !important; color: #991b1b !important; box-shadow: 0 10px 20px rgba(220,38,38,0.14) !important; }
       .goldBtn:active { transform: translateY(0px); filter: brightness(0.98); }
+
       .chip {
-        border: 1px solid rgba(255,255,255,0.14);
+        border: 2px solid #d4af37 !important;
         border-radius: 999px;
         padding: 8px 14px;
         display: inline-flex;
         gap: 8px;
         align-items: center;
-        background: rgba(0,0,0,0.18);
+        background: #fff8e1 !important;
+        color: #111827 !important;
         transition: transform .16s ease, border-color .16s ease, background .16s ease;
+        font-weight: 900;
+        box-shadow: 0 8px 18px rgba(212,175,55,0.10);
       }
+
+      .chip:nth-child(2) { border-color: #2563eb !important; background: #eef4ff !important; }
+      .chip:nth-child(3) { border-color: #16a34a !important; background: #effcf4 !important; }
+      .chip:nth-child(4) { border-color: #7c3aed !important; background: #f5f1ff !important; }
+      .chip:nth-child(5) { border-color: #ea580c !important; background: #fff3eb !important; }
+
       .chip:hover {
         transform: translateY(-1px);
-        border-color: rgba(212,175,55,0.34);
-        background: rgba(212,175,55,0.08);
+        background: #fffdf7 !important;
       }
-      .statCard {
-        border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 22px;
-        padding: 15px 16px;
-        background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
-        box-shadow: 0 16px 32px rgba(0,0,0,0.20), inset 0 1px 0 rgba(255,255,255,0.04);
-      }
+
       .card {
-        border: 1px solid rgba(255,255,255,0.12);
-        border-radius: 22px;
-        background: linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.02));
+        border: 2px solid #d4af37 !important;
+        border-radius: 22px !important;
+        background: linear-gradient(180deg, #fffdf7 0%, #f7f0df 100%) !important;
+        color: #111827 !important;
         transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
       }
+
+      .card:nth-child(4n + 1) { border-color: #d4af37 !important; }
+      .card:nth-child(4n + 2) { border-color: #2563eb !important; }
+      .card:nth-child(4n + 3) { border-color: #16a34a !important; }
+      .card:nth-child(4n + 4) { border-color: #7c3aed !important; }
+
       .card:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 18px 34px rgba(0,0,0,0.24);
-        border-color: rgba(212,175,55,0.24);
+        transform: translateY(-2px);
+        box-shadow: 0 14px 28px rgba(150,120,20,0.13) !important;
       }
-      .softBorder {
-        border: 1px solid rgba(255,255,255,0.12);
-        border-radius: 22px;
-        background: linear-gradient(180deg, rgba(255,255,255,0.028), rgba(255,255,255,0.015));
-        box-shadow: 0 18px 40px rgba(0,0,0,0.18);
+
+      .card div,
+      .card span {
+        color: #111827 !important;
       }
-      .luxFade { animation: floatUp .5s ease; }
+
+      .unavail-record-title {
+        color: #0f172a !important;
+        font-size: 24px !important;
+        font-weight: 1000 !important;
+        text-shadow: none !important;
+      }
+
+      .unavailability-empty-state {
+        color: #374151 !important;
+        border: 2px dashed rgba(212,175,55,0.70) !important;
+        border-radius: 18px !important;
+        padding: 22px !important;
+        background: #fffdf7 !important;
+        font-weight: 900 !important;
+      }
+
+      .luxFade { animation: floatUp .45s ease; }
+
       @media (max-width: 980px) {
         .unavail-form-grid { grid-template-columns: 1fr !important; }
         .unavail-row-grid { grid-template-columns: 1fr !important; }
+        .schoolOfficialHeaderGrid { grid-template-columns: 1fr !important; }
+        .schoolOfficialHeaderMeta { grid-template-columns: 1fr !important; }
       }
     `;
     document.head.appendChild(style);
@@ -415,16 +661,23 @@ export default function Unavailability() {
 
   return (
     <div
+      className="unavailOfficialPage"
       style={{
-        padding: 20,
+        padding: 18,
         direction: isRTL ? "rtl" : "ltr",
         background:
-          "radial-gradient(circle at 12% 8%, rgba(212,175,55,0.16), transparent 20%), radial-gradient(circle at 88% 14%, rgba(59,130,246,0.10), transparent 22%), radial-gradient(circle at 50% 0%, rgba(255,255,255,0.04), transparent 24%), linear-gradient(180deg, #070707 0%, #0d0d0d 52%, #111111 100%)",
+          "radial-gradient(circle at 12% 8%, rgba(212,175,55,0.13), transparent 24%), radial-gradient(circle at 88% 14%, rgba(16,185,129,0.10), transparent 26%), linear-gradient(180deg, #fffdf7 0%, #f4ecd8 54%, #fffaf0 100%)",
         minHeight: "100vh",
-        color: "#d4af37",
+        color: "#111827",
         fontFamily: "Cairo, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
       }}
     >
+      <OfficialSchoolHeader
+        lang={lang}
+        data={officialSchoolData}
+        logo={officialLogo}
+      />
+
       <div
         className="header3d luxFade"
         style={{
@@ -528,12 +781,12 @@ export default function Unavailability() {
         </div>
       </div>
 
-      <h2 className="luxFade" style={{ margin: "4px 0 14px", color: "#fff1c4", fontSize: 28, fontWeight: 900, textShadow: "0 4px 18px rgba(212,175,55,0.16)", letterSpacing: "-0.02em" }}>
+      <h2 className="luxFade unavail-record-title" style={{ margin: "4px 0 14px", color: "#fff1c4", fontSize: 28, fontWeight: 900, textShadow: "0 4px 18px rgba(212,175,55,0.16)", letterSpacing: "-0.02em" }}>
         {t.currentRecords}
       </h2>
 
       {rules.length === 0 ? (
-        <div className="luxFade" style={{ opacity: 0.9, border: "1px dashed rgba(212,175,55,0.26)", borderRadius: 18, padding: 24, background: "rgba(255,255,255,0.02)" }}>
+        <div className="luxFade unavailability-empty-state">
           {t.noRecords}
         </div>
       ) : (
@@ -565,8 +818,8 @@ export default function Unavailability() {
                     alert(t.deleteError);
                   }
                 }}
-                className="goldBtn"
-                style={{ padding: "8px 10px", background: "linear-gradient(135deg,#5c0b0b,#b8860b)" }}
+                className="goldBtn dangerBtn"
+                style={{ padding: "8px 10px" }}
               >
                 {t.delete}
               </button>

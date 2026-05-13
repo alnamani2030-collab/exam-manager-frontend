@@ -5,7 +5,7 @@
 // - الإجمالي = المراقبة + الاحتياط + مراقب الدور
 // - حذف مسارات المراجعة والتصحيح من قلب التوزيع والجداول النشطة
 // - إبقاء توافق قراءة البيانات القديمة عند الحاجة بدون إدخالها في الإجمالي
-// - الحفاظ على الشروط النشطة: شرط "بن"، منع معلم المادة من مراقبة مادته، منع تكرار مراقبة 3 ساعات، عدم التوفر، والعدالة
+// - الحفاظ على الشروط النشطة: شرط "بن"، منع معلم المادة من مراقبة مادته، منع تكرار مراقبة 3 ساعات، منع مراقبة يومين متتاليين إلا عند الضرورة، منع اليوم الثالث بعد يومين مراقبة متتاليين، عدم التوفر، والعدالة
 
 import React, {useEffect, useMemo, useRef, useState} from "react";
 import { useNavigate } from "react-router-dom";
@@ -765,6 +765,8 @@ function reasonLabel(code?: string) {
       return "تعارض في نفس الفترة";
     case "BACK_TO_BACK_BLOCK":
       return "منع حسب القيود";
+    case "CONSECUTIVE_INVIGILATION_DAYS":
+      return "مراقبة في يوم متتالٍ ممنوعة";
     case "SPECIALTY_BLOCK":
       return "ممنوع لمعلم المادة";
     case "DUTY_ALREADY_ASSIGNED":
@@ -892,6 +894,119 @@ function workDateISO(dateISO: string) {
   return d;
 }
 
+function getAdjacentDateISOs(dateISO: string) {
+  const d = workDateISO(String(dateISO || "").trim());
+  if (!d) return [];
+  return [addDaysISO(d, -1), addDaysISO(d, 1)]
+    .map((x) => workDateISO(String(x || "").trim()))
+    .filter(Boolean);
+}
+
+function hasAdjacentInvigilationDate(invigilationDates: Set<string> | undefined, dateISO: string) {
+  if (!invigilationDates || !dateISO) return false;
+  return getAdjacentDateISOs(dateISO).some((adjacentDateISO) => invigilationDates.has(adjacentDateISO));
+}
+
+function hasTeacherAdjacentInvigilation(
+  invigilationDatesByTeacher: Map<string, Set<string>>,
+  teacherId: string,
+  dateISO: string
+) {
+  const tid = String(teacherId || "").trim();
+  const d = workDateISO(String(dateISO || "").trim());
+  if (!tid || !d) return false;
+  return hasAdjacentInvigilationDate(invigilationDatesByTeacher.get(tid), d);
+}
+
+function wouldCreateThreeConsecutiveInvigilationDays(invigilationDates: Set<string> | undefined, dateISO: string) {
+  const d = workDateISO(String(dateISO || "").trim());
+  if (!invigilationDates || !d) return false;
+
+  const normalizedDates = new Set<string>(
+    Array.from(invigilationDates)
+      .map((value) => workDateISO(String(value || "").trim()))
+      .filter(Boolean)
+  );
+
+  // ✅ الشرط التجاري الجديد:
+  // إذا كان المعلم لديه مراقبة في يومين متتاليين، فلا يتم تكليفه مراقبة في اليوم الثالث.
+  // الفحص يشمل كل الاحتمالات حتى لا يؤدي الإسناد اليدوي أو إعادة التوازن إلى تكوين 3 أيام متتالية.
+  const has = (offset: number) => normalizedDates.has(workDateISO(addDaysISO(d, offset)));
+  return (
+    (has(-2) && has(-1)) ||
+    (has(-1) && has(1)) ||
+    (has(1) && has(2))
+  );
+}
+
+function wouldTeacherCreateThreeConsecutiveInvigilationDays(
+  invigilationDatesByTeacher: Map<string, Set<string>>,
+  teacherId: string,
+  dateISO: string
+) {
+  const tid = String(teacherId || "").trim();
+  const d = workDateISO(String(dateISO || "").trim());
+  if (!tid || !d) return false;
+  return wouldCreateThreeConsecutiveInvigilationDays(invigilationDatesByTeacher.get(tid), d);
+}
+
+function hasAdjacentInvigilationAssignment(
+  assignments: any[],
+  teacherId: string,
+  dateISO: string,
+  excludedAssignmentIds: Set<string> = new Set<string>()
+) {
+  const tid = String(teacherId || "").trim();
+  const d = workDateISO(String(dateISO || "").trim());
+  if (!tid || !d) return false;
+
+  for (let index = 0; index < (Array.isArray(assignments) ? assignments.length : 0); index++) {
+    const assignment = assignments[index];
+    const assignmentId = assignmentIdentity(assignment, index);
+    if (excludedAssignmentIds.has(assignmentId)) continue;
+
+    const assTeacherId = String((assignment as any)?.teacherId || "").trim();
+    if (assTeacherId !== tid) continue;
+
+    const assTaskType = normalizeStoredTaskTypeGlobal((assignment as any)?.taskType || (assignment as any)?.role || "");
+    if (assTaskType !== "INVIGILATION") continue;
+
+    const assDateISO = workDateISO(String((assignment as any)?.dateISO || (assignment as any)?.date || "").trim());
+    if (getAdjacentDateISOs(d).includes(assDateISO)) return true;
+  }
+
+  return false;
+}
+
+function wouldCreateThreeConsecutiveInvigilationAssignment(
+  assignments: any[],
+  teacherId: string,
+  dateISO: string,
+  excludedAssignmentIds: Set<string> = new Set<string>()
+) {
+  const tid = String(teacherId || "").trim();
+  const d = workDateISO(String(dateISO || "").trim());
+  if (!tid || !d) return false;
+
+  const invigilationDates = new Set<string>();
+  for (let index = 0; index < (Array.isArray(assignments) ? assignments.length : 0); index++) {
+    const assignment = assignments[index];
+    const assignmentId = assignmentIdentity(assignment, index);
+    if (excludedAssignmentIds.has(assignmentId)) continue;
+
+    const assTeacherId = String((assignment as any)?.teacherId || "").trim();
+    if (assTeacherId !== tid) continue;
+
+    const assTaskType = normalizeStoredTaskTypeGlobal((assignment as any)?.taskType || (assignment as any)?.role || "");
+    if (assTaskType !== "INVIGILATION") continue;
+
+    const assDateISO = workDateISO(String((assignment as any)?.dateISO || (assignment as any)?.date || "").trim());
+    if (assDateISO) invigilationDates.add(assDateISO);
+  }
+
+  return wouldCreateThreeConsecutiveInvigilationDays(invigilationDates, d);
+}
+
 /* ============================================================
    ✅ شرط "بن" في الاسم
 ============================================================ */
@@ -996,6 +1111,7 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
   const occupiedSlots = new Map<string, Set<string>>(); // teacherId -> set(date__period)
   const dayHasAnyPeriod = new Map<string, Set<string>>(); // teacherId -> set(dateISO)
   const teacherDayFirstInvDuration = new Map<string, number>(); // key teacherId__dateISO -> durationMinutes of first invigilation
+  const teacherInvigilationDates = new Map<string, Set<string>>(); // teacherId -> INVIGILATION dates, used to block consecutive days
 
   // ✅ NEW: منع تكرار مراقبة 3 ساعات
   const teacherHad3HoursInv = new Map<string, boolean>(); // teacherId -> true إذا أخذ 180 دقيقة مرة
@@ -1006,6 +1122,7 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
     dutyCounts.set(id, 0);
     occupiedSlots.set(id, new Set<string>());
     dayHasAnyPeriod.set(id, new Set<string>());
+    teacherInvigilationDates.set(id, new Set<string>());
     teacherHad3HoursInv.set(id, false);
   });
 
@@ -1101,6 +1218,21 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
       if (dur === 180 && (teacherHad3HoursInv.get(teacherId) || false)) {
         return { ok: false, reason: "BACK_TO_BACK_BLOCK" as const };
       }
+
+      // ✅ شرط تجاري جديد: إذا كُلف المعلم مراقبة في يومين متتاليين، اليوم الثالث يكون غير مكلف مراقبة.
+      // هذا الشرط صلب ولا يتم كسره حتى في حالة الضرورة، حتى لا تتكون 3 أيام مراقبة متتالية.
+      if (wouldTeacherCreateThreeConsecutiveInvigilationDays(teacherInvigilationDates, teacherId, dateISO)) {
+        return { ok: false, reason: "THREE_CONSECUTIVE_INVIGILATION_DAYS" as const };
+      }
+
+      // ✅ شرط تجاري: لا يكلف المعلم مراقبة في يومين متتاليين قدر الإمكان.
+      // ✅ يسمح بكسر الشرط فقط عند الضرورة إذا لم يوجد بديل مناسب.
+      const allowConsecutiveInvigilation =
+        meta?.allowConsecutiveInvigilation === true ||
+        meta?.allowConsecutiveInvigilationDays === true;
+      if (!allowConsecutiveInvigilation && hasTeacherAdjacentInvigilation(teacherInvigilationDates, teacherId, dateISO)) {
+        return { ok: false, reason: "CONSECUTIVE_INVIGILATION_DAYS" as const };
+      }
     }
 
     if (smartBySpecialty && taskType === "INVIGILATION") {
@@ -1151,7 +1283,18 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
       if (dur === 180) {
         teacherHad3HoursInv.set(teacherId, true);
       }
+
+      if (!teacherInvigilationDates.has(teacherId)) {
+        teacherInvigilationDates.set(teacherId, new Set<string>());
+      }
+      teacherInvigilationDates.get(teacherId)!.add(dateISO);
     }
+
+    const {
+      allowConsecutiveInvigilation,
+      allowConsecutiveInvigilationDays,
+      ...assignmentMeta
+    } = meta || {};
 
     assignments.push({
       teacherId,
@@ -1162,7 +1305,7 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
       date: dateISO,
       period,
       subject,
-      ...meta,
+      ...(assignmentMeta || {}),
     });
   }
 
@@ -1207,6 +1350,22 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
         commitAssign(c.id, dateISO, period, taskType, subject, meta);
         rr = (c.idx + 1) % n;
         return { assigned: true as const };
+      }
+
+      // ✅ ضرورة فقط: إذا لم يوجد أي بديل يحقق شرط عدم اليومين المتتاليين،
+      // نعيد المحاولة مع السماح بهذا الشرط فقط، مع إبقاء باقي الشروط كما هي.
+      const necessityMeta = {
+        ...(meta || {}),
+        allowConsecutiveInvigilation: true,
+        consecutiveInvigilationAllowedBecauseNecessary: true,
+      };
+      for (const c of baseCandidates) {
+        const chk = canAssign(c.id, dateISO, period, taskType, subject, necessityMeta);
+        if (!chk.ok) continue;
+
+        commitAssign(c.id, dateISO, period, taskType, subject, necessityMeta);
+        rr = (c.idx + 1) % n;
+        return { assigned: true as const, relaxedConsecutiveInvigilation: true as const };
       }
 
       return { assigned: false as const, reason: "NO_TEACHERS" as const };
@@ -1297,29 +1456,57 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
               a.rrDist - b.rrDist
           );
 
+        const baseInvMeta = {
+          durationMinutes: Number(exam.durationMinutes ?? 0) || 0,
+        };
+        const assignmentInvMeta = {
+          examId: exam.id,
+          examSubject: subject,
+          committeeNo,
+          committeeNumber: committeeNo,
+          roomNo: committeeNo,
+          roomNumber: committeeNo,
+          invigilatorIndex: 1,
+          durationMinutes: Number(exam.durationMinutes ?? 0) || 0,
+        };
+
         let ok = false;
         for (const c of candidatesAll) {
-          const chk = canAssign(c.id, dateISO, period, "INVIGILATION", subject, {
-            durationMinutes: Number(exam.durationMinutes ?? 0) || 0,
-          });
+          const chk = canAssign(c.id, dateISO, period, "INVIGILATION", subject, baseInvMeta);
           if (!chk.ok) continue;
 
-          commitAssign(c.id, dateISO, period, "INVIGILATION", subject, {
-            examId: exam.id,
-            examSubject: subject,
-            committeeNo,
-            committeeNumber: committeeNo,
-            roomNo: committeeNo,
-            roomNumber: committeeNo,
-            invigilatorIndex: 1,
-            durationMinutes: Number(exam.durationMinutes ?? 0) || 0,
-          });
+          commitAssign(c.id, dateISO, period, "INVIGILATION", subject, assignmentInvMeta);
 
           rr = (c.idx + 1) % n;
           ok = true;
           assignedInvHere += 1;
           invAssigned += 1;
           break;
+        }
+
+        // ✅ ضرورة فقط: السماح بيومين متتاليين إذا لم يوجد بديل مناسب.
+        if (!ok) {
+          const necessityBaseMeta = {
+            ...baseInvMeta,
+            allowConsecutiveInvigilation: true,
+          };
+          const necessityAssignmentMeta = {
+            ...assignmentInvMeta,
+            allowConsecutiveInvigilation: true,
+            consecutiveInvigilationAllowedBecauseNecessary: true,
+          };
+          for (const c of candidatesAll) {
+            const chk = canAssign(c.id, dateISO, period, "INVIGILATION", subject, necessityBaseMeta);
+            if (!chk.ok) continue;
+
+            commitAssign(c.id, dateISO, period, "INVIGILATION", subject, necessityAssignmentMeta);
+
+            rr = (c.idx + 1) % n;
+            ok = true;
+            assignedInvHere += 1;
+            invAssigned += 1;
+            break;
+          }
         }
 
         if (!ok) {
@@ -1374,31 +1561,47 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
 
         let firstPicked: any = null;
         let secondPicked: any = null;
+        let consecutiveNecessityPair = false;
 
-        const cand1 = buildCandidates();
-
-        for (const c1 of cand1) {
-          const chk1 = canAssign(c1.id, dateISO, period, "INVIGILATION", subject, {
+        const pickPair = (allowConsecutiveInvigilation = false) => {
+          const pairMeta = {
             durationMinutes: Number(exam.durationMinutes ?? 0) || 0,
-          });
-          if (!chk1.ok) continue;
+            ...(allowConsecutiveInvigilation ? { allowConsecutiveInvigilation: true } : {}),
+          };
+          const cand1 = buildCandidates();
 
-          const cand2 = buildCandidates().filter((c2) => c2.id !== c1.id);
+          for (const c1 of cand1) {
+            const chk1 = canAssign(c1.id, dateISO, period, "INVIGILATION", subject, pairMeta);
+            if (!chk1.ok) continue;
 
-          for (const c2 of cand2) {
-            // ✅ ممنوع: بدون بن + بدون بن
-            if (!c1.ben && !c2.ben) continue;
+            const cand2 = buildCandidates().filter((c2) => c2.id !== c1.id);
 
-            const chk2 = canAssign(c2.id, dateISO, period, "INVIGILATION", subject, {
-              durationMinutes: Number(exam.durationMinutes ?? 0) || 0,
-            });
-            if (!chk2.ok) continue;
+            for (const c2 of cand2) {
+              // ✅ ممنوع: بدون بن + بدون بن
+              if (!c1.ben && !c2.ben) continue;
 
-            firstPicked = c1;
-            secondPicked = c2;
-            break;
+              const chk2 = canAssign(c2.id, dateISO, period, "INVIGILATION", subject, pairMeta);
+              if (!chk2.ok) continue;
+
+              return { first: c1, second: c2 };
+            }
           }
-          if (firstPicked && secondPicked) break;
+          return null;
+        };
+
+        const strictPair = pickPair(false);
+        if (strictPair) {
+          firstPicked = strictPair.first;
+          secondPicked = strictPair.second;
+        } else {
+          // ✅ ضرورة فقط: إذا فشل إيجاد زوج مناسب بدون يومين متتاليين،
+          // نعيد المحاولة مع السماح بهذا الشرط فقط.
+          const necessityPair = pickPair(true);
+          if (necessityPair) {
+            firstPicked = necessityPair.first;
+            secondPicked = necessityPair.second;
+            consecutiveNecessityPair = true;
+          }
         }
 
         if (!firstPicked || !secondPicked) {
@@ -1424,6 +1627,12 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
           roomNumber: committeeNo,
           invigilatorIndex: 1,
           durationMinutes: Number(exam.durationMinutes ?? 0) || 0,
+          ...(consecutiveNecessityPair
+            ? {
+                allowConsecutiveInvigilation: true,
+                consecutiveInvigilationAllowedBecauseNecessary: true,
+              }
+            : {}),
         });
         assignedInvHere += 1;
         invAssigned += 1;
@@ -1437,6 +1646,12 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
           roomNumber: committeeNo,
           invigilatorIndex: 2,
           durationMinutes: Number(exam.durationMinutes ?? 0) || 0,
+          ...(consecutiveNecessityPair
+            ? {
+                allowConsecutiveInvigilation: true,
+                consecutiveInvigilationAllowedBecauseNecessary: true,
+              }
+            : {}),
         });
         assignedInvHere += 1;
         invAssigned += 1;
@@ -2594,15 +2809,17 @@ const nav = useNavigate();
       const occupiedSlots = new Map<string, Set<string>>();
       const dayHasAnyPeriod = new Map<string, Set<string>>();
       const teacherDayFirstInvDuration = new Map<string, number>();
+      const teacherInvigilationDates = new Map<string, Set<string>>();
       const teacherHad3HoursInv = new Map<string, boolean>();
       for (const teacherId of teacherIds) {
         quotaTotals.set(teacherId, 0);
         invCounts.set(teacherId, 0);
         occupiedSlots.set(teacherId, new Set<string>());
         dayHasAnyPeriod.set(teacherId, new Set<string>());
+        teacherInvigilationDates.set(teacherId, new Set<string>());
         teacherHad3HoursInv.set(teacherId, false);
       }
-      return { quotaTotals, invCounts, occupiedSlots, dayHasAnyPeriod, teacherDayFirstInvDuration, teacherHad3HoursInv };
+      return { quotaTotals, invCounts, occupiedSlots, dayHasAnyPeriod, teacherDayFirstInvDuration, teacherInvigilationDates, teacherHad3HoursInv };
     }
 
     function buildSimulationArtifactsFromAssignments(sourceAssignments: any[]) {
@@ -2645,6 +2862,11 @@ const nav = useNavigate();
             state.teacherHad3HoursInv.set(teacherId, true);
           }
 
+          if (!state.teacherInvigilationDates.has(teacherId)) {
+            state.teacherInvigilationDates.set(teacherId, new Set<string>());
+          }
+          state.teacherInvigilationDates.get(teacherId)!.add(dateISO);
+
           const examKey = String((ass as any)?.examId || `${key}__${String((ass as any)?.subject || "").trim()}`).trim();
           const committeeNo = Math.max(1, Number((ass as any)?.committeeNo || (ass as any)?.committeeNumber || (ass as any)?.roomNo || (ass as any)?.roomNumber || 1) || 1);
           if (!committeeMap.has(examKey)) committeeMap.set(examKey, new Map<number, any[]>());
@@ -2677,6 +2899,7 @@ const nav = useNavigate();
         occupiedSlots: new Map(Array.from(state.occupiedSlots.entries()).map(([teacherId, periods]: any) => [teacherId, new Set(Array.from(periods))])),
         dayHasAnyPeriod: new Map(Array.from(state.dayHasAnyPeriod.entries()).map(([teacherId, dates]: any) => [teacherId, new Set(Array.from(dates))])),
         teacherDayFirstInvDuration: new Map(state.teacherDayFirstInvDuration),
+        teacherInvigilationDates: new Map(Array.from((state.teacherInvigilationDates || new Map()).entries()).map(([teacherId, dates]: any) => [teacherId, new Set(Array.from(dates || []))])),
         teacherHad3HoursInv: new Map(state.teacherHad3HoursInv),
       };
     }
@@ -2708,6 +2931,11 @@ const nav = useNavigate();
       if (taskType === "INVIGILATION") {
         const durationMinutes = Number(meta?.durationMinutes ?? 0) || 0;
         if (durationMinutes === 180 && (state.teacherHad3HoursInv.get(teacherId) || false)) return false;
+        if (wouldCreateThreeConsecutiveInvigilationDays(state.teacherInvigilationDates?.get(teacherId), dateISO)) return false;
+        const allowConsecutiveInvigilation =
+          meta?.allowConsecutiveInvigilation === true ||
+          meta?.allowConsecutiveInvigilationDays === true;
+        if (!allowConsecutiveInvigilation && hasAdjacentInvigilationDate(state.teacherInvigilationDates?.get(teacherId), dateISO)) return false;
       }
 
 
@@ -2738,6 +2966,10 @@ const nav = useNavigate();
         if (durationMinutes === 180) {
           state.teacherHad3HoursInv.set(teacherId, true);
         }
+        if (!state.teacherInvigilationDates.has(teacherId)) {
+          state.teacherInvigilationDates.set(teacherId, new Set<string>());
+        }
+        state.teacherInvigilationDates.get(teacherId)!.add(dateISO);
       }
     }
 
@@ -2803,6 +3035,7 @@ const nav = useNavigate();
       const teacherName = teacherNameMapLocal.get(teacherId) || "";
 
       if (durationMinutes === 180 && (state.teacherHad3HoursInv.get(teacherId) || false)) return false;
+      if (hasAdjacentInvigilationDate(state.teacherInvigilationDates?.get(teacherId), dateISO)) return false;
 
       if (smartBySpecialty) {
         const subjects = teacherSubjectSetMap.get(teacherId);
@@ -2873,6 +3106,8 @@ const nav = useNavigate();
       }
 
       if (durationMinutes === 180 && (state.teacherHad3HoursInv.get(teacherId) || false)) blockers.push("THREE_HOURS_REPEAT");
+      if (wouldCreateThreeConsecutiveInvigilationDays(state.teacherInvigilationDates?.get(teacherId), dateISO)) blockers.push("THREE_CONSECUTIVE_INVIGILATION_DAYS");
+      else if (hasAdjacentInvigilationDate(state.teacherInvigilationDates?.get(teacherId), dateISO)) blockers.push("CONSECUTIVE_INVIGILATION_DAYS");
 
       if (blockers.length !== 1) return null;
       return blockers[0];
@@ -3342,7 +3577,7 @@ const nav = useNavigate();
         key: 'restrictions',
         title: tr('القيود المؤثرة','Effective Constraints'),
         value: `${unavailabilityRules.length}`,
-        sub: tr(`عدم توفر: ${unavailabilityRules.length} • منع معلم المادة • شرط بن • منع تكرار مراقبة 3 ساعات`, `Unavailability: ${unavailabilityRules.length} • Subject-teacher block • Ben rule • No repeated 3-hour invigilation`),
+        sub: tr(`عدم توفر: ${unavailabilityRules.length} • منع معلم المادة • شرط بن • منع تكرار مراقبة 3 ساعات • منع مراقبة يومين متتاليين • منع اليوم الثالث بعد يومين متتاليين`, `Unavailability: ${unavailabilityRules.length} • Subject-teacher block • Ben rule • No repeated 3-hour invigilation • No consecutive-day invigilation • No third consecutive invigilation day`),
         tone: unavailabilityRules.length ? 'warn' : 'neutral',
       },
     ];
@@ -3733,6 +3968,12 @@ const nav = useNavigate();
       if (sameTeacherSameSlot) {
         return { ok: false, message: tr(`المعلم ${teacherName} موجود بالفعل في الجدول الشامل لنفس الفترة، لذلك لا يمكن نقله إليها مرة أخرى.`, `Teacher ${teacherName} already exists in the master table for the same period, so it cannot be moved there again.`) };
       }
+      if (
+        preferredTaskType === "INVIGILATION" &&
+        hasAdjacentInvigilationAssignment(currentAssignments, teacherId, dateISO, new Set<string>([donorAssignmentId]))
+      ) {
+        return { ok: false, message: tr(`لا يمكن نقل ${teacherName} إلى المراقبة في ${dateISO} لأنه لديه مراقبة في اليوم السابق أو التالي.`, `Cannot move ${teacherName} to invigilation on ${dateISO} because the teacher has invigilation on the previous or next day.`) };
+      }
       const previousAssignmentSnapshot = JSON.parse(JSON.stringify(currentAssignments[donorIdx]));
       const donorTaskLabel = TASK_TYPE_LABEL_AR[String(suggestion?.transferFromTaskType || normalizeStoredTaskTypeGlobal((previousAssignmentSnapshot as any)?.taskType || (previousAssignmentSnapshot as any)?.role || ""))] || String(suggestion?.transferFromTaskType || "");
       const donorSlotLabel = `${String(suggestion?.transferFromDateISO || workDateISO(String((previousAssignmentSnapshot as any)?.dateISO || (previousAssignmentSnapshot as any)?.date || "").trim()) || "")} ${String(suggestion?.transferFromPeriod || periodToAMPM(String((previousAssignmentSnapshot as any)?.period || "AM"))) === "PM" ? tr("الفترة الثانية","Second Period") : tr("الفترة الأولى","First Period")}`;
@@ -3797,6 +4038,9 @@ const nav = useNavigate();
     }
 
     if (sameTeacherSameSlot && String((sameTeacherSameSlot as any)?.taskType || "").trim() === "RESERVE" && preferredTaskType === "INVIGILATION") {
+      if (hasAdjacentInvigilationAssignment(currentAssignments, teacherId, dateISO)) {
+        return { ok: false, message: tr(`لا يمكن تحويل ${teacherName} إلى مراقبة في ${dateISO} لأنه لديه مراقبة في اليوم السابق أو التالي.`, `Cannot convert ${teacherName} to invigilation on ${dateISO} because the teacher has invigilation on the previous or next day.`) };
+      }
       const previousAssignmentId = String((sameTeacherSameSlot as any)?.__uid || (sameTeacherSameSlot as any)?.id || "").trim();
       const previousAssignmentSnapshot = JSON.parse(JSON.stringify(sameTeacherSameSlot));
       const nextAssignments = currentAssignments.map((ass: any) => {
@@ -3859,6 +4103,14 @@ const nav = useNavigate();
         meta: { teacherId, teacherName, dateISO, period, taskType: "INVIGILATION", subject, source: normalizedSuggestionSource === "FREE" ? "RESERVE" : normalizedSuggestionSource },
       }).catch(() => {});
       return { ok: true, message: tr(`${note}. إذا بقي عجز في نفس الفترة ستظهر لك اقتراحات جديدة مباشرة، ويمكنك التراجع من سجل الإضافات الأخيرة.`, `${note}. If a shortage remains in the same period, new suggestions will appear immediately, and you can undo it from the recent additions history.`) };
+    }
+
+    if (preferredTaskType === "INVIGILATION" && wouldCreateThreeConsecutiveInvigilationAssignment(currentAssignments, teacherId, dateISO)) {
+      return { ok: false, message: tr(`لا يمكن إضافة ${teacherName} للمراقبة في ${dateISO} لأن ذلك سيجعله مكلفًا بالمراقبة في 3 أيام متتالية.`, `Cannot add ${teacherName} to invigilation on ${dateISO} because it would create 3 consecutive invigilation days.`) };
+    }
+
+    if (preferredTaskType === "INVIGILATION" && hasAdjacentInvigilationAssignment(currentAssignments, teacherId, dateISO)) {
+      return { ok: false, message: tr(`لا يمكن إضافة ${teacherName} للمراقبة في ${dateISO} لأنه لديه مراقبة في اليوم السابق أو التالي.`, `Cannot add ${teacherName} to invigilation on ${dateISO} because the teacher has invigilation on the previous or next day.`) };
     }
 
     const now = Date.now();
@@ -4401,6 +4653,10 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
         return tr("تعارض في نفس الفترة","Same period conflict");
       case "BACK_TO_BACK_BLOCK":
         return tr("منع حسب القيود","Blocked by constraints");
+      case "CONSECUTIVE_INVIGILATION_DAYS":
+        return tr("مراقبة في يوم متتالٍ ممنوعة","Consecutive-day invigilation is blocked");
+      case "THREE_CONSECUTIVE_INVIGILATION_DAYS":
+        return tr("اليوم الثالث بعد يومين مراقبة متتاليين ممنوع","Third consecutive invigilation day is blocked");
       case "SPECIALTY_BLOCK":
         return tr("ممنوع لمعلم المادة","Blocked for subject teacher");
       case "ARABIC_ONCE":

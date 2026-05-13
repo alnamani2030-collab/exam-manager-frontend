@@ -2,8 +2,8 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { useI18n } from "../i18n/I18nProvider";
-import { pageDark, container, cardDark } from "../styles/ui";
-import { GOLD_LINE, GOLD_LINE_SOFT, subjectColors, TABLE_FONT_SIZE, TABLE_TEXT } from "./taskDistributionResults12/constants";
+import { container } from "../styles/ui";
+import { subjectColors } from "./taskDistributionResults12/constants";
 import { ResultsPageHeader } from "./taskDistributionResults12/components/ResultsPageHeader";
 import { ResultsTable } from "./taskDistributionResults12/components/ResultsTable";
 import { ResultsEmptyRunState } from "./taskDistributionResults12/components/ResultsEmptyRunState";
@@ -17,14 +17,248 @@ import { useResultsDataModel } from "./taskDistributionResults12/hooks/useResult
 import { useResultsPageActions } from "./taskDistributionResults12/hooks/useResultsPageActions";
 import { useResultsTableActions } from "./taskDistributionResults12/hooks/useResultsTableActions";
 import { useResultsClipboardShortcuts } from "./taskDistributionResults12/hooks/useResultsClipboardShortcuts";
-import { loadTenantArray, loadTenantSettings, replaceTenantArray, saveTenantSettings, subscribeTenantArray } from "../services/tenantData";
+
+const OFFICIAL_PAGE_STYLE: React.CSSProperties = {
+  minHeight: "100vh",
+  background: "linear-gradient(180deg, #f7f1e4 0%, #eee2c9 100%)",
+  color: "#111827",
+  padding: "12px 8px",
+};
+
+const OFFICIAL_PANEL_STYLE: React.CSSProperties = {
+  background: "rgba(255, 253, 247, 0.98)",
+  border: "1px solid #d1b66a",
+  borderRadius: 12,
+  boxShadow: "0 6px 16px rgba(80, 60, 20, 0.08)",
+  color: "#111827",
+};
+
+const OFFICIAL_HEADER_STYLES_INPUT: Parameters<
+  typeof getResultsTableHeaderStyles
+>[0] = {
+  tableText: "#111827",
+  tableFontSize: "12px",
+  goldLine: "#a98322",
+  goldLineSoft: "rgba(151, 116, 28, 0.34)",
+};
+
+const OFFICIAL_GOLDEN_TABLE_CSS = `
+  .results12GoldenTableScope {
+    background: linear-gradient(180deg, #f7f1e4 0%, #eee2c9 100%) !important;
+    color: #111827 !important;
+  }
+
+  .results12GoldenTableScope table,
+  .results12GoldenTableScope td,
+  .results12GoldenTableScope th,
+  .results12GoldenTableScope button,
+  .results12GoldenTableScope input,
+  .results12GoldenTableScope select,
+  .results12GoldenTableScope textarea {
+    box-sizing: border-box !important;
+    color: #111827 !important;
+    -webkit-text-fill-color: #111827 !important;
+    text-shadow: none !important;
+  }
+
+  .results12GoldenTableScope input,
+  .results12GoldenTableScope select,
+  .results12GoldenTableScope textarea,
+  .results12GoldenTableScope option {
+    background: #fffdf7 !important;
+    border: 1px solid #c8ad61 !important;
+    border-radius: 8px !important;
+    font-weight: 650 !important;
+    outline: none !important;
+  }
+
+  .results12GoldenTableScope input:focus,
+  .results12GoldenTableScope select:focus,
+  .results12GoldenTableScope textarea:focus {
+    border-color: #947329 !important;
+    box-shadow: 0 0 0 2px rgba(148,115,41,0.18) !important;
+  }
+
+  .results12GoldenTableScope button {
+    font-weight: 700 !important;
+    border-color: rgba(148,115,41,0.36) !important;
+  }
+
+  .results12GoldenTableScope table {
+    width: 100% !important;
+    background: #fffdf7 !important;
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+    border: 1px solid #c8ad61 !important;
+    border-radius: 10px !important;
+    overflow: hidden !important;
+    box-shadow: 0 6px 18px rgba(80,60,20,0.08) !important;
+  }
+
+  .results12GoldenTableScope table thead th,
+  .results12GoldenTableScope table tfoot td,
+  .results12GoldenTableScope table tfoot th {
+    background: linear-gradient(180deg, #f8ebc8 0%, #e3c978 100%) !important;
+    border: 1px solid #b89538 !important;
+    color: #111827 !important;
+    -webkit-text-fill-color: #111827 !important;
+    font-size: 11.5px !important;
+    font-weight: 800 !important;
+    line-height: 1.3 !important;
+    padding: 5px 6px !important;
+    vertical-align: middle !important;
+    white-space: normal !important;
+  }
+
+  .results12GoldenTableScope table tbody td {
+    background: #fffdf7 !important;
+    border: 1px solid rgba(184,149,56,0.34) !important;
+    color: #111827 !important;
+    -webkit-text-fill-color: #111827 !important;
+    font-size: 11.5px !important;
+    font-weight: 600 !important;
+    line-height: 1.3 !important;
+    padding: 4px 5px !important;
+    vertical-align: top !important;
+    box-shadow: none !important;
+  }
+
+  .results12GoldenTableScope table tbody tr:nth-child(even) td:not(.results12TaskInvigilation):not(.results12TaskReserve):not(.results12TaskDuty):not(.results12CellEmptyOfficial) {
+    background: #fbf5e6 !important;
+  }
+
+  .results12GoldenTableScope table tbody tr:hover td:not(.results12TaskInvigilation):not(.results12TaskReserve):not(.results12TaskDuty):not(.results12CellEmptyOfficial) {
+    background: #f4e9c9 !important;
+  }
+
+  .results12GoldenTableScope table tbody td.results12TaskInvigilation {
+    background: linear-gradient(180deg, #edf5ff 0%, #d8e9ff 100%) !important;
+    border: 1.25px solid #3b78bd !important;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.38), 0 0 6px rgba(59,120,189,0.14) !important;
+    animation: results12CommercialBluePulse 4.2s ease-in-out infinite !important;
+  }
+
+  .results12GoldenTableScope table tbody td.results12TaskReserve {
+    background: linear-gradient(180deg, #edf9f0 0%, #d9f0df 100%) !important;
+    border: 1.25px solid #3d8b5b !important;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.38), 0 0 6px rgba(61,139,91,0.14) !important;
+    animation: results12CommercialGreenPulse 4.2s ease-in-out infinite !important;
+  }
+
+  .results12GoldenTableScope table tbody td.results12TaskDuty {
+    background: linear-gradient(180deg, #fff0f0 0%, #f9dddd 100%) !important;
+    border: 1.25px solid #bf4d4d !important;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.38), 0 0 6px rgba(191,77,77,0.14) !important;
+    animation: results12CommercialRedPulse 4.2s ease-in-out infinite !important;
+  }
+
+  .results12GoldenTableScope table tbody td.results12CellEmptyOfficial,
+  .results12GoldenTableScope table tbody td:empty {
+    background: linear-gradient(180deg, #fff9e5 0%, #f2e1a7 100%) !important;
+    border: 1.25px solid #b89538 !important;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.45) !important;
+  }
+
+  .results12GoldenTableScope table tbody td.results12TaskInvigilation > *,
+  .results12GoldenTableScope table tbody td.results12TaskReserve > *,
+  .results12GoldenTableScope table tbody td.results12TaskDuty > *,
+  .results12GoldenTableScope table tbody td.results12CellEmptyOfficial > * {
+    background: transparent !important;
+    color: #111827 !important;
+    -webkit-text-fill-color: #111827 !important;
+    font-size: inherit !important;
+    line-height: 1.3 !important;
+    max-width: 100% !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  .results12GoldenTableScope table tbody td.results12TaskInvigilation button,
+  .results12GoldenTableScope table tbody td.results12TaskReserve button,
+  .results12GoldenTableScope table tbody td.results12TaskDuty button,
+  .results12GoldenTableScope table tbody td.results12CellEmptyOfficial button {
+    background: rgba(255,255,255,0.46) !important;
+    border: 1px solid rgba(17,24,39,0.16) !important;
+    border-radius: 8px !important;
+    padding: 3px 7px !important;
+    margin: 1px 2px !important;
+    min-height: auto !important;
+    font-size: 11.5px !important;
+    font-weight: 750 !important;
+    box-shadow: none !important;
+  }
+
+  .results12GoldenTableScope table tbody td.results12CellEmptyOfficial button {
+    background: #fff8df !important;
+    border-color: rgba(184,149,56,0.50) !important;
+  }
+
+  .results12GoldenTableScope table tbody td.results12TaskInvigilation button:hover,
+  .results12GoldenTableScope table tbody td.results12TaskReserve button:hover,
+  .results12GoldenTableScope table tbody td.results12TaskDuty button:hover,
+  .results12GoldenTableScope table tbody td.results12CellEmptyOfficial button:hover {
+    background: rgba(255,255,255,0.72) !important;
+    transform: translateY(-1px) !important;
+  }
+
+  @keyframes results12CommercialBluePulse {
+    0%, 100% { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.38), 0 0 4px rgba(59,120,189,0.10); }
+    50% { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.50), 0 0 8px rgba(59,120,189,0.20); }
+  }
+
+  @keyframes results12CommercialGreenPulse {
+    0%, 100% { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.38), 0 0 4px rgba(61,139,91,0.10); }
+    50% { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.50), 0 0 8px rgba(61,139,91,0.20); }
+  }
+
+  @keyframes results12CommercialRedPulse {
+    0%, 100% { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.38), 0 0 4px rgba(191,77,77,0.10); }
+    50% { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.50), 0 0 8px rgba(191,77,77,0.20); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .results12GoldenTableScope * {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+
+  @media print {
+    .results12GoldenTableScope,
+    .results12GoldenTableScope * {
+      color: #000000 !important;
+      -webkit-text-fill-color: #000000 !important;
+      text-shadow: none !important;
+      animation: none !important;
+      box-shadow: none !important;
+      transition: none !important;
+    }
+
+    .results12GoldenTableScope {
+      background: #ffffff !important;
+      padding: 0 !important;
+    }
+
+    .results12GoldenTableScope table {
+      box-shadow: none !important;
+      border-radius: 0 !important;
+    }
+
+    .results12GoldenTableScope table thead th,
+    .results12GoldenTableScope table tbody td,
+    .results12GoldenTableScope table tfoot td,
+    .results12GoldenTableScope table tfoot th {
+      padding: 3px 4px !important;
+      font-size: 10.5px !important;
+    }
+  }
+`;
 
 function normalizeSubject(subject: string) {
-  return String(subject || "").replace(/\s+/g, " ").trim();
+  return String(subject || "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
-
-const RESULTS12_ASSIGNMENTS_SUBCOLLECTION = "taskDistributionAssignments12";
-const RESULTS12_LATEST_RUN_SETTINGS_DOC_ID = "latestTaskDistributionRun12";
 
 function getCommitteeNo(a: any) {
   const value = a?.committeeNo ?? a?.committee ?? a?.roomNo ?? a?.room;
@@ -40,16 +274,144 @@ function getSubjectBackground(subject?: string) {
 function getTenantIdFromAuth(auth: any) {
   return (
     String(
-      auth?.effectiveTenantId || auth?.profile?.tenantId || auth?.userProfile?.tenantId || auth?.user?.tenantId || "default",
+      auth?.effectiveTenantId ||
+        auth?.profile?.tenantId ||
+        auth?.userProfile?.tenantId ||
+        auth?.user?.tenantId ||
+        "default",
     ).trim() || "default"
   );
 }
 
+const OFFICIAL_TASK_CLASS_NAMES = [
+  "results12TaskInvigilation",
+  "results12TaskReserve",
+  "results12TaskDuty",
+  "results12CellEmptyOfficial",
+];
+
+function cleanArabicText(value: string) {
+  return String(value || "")
+    .replace(/[\u064B-\u065F\u0670]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isAddActionText(value: string) {
+  const raw = String(value || "").replace(/\s+/g, " ").trim();
+  const text = cleanArabicText(raw).toLowerCase();
+
+  return (
+    !text ||
+    text === "+" ||
+    /^\+/.test(raw) ||
+    /^(اضافة|إضافة|add)(\s|$)/i.test(raw) ||
+    /\+\s*(احتياط|مراقبة|مراقب|فاضي|review|correction|reserve|invigilation|duty)/i.test(raw) ||
+    /(فاضي\s*للمراجعة|فاضي\s*للتصحيح|free\s*for\s*review|free\s*for\s*correction)/i.test(text)
+  );
+}
+
+function getOfficialTaskClassFromText(value: string) {
+  const raw = String(value || "").replace(/\s+/g, " ").trim();
+  const text = cleanArabicText(raw).toLowerCase();
+
+  if (!text) return "results12CellEmptyOfficial";
+  if (isAddActionText(raw)) return "";
+
+  if (/مراقب\s*دور|duty\s*invigilator/.test(text)) return "results12TaskDuty";
+  if (/(^|\s)(احتياط|reserve)(\s|$)/.test(text)) return "results12TaskReserve";
+  if (/مراقبة|invigilation/.test(text)) return "results12TaskInvigilation";
+
+  return "";
+}
+
+function isOfficialEmptyCellText(value: string) {
+  const raw = String(value || "").replace(/\s+/g, " ").trim();
+  const text = cleanArabicText(raw);
+
+  return (
+    !text ||
+    text === "—" ||
+    text === "-" ||
+    text === "+" ||
+    text === "إضافة" ||
+    text === "اضافة" ||
+    text.toLowerCase() === "add" ||
+    isAddActionText(raw)
+  );
+}
+
+
+function getCellTextWithoutActionButtons(cell: HTMLElement) {
+  const clone = cell.cloneNode(true) as HTMLElement;
+  clone
+    .querySelectorAll("button, [role='button']")
+    .forEach((node) => node.parentElement?.removeChild(node));
+  return String(clone.textContent || "").replace(/\s+/g, " ").trim();
+}
+
+function applyOfficialTaskClasses(root: HTMLElement | null) {
+  if (!root) return;
+
+  OFFICIAL_TASK_CLASS_NAMES.forEach((className) => {
+    root
+      .querySelectorAll(`.${className}`)
+      .forEach((node) => node.classList.remove(className));
+  });
+
+  const cells = Array.from(
+    root.querySelectorAll<HTMLElement>(
+      "tbody td, [role='cell'], [role='gridcell']",
+    ),
+  );
+
+  cells.forEach((cell) => {
+    const fullCellText = String(cell.textContent || "");
+    const textWithoutButtons = getCellTextWithoutActionButtons(cell);
+    const buttons = Array.from(
+      cell.querySelectorAll<HTMLElement>("button, [role='button']"),
+    );
+    const hasAddActionButton = buttons.some((button) =>
+      isAddActionText(button.textContent || ""),
+    );
+    const hasOnlyAddActions =
+      buttons.length > 0 &&
+      buttons.every((button) => isAddActionText(button.textContent || ""));
+
+    if (
+      hasOnlyAddActions ||
+      (hasAddActionButton && isOfficialEmptyCellText(textWithoutButtons)) ||
+      isOfficialEmptyCellText(fullCellText)
+    ) {
+      cell.classList.add("results12CellEmptyOfficial");
+      return;
+    }
+
+    const cellClass = getOfficialTaskClassFromText(
+      textWithoutButtons || fullCellText,
+    );
+    if (cellClass) {
+      cell.classList.add(cellClass);
+    }
+  });
+}
 
 function normalizeResultsTaskType(taskType: any) {
-  const raw = String(taskType || "").trim().toUpperCase();
-  if (raw === "INVIGILATION" || raw === "RESERVE" || raw === "DUTY_INVIGILATOR") return raw;
-  return "DUTY_INVIGILATOR";
+  const raw = String(taskType || "")
+    .trim()
+    .toUpperCase();
+
+  if (
+    raw === "INVIGILATION" ||
+    raw === "RESERVE" ||
+    raw === "DUTY_INVIGILATOR" ||
+    raw === "REVIEW_FREE" ||
+    raw === "CORRECTION_FREE"
+  ) {
+    return raw;
+  }
+
+  return raw || "DUTY_INVIGILATOR";
 }
 
 function normalizeRunForDutyInvigilator(run: any) {
@@ -79,121 +441,24 @@ function normalizeRunForDutyInvigilator(run: any) {
   };
 }
 
-function ensureResultsRun(run: any, assignmentsFallback: any[] = []) {
-  const assignments =
-    Array.isArray(run?.assignments) && run.assignments.length
-      ? run.assignments
-      : Array.isArray(assignmentsFallback)
-      ? assignmentsFallback
-      : [];
-
-  if (!run && !assignments.length) return null;
-
-  return normalizeRunForDutyInvigilator({
-    ...(run || {}),
-    runId: String(run?.runId || `cloud_run_${Date.now()}`).trim(),
-    createdAtISO: String(run?.createdAtISO || run?.runCreatedAtISO || new Date().toISOString()).trim(),
-    assignments,
-    warnings: Array.isArray(run?.warnings) ? run.warnings : [],
-    debug: run?.debug || null,
-  });
-}
-
-function normalizeCloudAssignment(row: any, index: number) {
-  const id = String(row?.__uid || row?.id || `assignment_${index + 1}`).trim();
-
-  return {
-    ...row,
-    id,
-    __uid: String(row?.__uid || id),
-  };
-}
-
-function buildResultsRunSignature(run: any) {
-  const assignments = Array.isArray(run?.assignments) ? run.assignments : [];
-
-  return JSON.stringify({
-    runId: String(run?.runId || ""),
-    createdAtISO: String(run?.createdAtISO || ""),
-    count: assignments.length,
-    assignments: assignments.map((assignment: any, index: number) => ({
-      id: String(assignment?.__uid || assignment?.id || index),
-      teacherId: String(assignment?.teacherId || ""),
-      teacherName: String(assignment?.teacherName || ""),
-      dateISO: String(assignment?.dateISO || assignment?.date || ""),
-      period: String(assignment?.period || ""),
-      taskType: normalizeResultsTaskType(assignment?.taskType),
-      subject: String(assignment?.subject || ""),
-      committeeNo: String(assignment?.committeeNo || assignment?.roomNo || ""),
-      invigilatorIndex: String(assignment?.invigilatorIndex || ""),
-    })),
-  });
-}
-
-async function persistResultsRunToCloud(tenantId: string, run: any, by?: string) {
-  const safeRun = ensureResultsRun(run);
-  if (!safeRun) return;
-
-  const runId = String(safeRun?.runId || `run_${Date.now()}`).trim();
-  const createdAtISO = String(safeRun?.createdAtISO || new Date().toISOString()).trim();
-
-  const assignments = (Array.isArray(safeRun.assignments) ? safeRun.assignments : []).map((assignment: any, index: number) => ({
-    ...normalizeCloudAssignment(assignment, index),
-    runId,
-    runCreatedAtISO: createdAtISO,
-    updatedAtISO: new Date().toISOString(),
-  }));
-
-  await replaceTenantArray(tenantId, RESULTS12_ASSIGNMENTS_SUBCOLLECTION, assignments as any[], {
-    by,
-    audit: {
-      entity: RESULTS12_ASSIGNMENTS_SUBCOLLECTION,
-      meta: {
-        summary: "saved task distribution results from results page",
-        runId,
-        count: assignments.length,
-      },
-    },
-  });
-
-  await saveTenantSettings(
-    tenantId,
-    RESULTS12_LATEST_RUN_SETTINGS_DOC_ID,
-    {
-      runId,
-      createdAtISO,
-      updatedAtISO: new Date().toISOString(),
-      assignmentsCount: assignments.length,
-      assignments,
-      warnings: Array.isArray(safeRun?.warnings) ? safeRun.warnings : [],
-      debug: safeRun?.debug || null,
-      summary: safeRun?.debug?.summary || null,
-      run: {
-        ...safeRun,
-        assignments,
-      },
-    },
-    { by },
-  );
-}
-
 export default function TaskDistributionResults() {
   const nav = useNavigate();
   const auth = useAuth();
   const { lang } = useI18n();
-  const tr = React.useCallback((ar: string, en: string) => (lang === "ar" ? ar : en), [lang]);
-  const tenantId = React.useMemo(() => getTenantIdFromAuth(auth), [auth]);
-  const currentUserId = React.useMemo(
-    () => String((auth as any)?.user?.email || (auth as any)?.user?.uid || "").trim(),
-    [auth],
+  const tr = React.useCallback(
+    (ar: string, en: string) => (lang === "ar" ? ar : en),
+    [lang],
   );
+  const tenantId = React.useMemo(() => getTenantIdFromAuth(auth), [auth]);
   const printAreaRef = React.useRef<HTMLDivElement>(null);
   const [showTeacherSidebar, setShowTeacherSidebar] = React.useState(true);
 
   const formatPeriod = React.useCallback(
     (period?: string) => {
       const p = String(period || "AM").toUpperCase();
-      return p === "PM" || p === "BM" ? tr("الفترة الثانية", "Second Period") : tr("الفترة الأولى", "First Period");
+      return p === "PM" || p === "BM"
+        ? tr("الفترة الثانية", "Second Period")
+        : tr("الفترة الأولى", "First Period");
     },
     [tr],
   );
@@ -207,6 +472,10 @@ export default function TaskDistributionResults() {
           return tr("احتياط", "Reserve");
         case "DUTY_INVIGILATOR":
           return tr("مراقب دور", "Duty Invigilator");
+        case "REVIEW_FREE":
+          return tr("فاضي للمراجعة", "Free for review");
+        case "CORRECTION_FREE":
+          return tr("فاضي للتصحيح", "Free for correction");
         default:
           return tr("مهمة", "Task");
       }
@@ -220,10 +489,13 @@ export default function TaskDistributionResults() {
       if (!value) return { day: "—", full: "—", line: "—" };
 
       const d = new Date(`${value}T00:00:00`);
-      if (Number.isNaN(d.getTime())) return { day: value, full: value, line: value };
+      if (Number.isNaN(d.getTime()))
+        return { day: value, full: value, line: value };
 
       const locale = lang === "ar" ? "ar" : "en";
-      const day = new Intl.DateTimeFormat(locale, { weekday: "long" }).format(d);
+      const day = new Intl.DateTimeFormat(locale, { weekday: "long" }).format(
+        d,
+      );
       const full = new Intl.DateTimeFormat(locale, {
         year: "numeric",
         month: "2-digit",
@@ -236,108 +508,16 @@ export default function TaskDistributionResults() {
   );
 
   const { run, setRun } = useResultsRunSync(tenantId);
-  const runForResults = React.useMemo(() => normalizeRunForDutyInvigilator(run), [run]);
-  const [cloudLoading, setCloudLoading] = React.useState(false);
-  const [cloudStatus, setCloudStatus] = React.useState("");
-  const [cloudError, setCloudError] = React.useState("");
-  const cloudHydratedRef = React.useRef(false);
-  const cloudSignatureRef = React.useRef("");
-
-  React.useEffect(() => {
-    let mounted = true;
-    let unsubscribeAssignments: (() => void) | undefined;
-
-    async function loadCloudResults() {
-      setCloudLoading(true);
-      setCloudError("");
-      setCloudStatus(tr("جاري تحميل نتائج التوزيع من السحابة...", "Loading distribution results from cloud..."));
-
-      try {
-        const [cloudSettings, cloudRows] = await Promise.all([
-          loadTenantSettings<any>(tenantId, RESULTS12_LATEST_RUN_SETTINGS_DOC_ID, {}),
-          loadTenantArray<any>(tenantId, RESULTS12_ASSIGNMENTS_SUBCOLLECTION, { cacheFallback: true }),
-        ]);
-
-        if (!mounted) return;
-
-        const rows = Array.isArray(cloudRows) ? cloudRows.map(normalizeCloudAssignment) : [];
-        const cloudRun = ensureResultsRun(cloudSettings?.run || null, rows.length ? rows : cloudSettings?.assignments || []);
-
-        if (cloudRun && Array.isArray(cloudRun.assignments) && cloudRun.assignments.length) {
-          const signature = buildResultsRunSignature(cloudRun);
-          cloudSignatureRef.current = signature;
-          (setRun as any)(cloudRun);
-          setCloudStatus(tr("تم تحميل نتائج التوزيع من السحابة.", "Distribution results loaded from cloud."));
-        } else {
-          setCloudStatus(tr("لا توجد نتائج توزيع محفوظة في السحابة بعد.", "No saved distribution results in cloud yet."));
-        }
-
-        cloudHydratedRef.current = true;
-
-        unsubscribeAssignments = subscribeTenantArray<any>(
-          tenantId,
-          RESULTS12_ASSIGNMENTS_SUBCOLLECTION,
-          (items) => {
-            const rows = (Array.isArray(items) ? items : []).map(normalizeCloudAssignment);
-            if (!rows.length) return;
-
-            (setRun as any)((prev: any) => {
-              const nextRun = ensureResultsRun(prev, rows);
-              if (!nextRun) return prev;
-
-              const signature = buildResultsRunSignature(nextRun);
-              cloudSignatureRef.current = signature;
-              return nextRun;
-            });
-
-            setCloudStatus(tr("تم تحديث النتائج من السحابة.", "Results updated from cloud."));
-          },
-          () => {
-            setCloudError(tr("تعذر الاتصال اللحظي بنتائج السحابة.", "Realtime cloud results connection failed."));
-          },
-        );
-      } catch {
-        if (!mounted) return;
-        cloudHydratedRef.current = true;
-        setCloudError(tr("تعذر تحميل نتائج التوزيع من السحابة؛ يتم عرض آخر نسخة مؤقتة.", "Could not load distribution results from cloud; showing last temporary copy."));
-      } finally {
-        if (mounted) setCloudLoading(false);
-      }
-    }
-
-    void loadCloudResults();
-
-    return () => {
-      mounted = false;
-      unsubscribeAssignments?.();
-    };
-  }, [tenantId, setRun, tr]);
-
-  React.useEffect(() => {
-    if (!cloudHydratedRef.current) return;
-    if (!runForResults || !Array.isArray(runForResults.assignments) || !runForResults.assignments.length) return;
-
-    const signature = buildResultsRunSignature(runForResults);
-    if (signature === cloudSignatureRef.current) return;
-
-    const timeout = window.setTimeout(() => {
-      cloudSignatureRef.current = signature;
-      setCloudStatus(tr("جاري حفظ تعديلات النتائج في السحابة...", "Saving result edits to cloud..."));
-
-      void persistResultsRunToCloud(tenantId, runForResults, currentUserId || undefined)
-        .then(() => {
-          setCloudStatus(tr("تم حفظ تعديلات النتائج في السحابة.", "Result edits saved to cloud."));
-        })
-        .catch(() => {
-          setCloudError(tr("تم تعديل النتائج محليًا، لكن تعذر حفظها في السحابة.", "Results were edited locally, but cloud save failed."));
-        });
-    }, 900);
-
-    return () => window.clearTimeout(timeout);
-  }, [tenantId, runForResults, currentUserId, tr]);
-
+  const runForResults = React.useMemo(
+    () => normalizeRunForDutyInvigilator(run),
+    [run],
+  );
   const interaction = useResultsInteractionState(tenantId);
-  const dataModel = useResultsDataModel({ tenantId, run: runForResults, normalizeSubject });
+  const dataModel = useResultsDataModel({
+    tenantId,
+    run: runForResults,
+    normalizeSubject,
+  });
 
   const pageActions = useResultsPageActions({
     tenantId,
@@ -380,21 +560,30 @@ export default function TaskDistributionResults() {
 
   const addTaskToEmptyCellSynced = React.useCallback(
     (dstTeacher: string, dstColKey: string, taskType: string) => {
-      const safeTaskType = normalizeResultsTaskType(taskType) || "DUTY_INVIGILATOR";
+      const safeTaskType =
+        normalizeResultsTaskType(taskType) || "DUTY_INVIGILATOR";
       tableActions.addTaskToEmptyCell(dstTeacher, dstColKey, safeTaskType);
     },
     [tableActions],
   );
 
   const isDraggableTaskTypeSynced = React.useCallback(
-    (taskType: any) => String(taskType || "").trim().toUpperCase() === "DUTY_INVIGILATOR" || tableActions.isDraggableTaskType(taskType),
+    (taskType: any) =>
+      String(taskType || "")
+        .trim()
+        .toUpperCase() === "DUTY_INVIGILATOR" ||
+      tableActions.isDraggableTaskType(taskType),
     [tableActions],
   );
 
-
   const getAssignmentsInCell = React.useCallback(
     (teacher: string, subColKey: string) =>
-      tableActions.getAssignmentsInCell(runForResults?.assignments || [], teacher, subColKey, normalizeSubject),
+      tableActions.getAssignmentsInCell(
+        runForResults?.assignments || [],
+        teacher,
+        subColKey,
+        normalizeSubject,
+      ),
     [runForResults, tableActions],
   );
 
@@ -419,24 +608,58 @@ export default function TaskDistributionResults() {
     return tones[index % tones.length];
   }, []);
 
-  const teacherRowColor = React.useCallback((index: number) => ({
-    stripe: ["#38bdf8", "#c084fc", "#22c55e", "#f59e0b", "#ef4444"][index % 5],
-  }), []);
-
-  const styles = React.useMemo(() => ({
-    tableText: TABLE_TEXT,
-    tableFontSize: TABLE_FONT_SIZE,
-    goldLine: GOLD_LINE,
-    goldLineSoft: GOLD_LINE_SOFT,
-    ...getResultsTableHeaderStyles({
-      tableText: TABLE_TEXT,
-      tableFontSize: TABLE_FONT_SIZE,
-      goldLine: GOLD_LINE,
-      goldLineSoft: GOLD_LINE_SOFT,
+  const teacherRowColor = React.useCallback(
+    (index: number) => ({
+      stripe: ["#38bdf8", "#c084fc", "#22c55e", "#f59e0b", "#ef4444"][
+        index % 5
+      ],
     }),
-  }), []);
+    [],
+  );
 
-  const hasRun = Boolean(runForResults && Array.isArray(runForResults.assignments) && runForResults.assignments.length);
+  const styles = React.useMemo(
+    () => ({
+      ...OFFICIAL_HEADER_STYLES_INPUT,
+      ...getResultsTableHeaderStyles(OFFICIAL_HEADER_STYLES_INPUT),
+    }),
+    [],
+  );
+
+  const hasRun = Boolean(
+    runForResults &&
+    Array.isArray(runForResults.assignments) &&
+    runForResults.assignments.length,
+  );
+
+  React.useEffect(() => {
+    if (!hasRun) return;
+
+    const apply = () => applyOfficialTaskClasses(printAreaRef.current);
+    const frame = window.requestAnimationFrame(apply);
+
+    if (typeof MutationObserver === "undefined" || !printAreaRef.current) {
+      return () => window.cancelAnimationFrame(frame);
+    }
+
+    const observer = new MutationObserver(() => apply());
+    observer.observe(printAreaRef.current, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [
+    hasRun,
+    runForResults,
+    dataModel.allSubCols.length,
+    dataModel.allTeachers.length,
+    showTeacherSidebar,
+    interaction.tableFullScreen,
+  ]);
 
   const content = !hasRun ? (
     <ResultsEmptyRunState
@@ -449,7 +672,7 @@ export default function TaskDistributionResults() {
   ) : (
     <>
       {!interaction.tableFullScreen ? (
-        <div style={cardDark}>
+        <div style={OFFICIAL_PANEL_STYLE}>
           <ResultsPageHeader
             runId={String(runForResults?.runId || "—")}
             createdAtISO={runForResults?.createdAtISO}
@@ -460,7 +683,9 @@ export default function TaskDistributionResults() {
             onPickImportFile={pageActions.handlePickImportFile}
             onExportPdf={pageActions.handleExportPdf}
             onArchiveSnapshot={pageActions.handleArchiveSnapshot}
-            onToggleFullscreen={() => interaction.setTableFullScreen(!interaction.tableFullScreen)}
+            onToggleFullscreen={() =>
+              interaction.setTableFullScreen(!interaction.tableFullScreen)
+            }
             onUndo={() => pageActions.handleUndo(interaction.undoStack)}
             onExportExcel={tableActions.exportExcel}
             onPrintTableOnly={pageActions.handlePrintTableOnly}
@@ -500,11 +725,15 @@ export default function TaskDistributionResults() {
           onDeleteSubCol={tableActions.deleteAssignmentsBySubCol}
           styles={styles as any}
           formatDateWithDayAr={formatDateWithDay}
-          containerMaxHeight={interaction.tableFullScreen ? "calc(100vh - 120px)" : "72vh"}
+          containerMaxHeight={
+            interaction.tableFullScreen ? "calc(100vh - 120px)" : "72vh"
+          }
           selectedCell={interaction.selectedCell}
           onSelectCell={interaction.setSelectedCell}
           isConflictUid={(uid) => dataModel.conflictUids.has(uid)}
-          getUnavailabilityReasonForCell={tableActions.getUnavailabilityReasonForCell}
+          getUnavailabilityReasonForCell={
+            tableActions.getUnavailabilityReasonForCell
+          }
           blockedCellMsg={interaction.blockedCellMsg}
           showTeacherSidebar={showTeacherSidebar}
         />
@@ -541,27 +770,31 @@ export default function TaskDistributionResults() {
     </>
   );
 
-  const cloudSyncStatusCard = (
-        <div
-          style={{
-            ...cardDark,
-            marginBottom: 12,
-            border: "3px solid rgba(212,175,55,0.75)",
-            color: TABLE_TEXT,
-            fontWeight: 900,
-          }}
-        >
-          {cloudLoading
-            ? tr("تحميل نتائج التوزيع من السحابة...", "Loading distribution results from cloud...")
-            : cloudError || cloudStatus || tr("جاهز لعرض النتائج المتزامنة من أي جهاز.", "Ready to show synchronized results from any device.")}
-        </div>
-  );
-
   if (interaction.tableFullScreen && hasRun) {
     return (
-      <div style={{ ...pageDark, padding: 8 }}>
-        <div style={{ position: "fixed", inset: 0, zIndex: 9999, background: "#020617", padding: 8, overflow: "auto" }}>
-          <div style={{ ...container, width: "100%", maxWidth: "100%", padding: 0 }}>
+      <div
+        className="results12GoldenTableScope"
+        style={{ ...OFFICIAL_PAGE_STYLE, padding: 8 }}
+      >
+        <style>{OFFICIAL_GOLDEN_TABLE_CSS}</style>
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            background: "#f8f2e6",
+            padding: 8,
+            overflow: "auto",
+          }}
+        >
+          <div
+            style={{
+              ...container,
+              width: "100%",
+              maxWidth: "100%",
+              padding: 0,
+            }}
+          >
             <ResultsFullscreenToolbar
               undoDisabled={!interaction.undoStack.length}
               onUndo={() => pageActions.handleUndo(interaction.undoStack)}
@@ -570,7 +803,6 @@ export default function TaskDistributionResults() {
               onToggleTeacherSidebar={() => setShowTeacherSidebar((v) => !v)}
             />
             {sharedImportControls}
-            {cloudSyncStatusCard}
             {content}
           </div>
         </div>
@@ -579,10 +811,12 @@ export default function TaskDistributionResults() {
   }
 
   return (
-    <div style={pageDark}>
-      <div style={{ ...container, width: "min(1880px, 100%)", maxWidth: "100%" }}>
+    <div className="results12GoldenTableScope" style={OFFICIAL_PAGE_STYLE}>
+      <style>{OFFICIAL_GOLDEN_TABLE_CSS}</style>
+      <div
+        style={{ ...container, width: "min(1880px, 100%)", maxWidth: "100%" }}
+      >
         {sharedImportControls}
-        {cloudSyncStatusCard}
         {content}
       </div>
     </div>

@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { useI18n } from "../i18n/I18nProvider";
 import { pageDark, container, cardDark } from "../styles/ui";
-import { GOLD_LINE, GOLD_LINE_SOFT, subjectColors, TABLE_FONT_SIZE, TABLE_TEXT } from "./taskDistributionResults/constants";
+import { subjectColors } from "./taskDistributionResults/constants";
 import { ResultsPageHeader } from "./taskDistributionResults/components/ResultsPageHeader";
 import { ResultsTable } from "./taskDistributionResults/components/ResultsTable";
 import { ResultsEmptyRunState } from "./taskDistributionResults/components/ResultsEmptyRunState";
@@ -17,6 +17,275 @@ import { useResultsDataModel } from "./taskDistributionResults/hooks/useResultsD
 import { useResultsPageActions } from "./taskDistributionResults/hooks/useResultsPageActions";
 import { useResultsTableActions } from "./taskDistributionResults/hooks/useResultsTableActions";
 import { useResultsClipboardShortcuts } from "./taskDistributionResults/hooks/useResultsClipboardShortcuts";
+
+
+const OFFICIAL_PAGE_STYLE: React.CSSProperties = {
+  ...pageDark,
+  minHeight: "100vh",
+  background:
+    "radial-gradient(circle at top right, rgba(180, 142, 48, 0.18), transparent 34%), linear-gradient(135deg, #f7f0df 0%, #efe2c3 46%, #fbf7ee 100%)",
+  color: "#111827",
+  padding: "16px 10px",
+};
+
+const OFFICIAL_CARD_STYLE: React.CSSProperties = {
+  ...cardDark,
+  background: "linear-gradient(180deg, rgba(255, 253, 247, 0.98), rgba(246, 238, 218, 0.98))",
+  border: "1px solid rgba(151, 116, 28, 0.55)",
+  borderRadius: 18,
+  boxShadow: "0 14px 30px rgba(78, 59, 16, 0.12), inset 0 1px 0 rgba(255,255,255,0.72)",
+  color: "#111827",
+};
+
+const OFFICIAL_FULLSCREEN_LAYER_STYLE: React.CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  zIndex: 9999,
+  background:
+    "radial-gradient(circle at top left, rgba(180, 142, 48, 0.14), transparent 30%), linear-gradient(135deg, #f7f0df 0%, #efe2c3 52%, #fbf7ee 100%)",
+  padding: 8,
+  overflow: "auto",
+};
+
+const OFFICIAL_RESULTS_TABLE_CSS = `
+  .resultsOfficialCommercialScope,
+  .resultsOfficialCommercialScope * {
+    box-sizing: border-box !important;
+  }
+
+  .resultsOfficialCommercialScope {
+    color: #111827 !important;
+  }
+
+  .resultsOfficialCommercialScope input,
+  .resultsOfficialCommercialScope select,
+  .resultsOfficialCommercialScope textarea {
+    background: #fffdf7 !important;
+    color: #111827 !important;
+    border: 1px solid #b89435 !important;
+    border-radius: 10px !important;
+    font-weight: 700 !important;
+  }
+
+  .resultsOfficialCommercialScope button {
+    color: #111827 !important;
+    border-color: rgba(151, 116, 28, 0.42) !important;
+    font-weight: 800 !important;
+  }
+
+  .resultsOfficialCommercialScope table {
+    width: 100% !important;
+    background: #fffdf7 !important;
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+    border: 1px solid #a98322 !important;
+    border-radius: 14px !important;
+    overflow: hidden !important;
+    box-shadow: 0 10px 24px rgba(78, 59, 16, 0.10) !important;
+  }
+
+  .resultsOfficialCommercialScope table thead th,
+  .resultsOfficialCommercialScope table tfoot th,
+  .resultsOfficialCommercialScope table tfoot td {
+    background: linear-gradient(180deg, #f4e2ad 0%, #d5b45a 100%) !important;
+    color: #111827 !important;
+    -webkit-text-fill-color: #111827 !important;
+    border: 1px solid rgba(120, 89, 14, 0.58) !important;
+    font-size: 12px !important;
+    font-weight: 850 !important;
+    line-height: 1.28 !important;
+    padding: 6px 7px !important;
+    text-align: center !important;
+    vertical-align: middle !important;
+    white-space: normal !important;
+  }
+
+  .resultsOfficialCommercialScope table tbody td {
+    background: #fffaf0 !important;
+    color: #111827 !important;
+    -webkit-text-fill-color: #111827 !important;
+    border: 1px solid rgba(151, 116, 28, 0.34) !important;
+    font-size: 12px !important;
+    font-weight: 700 !important;
+    line-height: 1.28 !important;
+    padding: 4px 6px !important;
+    vertical-align: top !important;
+    height: auto !important;
+    min-height: 0 !important;
+  }
+
+  .resultsOfficialCommercialScope table tbody tr:nth-child(even) td:not(.resultsOfficialInvigilationCell):not(.resultsOfficialReserveCell):not(.resultsOfficialDutyCell):not(.resultsOfficialEmptyCell) {
+    background: #f8efd8 !important;
+  }
+
+  .resultsOfficialCommercialScope table tbody tr:hover td:not(.resultsOfficialInvigilationCell):not(.resultsOfficialReserveCell):not(.resultsOfficialDutyCell):not(.resultsOfficialEmptyCell) {
+    background: #f2e4bd !important;
+  }
+
+  .resultsOfficialCommercialScope table tbody td > div,
+  .resultsOfficialCommercialScope table tbody td > section,
+  .resultsOfficialCommercialScope table tbody td > article {
+    max-width: 100% !important;
+    margin: 0 !important;
+  }
+
+  .resultsOfficialCommercialScope table tbody td button,
+  .resultsOfficialCommercialScope table tbody td [role="button"] {
+    min-height: 0 !important;
+    padding: 4px 8px !important;
+    margin: 2px !important;
+    border-radius: 10px !important;
+    font-size: 12px !important;
+    line-height: 1.2 !important;
+    box-shadow: none !important;
+  }
+
+  .resultsOfficialCommercialScope table tbody td.resultsOfficialInvigilationCell,
+  .resultsOfficialCommercialScope table tbody td.resultsOfficialReserveCell,
+  .resultsOfficialCommercialScope table tbody td.resultsOfficialDutyCell,
+  .resultsOfficialCommercialScope table tbody td.resultsOfficialEmptyCell {
+    color: #111827 !important;
+    -webkit-text-fill-color: #111827 !important;
+    font-weight: 800 !important;
+  }
+
+  .resultsOfficialCommercialScope table tbody td.resultsOfficialInvigilationCell {
+    background: linear-gradient(180deg, #dbeafe 0%, #93c5fd 100%) !important;
+    border-color: rgba(29, 78, 216, 0.55) !important;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.55), 0 0 10px rgba(37, 99, 235, 0.16) !important;
+    animation: resultsOfficialBluePulse 2.4s ease-in-out infinite !important;
+  }
+
+  .resultsOfficialCommercialScope table tbody td.resultsOfficialReserveCell {
+    background: linear-gradient(180deg, #dcfce7 0%, #86efac 100%) !important;
+    border-color: rgba(21, 128, 61, 0.55) !important;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.55), 0 0 10px rgba(22, 163, 74, 0.16) !important;
+    animation: resultsOfficialGreenPulse 2.4s ease-in-out infinite !important;
+  }
+
+  .resultsOfficialCommercialScope table tbody td.resultsOfficialDutyCell {
+    background: linear-gradient(180deg, #fee2e2 0%, #fca5a5 100%) !important;
+    border-color: rgba(185, 28, 28, 0.55) !important;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.55), 0 0 10px rgba(220, 38, 38, 0.16) !important;
+    animation: resultsOfficialRedPulse 2.4s ease-in-out infinite !important;
+  }
+
+  .resultsOfficialCommercialScope table tbody td.resultsOfficialEmptyCell,
+  .resultsOfficialCommercialScope table tbody td:empty {
+    background: linear-gradient(180deg, #fff6cf 0%, #efd076 100%) !important;
+    border-color: rgba(151, 116, 28, 0.56) !important;
+  }
+
+  .resultsOfficialCommercialScope table tbody td.resultsOfficialInvigilationCell *,
+  .resultsOfficialCommercialScope table tbody td.resultsOfficialReserveCell *,
+  .resultsOfficialCommercialScope table tbody td.resultsOfficialDutyCell *,
+  .resultsOfficialCommercialScope table tbody td.resultsOfficialEmptyCell * {
+    color: #111827 !important;
+    -webkit-text-fill-color: #111827 !important;
+    text-shadow: none !important;
+  }
+
+  @keyframes resultsOfficialBluePulse {
+    0%, 100% { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.55), 0 0 6px rgba(37, 99, 235, 0.12); }
+    50% { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.70), 0 0 14px rgba(37, 99, 235, 0.25); }
+  }
+
+  @keyframes resultsOfficialGreenPulse {
+    0%, 100% { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.55), 0 0 6px rgba(22, 163, 74, 0.12); }
+    50% { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.70), 0 0 14px rgba(22, 163, 74, 0.25); }
+  }
+
+  @keyframes resultsOfficialRedPulse {
+    0%, 100% { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.55), 0 0 6px rgba(220, 38, 38, 0.12); }
+    50% { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.70), 0 0 14px rgba(220, 38, 38, 0.25); }
+  }
+
+  @media print {
+    .resultsOfficialCommercialScope,
+    .resultsOfficialCommercialScope * {
+      color: #000000 !important;
+      -webkit-text-fill-color: #000000 !important;
+      text-shadow: none !important;
+      animation: none !important;
+      box-shadow: none !important;
+    }
+
+    .resultsOfficialCommercialScope {
+      background: #ffffff !important;
+      padding: 0 !important;
+    }
+
+    .resultsOfficialCommercialScope table {
+      border-radius: 0 !important;
+      box-shadow: none !important;
+    }
+  }
+`;
+
+const OFFICIAL_CELL_CLASS_NAMES = [
+  "resultsOfficialInvigilationCell",
+  "resultsOfficialReserveCell",
+  "resultsOfficialDutyCell",
+  "resultsOfficialEmptyCell",
+];
+
+function cleanCommercialCellText(value: string) {
+  return String(value || "")
+    .replace(/[\u064B-\u065F\u0670]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isCommercialEmptyActionText(value: string) {
+  const raw = String(value || "").replace(/\s+/g, " ").trim();
+  const text = cleanCommercialCellText(raw).toLowerCase();
+
+  return (
+    !text ||
+    text === "—" ||
+    text === "-" ||
+    /^\+/.test(raw) ||
+    /(^|\s)(اضافة|إضافة|add)(\s|$)/i.test(raw) ||
+    /فاضي|للمراجعة|للتصحيح|review|correction/.test(text)
+  );
+}
+
+function getCommercialCellClassFromText(value: string) {
+  const raw = String(value || "").replace(/\s+/g, " ").trim();
+  const text = cleanCommercialCellText(raw).toLowerCase();
+
+  if (isCommercialEmptyActionText(raw)) return "resultsOfficialEmptyCell";
+  if (/مراقب\s*دور|duty\s*invigilator/.test(text)) return "resultsOfficialDutyCell";
+  if (/(^|\s)(احتياط|reserve)(\s|$)/.test(text)) return "resultsOfficialReserveCell";
+  if (/مراقبة|invigilation/.test(text)) return "resultsOfficialInvigilationCell";
+
+  return "";
+}
+
+function applyCommercialResultsCellClasses(root: HTMLElement | null) {
+  if (!root) return;
+
+  const cells = Array.from(root.querySelectorAll<HTMLElement>("tbody td"));
+
+  cells.forEach((cell) => {
+    OFFICIAL_CELL_CLASS_NAMES.forEach((className) => cell.classList.remove(className));
+
+    const text = cell.textContent || "";
+    const cellClass = getCommercialCellClassFromText(text);
+    const hasActionButton = Array.from(cell.querySelectorAll<HTMLElement>("button, [role='button']")).some((button) =>
+      isCommercialEmptyActionText(button.textContent || ""),
+    );
+
+    if (cellClass) {
+      cell.classList.add(cellClass);
+      return;
+    }
+
+    if (hasActionButton || cleanCommercialCellText(text) === "") {
+      cell.classList.add("resultsOfficialEmptyCell");
+    }
+  });
+}
 
 function normalizeSubject(subject: string) {
   return String(subject || "").replace(/\s+/g, " ").trim();
@@ -173,20 +442,46 @@ export default function TaskDistributionResults() {
     stripe: ["#38bdf8", "#c084fc", "#22c55e", "#f59e0b", "#ef4444"][index % 5],
   }), []);
 
-  const styles = React.useMemo(() => ({
-    tableText: TABLE_TEXT,
-    tableFontSize: TABLE_FONT_SIZE,
-    goldLine: GOLD_LINE,
-    goldLineSoft: GOLD_LINE_SOFT,
-    ...getResultsTableHeaderStyles({
-      tableText: TABLE_TEXT,
-      tableFontSize: TABLE_FONT_SIZE,
-      goldLine: GOLD_LINE,
-      goldLineSoft: GOLD_LINE_SOFT,
-    }),
-  }), []);
+  const styles = React.useMemo(() => {
+    const officialHeaderStylesInput: Parameters<
+      typeof getResultsTableHeaderStyles
+    >[0] = {
+      tableText: "#111827",
+      tableFontSize: "12px",
+      goldLine: "#a98322",
+      goldLineSoft: "rgba(151, 116, 28, 0.34)",
+    };
+
+    return {
+      ...officialHeaderStylesInput,
+      ...getResultsTableHeaderStyles(officialHeaderStylesInput),
+    };
+  }, []);
 
   const hasRun = Boolean(run && Array.isArray(run.assignments) && run.assignments.length);
+
+  React.useEffect(() => {
+    if (!hasRun) return;
+
+    const apply = () => applyCommercialResultsCellClasses(printAreaRef.current);
+    const frame = window.requestAnimationFrame(apply);
+
+    if (typeof MutationObserver === "undefined" || !printAreaRef.current) {
+      return () => window.cancelAnimationFrame(frame);
+    }
+
+    const observer = new MutationObserver(() => apply());
+    observer.observe(printAreaRef.current, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [hasRun, run, dataModel.allSubCols.length, dataModel.allTeachers.length, showTeacherSidebar, interaction.tableFullScreen]);
 
   const content = !hasRun ? (
     <ResultsEmptyRunState
@@ -199,7 +494,7 @@ export default function TaskDistributionResults() {
   ) : (
     <>
       {!interaction.tableFullScreen ? (
-        <div style={cardDark}>
+        <div style={OFFICIAL_CARD_STYLE}>
           <ResultsPageHeader
             runId={String(run?.runId || "—")}
             createdAtISO={run?.createdAtISO}
@@ -293,8 +588,9 @@ export default function TaskDistributionResults() {
 
   if (interaction.tableFullScreen && hasRun) {
     return (
-      <div style={{ ...pageDark, padding: 8 }}>
-        <div style={{ position: "fixed", inset: 0, zIndex: 9999, background: "#020617", padding: 8, overflow: "auto" }}>
+      <div className="resultsOfficialCommercialScope" style={{ ...OFFICIAL_PAGE_STYLE, padding: 8 }}>
+        <style>{OFFICIAL_RESULTS_TABLE_CSS}</style>
+        <div style={OFFICIAL_FULLSCREEN_LAYER_STYLE}>
           <div style={{ ...container, width: "100%", maxWidth: "100%", padding: 0 }}>
             <ResultsFullscreenToolbar
               undoDisabled={!interaction.undoStack.length}
@@ -312,7 +608,8 @@ export default function TaskDistributionResults() {
   }
 
   return (
-    <div style={pageDark}>
+    <div className="resultsOfficialCommercialScope" style={OFFICIAL_PAGE_STYLE}>
+      <style>{OFFICIAL_RESULTS_TABLE_CSS}</style>
       <div style={{ ...container, width: "min(1880px, 100%)", maxWidth: "100%" }}>
         {sharedImportControls}
         {content}

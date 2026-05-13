@@ -1764,6 +1764,7 @@ export default function TaskDistributionPrint() {
             <li style={styles.importantLi}>{tr("يرجى الالتزام التام بالتعليمات الواردة في لائحة إدارة الامتحانات.", "Please fully comply with the instructions in the exam administration regulations.")}</li>
             <li style={styles.importantLi}>{tr("يمنع استخدام الهاتف النقال داخل قاعات الامتحان.", "Using a mobile phone inside exam halls is prohibited.")}</li>
             <li style={styles.importantLi}>{tr("في حال وجود عذر طارئ يمنعك من الحضور، يرجى إبلاغ إدارة المدرسة فوراً لتوفير البديل.", "If there is an emergency excuse preventing your attendance, please inform the school administration immediately to arrange a replacement.")}</li>
+            <li style={styles.importantLi}>{tr("في حال استدعاء أي معلم للمراقبة من خارج أيام الجدول المرفق و لم يحضر يتم تسجيله غياب يوم كامل.", "")}</li>
           </ul>
 
           <div style={styles.importantSigRow}>

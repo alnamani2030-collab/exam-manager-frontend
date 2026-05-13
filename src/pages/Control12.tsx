@@ -301,6 +301,13 @@ export default function SchoolControl() {
 
   const tenantId = String(routeTenantId || effectiveTenantId || "").trim();
 
+  const goToTenantRoute = (route: string) => {
+    const safeTenantId = encodeURIComponent(String(tenantId || "").trim());
+    const cleanRoute = String(route || "").replace(/^\/+/, "");
+    if (!safeTenantId || !cleanRoute) return;
+    navigate(`/t/${safeTenantId}/${cleanRoute}`);
+  };
+
   const [schoolConfig, setSchoolConfig] = useState<SchoolConfig>({});
   const [officialDataVersion, setOfficialDataVersion] = useState(0);
   const [members, setMembers] = useState<ControlMember[]>([]);
@@ -948,6 +955,20 @@ ${membersTable}
             >
               {tr("سجل أرقام الجلوس", "Seat Numbers Register")}
             </button>
+            <button
+              type="button"
+              onClick={() => goToTenantRoute("candidate-violation-report12")}
+              style={buttonStyle("linear-gradient(180deg, #fee2e2 0%, #fca5a5 100%)")}
+            >
+              {tr("محضر مخالفة ممتحن", "Candidate Violation Report")}
+            </button>
+            <button
+              type="button"
+              onClick={() => goToTenantRoute("candidate-written-warning12")}
+              style={buttonStyle("linear-gradient(180deg, #fff7cc 0%, #facc15 100%)")}
+            >
+              {tr("إنذار كتابي لممتحن", "Candidate Written Warning")}
+            </button>
             <button onClick={exportMembers} style={buttonStyle("linear-gradient(180deg, #dcfce7 0%, #bbf7d0 100%)")}>
               {tr("تصدير اكسل", "Export Excel")}
             </button>
@@ -1091,11 +1112,10 @@ ${membersTable}
 
           {reportForm.type === "envelope_open" ? (
             <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 14 }}>
-              <SelectField
+              <Field
                 label={tr("المادة", "Subject")}
                 value={reportForm.subject}
                 onChange={(v) => setReportField("subject", v)}
-                options={examSubjects.map((item) => ({ value: item, label: item }))}
               />
               <Field label={tr("عدد المظاريف", "Number of envelopes")} value={reportForm.envelopesCount} onChange={(v) => setReportField("envelopesCount", v)} />
               <Field label={tr("عدد الأوراق", "Number of papers")} value={reportForm.papersCount} onChange={(v) => setReportField("papersCount", v)} />

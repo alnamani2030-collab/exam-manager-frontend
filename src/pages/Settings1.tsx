@@ -1,6 +1,10 @@
 // src/pages/Settings1.tsx
 import React, { useEffect, useMemo, useState } from "react";
+import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
 import { useI18n } from "../i18n/I18nProvider";
+import { useAuth } from "../auth/AuthContext";
+import { db } from "../firebase/firebase";
+import "./schoolSettingsOfficial.css";
 
 const SCHOOL_DATA_KEY = "exam-manager:school-data:v1";
 const LOGO_KEY = "exam-manager:app-logo";
@@ -56,9 +60,124 @@ function getAcademicYearFromSystemDate(now = new Date()) {
   return `${startYear} - ${endYear}`;
 }
 
+
+function cleanText(value: unknown) {
+  return String(value ?? "").trim();
+}
+
+function normalizeGovernorateText(value: unknown) {
+  return cleanText(value)
+    .replace(/\s+/g, " ")
+    .replace(/محافظة\s+/g, "محافظة ")
+    .trim();
+}
+
+function resolveGovernorateDisplay(
+  rawValue: unknown,
+  lang: "ar" | "en",
+  arOptions: readonly string[],
+  enOptions: readonly string[]
+) {
+  const raw = normalizeGovernorateText(rawValue);
+  if (!raw) return "";
+
+  const activeOptions = lang === "ar" ? arOptions : enOptions;
+  const oppositeOptions = lang === "ar" ? enOptions : arOptions;
+
+  const exactActive = activeOptions.find((x) => normalizeGovernorateText(x) === raw);
+  if (exactActive) return exactActive;
+
+  const oppositeIndex = oppositeOptions.findIndex((x) => normalizeGovernorateText(x) === raw);
+  if (oppositeIndex >= 0) return activeOptions[oppositeIndex] || raw;
+
+  const governorateHints: Array<[string[], string[]]> = [
+    [["مسقط", "muscat"], ["مسقط", "muscat"]],
+    [["ظفار", "dhofar"], ["ظفار", "dhofar"]],
+    [["الداخلية", "dakhiliyah", "al dakhiliyah"], ["الداخلية", "dakhiliyah"]],
+    [["الظاهرة", "dhahirah", "al dhahirah"], ["الظاهرة", "dhahirah"]],
+    [["البريمي", "buraimi", "al buraimi"], ["البريمي", "buraimi"]],
+    [["شمال الشرقية", "north al sharqiyah", "north sharqiyah"], ["شمال الشرقية", "north al sharqiyah"]],
+    [["جنوب الشرقية", "south al sharqiyah", "south sharqiyah"], ["جنوب الشرقية", "south al sharqiyah"]],
+    [["الوسطى", "wusta", "al wusta"], ["الوسطى", "wusta"]],
+    [["شمال الباطنة", "north al batinah", "north batinah"], ["شمال الباطنة", "north al batinah"]],
+    [["جنوب الباطنة", "south al batinah", "south batinah"], ["جنوب الباطنة", "south al batinah"]],
+    [["مسندم", "musandam"], ["مسندم", "musandam"]],
+  ];
+
+  const lowered = raw.toLowerCase();
+  for (const [needles] of governorateHints) {
+    const matched = needles.some((needle) => lowered.includes(needle.toLowerCase()));
+    if (!matched) continue;
+
+    const option = activeOptions.find((x) => {
+      const optionText = x.toLowerCase();
+      return needles.some((needle) => optionText.includes(needle.toLowerCase()));
+    });
+
+    if (option) return option;
+  }
+
+  return raw;
+}
+
+async function resolveGovernorateFromAllowlist(email: string) {
+  const safeEmail = cleanText(email).toLowerCase();
+  if (!safeEmail) return "";
+
+  try {
+    const ownDoc = await getDoc(doc(db, "allowlist", safeEmail));
+    if (ownDoc.exists()) {
+      const data = (ownDoc.data() as Record<string, unknown>) || {};
+      const gov = cleanText(data.governorate || data.directorate || data.scope);
+      if (gov) return gov;
+    }
+  } catch {
+    // continue to email query fallback
+  }
+
+  try {
+    const byEmail = await getDocs(
+      query(collection(db, "allowlist"), where("email", "==", safeEmail))
+    );
+    const first = byEmail.docs[0];
+    if (first) {
+      const data = (first.data() as Record<string, unknown>) || {};
+      const gov = cleanText(data.governorate || data.directorate || data.scope);
+      if (gov) return gov;
+    }
+  } catch {
+    // no permission or offline; keep local/auth fallback only
+  }
+
+  return "";
+}
+
+
 export default function Settings1() {
   const { lang, isRTL } = useI18n();
+  const auth = useAuth() as any;
   const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
+
+  const currentEmail = cleanText(
+    auth?.allow?.email ||
+      auth?.profile?.email ||
+      auth?.userProfile?.email ||
+      auth?.user?.email ||
+      auth?.currentUser?.email ||
+      ""
+  ).toLowerCase();
+
+  const governorateFromAuth = cleanText(
+    auth?.allow?.governorate ||
+      auth?.allow?.directorate ||
+      auth?.profile?.governorate ||
+      auth?.profile?.directorate ||
+      auth?.userProfile?.governorate ||
+      auth?.userProfile?.directorate ||
+      auth?.tenant?.governorate ||
+      auth?.tenant?.directorate ||
+      ""
+  );
 
   const governorates = GOVERNORATES[lang];
   const semesters = SEMESTERS[lang];
@@ -71,7 +190,18 @@ export default function Settings1() {
     address: "",
   });
 
+  const governorateOptions = useMemo(() => {
+    const options = [...governorates];
+    const currentGov = cleanText(data.governorate);
+    if (currentGov && !options.includes(currentGov as any)) {
+      options.unshift(currentGov as any);
+    }
+    return options;
+  }, [governorates, data.governorate]);
+
   const [logo, setLogo] = useState<string>(DEFAULT_LOGO_URL);
+  const [autoGovernorate, setAutoGovernorate] = useState("");
+  const [autoGovernorateSource, setAutoGovernorateSource] = useState("");
 
   useEffect(() => {
     const savedData = localStorage.getItem(SCHOOL_DATA_KEY);
@@ -80,6 +210,71 @@ export default function Settings1() {
     const savedLogo = localStorage.getItem(LOGO_KEY);
     if (savedLogo) setLogo(savedLogo);
   }, []);
+
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function applyLinkedGovernorate() {
+      const fromAuth = resolveGovernorateDisplay(
+        governorateFromAuth,
+        lang,
+        GOVERNORATES.ar,
+        GOVERNORATES.en
+      );
+
+      let finalGovernorate = fromAuth;
+      let sourceLabel = fromAuth
+        ? tr("تم تحديد المحافظة تلقائيًا من صلاحيات الحساب الحالي.", "Governorate was automatically detected from the current account permissions.")
+        : "";
+
+      if (!finalGovernorate && currentEmail) {
+        const fromAllowlist = await resolveGovernorateFromAllowlist(currentEmail);
+        if (cancelled) return;
+
+        finalGovernorate = resolveGovernorateDisplay(
+          fromAllowlist,
+          lang,
+          GOVERNORATES.ar,
+          GOVERNORATES.en
+        );
+
+        if (finalGovernorate) {
+          sourceLabel = tr(
+            "تم تحديد المحافظة تلقائيًا من ربط البريد الإلكتروني / أدمن المدرسة.",
+            "Governorate was automatically detected from the email / school admin binding."
+          );
+        }
+      }
+
+      if (!finalGovernorate || cancelled) return;
+
+      setAutoGovernorate(finalGovernorate);
+      setAutoGovernorateSource(sourceLabel);
+
+      setData((prev) => {
+        if (prev.governorate === finalGovernorate) return prev;
+
+        const next = { ...prev, governorate: finalGovernorate };
+
+        try {
+          localStorage.setItem(SCHOOL_DATA_KEY, JSON.stringify(next));
+          window.dispatchEvent(new Event("exam-manager:changed"));
+        } catch {
+          // keep state update even if localStorage is unavailable
+        }
+
+        return next;
+      });
+    }
+
+    void applyLinkedGovernorate();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentEmail, governorateFromAuth, lang]);
+
 
   const handleChange = (field: keyof SchoolData, value: string) => {
     setData((prev) => ({ ...prev, [field]: value }));
@@ -98,7 +293,7 @@ export default function Settings1() {
   const previewSemester = data.semester?.trim() || tr("الفصل الدراسي الأول", "First Semester");
 
   return (
-    <div style={{ ...pageWrap, direction: isRTL ? "rtl" : "ltr" }}>
+    <div style={{ ...pageWrap, direction: isRTL ? "rtl" : "ltr" }} className="schoolSettingsOfficialPage">
       <div
         style={{
           position: "absolute",
@@ -130,6 +325,7 @@ export default function Settings1() {
 
       <div style={{ width: "100%", maxWidth: 1380, position: "relative", zIndex: 1, display: "grid", gap: 22 }}>
         <div
+          className="settingsHeroCard"
           style={{
             display: "grid",
             gap: 18,
@@ -141,6 +337,7 @@ export default function Settings1() {
           }}
         >
           <div
+            className="settingsHeroLayout"
             style={{
               display: "flex",
               justifyContent: "space-between",
@@ -149,8 +346,9 @@ export default function Settings1() {
               alignItems: "start",
             }}
           >
-            <div style={{ display: "grid", gap: 14, maxWidth: 900 }}>
+            <div style={{ display: "grid", gap: 14, maxWidth: 900 }} className="settingsHeroMain">
               <div
+                className="settingsHeroBadge"
                 style={{
                   display: "inline-flex",
                   width: "fit-content",
@@ -168,11 +366,12 @@ export default function Settings1() {
                 {tr("إعداد الهوية الرسمية للمدرسة والتقارير", "Configure the school's official identity and reports")}
               </div>
 
-              <div>
-                <div style={{ fontSize: 18, fontWeight: 900, color: "#000000", marginBottom: 10 }}>
+              <div className="settingsHeroTitleBlock">
+                <div className="settingsHeroEyebrow" style={{ fontSize: 18, fontWeight: 900, color: "#000000", marginBottom: 10 }}>
                   {tr("نظام إدارة الامتحانات الذكي", "Smart Exam Management System")}
                 </div>
                 <h1
+                  className="settingsHeroTitle"
                   style={{
                     margin: 0,
                     fontSize: "clamp(34px, 5vw, 60px)",
@@ -188,6 +387,7 @@ export default function Settings1() {
               </div>
 
               <p
+                className="settingsHeroDescription"
                 style={{
                   margin: 0,
                   fontSize: 16,
@@ -202,7 +402,7 @@ export default function Settings1() {
                 )}
               </p>
 
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }} className="settingsHeroStats">
                 {[
                   { label: tr("اسم المدرسة", "School Name"), value: previewSchool },
                   { label: tr("الفصل", "Semester"), value: previewSemester },
@@ -210,6 +410,7 @@ export default function Settings1() {
                 ].map((item) => (
                   <div
                     key={item.label}
+                    className="settingsHeroStatCard"
                     style={{
                       border: "2px solid #ead98b",
                       background: "linear-gradient(180deg, #faf7ee 0%, #f6f1e2 100%)",
@@ -219,14 +420,15 @@ export default function Settings1() {
                       boxShadow: "inset 0 1px 0 rgba(255,255,255,0.75), 0 8px 18px rgba(190,160,40,0.10)",
                     }}
                   >
-                    <div style={{ fontSize: 12, color: "#000000", fontWeight: 800 }}>{item.label}</div>
-                    <div style={{ marginTop: 6, fontSize: 16, color: "#000000", fontWeight: 900 }}>{item.value}</div>
+                    <div className="settingsHeroStatLabel" style={{ fontSize: 12, color: "#000000", fontWeight: 800 }}>{item.label}</div>
+                    <div className="settingsHeroStatValue" style={{ marginTop: 6, fontSize: 16, color: "#000000", fontWeight: 900 }}>{item.value}</div>
                   </div>
                 ))}
               </div>
             </div>
 
             <div
+              className="settingsHeroAside"
               style={{
                 minWidth: 300,
                 maxWidth: 390,
@@ -241,6 +443,7 @@ export default function Settings1() {
               }}
             >
               <div
+                className="settingsHeroAsideBadge"
                 style={{
                   display: "inline-flex",
                   width: "fit-content",
@@ -256,16 +459,16 @@ export default function Settings1() {
                 {tr("معاينة مباشرة وهوية مؤسسية", "Live preview and institutional identity")}
               </div>
 
-              <div style={{ fontSize: 28, lineHeight: 1.5, fontWeight: 950, color: "#000000" }}>
+              <div className="settingsHeroAsideTitle" style={{ fontSize: 28, lineHeight: 1.5, fontWeight: 950, color: "#000000" }}>
                 {tr(
                   "اكتب البيانات مرة واحدة وشاهد شكلها النهائي داخل نموذج التقرير فورًا.",
                   "Enter the data once and instantly see its final appearance inside the report template."
                 )}
               </div>
 
-              <div style={{ fontSize: 14, lineHeight: 1.95, color: "#000000" }}>
+              <div className="settingsHeroAsideText" style={{ fontSize: 14, lineHeight: 1.95, color: "#000000" }}>
                 {tr(
-                  "",
+                  "تم تطوير الصفحة لتجمع بين سهولة إدخال البيانات وجمال المعاينة الرسمية، بحيث يشعر المستخدم بأنه يتعامل مع منتج شركة عالمية من أول لحظة.",
                   "This page was designed to combine easy data entry with a beautiful official preview, so the user feels they are using a world-class product from the very first moment."
                 )}
               </div>
@@ -273,8 +476,8 @@ export default function Settings1() {
           </div>
         </div>
 
-        <div style={gridWrap}>
-          <div style={formCard}>
+        <div style={gridWrap} className="settingsGridWrap">
+          <div style={formCard} className="settingsFormCard">
             <h1 style={{ ...formTitle, textAlign: isRTL ? "right" : "left" }}>
               {tr("بيانات المدرسة", "School Data")}
             </h1>
@@ -309,18 +512,45 @@ export default function Settings1() {
                 <label style={labelStyle}>{tr("المحافظة / المديرية", "Governorate / Directorate")}</label>
                 <select
                   value={data.governorate}
-                  onChange={(e) => handleChange("governorate", e.target.value)}
-                  style={{ ...selectStyle, color: "#000000", caretColor: "#000000", WebkitTextFillColor: "#000000", fontWeight: 900 }}
+                  disabled={Boolean(autoGovernorate)}
+                  onChange={(e) => {
+                    if (autoGovernorate) return;
+                    handleChange("governorate", e.target.value);
+                  }}
+                  title={
+                    autoGovernorate
+                      ? tr("هذه المحافظة مرتبطة تلقائيًا بالحساب الحالي.", "This governorate is automatically linked to the current account.")
+                      : undefined
+                  }
+                  style={{
+                    ...selectStyle,
+                    color: "#000000",
+                    caretColor: "#000000",
+                    WebkitTextFillColor: "#000000",
+                    fontWeight: 900,
+                    opacity: autoGovernorate ? 1 : undefined,
+                    background: autoGovernorate ? "#f8f1dc" : selectStyle.background,
+                  }}
                 >
                   <option value="" style={{ ...optionStyle, color: "#000000", fontWeight: 900 }}>
                     {tr("اختر...", "Select...")}
                   </option>
-                  {governorates.map((gov) => (
+                  {governorateOptions.map((gov) => (
                     <option key={gov} value={gov} style={{ ...optionStyle, color: "#000000", fontWeight: 900 }}>
                       {gov}
                     </option>
                   ))}
                 </select>
+
+                {autoGovernorate && (
+                  <div className="settingsAutoGovernorateNote">
+                    {autoGovernorateSource ||
+                      tr(
+                        "تم ربط المحافظة تلقائيًا بالحساب الحالي.",
+                        "The governorate has been linked automatically to the current account."
+                      )}
+                  </div>
+                )}
               </div>
 
               <div>

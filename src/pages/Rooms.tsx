@@ -1343,7 +1343,7 @@ export default function Rooms() {
                 <h1 className="schoolRoomsHeroTitle"
                   style={{
                     margin: 0,
-                    fontSize: "clamp(34px, 5vw, 64px)",
+                    fontSize: "clamp(34px, 5vw, 50px)",
                     lineHeight: 1.05,
                     fontWeight: 950,
                     color: "#111827",
@@ -1366,7 +1366,7 @@ export default function Rooms() {
                 }}
               >
                 {tr(
-                  "تمنح هذه الصفحة الإدارة رؤية تنفيذية فاخرة لحالة القاعات، والسعة، والحظر الحالي، مع تجربة منظمة لإضافة القاعات وتعديلها واستيرادها وتصديرها وإدارة سجل الحظر في واجهة مؤسسية أنيقة وسريعة.",
+                  "",
                   "This page gives the administration a premium executive view of room status, capacity, and current blocks, with an organized experience for adding, editing, importing, and exporting rooms, and managing block history in a fast and elegant institutional interface."
                 )}
               </p>

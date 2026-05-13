@@ -7,6 +7,7 @@ import { subscribeTenantArray } from "../services/tenantData";
 import { buildSmartAlerts } from "../services/smartAlerts.service";
 import { useI18n } from "../i18n/I18nProvider";
 import { tenantPath } from "../config/tenantRoutes";
+import "./schoolDashboardOfficial.css";
 
 const SUBS = {
   teachers: "teachers",
@@ -278,7 +279,7 @@ export default function Dashboard() {
         position: "relative",
         overflowX: "hidden",
       }}
-     className="dashboardLightOuterBgFix dashboardLightColoredUiScope">
+     className="dashboardLightOuterBgFix dashboardLightColoredUiScope schoolDashboardOfficialPage">
       <style>{`
         .dashboardLightColoredUiScope .dashStat:nth-of-type(5),
         .dashboardLightColoredUiScope .dashStat:nth-of-type(5) *,
@@ -897,7 +898,7 @@ export default function Dashboard() {
 
               <div style={{ fontSize: 14, lineHeight: 1.95, color: "#000000" }}>
                 {tr(
-                  "",
+                  "الواجهة المطورة ترفع من جودة الانطباع الأول وتمنح المستخدم تجربة تنقل منظمة بين التوزيع، التقارير، السجلات، والإعدادات.",
                   "The upgraded interface improves first impression quality and gives users a cleaner journey across distribution, reports, records, and settings."
                 )}
               </div>
