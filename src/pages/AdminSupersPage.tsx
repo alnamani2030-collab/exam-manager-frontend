@@ -30,6 +30,11 @@ const EXAM_CENTER_ROLES = [
   "distribution_admin",
 ];
 
+const TENANT_LINKED_SUPER_ROLES = ["exam_super", "exam_center_admin", "diploma_center_admin"];
+const SYSTEM_SCOPE_SUPER_ROLES = ["super", "ministry_super"];
+const isTenantLinkedSuperRole = (role: any) => TENANT_LINKED_SUPER_ROLES.includes(String(role || "").trim());
+const isSystemScopeSuperRole = (role: any) => SYSTEM_SCOPE_SUPER_ROLES.includes(String(role || "").trim());
+
 const GOVERNORATE_ASSIGNABLE_CENTER_ROLES = ["exam_super"];
 
 const normalizeRoleValue = (value: any) => String(value || "").trim().toLowerCase();
@@ -217,7 +222,8 @@ export default function AdminSupersPage() {
       if (isGovernorateSupervisor && !sameGovernorate(governorate, currentGovernorate)) return;
       const role = String(data?.role || "").trim();
       if (isGovernorateSupervisor && role !== "exam_super" && role !== "سوبر الامتحانات") return;
-      byEmail.set(`${email}__${String(data?.tenantId || "")}`, { email, ...data, role: "exam_super" });
+      const resolvedRole = String(data?.role || "exam_super").trim() || "exam_super";
+      byEmail.set(`${email}__${String(data?.tenantId || "")}`, { email, ...data, role: resolvedRole });
     };
 
     // المصدر الجديد الآمن: مجموعة مخصصة لسوبر الامتحانات داخل المحافظات.
@@ -311,7 +317,7 @@ export default function AdminSupersPage() {
     if (!["super", "exam_super", "exam_center_admin", "diploma_center_admin", "ministry_super"].includes(role)) return false;
     if (role === "super" && !effectiveGovernorate) return false;
 
-    if (["exam_super", "exam_center_admin", "diploma_center_admin"].includes(role)) {
+    if (isTenantLinkedSuperRole(role)) {
       if (!effectiveGovernorate) return false;
       if (!effectiveExamTenantId) return false;
       if (tenantMode === "list") {
@@ -339,7 +345,7 @@ export default function AdminSupersPage() {
 
   const createOrValidateExamCenterTenant = async (role: string, governorate: string) => {
     let targetTenantId = tenantMode === "create" ? String(newCenterTenantId || "").trim() : String(superTenantId || "").trim();
-    if (!["exam_super", "exam_center_admin", "diploma_center_admin"].includes(role)) return "system";
+    if (!isTenantLinkedSuperRole(role)) return "";
 
     if (!targetTenantId) {
       alert("يجب اختيار أو إدخال مركز الامتحانات أولًا.");
@@ -449,19 +455,54 @@ export default function AdminSupersPage() {
         ? MINISTRY_SCOPE
         : String(superGovernorate || "").trim();
 
-    const targetTenantId = await createOrValidateExamCenterTenant(role, governorate);
-    if (!targetTenantId) return;
+    const tenantLinkedRole = isTenantLinkedSuperRole(role);
+    const targetTenantId = tenantLinkedRole ? await createOrValidateExamCenterTenant(role, governorate) : "";
+    if (tenantLinkedRole && !targetTenantId) return;
 
-    const selectedCenter = visibleTenants.find((t: any) => String(t?.id || "").trim() === targetTenantId);
-    const targetCenterName =
-      tenantMode === "create"
+    const selectedCenter = tenantLinkedRole
+      ? visibleTenants.find((t: any) => String(t?.id || "").trim() === targetTenantId)
+      : null;
+    const targetCenterName = tenantLinkedRole
+      ? tenantMode === "create"
         ? String(newCenterName || "").trim()
-        : String(selectedCenter?.name || selectedCenter?.schoolName || selectedCenter?.title || targetTenantId || "").trim();
+        : String(selectedCenter?.name || selectedCenter?.schoolName || selectedCenter?.title || targetTenantId || "").trim()
+      : "";
 
     try {
       const normalizedEmail = String(superEmail || "").trim().toLowerCase();
 
-      if (isGovernorateSupervisor) {
+      if (isSystemScopeSuperRole(role)) {
+        const systemPayload = {
+          email: normalizedEmail,
+          name: String(superName || "").trim(),
+          userName: String(superName || "").trim(),
+          role,
+          enabled: superEnabled,
+          active: superEnabled,
+          scopeType: role === "ministry_super" ? "ministry" : "governorate",
+          governorate,
+          tenantGovernorate: governorate,
+          regionAr: governorate,
+          tenantId: "",
+          tenantName: "",
+          schoolName: "",
+          tenantType: "system",
+          type: "system",
+          isGovernorateSuper: role === "super",
+          isMinistrySuper: role === "ministry_super",
+          createdBy: user?.email || "",
+          updatedAt: serverTimestamp(),
+        };
+
+        await setDoc(
+          doc(db, "allowlist", normalizedEmail),
+          {
+            ...systemPayload,
+            createdAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+      } else if (isGovernorateSupervisor) {
         const nameValue = String(superName || "").trim();
         const linkPayload = buildExamSuperLinkPayload({
           email: normalizedEmail,
@@ -505,13 +546,13 @@ export default function AdminSupersPage() {
           newUserGovernorate: governorate,
           newUserEnabled: superEnabled,
           newUserName: superName,
-          newUserSchoolName: ["exam_super", "exam_center_admin", "diploma_center_admin"].includes(role) ? targetCenterName : "",
+          newUserSchoolName: isTenantLinkedSuperRole(role) ? targetCenterName : "",
           selectedTenantConfig: {
             governorate,
             tenantGovernorate: governorate,
-            tenantType: ["exam_super", "exam_center_admin", "diploma_center_admin"].includes(role) ? "exam_center" : "system",
-            type: ["exam_super", "exam_center_admin", "diploma_center_admin"].includes(role) ? "exam_center" : "system",
-            isExamCenter: ["exam_super", "exam_center_admin", "diploma_center_admin"].includes(role),
+            tenantType: isTenantLinkedSuperRole(role) ? "exam_center" : "system",
+            type: isTenantLinkedSuperRole(role) ? "exam_center" : "system",
+            isExamCenter: isTenantLinkedSuperRole(role),
           },
         });
       }

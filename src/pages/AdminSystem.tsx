@@ -1,7 +1,7 @@
 // src/pages/AdminSystem.tsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, serverTimestamp, setDoc, where } from "firebase/firestore";
 import "./adminSystem.theme.css";
 import "./ownerOfficial.theme.css";
 import AdminTenantsSection from "../features/system-admin/components/AdminTenantsSection";
@@ -12,6 +12,8 @@ import { Button, Card, GOLD, Input, LINE } from "../features/system-admin/ui";
 // شعار وزارة التعليم
 const MINISTRY_LOGO_URL = "https://i.imgur.com/vdDhSMh.png";
 const USE_FUNCTIONS = !Boolean((import.meta as any).env?.DEV);
+const SYSTEM_SCOPE_ADMIN_ROLES = ["super", "ministry_super"];
+const isSystemScopeAdminRole = (role: any) => SYSTEM_SCOPE_ADMIN_ROLES.includes(String(role || "").trim().toLowerCase());
 
 import { auth, db } from "../firebase/firebase";
 import { useAuth } from "../auth/AuthContext";
@@ -308,6 +310,13 @@ export default function AdminSystem() {
 
     if (!canManageUsers) return false;
     if (!em.includes("@")) return false;
+
+    if (isSystemScopeAdminRole(role)) {
+      if (!isPlatformOwner) return false;
+      if (role === "super" && !String(newUserGovernorate || "").trim()) return false;
+      return true;
+    }
+
     if (!newUserTenantId || !targetTenant) return false;
 
     if (!isPlatformOwner && isGovernorateSupervisor) {
@@ -446,21 +455,53 @@ export default function AdminSystem() {
     if (!user) return;
     if (!canCreateUser || !canAssignNewUserRole) return;
     try {
-      await createAllowUserAction({
-        user,
-        authzSnapshot,
-        isSuper,
-        profile,
-        users: commercialUsers,
-        newUserEmail,
-        newUserTenantId,
-        newUserRole,
-        newUserGovernorate,
-        newUserEnabled,
-        newUserName,
-        newUserSchoolName,
-        selectedTenantConfig,
-      });
+      const role = normalizeRoleClient(newUserRole, newUserGovernorate);
+      const normalizedEmail = String(newUserEmail || "").trim().toLowerCase();
+
+      if (isSystemScopeAdminRole(role)) {
+        const governorate = role === "ministry_super" ? "ministry" : String(newUserGovernorate || "").trim();
+        await setDoc(
+          doc(db, "allowlist", normalizedEmail),
+          {
+            email: normalizedEmail,
+            name: String(newUserName || "").trim(),
+            userName: String(newUserName || "").trim(),
+            role,
+            enabled: newUserEnabled,
+            active: newUserEnabled,
+            governorate,
+            tenantGovernorate: governorate,
+            regionAr: governorate,
+            scopeType: role === "ministry_super" ? "ministry" : "governorate",
+            tenantId: "",
+            tenantName: "",
+            schoolName: "",
+            tenantType: "system",
+            type: "system",
+            isGovernorateSuper: role === "super",
+            isMinistrySuper: role === "ministry_super",
+            updatedAt: serverTimestamp(),
+            createdAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+      } else {
+        await createAllowUserAction({
+          user,
+          authzSnapshot,
+          isSuper,
+          profile,
+          users: commercialUsers,
+          newUserEmail,
+          newUserTenantId,
+          newUserRole,
+          newUserGovernorate,
+          newUserEnabled,
+          newUserName,
+          newUserSchoolName,
+          selectedTenantConfig,
+        });
+      }
       setNewUserEmail("");
       setNewUserName("");
       setNewUserSchoolName("");
