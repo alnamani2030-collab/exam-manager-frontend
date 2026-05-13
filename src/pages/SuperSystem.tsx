@@ -13,6 +13,7 @@ import {
   QueryDocumentSnapshot,
   DocumentData,
   setDoc,
+  serverTimestamp,
 } from "firebase/firestore";
 
 import { useAuth } from "../auth/AuthContext";
@@ -982,74 +983,158 @@ export default function SuperSystem() {
       return;
     }
 
+    const cleanedName = String(newTenantName || "").trim();
+    const cleanedTenantId = safeId(String(newTenantId || cleanedName || ""));
+    const governorateForWrite = canSeeAllGovs ? String(myGov || "").trim() : String(myGov || "").trim();
+
+    if (!cleanedName) {
+      alert("اكتب اسم المدرسة أولاً.");
+      return;
+    }
+
+    if (!cleanedTenantId) {
+      alert("اكتب Tenant ID صحيح أو اسم مدرسة يمكن تحويله إلى معرف.");
+      return;
+    }
+
+    if (isRegionalSuper && !governorateForWrite) {
+      alert("حساب سوبر المحافظة غير مرتبط بمحافظة، لذلك لا يمكن إنشاء مدرسة جديدة.");
+      return;
+    }
+
+    const tenantPayload = withSchoolTenantMarkers({
+      name: cleanedName,
+      schoolName: cleanedName,
+      schoolNameAr: cleanedName,
+      enabled: newTenantEnabled,
+      governorate: governorateForWrite || undefined,
+      tenantGovernorate: governorateForWrite || undefined,
+      regionAr: governorateForWrite || undefined,
+      governorateAr: governorateForWrite || undefined,
+      scopeGovernorate: governorateForWrite || undefined,
+      createdBy: String(user?.email || "").trim().toLowerCase(),
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+
+    const configPayload = withSchoolTenantMarkers({
+      schoolName: cleanedName,
+      schoolNameAr: cleanedName,
+      centerName: cleanedName,
+      tenantName: cleanedName,
+      enabled: newTenantEnabled,
+      governorate: governorateForWrite || undefined,
+      tenantGovernorate: governorateForWrite || undefined,
+      regionAr: governorateForWrite || undefined,
+      governorateAr: governorateForWrite || undefined,
+      scopeGovernorate: governorateForWrite || undefined,
+      createdBy: String(user?.email || "").trim().toLowerCase(),
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+
     try {
-      const result = await createTenantForScope({
-        tenantId: newTenantId,
-        name: newTenantName,
-        enabled: newTenantEnabled,
-        canSeeAllGovs,
-        myGov,
-      });
+      let finalTenantId = cleanedTenantId;
 
-      await setDoc(
-        doc(db, "tenants", result.tenantId),
-        withSchoolTenantMarkers({
-          name: newTenantName,
-          governorate: canSeeAllGovs ? undefined : myGov,
-          tenantGovernorate: canSeeAllGovs ? undefined : myGov,
-          regionAr: canSeeAllGovs ? undefined : myGov,
-        }),
-        { merge: true },
-      );
-
-      await setDoc(
-        doc(db, "tenants", result.tenantId, "meta", "config"),
-        withSchoolTenantMarkers({
-          schoolName: newTenantName,
-          schoolNameAr: newTenantName,
-          governorate: canSeeAllGovs ? undefined : myGov,
-          tenantGovernorate: canSeeAllGovs ? undefined : myGov,
-          regionAr: canSeeAllGovs ? undefined : myGov,
+      // نحاول أولاً استخدام خدمة النظام القديمة، لكن لا نسمح لفشلها بكسر إنشاء المدرسة
+      // لمشرف المحافظة؛ لأن الخدمة قد تكتب في مسارات لا تسمح بها القواعد الحالية.
+      try {
+        const result = await createTenantForScope({
+          tenantId: cleanedTenantId,
+          name: cleanedName,
           enabled: newTenantEnabled,
-        }),
+          canSeeAllGovs,
+          myGov: governorateForWrite,
+        });
+        finalTenantId = String(result?.tenantId || cleanedTenantId).trim();
+      } catch (serviceError: any) {
+        const message = String(serviceError?.message || "");
+        if (message === "TENANT_EXISTS") {
+          alert("Tenant ID مستخدم بالفعل. اختر Tenant ID جديد.");
+          return;
+        }
+        if (message === "MISSING_GOVERNORATE") {
+          alert("حساب السوبر غير مرتبط بمحافظة.");
+          return;
+        }
+        console.warn("تعذر إنشاء المدرسة عبر createTenantForScope، سيتم استخدام الحفظ المباشر.", serviceError);
+      }
+
+      await setDoc(doc(db, "tenants", finalTenantId), tenantPayload, { merge: true });
+
+      await setDoc(
+        doc(db, "tenants", finalTenantId, "meta", "config"),
+        configPayload,
         { merge: true },
       );
 
       setNewTenantName("");
       setNewTenantId("");
       setNewTenantEnabled(true);
-      setSelectedTenantId(result.tenantId);
+      setSelectedTenantId(finalTenantId);
+      setTenants((prev) => {
+        const exists = prev.some((tenant) => String(tenant.id || "").trim() === finalTenantId);
+        const nextTenant = {
+          id: finalTenantId,
+          name: cleanedName,
+          enabled: newTenantEnabled,
+          governorate: governorateForWrite,
+          tenantGovernorate: governorateForWrite,
+          regionAr: governorateForWrite,
+          tenantType: "school",
+          type: "school",
+          entityType: "school",
+          isExamCenter: false,
+          isDiplomaCenter: false,
+        } as any;
+        if (exists) {
+          return prev.map((tenant) =>
+            String(tenant.id || "").trim() === finalTenantId
+              ? { ...tenant, ...nextTenant }
+              : tenant,
+          );
+        }
+        return [nextTenant, ...prev];
+      });
       setEditReloadTick((x: number) => x + 1);
       alert("تم إنشاء المدرسة بنجاح ✅");
     } catch (e: any) {
       console.error(e);
-      if (String(e?.message || "") === "TENANT_EXISTS") {
-        alert("Tenant ID مستخدم بالفعل. اختر Tenant ID جديد.");
-      } else if (String(e?.message || "") === "MISSING_GOVERNORATE") {
-        alert("حساب السوبر غير مرتبط بمحافظة.");
-      } else {
-        alert(getActionErrorMessage(e, "تعذر إنشاء المدرسة. تأكد من الصلاحيات ثم جرّب مرة أخرى."));
-      }
+      alert(getActionErrorMessage(e, "تعذر إنشاء المدرسة. تأكد من صلاحيات إنشاء tenants داخل نفس المحافظة ثم جرّب مرة أخرى."));
     }
   };
 
   const commitSaveSelectedTenant = async (tenantId: string, name: string) => {
     setEditBusy(true);
     try {
-      await saveTenantForScope({
-        tenantId,
-        name,
-        enabled: editTenantEnabled,
-        wilayatAr: editWilayatAr,
-        logoUrl: editLogoUrl,
-        canSeeAllGovs,
-        myGov,
-      });
+      const currentTenant = tenants.find((t) => String(t.id || "").trim() === String(tenantId || "").trim());
+      const tenantGovernorateValue = isRegionalSuper ? String(myGov || "").trim() : getGovernorateValue(currentTenant, selectedTenant, myGov);
+
+      // بعض قواعد Firestore القديمة تمنع خدمة الحفظ العامة لمشرف المحافظة.
+      // لذلك لا نجعل فشلها يمنع الحفظ المباشر داخل tenant/meta/config.
+      try {
+        await saveTenantForScope({
+          tenantId,
+          name,
+          enabled: editTenantEnabled,
+          wilayatAr: editWilayatAr,
+          logoUrl: editLogoUrl,
+          canSeeAllGovs,
+          myGov,
+        });
+      } catch (scopeSaveError) {
+        console.warn("تعذر تنفيذ saveTenantForScope، سيتم استكمال الحفظ المباشر.", scopeSaveError);
+      }
 
       await setDoc(
         doc(db, "tenants", tenantId),
         withSchoolTenantMarkers({
           name,
+          governorate: tenantGovernorateValue,
+          tenantGovernorate: tenantGovernorateValue,
+          regionAr: tenantGovernorateValue,
+          governorateAr: tenantGovernorateValue,
+          scopeGovernorate: tenantGovernorateValue,
         }),
         { merge: true },
       );
@@ -1063,6 +1148,11 @@ export default function SuperSystem() {
           wilayat: editWilayatAr,
           wilayatAr: editWilayatAr,
           logoUrl: editLogoUrl,
+          governorate: tenantGovernorateValue,
+          tenantGovernorate: tenantGovernorateValue,
+          regionAr: tenantGovernorateValue,
+          governorateAr: tenantGovernorateValue,
+          scopeGovernorate: tenantGovernorateValue,
         }),
         { merge: true },
       );
@@ -1175,6 +1265,70 @@ export default function SuperSystem() {
     }
   };
 
+  const saveTenantAdminAssignmentResilient = async (params: {
+    email: string;
+    enabled: boolean;
+    tenantId: string;
+    tenantName: string;
+    tenantGovernorate: string;
+    userName: string;
+  }) => {
+    const email = String(params.email || "").trim().toLowerCase();
+    const tenantId = String(params.tenantId || "").trim();
+    const tenantName = String(params.tenantName || tenantId).trim();
+    const tenantGovernorate = String(params.tenantGovernorate || "").trim();
+    const userNameValue = String(params.userName || "").trim();
+
+    if (!email || !email.includes("@")) {
+      throw new Error("INVALID_EMAIL");
+    }
+    if (!tenantId) {
+      throw new Error("MISSING_TENANT");
+    }
+
+    const payload = withSchoolTenantMarkers({
+      email,
+      enabled: params.enabled !== false,
+      role: "tenant_admin",
+      scopeType: "tenant",
+      tenantId,
+      schoolName: tenantName,
+      tenantName,
+      governorate: tenantGovernorate,
+      tenantGovernorate,
+      userName: userNameValue,
+      updatedAt: serverTimestamp(),
+      updatedBy: String(user?.email || "").trim().toLowerCase(),
+    });
+
+    // المصدر الأساسي للصلاحية: allowlist.
+    // هذا هو المسار الذي يقرأه النظام عند تسجيل الدخول وتحديد صلاحية أدمن المدرسة.
+    await setDoc(doc(db, "allowlist", email), payload, { merge: true });
+
+    // جدول tenantAdminLinks مساعد فقط لإظهار الربط داخل الجداول.
+    // بعض قواعد Firestore لا تسمح لمشرف المحافظة بالكتابة هنا، لذلك لا نوقف عملية الربط إذا فشل هذا المسار.
+    try {
+      await setDoc(
+        doc(db, "tenantAdminLinks", tenantId),
+        {
+          email,
+          tenantId,
+          schoolName: tenantName,
+          tenantName,
+          governorate: tenantGovernorate,
+          tenantGovernorate,
+          enabled: params.enabled !== false,
+          userName: userNameValue,
+          updatedAt: serverTimestamp(),
+          updatedBy: String(user?.email || "").trim().toLowerCase(),
+        },
+        { merge: true },
+      );
+    } catch (linkError) {
+      console.warn("تعذر تحديث tenantAdminLinks، وتم الاكتفاء بتحديث allowlist.", linkError);
+    }
+  };
+
   const saveAdminUser = async (forceReplaceExistingEmail?: boolean) => {
     if (isMinistryViewer) {
       alert("سوبر الوزارة للمشاهدة فقط ولا يمكنه إضافة أو تعديل أدمن المدرسة.");
@@ -1200,7 +1354,7 @@ export default function SuperSystem() {
 
     if (
       isRegionalSuper &&
-      String(tenant.governorate || "").trim().toLowerCase() !== String(myGov || "").trim().toLowerCase()
+      !sameGovernorate(getGovernorateValue(tenant), myGov)
     ) {
       alert("لا يمكنك إضافة مستخدم لمدرسة خارج محافظتك.");
       return;
@@ -1234,14 +1388,12 @@ export default function SuperSystem() {
         return;
       }
 
-      await saveTenantAdminAssignment({
+      await saveTenantAdminAssignmentResilient({
         email: normalizedEmail,
         enabled: userEnabled,
         tenantId,
-        tenantName: tenant.name,
-        tenantGovernorate: getGovernorateValue(tenant),
-        canSeeAllGovs,
-        myGov,
+        tenantName: String(tenant.name || tenantId),
+        tenantGovernorate: isRegionalSuper ? String(myGov || "").trim() : getGovernorateValue(tenant, myGov),
         userName,
       });
 
@@ -1304,102 +1456,220 @@ export default function SuperSystem() {
           </div>
         </div>
 
-        <div className="super-cards">
-          <button
-            className="super-card"
-            onClick={() => navigate("/exam-supers")}
+        <div
+          className="super-cards"
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr",
+            gap: 18,
+            alignItems: "stretch",
+          }}
+        >
+          <div
+            style={{
+              border: "1px solid rgba(212,175,55,0.38)",
+              borderRadius: 18,
+              padding: 16,
+              background: "rgba(255, 250, 235, 0.08)",
+              boxShadow: "0 14px 34px rgba(0,0,0,0.18)",
+            }}
           >
-            <div className="super-card-title">سوبر الامتحانات في المحافظة</div>
-            <div className="super-card-desc">عرض جميع سوبر الامتحانات ضمن النطاق المسموح ثم فتح مركز الامتحانات للمشاهدة والمتابعة.</div>
-          </button>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                marginBottom: 14,
+                borderBottom: "1px solid rgba(212,175,55,0.28)",
+                paddingBottom: 10,
+              }}
+            >
+              <div style={{ fontWeight: 1000, color: "#d4af37", fontSize: 20 }}>قائمة المدارس وأدمنات المدارس</div>
+              <div style={{ color: "#f8fafc", opacity: 0.85, fontWeight: 800, fontSize: 13 }}>إدارة المدارس وربط أدمن المدرسة</div>
+            </div>
 
-          <button
-            className="super-card"
-            disabled={isMinistryViewer}
-            onClick={() => navigate(isOwner ? "/platform-super-system/add-exam-super12" : "/super-system/add-exam-super12")}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+                gap: 12,
+              }}
+            >
+              <button
+                className="super-card"
+                disabled={isMinistryViewer}
+                onClick={() => navigate(isOwner ? "/platform-super-system/add-school-admin" : "/super-system/add-school-admin")}
+                style={{ borderColor: "rgba(212,175,55,0.72)", background: "linear-gradient(135deg, rgba(212,175,55,0.22), rgba(255,255,255,0.04))" }}
+              >
+                <div className="super-card-title">➕ إضافة أدمن مدرسة</div>
+                <div className="super-card-desc">صفحة مستقلة لربط أدمن بمدرسة داخل المحافظة بدون تعديل بيانات المدرسة.</div>
+              </button>
+
+              <button
+                className="super-card"
+                onClick={() => navigate("/school-admins")}
+              >
+                <div className="super-card-title">أدمنات المدارس في المحافظة</div>
+                <div className="super-card-desc">عرض جميع أدمنات المدارس حسب المحافظة ثم فتح نظام المدرسة للمشاهدة والمتابعة.</div>
+              </button>
+
+              <button
+                className="super-card"
+                onClick={() =>
+                  document.getElementById("section-tenants")?.scrollIntoView({
+                    behavior: "smooth",
+                  })
+                }
+              >
+                <div className="super-card-title">إدارة المدارس</div>
+                <div className="super-card-desc">عرض وبحث المدارس داخل النطاق المسموح.</div>
+              </button>
+
+              <button
+                className="super-card"
+                disabled={isMinistryViewer}
+                onClick={() =>
+                  document.getElementById("section-create")?.scrollIntoView({
+                    behavior: "smooth",
+                  })
+                }
+              >
+                <div className="super-card-title">إضافة مدرسة جديدة</div>
+                <div className="super-card-desc">إنشاء مدرسة داخل محافظتك.</div>
+              </button>
+
+              <button
+                className="super-card"
+                disabled={isMinistryViewer}
+                onClick={() =>
+                  document.getElementById("section-edit")?.scrollIntoView({
+                    behavior: "smooth",
+                  })
+                }
+              >
+                <div className="super-card-title">تعديل بيانات المدرسة</div>
+                <div className="super-card-desc">تعديل اسم المدرسة والشعار والولاية داخل محافظتك.</div>
+              </button>
+
+              <button
+                className="super-card"
+                disabled={isMinistryViewer}
+                onClick={() =>
+                  document.getElementById("section-admin")?.scrollIntoView({
+                    behavior: "smooth",
+                  })
+                }
+              >
+                <div className="super-card-title">إدارة أدمن المدرسة</div>
+                <div className="super-card-desc">إضافة أو ربط أو حذف أدمن مدرسة داخل النطاق المسموح.</div>
+              </button>
+            </div>
+          </div>
+
+          <div
+            style={{
+              border: "1px solid rgba(212,175,55,0.38)",
+              borderRadius: 18,
+              padding: 16,
+              background: "rgba(255, 250, 235, 0.08)",
+              boxShadow: "0 14px 34px rgba(0,0,0,0.18)",
+            }}
           >
-            <div className="super-card-title">إضافة سوبر امتحانات لمركز دبلوم</div>
-            <div className="super-card-desc">إضافة سوبر امتحانات وربطه بمركز امتحانات الدبلوم داخل نطاق المحافظة.</div>
-          </button>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                marginBottom: 14,
+                borderBottom: "1px solid rgba(212,175,55,0.28)",
+                paddingBottom: 10,
+              }}
+            >
+              <div style={{ fontWeight: 1000, color: "#d4af37", fontSize: 20 }}>قائمة مراكز الدبلوم وسوبر الامتحانات</div>
+              <div style={{ color: "#f8fafc", opacity: 0.85, fontWeight: 800, fontSize: 13 }}>إدارة سوبر الامتحانات ومراكز الدبلوم</div>
+            </div>
 
-          <button
-            className="super-card"
-            onClick={() => navigate("/school-admins")}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+                gap: 12,
+              }}
+            >
+              <button
+                className="super-card"
+                disabled={isMinistryViewer}
+                onClick={() => navigate(isOwner ? "/platform-super-system/add-exam-super12" : "/super-system/add-exam-super12")}
+                style={{ borderColor: "rgba(212,175,55,0.72)", background: "linear-gradient(135deg, rgba(212,175,55,0.22), rgba(255,255,255,0.04))" }}
+              >
+                <div className="super-card-title">➕ إضافة سوبر امتحانات دبلوم</div>
+                <div className="super-card-desc">صفحة مستقلة لإضافة سوبر امتحانات وربطه بمركز امتحانات دبلوم داخل نطاق المحافظة.</div>
+              </button>
+
+              <button
+                className="super-card"
+                onClick={() => navigate("/exam-supers")}
+              >
+                <div className="super-card-title">سوبر الامتحانات في المحافظة</div>
+                <div className="super-card-desc">عرض جميع سوبر الامتحانات ضمن النطاق المسموح ثم فتح مركز الامتحانات للمشاهدة والمتابعة.</div>
+              </button>
+            </div>
+          </div>
+
+          <div
+            style={{
+              border: "1px solid rgba(212,175,55,0.28)",
+              borderRadius: 18,
+              padding: 16,
+              background: "rgba(0,0,0,0.18)",
+              boxShadow: "0 14px 34px rgba(0,0,0,0.14)",
+            }}
           >
-            <div className="super-card-title">أدمنات المدارس في المحافظة</div>
-            <div className="super-card-desc">عرض جميع أدمنات المدارس حسب المحافظة ثم فتح نظام المدرسة للمشاهدة والمتابعة.</div>
-          </button>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                marginBottom: 14,
+                borderBottom: "1px solid rgba(212,175,55,0.2)",
+                paddingBottom: 10,
+              }}
+            >
+              <div style={{ fontWeight: 1000, color: "#d4af37", fontSize: 20 }}>قائمة البوابات والفحص والسجلات</div>
+              <div style={{ color: "#f8fafc", opacity: 0.85, fontWeight: 800, fontSize: 13 }}>أدوات المتابعة والتشغيل</div>
+            </div>
 
-          <button
-            className="super-card"
-            onClick={() =>
-              document.getElementById("section-tenants")?.scrollIntoView({
-                behavior: "smooth",
-              })
-            }
-          >
-            <div className="super-card-title">إدارة المدارس</div>
-            <div className="super-card-desc">عرض وبحث المدارس داخل النطاق المسموح.</div>
-          </button>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+                gap: 12,
+              }}
+            >
+              <button className="super-card" onClick={() => navigate("/programs-gateway")}>
+                <div className="super-card-title">فتح البوابة التشغيلية</div>
+                <div className="super-card-desc">الانتقال إلى البوابة التشغيلية لاختيار البرنامج أو القوائم الإشرافية.</div>
+              </button>
 
-          <button
-            className="super-card"
-            disabled={isMinistryViewer}
-            onClick={() =>
-              document.getElementById("section-edit")?.scrollIntoView({
-                behavior: "smooth",
-              })
-            }
-          >
-            <div className="super-card-title">تعديل بيانات المدرسة</div>
-            <div className="super-card-desc">تعديل اسم المدرسة والشعار والولاية داخل محافظتك.</div>
-          </button>
+              <button className="super-card" onClick={() => navigate("/system/permissions-audit")}>
+                <div className="super-card-title">فحص الصلاحيات والربط</div>
+                <div className="super-card-desc">مراجعة المستخدمين والأدوار والمحافظة وربط المدارس ومراكز الدبلوم، مع فتح النطاق للمشاهدة فقط عند مشرف المحافظة.</div>
+              </button>
 
-          <button
-            className="super-card"
-            disabled={isMinistryViewer}
-            onClick={() =>
-              document.getElementById("section-create")?.scrollIntoView({
-                behavior: "smooth",
-              })
-            }
-          >
-            <div className="super-card-title">إضافة مدرسة جديدة</div>
-            <div className="super-card-desc">إنشاء مدرسة داخل محافظتك.</div>
-          </button>
+              <button className="super-card" onClick={() => navigate("/system/commercial-readiness")}>
+                <div className="super-card-title">لوحة الجاهزية التجارية</div>
+                <div className="super-card-desc">مراجعة حالة الصلاحيات، السحابة، المشاهدة فقط، النسخ الاحتياطي، وروابط الفحص قبل التشغيل التجاري.</div>
+              </button>
 
-          <button
-            className="super-card"
-            disabled={isMinistryViewer}
-            onClick={() =>
-              document.getElementById("section-admin")?.scrollIntoView({
-                behavior: "smooth",
-              })
-            }
-          >
-            <div className="super-card-title">إدارة أدمن المدرسة</div>
-            <div className="super-card-desc">إضافة أو ربط أو حذف أدمن مدرسة داخل النطاق المسموح.</div>
-          </button>
-
-          <button className="super-card" onClick={() => navigate("/programs-gateway")}>
-            <div className="super-card-title">فتح البوابة التشغيلية</div>
-            <div className="super-card-desc">الانتقال إلى البوابة التشغيلية لاختيار البرنامج أو القوائم الإشرافية.</div>
-          </button>
-
-          <button className="super-card" onClick={() => navigate("/system/permissions-audit")}>
-            <div className="super-card-title">فحص الصلاحيات والربط</div>
-            <div className="super-card-desc">مراجعة المستخدمين والأدوار والمحافظة وربط المدارس ومراكز الدبلوم، مع فتح النطاق للمشاهدة فقط عند مشرف المحافظة.</div>
-          </button>
-
-          <button className="super-card" onClick={() => navigate("/system/commercial-readiness")}>
-            <div className="super-card-title">لوحة الجاهزية التجارية</div>
-            <div className="super-card-desc">مراجعة حالة الصلاحيات، السحابة، المشاهدة فقط، النسخ الاحتياطي، وروابط الفحص قبل التشغيل التجاري.</div>
-          </button>
-
-          <button className="super-card" onClick={() => navigate("/system/audit-log")}>
-            <div className="super-card-title">سجل العمليات</div>
-            <div className="super-card-desc">متابعة إجراءات الحفظ والحذف والاستيراد والتوزيع والاستعادة أثناء الاختبار والتشغيل التجاري.</div>
-          </button>
+              <button className="super-card" onClick={() => navigate("/system/audit-log")}>
+                <div className="super-card-title">سجل العمليات</div>
+                <div className="super-card-desc">متابعة إجراءات الحفظ والحذف والاستيراد والتوزيع والاستعادة أثناء الاختبار والتشغيل التجاري.</div>
+              </button>
+            </div>
+          </div>
         </div>
 
         <div
