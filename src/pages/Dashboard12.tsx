@@ -341,6 +341,18 @@ export default function Dashboard12() {
     (userProfile?.email ? String(userProfile.email).split("@")[0] : "") ||
     tr("مستخدم", "User");
 
+  const isMinistrySupervisor = ["ministry_super", "ministry_admin", "ministry_supervisor"].includes(accessState.role);
+  const privilegedReturnPath = accessState.isOwner
+    ? "/programs-gateway"
+    : accessState.isGovernorateSuper
+      ? "/governorate-supers"
+      : "";
+  const privilegedReturnLabel = accessState.isOwner
+    ? tr("العودة إلى صفحة مالك المنصة", "Back to Platform Owner Page")
+    : isMinistrySupervisor
+      ? tr("العودة إلى صفحة مشرف الوزارة", "Back to Ministry Supervisor Page")
+      : tr("العودة إلى صفحة مشرف المحافظة", "Back to Governorate Supervisor Page");
+
   return (
     <>
       <style>{`
@@ -454,18 +466,54 @@ export default function Dashboard12() {
             <div style={{ display: "grid", gap: 10 }}>
               <div
                 style={{
-                  display: "inline-flex",
-                  width: "fit-content",
-                  padding: "10px 16px",
-                  borderRadius: 999,
-                  background: "linear-gradient(180deg, #dbeafe 0%, #bfdbfe 100%)",
-                  border: "3px solid #d4af37",
-                  boxShadow: "0 8px 18px rgba(212,175,55,0.15)",
-                  fontWeight: 900,
-                  color: "#000000",
+                  display: "flex",
+                  justifyContent: isRTL ? "flex-start" : "flex-end",
+                  alignItems: "center",
+                  marginBottom: 4,
                 }}
               >
-                {tr("واجهة تشغيل مخصصة", "Dedicated operation console")}
+                {privilegedReturnPath ? (
+                  <button
+                    type="button"
+                    onClick={() => navigate(privilegedReturnPath)}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      width: "fit-content",
+                      minHeight: 46,
+                      padding: "10px 22px",
+                      borderRadius: 999,
+                      background: accessState.isOwner
+                        ? "linear-gradient(180deg, #fef3c7 0%, #fcd34d 100%)"
+                        : "linear-gradient(180deg, #dbeafe 0%, #bfdbfe 100%)",
+                      border: `3px solid ${GOLD_BORDER}`,
+                      boxShadow: "0 8px 18px rgba(212,175,55,0.16), inset 0 1px 0 rgba(255,255,255,0.82)",
+                      fontWeight: 900,
+                      color: "#000000",
+                      cursor: "pointer",
+                      fontSize: 16,
+                    }}
+                  >
+                    {privilegedReturnLabel}
+                  </button>
+                ) : (
+                  <div
+                    style={{
+                      display: "inline-flex",
+                      width: "fit-content",
+                      padding: "10px 16px",
+                      borderRadius: 999,
+                      background: "linear-gradient(180deg, #dbeafe 0%, #bfdbfe 100%)",
+                      border: "3px solid #d4af37",
+                      boxShadow: "0 8px 18px rgba(212,175,55,0.15)",
+                      fontWeight: 900,
+                      color: "#000000",
+                    }}
+                  >
+                    {tr("واجهة تشغيل مخصصة", "Dedicated operation console")}
+                  </div>
+                )}
               </div>
 
               <div className="dashboard12HeroTitle">
@@ -529,27 +577,7 @@ export default function Dashboard12() {
               {tr("الوصول السريع", "Quick access")}
             </div>
 
-            {accessState.isOwner || accessState.isGovernorateSuper ? (
-              <button
-                onClick={() =>
-                  navigate(accessState.isGovernorateSuper ? "/governorate-supers" : "/programs-gateway")
-                }
-                style={{
-                  background: "linear-gradient(180deg, #e9d5ff 0%, #d8b4fe 100%)",
-                  color: "#000000",
-                  border: `3px solid ${GOLD_BORDER}`,
-                  borderRadius: 16,
-                  padding: "12px 18px",
-                  fontWeight: 900,
-                  cursor: "pointer",
-                  boxShadow: "0 10px 22px rgba(212,175,55,0.18), 0 0 0 2px rgba(255,235,140,0.35) inset",
-                }}
-              >
-                {accessState.isGovernorateSuper
-                  ? tr("العودة إلى صفحة مشرفي الامتحانات", "Back to Governorate Exam Supervisors")
-                  : tr("العودة إلى البوابة التشغيلية", "Back to Programs Gateway")}
-              </button>
-            ) : null}
+            <div />
           </div>
 
           <div
