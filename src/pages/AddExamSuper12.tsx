@@ -855,7 +855,7 @@ export default function AddExamSuper12() {
                 نظام إدارة الامتحانات المطور
               </div>
               <div style={{ fontWeight: 850, color: "#374151", textAlign: "center" }}>
-                إضافة وربط سوبر امتحانات الدبلوم
+                إضافة وربط سوبر امتحانات الدبلوم العام و ما في مستواه
               </div>
             </div>
           </div>
@@ -870,7 +870,7 @@ export default function AddExamSuper12() {
           >
             <div>
               <div style={{ fontSize: 30, fontWeight: 1000, color: "#111827" }}>
-                إضافة سوبر امتحانات لمركز دبلوم
+                إضافة سوبر امتحانات لمركز دبلوم العام و ما في مستواه
               </div>
               <div style={{ marginTop: 8, color: "#374151", fontWeight: 850, lineHeight: 1.8 }}>
                 ربط سوبر امتحانات بمركز امتحانات دبلوم داخل نطاق المحافظة، مع إمكانية اختيار مركز موجود أو إنشاء مركز جديد.
