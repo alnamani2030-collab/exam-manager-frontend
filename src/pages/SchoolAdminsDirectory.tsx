@@ -212,8 +212,9 @@ export default function SchoolAdminsDirectory() {
             </button>
             <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
               <div style={{ display: "grid", gap: 4, textAlign: isRTL ? "right" : "left" }}>
-                <div style={{ color: "#7a5a13", fontWeight: 1000, fontSize: 26 }}>{tr("وزارة التعليم", "Ministry of Education")}</div>
-                <div style={{ color: "#5c4a24", fontWeight: 800, fontSize: 15 }}>{tr("واجهة إشرافية رسمية", "Official supervisory interface")}</div>
+                 <div style={{ color: "#5c4a24", fontWeight: 850, fontSize: 20 }}>{tr("سلطنة عمان", "Sultanate of Oman")}</div>
+                <div style={{ color: "#7a5a13", fontWeight: 1000, fontSize: 20 }}>{tr("وزارة التعليم", "Ministry of Education")}</div>
+                <div style={{ color: "#5c4a24", fontWeight: 800, fontSize: 20 }}>{tr("واجهة إشرافية رسمية", "Official supervisory interface")}</div>
               </div>
               <img src={MINISTRY_LOGO_URL} alt="وزارة التعليم" style={{ width: 64, height: 64, objectFit: "contain" }} />
             </div>

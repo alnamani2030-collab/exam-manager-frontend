@@ -165,8 +165,9 @@ export default function ProgramsGateway() {
 
             <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
               <div style={{ display: "grid", gap: 4, textAlign: isRTL ? "right" : "left" }}>
+                <div style={{ color: "#5c4a24", fontWeight: 850, fontSize: 24 }}>{tr("سلطنة عمان", "Sultanate of Oman")}</div>
                 <div style={{ color: "#7a5a13", fontWeight: 1000, fontSize: 24 }}>{tr("وزارة التعليم", "Ministry of Education")}</div>
-                <div style={{ color: "#5c4a24", fontWeight: 850, fontSize: 14 }}>{tr("سلطنة عمان", "Sultanate of Oman")}</div>
+             
               </div>
               <img src={MINISTRY_LOGO_URL} alt="وزارة التعليم" style={{ width: 70, height: 70, objectFit: "contain" }} />
             </div>
