@@ -85,7 +85,9 @@ export default function Layout() {
       path.includes("/cloud-health12") ||
       path.includes("/cloud-backup12") ||
       path.includes("/suggestions12page") ||
-      path.includes("/about12")
+      path.includes("/about12") ||
+      path.includes("/candidate-violation-report12") ||
+      path.includes("/candidate-written-warning12")
     );
   }, [location.pathname]);
 
