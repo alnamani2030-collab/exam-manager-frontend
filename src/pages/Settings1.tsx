@@ -52,6 +52,12 @@ type SchoolData = {
   address: string;
 };
 
+type SaveNotice = {
+  kind: "success" | "error" | "warning" | "info";
+  title: string;
+  message: string;
+};
+
 function getAcademicYearFromSystemDate(now = new Date()) {
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
@@ -200,6 +206,7 @@ export default function Settings1() {
   }, [governorates, data.governorate]);
 
   const [logo, setLogo] = useState<string>(DEFAULT_LOGO_URL);
+  const [saveNotice, setSaveNotice] = useState<SaveNotice | null>(null);
   const [autoGovernorate, setAutoGovernorate] = useState("");
   const [autoGovernorateSource, setAutoGovernorateSource] = useState("");
 
@@ -283,7 +290,15 @@ export default function Settings1() {
   const saveData = () => {
     localStorage.setItem(SCHOOL_DATA_KEY, JSON.stringify(data));
     window.dispatchEvent(new Event("exam-manager:changed"));
-    alert(tr("تم حفظ التغييرات بنجاح!", "Changes saved successfully!"));
+    setSaveNotice({
+      kind: "success",
+      title: tr("تم الحفظ بنجاح", "Saved successfully"),
+      message: tr(
+        "تم حفظ بيانات المدرسة وتحديث الطابع الرسمي للصفحات.",
+        "School data was saved and the official page identity was updated."
+      ),
+    });
+    window.setTimeout(() => setSaveNotice(null), 5200);
   };
 
   const academicYear = useMemo(() => getAcademicYearFromSystemDate(new Date()), []);
@@ -294,6 +309,31 @@ export default function Settings1() {
 
   return (
     <div style={{ ...pageWrap, direction: isRTL ? "rtl" : "ltr" }} className="schoolSettingsOfficialPage">
+      {saveNotice && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            ...floatingNoticeStyle,
+            ...(saveNotice.kind === "success"
+              ? floatingNoticeSuccessStyle
+              : saveNotice.kind === "warning"
+                ? floatingNoticeWarningStyle
+                : saveNotice.kind === "error"
+                  ? floatingNoticeErrorStyle
+                  : floatingNoticeInfoStyle),
+          }}
+        >
+          <div style={floatingNoticeIconStyle}>✓</div>
+          <div style={{ display: "grid", gap: 4, flex: 1 }}>
+            <strong style={floatingNoticeTitleStyle}>{saveNotice.title}</strong>
+            <span style={floatingNoticeMessageStyle}>{saveNotice.message}</span>
+          </div>
+          <button type="button" onClick={() => setSaveNotice(null)} style={floatingNoticeCloseStyle}>
+            ×
+          </button>
+        </div>
+      )}
       <div
         style={{
           position: "absolute",
@@ -917,4 +957,87 @@ const belowMetaSep: React.CSSProperties = {
   opacity: 0.95,
   color: "#000000",
   
+};
+
+
+const floatingNoticeStyle: React.CSSProperties = {
+  position: "fixed",
+  top: 24,
+  left: "50%",
+  transform: "translateX(-50%)",
+  zIndex: 9999,
+  minWidth: "min(92vw, 520px)",
+  maxWidth: "min(92vw, 680px)",
+  borderRadius: 24,
+  padding: "16px 18px",
+  display: "flex",
+  alignItems: "center",
+  gap: 14,
+  border: "3px solid",
+  boxShadow: "0 24px 60px rgba(15,23,42,0.22)",
+  color: "#0f172a",
+  fontFamily: "inherit",
+};
+
+const floatingNoticeSuccessStyle: React.CSSProperties = {
+  background: "linear-gradient(135deg, #ecfdf5 0%, #dcfce7 52%, #f7fee7 100%)",
+  borderColor: "#16a34a",
+};
+
+const floatingNoticeWarningStyle: React.CSSProperties = {
+  background: "linear-gradient(135deg, #fff7ed 0%, #ffedd5 52%, #fef3c7 100%)",
+  borderColor: "#f59e0b",
+};
+
+const floatingNoticeErrorStyle: React.CSSProperties = {
+  background: "linear-gradient(135deg, #fef2f2 0%, #fee2e2 52%, #fff1f2 100%)",
+  borderColor: "#dc2626",
+};
+
+const floatingNoticeInfoStyle: React.CSSProperties = {
+  background: "linear-gradient(135deg, #eff6ff 0%, #dbeafe 52%, #eef2ff 100%)",
+  borderColor: "#2563eb",
+};
+
+const floatingNoticeIconStyle: React.CSSProperties = {
+  width: 44,
+  height: 44,
+  borderRadius: "50%",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  background: "#0f7a46",
+  color: "#ffffff",
+  fontWeight: 1000,
+  fontSize: 22,
+  boxShadow: "0 10px 24px rgba(15,122,70,0.22)",
+  flex: "0 0 auto",
+};
+
+const floatingNoticeTitleStyle: React.CSSProperties = {
+  color: "#0f172a",
+  fontWeight: 1000,
+  fontSize: 18,
+  lineHeight: 1.3,
+};
+
+const floatingNoticeMessageStyle: React.CSSProperties = {
+  color: "#1f2937",
+  fontWeight: 850,
+  fontSize: 14,
+  lineHeight: 1.7,
+};
+
+const floatingNoticeCloseStyle: React.CSSProperties = {
+  width: 34,
+  height: 34,
+  borderRadius: "50%",
+  border: "2px solid rgba(15,23,42,0.18)",
+  background: "rgba(255,255,255,0.78)",
+  color: "#0f172a",
+  fontWeight: 1000,
+  fontSize: 20,
+  cursor: "pointer",
+  lineHeight: 1,
+  flex: "0 0 auto",
 };
