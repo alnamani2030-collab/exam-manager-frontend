@@ -1,6 +1,6 @@
 // src/pages/AddExamSuper12.tsx
 import React, { useEffect, useMemo, useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import {
   collection,
   deleteDoc,
@@ -20,96 +20,8 @@ import { MINISTRY_SCOPE } from "../constants/directorates";
 
 const MINISTRY_LOGO_URL = "https://i.imgur.com/vdDhSMh.png";
 const EXAM_SUPER_LINKS_COLLECTION = "governorateExamSupers";
-const EXAM_SUPER_ROLE_VALUES = new Set([
-  "exam_super",
-  "exam-super",
-  "examcenter_super",
-  "exam_center_super",
-  "exam_center_admin",
-  "diploma_exam_super",
-  "diploma_center_super",
-  "diploma_center_admin",
-]);
 
 const normalize = (value: unknown) => String(value || "").trim().toLowerCase();
-
-const safeLinkId = (email: unknown, tenantId: unknown) => {
-  const mail = String(email || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9@._-]+/gi, "_");
-  const tenant =
-    String(tenantId || "")
-      .trim()
-      .replace(/[^a-z0-9_-]+/gi, "_") || "no_tenant";
-  return `${mail}__${tenant}`;
-};
-
-const safeTenantIdFromName = (value: unknown) => {
-  const base = String(value || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9؀-ۿ]+/gi, "-")
-    .replace(/^-+|-+$/g, "");
-  return base || `exam-center-${Date.now()}`;
-};
-
-const BLACK_FORM_CSS = `
-.add-exam-super12-page,
-.add-exam-super12-page * {
-  color: #111827;
-  -webkit-text-fill-color: #111827;
-  box-sizing: border-box;
-}
-.add-exam-super12-page input,
-.add-exam-super12-page select,
-.add-exam-super12-page textarea,
-.add-exam-super12-page option {
-  color: #111827 !important;
-  -webkit-text-fill-color: #111827 !important;
-  background: #ffffff !important;
-  font-weight: 850 !important;
-  width: 100% !important;
-  max-width: 100% !important;
-}
-.add-exam-super12-page input::placeholder,
-.add-exam-super12-page textarea::placeholder {
-  color: #6b7280 !important;
-  -webkit-text-fill-color: #6b7280 !important;
-}
-.add-exam-super12-page select:disabled,
-.add-exam-super12-page input:disabled {
-  color: #374151 !important;
-  -webkit-text-fill-color: #374151 !important;
-  background: #f3ead0 !important;
-}
-.add-exam-super12-page section,
-.add-exam-super12-page .exam-super12-shell,
-.add-exam-super12-page .exam-super12-form-card,
-.add-exam-super12-page .exam-super12-table-card {
-  min-width: 0 !important;
-  max-width: 100% !important;
-  overflow: hidden !important;
-}
-.add-exam-super12-content-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.45fr);
-  gap: 18px;
-  align-items: start;
-  width: 100%;
-  max-width: 100%;
-}
-.add-exam-super12-table-wrap {
-  width: 100%;
-  max-width: 100%;
-  overflow-x: auto;
-}
-@media (max-width: 1180px) {
-  .add-exam-super12-content-grid {
-    grid-template-columns: 1fr;
-  }
-}
-`;
 
 const getGovernorateValue = (...items: any[]) => {
   for (const item of items) {
@@ -121,44 +33,44 @@ const getGovernorateValue = (...items: any[]) => {
           item?.tenantGovernorate ??
           item?.regionAr ??
           item?.governorateAr ??
-          item?.gov ??
           item?.scopeGovernorate ??
+          item?.gov ??
           "";
-    const normalized = String(value || "").trim();
-    if (normalized) return normalized;
+    const cleaned = String(value || "").trim();
+    if (cleaned) return cleaned;
   }
   return "";
 };
 
-const sameGovernorate = (a: unknown, b: unknown) =>
-  normalize(a) === normalize(b);
+const sameGovernorate = (a: unknown, b: unknown) => normalize(a) === normalize(b);
 
-const isExamSuperRecord = (record: any) => {
-  const values = [
-    record?.role,
-    record?.originalRole,
-    record?.userRole,
-    record?.permissionRole,
-    record?.scopeType,
-  ]
-    .map(normalize)
-    .filter(Boolean);
+const safeIdPart = (value: unknown) =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/gi, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
 
-  return (
-    record?.isExamSuper === true ||
-    record?.examSuper === true ||
-    values.some((value) => EXAM_SUPER_ROLE_VALUES.has(value))
-  );
+const safeEmailId = (email: unknown) =>
+  String(email || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9@._-]+/gi, "_");
+
+const safeLinkId = (email: unknown, tenantId: unknown) => {
+  const mail = safeEmailId(email) || "no_email";
+  const tenant = safeIdPart(tenantId) || "no_tenant";
+  return `${mail}__${tenant}`;
+};
+
+const generateTenantId = (name: string) => {
+  const base = safeIdPart(name) || "diploma-center";
+  return `${base}-${Date.now().toString(36)}`.slice(0, 95);
 };
 
 const isExamCenterTenant = (tenant: any) => {
-  const values = [
-    tenant?.tenantType,
-    tenant?.type,
-    tenant?.entityType,
-    tenant?.kind,
-    tenant?.category,
-  ]
+  const values = [tenant?.tenantType, tenant?.type, tenant?.entityType, tenant?.kind, tenant?.category]
     .map(normalize)
     .filter(Boolean);
 
@@ -180,6 +92,36 @@ const isExamCenterTenant = (tenant: any) => {
   );
 };
 
+const EXAM_SUPER_ROLE_VALUES = new Set([
+  "exam_super",
+  "exam-center-super",
+  "exam_center_super",
+  "سوبر الامتحانات",
+  "سوبر امتحانات",
+  "سوبر امتحانات الدبلوم",
+  "سوبر امتحانات الدبلوم العام",
+]);
+
+const PROTECTED_SYSTEM_ROLE_VALUES = new Set([
+  "owner",
+  "platform_owner",
+  "super_admin",
+  "superadmin",
+  "system_admin",
+  "super",
+  "governorate_super",
+  "regional_super",
+  "super_regional",
+  "ministry_super",
+]);
+
+const readableRole = (role: unknown) => {
+  const value = String(role || "").trim();
+  return value || "صلاحية غير محددة";
+};
+
+type CenterMode = "existing" | "new";
+
 type ExamCenterRow = {
   id: string;
   name: string;
@@ -195,8 +137,40 @@ type ExamSuperRow = {
   centerName: string;
   governorate: string;
   enabled: boolean;
-  source?: string;
+  source?: "link" | "allowlist";
 };
+
+const buildExamCenterPayload = (params: {
+  centerId: string;
+  centerName: string;
+  governorate: string;
+  createdBy: string;
+  enabled: boolean;
+}) => ({
+  id: params.centerId,
+  tenantId: params.centerId,
+  name: params.centerName,
+  schoolName: params.centerName,
+  tenantName: params.centerName,
+  centerName: params.centerName,
+  centerNameAr: params.centerName,
+  governorate: params.governorate,
+  tenantGovernorate: params.governorate,
+  regionAr: params.governorate,
+  governorateAr: params.governorate,
+  scopeGovernorate: params.governorate,
+  type: "exam_center",
+  tenantType: "exam_center",
+  entityType: "exam_center",
+  kind: "diploma_center",
+  category: "diploma_center",
+  isExamCenter: true,
+  isDiplomaCenter: true,
+  enabled: params.enabled,
+  active: params.enabled,
+  createdBy: params.createdBy,
+  updatedAt: serverTimestamp(),
+});
 
 const buildExamSuperPayload = (params: {
   email: string;
@@ -222,6 +196,8 @@ const buildExamSuperPayload = (params: {
   governorate: params.governorate,
   tenantGovernorate: params.governorate,
   regionAr: params.governorate,
+  governorateAr: params.governorate,
+  scopeGovernorate: params.governorate,
   scopeType: "exam_center",
   tenantType: "exam_center",
   type: "exam_center",
@@ -234,26 +210,42 @@ const buildExamSuperPayload = (params: {
 
 export default function AddExamSuper12() {
   const navigate = useNavigate();
+  const location = useLocation();
   const auth = useAuth() as any;
   const { user, allow, profile } = auth;
 
   const authzSnapshot = useMemo(() => buildAuthzSnapshot(auth), [auth]);
   const owner = isPlatformOwner(authzSnapshot);
-  const currentRole = String(
-    allow?.role || profile?.role || authzSnapshot?.roles?.[0] || "",
-  )
+  const currentRole = String(allow?.role || profile?.role || authzSnapshot?.roles?.[0] || "")
     .trim()
     .toLowerCase();
   const currentGovernorate = getGovernorateValue(allow, profile, authzSnapshot as any);
+  const currentAuthEmails = useMemo(
+    () =>
+      [
+        user?.email,
+        allow?.email,
+        profile?.email,
+        (authzSnapshot as any)?.email,
+        (authzSnapshot as any)?.userEmail,
+        (authzSnapshot as any)?.authEmail,
+      ]
+        .map(normalize)
+        .filter(Boolean),
+    [user?.email, allow?.email, profile?.email, authzSnapshot],
+  );
   const isMinistryViewer = !owner && currentGovernorate === MINISTRY_SCOPE;
   const isGovernorateSupervisor =
-    !owner && !isMinistryViewer && currentRole === "super" && !!currentGovernorate;
+    !owner &&
+    !isMinistryViewer &&
+    !!currentGovernorate &&
+    ["super", "regional_super", "super_regional", "governorate_super", "governorate-super"].includes(currentRole);
   const canUsePage = owner || isGovernorateSupervisor;
 
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
+  const [centerMode, setCenterMode] = useState<CenterMode>("existing");
   const [selectedCenterId, setSelectedCenterId] = useState("");
-  const [centerMode, setCenterMode] = useState<"existing" | "new">("existing");
   const [newCenterName, setNewCenterName] = useState("");
   const [newCenterId, setNewCenterId] = useState("");
   const [newCenterGovernorate, setNewCenterGovernorate] = useState(currentGovernorate || "");
@@ -262,17 +254,27 @@ export default function AddExamSuper12() {
   const [loading, setLoading] = useState(false);
   const [centers, setCenters] = useState<ExamCenterRow[]>([]);
   const [rows, setRows] = useState<ExamSuperRow[]>([]);
-  const [rowsWarning, setRowsWarning] = useState("");
-  const [editingRow, setEditingRow] = useState<ExamSuperRow | null>(null);
+  const [editingRowId, setEditingRowId] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ type: "ok" | "warn" | "error"; text: string } | null>(null);
 
   const selectedCenter = useMemo(
     () => centers.find((center) => center.id === selectedCenterId) || null,
     [centers, selectedCenterId],
   );
 
-  useEffect(() => {
-    if (!owner && currentGovernorate) setNewCenterGovernorate(currentGovernorate);
-  }, [currentGovernorate, owner]);
+  const effectiveNewCenterGovernorate = owner ? newCenterGovernorate : currentGovernorate;
+
+  const resetForm = () => {
+    setEmail("");
+    setName("");
+    setCenterMode("existing");
+    setSelectedCenterId("");
+    setNewCenterName("");
+    setNewCenterId("");
+    setNewCenterGovernorate(currentGovernorate || "");
+    setEnabled(true);
+    setEditingRowId(null);
+  };
 
   const loadCenters = async () => {
     setLoading(true);
@@ -296,101 +298,77 @@ export default function AddExamSuper12() {
         });
       });
 
-      list.sort((a, b) =>
-        `${a.governorate} ${a.name}`.localeCompare(`${b.governorate} ${b.name}`, "ar"),
-      );
+      list.sort((a, b) => `${a.governorate} ${a.name}`.localeCompare(`${b.governorate} ${b.name}`, "ar"));
       setCenters(list);
     } catch (error) {
       console.error(error);
-      alert("تعذر تحميل مراكز امتحانات الدبلوم. تأكد من الصلاحيات أو الاتصال بالسحابة.");
+      setMessage({
+        type: "warn",
+        text: "تعذر تحميل مراكز الدبلوم من السحابة. يمكنك إضافة مركز جديد إذا كانت الصلاحيات تسمح بذلك.",
+      });
     } finally {
       setLoading(false);
     }
   };
 
+  const addUniqueRow = (map: Map<string, ExamSuperRow>, row: ExamSuperRow) => {
+    const key = `${normalize(row.email)}__${row.tenantId}`;
+    if (!row.email || !row.tenantId || map.has(key)) return;
+    map.set(key, row);
+  };
+
   const loadExamSupers = async () => {
-    const merged = new Map<string, ExamSuperRow>();
-    const warnings: string[] = [];
-
-    const addRow = (id: string, data: any, forceInclude = false, source = "unknown") => {
-      if (!forceInclude && !isExamSuperRecord(data)) return;
-
-      const email = String(data?.email || id || "").trim().toLowerCase();
-      const tenantId = String(data?.tenantId || data?.centerId || data?.examCenterId || "").trim();
-      const governorate = getGovernorateValue(data);
-
-      if (!owner && !sameGovernorate(governorate, currentGovernorate)) return;
-
-      const key = `${email || id}__${tenantId || "no_tenant"}`;
-      merged.set(key, {
-        id: String(id || key),
-        email,
-        name: String(data?.name || data?.userName || data?.displayName || ""),
-        tenantId,
-        centerName: String(
-          data?.centerName ||
-            data?.centerNameAr ||
-            data?.tenantName ||
-            data?.schoolName ||
-            data?.examCenterName ||
-            tenantId ||
-            "",
-        ),
-        governorate,
-        enabled: data?.enabled !== false && data?.active !== false,
-        source,
-      });
-    };
-
-    setRowsWarning("");
+    const map = new Map<string, ExamSuperRow>();
 
     try {
-      const linksBase = collection(db, EXAM_SUPER_LINKS_COLLECTION);
-      const linksSnap = owner
-        ? await getDocs(linksBase)
-        : await getDocs(query(linksBase, where("governorate", "==", currentGovernorate)));
+      const base = collection(db, EXAM_SUPER_LINKS_COLLECTION);
+      const snap = owner
+        ? await getDocs(base)
+        : await getDocs(query(base, where("governorate", "==", currentGovernorate)));
 
-      linksSnap.forEach((docSnap) => {
-        addRow(docSnap.id, docSnap.data() as any, true, EXAM_SUPER_LINKS_COLLECTION);
+      snap.forEach((docSnap) => {
+        const data = docSnap.data() as any;
+        addUniqueRow(map, {
+          id: docSnap.id,
+          email: String(data?.email || ""),
+          name: String(data?.name || data?.userName || ""),
+          tenantId: String(data?.tenantId || ""),
+          centerName: String(data?.centerName || data?.tenantName || data?.schoolName || ""),
+          governorate: getGovernorateValue(data),
+          enabled: data?.enabled !== false,
+          source: "link",
+        });
       });
     } catch (error) {
-      console.warn("Cannot load governorate exam supers links", error);
-      warnings.push("تعذر قراءة جدول ربط سوبر الامتحانات، وسيتم عرض ما يمكن قراءته فقط.");
+      console.warn("governorateExamSupers read skipped", error);
     }
 
     try {
-      let allowlistSnap;
-      if (owner) {
-        allowlistSnap = await getDocs(collection(db, "allowlist"));
-      } else {
-        try {
-          allowlistSnap = await getDocs(
-            query(collection(db, "allowlist"), where("governorate", "==", currentGovernorate)),
-          );
-        } catch {
-          allowlistSnap = await getDocs(
-            query(collection(db, "allowlist"), where("tenantGovernorate", "==", currentGovernorate)),
-          );
-        }
-      }
+      const allowBase = collection(db, "allowlist");
+      const allowSnap = owner
+        ? await getDocs(query(allowBase, where("role", "==", "exam_super")))
+        : await getDocs(query(allowBase, where("role", "==", "exam_super"), where("governorate", "==", currentGovernorate)));
 
-      allowlistSnap.forEach((docSnap) => {
-        addRow(docSnap.id, docSnap.data() as any, false, "allowlist");
+      allowSnap.forEach((docSnap) => {
+        const data = docSnap.data() as any;
+        addUniqueRow(map, {
+          id: safeLinkId(data?.email || docSnap.id, data?.tenantId),
+          email: String(data?.email || docSnap.id || ""),
+          name: String(data?.name || data?.userName || ""),
+          tenantId: String(data?.tenantId || ""),
+          centerName: String(data?.centerName || data?.tenantName || data?.schoolName || ""),
+          governorate: getGovernorateValue(data),
+          enabled: data?.enabled !== false,
+          source: "allowlist",
+        });
       });
     } catch (error) {
-      console.warn("Cannot load old exam supers from allowlist", error);
-      warnings.push("تعذر قراءة بعض السجلات القديمة من allowlist بسبب الصلاحيات. هذا لا يمنع إضافة سوبر امتحانات جديد.");
+      console.warn("allowlist read skipped", error);
     }
 
-    const list = Array.from(merged.values()).sort((a, b) =>
-      `${a.governorate} ${a.centerName} ${a.email}`.localeCompare(
-        `${b.governorate} ${b.centerName} ${b.email}`,
-        "ar",
-      ),
-    );
-
+    const list = Array.from(map.values()).filter((row) => owner || sameGovernorate(row.governorate, currentGovernorate));
+    list.sort((a, b) => `${a.centerName} ${a.email}`.localeCompare(`${b.centerName} ${b.email}`, "ar"));
     setRows(list);
-    setRowsWarning(warnings.join(" "));
   };
 
   useEffect(() => {
@@ -402,262 +380,69 @@ export default function AddExamSuper12() {
 
   if (!user) return <Navigate to="/login" replace />;
 
-  const createOrResolveNewCenter = async (): Promise<ExamCenterRow> => {
-    const centerName = String(newCenterName || "").trim();
-    const governorate = String(owner ? newCenterGovernorate : currentGovernorate || newCenterGovernorate).trim();
-    const centerId = safeTenantIdFromName(newCenterId || centerName);
+  const resolveCenterForSave = async () => {
+    if (centerMode === "existing") {
+      if (!selectedCenter) throw new Error("اختر مركز امتحانات دبلوم أولاً.");
+      if (!selectedCenter.enabled) throw new Error("لا يمكن ربط سوبر امتحانات بمركز غير مفعل.");
+      const centerGovernorate = getGovernorateValue(selectedCenter);
+      if (!owner && !sameGovernorate(centerGovernorate, currentGovernorate)) {
+        throw new Error("لا يمكن ربط سوبر امتحانات بمركز خارج نطاق محافظتك.");
+      }
+      return {
+        id: selectedCenter.id,
+        name: selectedCenter.name,
+        governorate: centerGovernorate || currentGovernorate,
+      };
+    }
 
-    if (!centerName) {
-      throw new Error("يرجى إدخال اسم مركز امتحانات الدبلوم الجديد.");
-    }
-    if (!governorate) {
-      throw new Error("يرجى إدخال المحافظة / النطاق للمركز الجديد.");
-    }
+    const centerName = String(newCenterName || "").trim();
+    const governorate = String(effectiveNewCenterGovernorate || "").trim();
+    const requestedId = String(newCenterId || "").trim();
+    const centerId = requestedId ? safeIdPart(requestedId) : generateTenantId(centerName);
+
+    if (!centerName) throw new Error("يرجى إدخال اسم مركز امتحانات الدبلوم الجديد.");
+    if (!centerId) throw new Error("تعذر إنشاء معرف للمركز. اكتب معرفًا يدويًا.");
+    if (!governorate) throw new Error("يرجى تحديد محافظة المركز الجديد.");
     if (!owner && !sameGovernorate(governorate, currentGovernorate)) {
       throw new Error("لا يمكن إنشاء مركز خارج نطاق محافظتك.");
     }
 
-    const centerRef = doc(db, "tenants", centerId);
-    const centerSnap = await getDoc(centerRef);
-
-    if (centerSnap.exists()) {
-      const existing = { id: centerSnap.id, ...(centerSnap.data() as any) };
-      if (!isExamCenterTenant(existing)) {
-        throw new Error("يوجد tenant بنفس المعرف لكنه ليس مركز امتحانات دبلوم. اختر معرفًا آخر.");
-      }
-
-      const existingGovernorate = getGovernorateValue(existing);
-      if (!owner && !sameGovernorate(existingGovernorate, currentGovernorate)) {
-        throw new Error("يوجد مركز بنفس المعرف خارج نطاق محافظتك.");
-      }
-
-      const ok = window.confirm("يوجد مركز امتحانات بنفس المعرف. هل تريد استخدامه وربط السوبر به؟");
-      if (!ok) throw new Error("تم إلغاء استخدام المركز الموجود.");
-
-      return {
-        id: centerSnap.id,
-        name: String((existing as any)?.name || (existing as any)?.centerName || centerName),
-        governorate: existingGovernorate || governorate,
-        enabled: (existing as any)?.enabled !== false,
-      };
-    }
-
-    await setDoc(centerRef, {
-      id: centerId,
-      name: centerName,
+    const tenantPayload = buildExamCenterPayload({
+      centerId,
       centerName,
-      centerNameAr: centerName,
-      schoolName: centerName,
-      tenantName: centerName,
       governorate,
-      tenantGovernorate: governorate,
-      regionAr: governorate,
-      scopeGovernorate: governorate,
       enabled: true,
-      active: true,
-      tenantType: "exam_center",
-      type: "exam_center",
-      entityType: "exam_center",
-      kind: "exam_center",
-      category: "exam_center",
-      isExamCenter: true,
-      isDiplomaCenter: true,
       createdBy: String(user?.email || ""),
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    }, { merge: true });
-
-    const createdCenter = { id: centerId, name: centerName, governorate, enabled: true };
-    setCenters((prev) => {
-      const next = prev.filter((item) => item.id !== centerId).concat(createdCenter);
-      next.sort((a, b) => `${a.governorate} ${a.name}`.localeCompare(`${b.governorate} ${b.name}`, "ar"));
-      return next;
     });
-    setSelectedCenterId(centerId);
 
-    return createdCenter;
-  };
-
-  const resetForm = () => {
-    setEmail("");
-    setName("");
-    setSelectedCenterId("");
-    setCenterMode("existing");
-    setNewCenterName("");
-    setNewCenterId("");
-    setNewCenterGovernorate(currentGovernorate || "");
-    setEnabled(true);
-    setEditingRow(null);
-  };
-
-  const startEditExamSuper = (row: ExamSuperRow) => {
-    setEditingRow(row);
-    setEmail(row.email || "");
-    setName(row.name || "");
-    setEnabled(row.enabled !== false);
-    setCenterMode("existing");
-    setNewCenterName("");
-    setNewCenterId("");
-    setNewCenterGovernorate(row.governorate || currentGovernorate || "");
-
-    if (row.tenantId) {
-      const exists = centers.some((center) => center.id === row.tenantId);
-      if (!exists) {
-        setCenters((prev) =>
-          prev.concat({
-            id: row.tenantId,
-            name: row.centerName || row.tenantId,
-            governorate: row.governorate || currentGovernorate || "",
-            enabled: true,
-          }),
-        );
-      }
-      setSelectedCenterId(row.tenantId);
-    } else {
-      setSelectedCenterId("");
-    }
-
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
-  const deleteExamSuper = async (row: ExamSuperRow) => {
-    if (!canUsePage) {
-      alert("هذه العملية متاحة لمالك المنصة أو مشرف المحافظة فقط.");
-      return;
-    }
-    if (!owner && !sameGovernorate(row.governorate, currentGovernorate)) {
-      alert("لا يمكن حذف سوبر امتحانات خارج نطاق محافظتك.");
-      return;
-    }
-
-    const ok = window.confirm(
-      `هل تريد حذف سوبر الامتحانات (${row.email || row.name || "بدون بريد"}) من هذا المركز؟`,
-    );
-    if (!ok) return;
-
-    setBusy(true);
-    try {
-      const normalizedEmail = String(row.email || "").trim().toLowerCase();
-      const normalizedTenantId = String(row.tenantId || "").trim();
-
-      if (normalizedEmail && normalizedTenantId) {
-        await deleteDoc(
-          doc(db, EXAM_SUPER_LINKS_COLLECTION, safeLinkId(normalizedEmail, normalizedTenantId)),
-        ).catch((error) => console.warn("Cannot delete exam super link", error));
-      }
-
-      if (normalizedEmail) {
-        const allowRef = doc(db, "allowlist", normalizedEmail);
-        const allowSnap = await getDoc(allowRef).catch(() => null as any);
-        const allowData = allowSnap?.exists?.() ? (allowSnap.data() as any) : null;
-        const allowTenantId = String(allowData?.tenantId || "").trim();
-        const canDeleteAllowlist =
-          allowData &&
-          isExamSuperRecord(allowData) &&
-          (!normalizedTenantId || !allowTenantId || allowTenantId === normalizedTenantId);
-
-        if (canDeleteAllowlist) {
-          await deleteDoc(allowRef).catch((error) => console.warn("Cannot delete allowlist row", error));
-        }
-      }
-
-      if (editingRow?.email === row.email && editingRow?.tenantId === row.tenantId) {
-        resetForm();
-      }
-
-      await loadExamSupers();
-      alert("تم حذف سوبر الامتحانات بنجاح.");
-    } catch (error) {
-      console.error(error);
-      alert("تعذر حذف سوبر الامتحانات. تأكد من الصلاحيات ثم جرّب مرة أخرى.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const deleteAllExamSupers = async () => {
-    if (!canUsePage) {
-      alert("هذه العملية متاحة لمالك المنصة أو مشرف المحافظة فقط.");
-      return;
-    }
-
-    const visibleRows = rows.filter((row) =>
-      owner || sameGovernorate(row.governorate, currentGovernorate),
+    // لا نقرأ tenant قبل الحفظ حتى لا يفشل مشرف المحافظة بسبب صلاحية get على سجل غير موجود.
+    await setDoc(
+      doc(db, "tenants", centerId),
+      {
+        ...tenantPayload,
+        createdAt: serverTimestamp(),
+      },
+      { merge: true },
     );
 
-    if (!visibleRows.length) {
-      alert("لا توجد سجلات سوبر امتحانات دبلوم لحذفها.");
-      return;
-    }
-
-    const scopeLabel = owner ? "جميع السجلات الظاهرة" : `سجلات محافظة ${currentGovernorate}`;
-    const firstConfirm = window.confirm(
-      `سيتم حذف ${visibleRows.length} سجل من سوبر امتحانات الدبلوم ضمن ${scopeLabel}. هل تريد المتابعة؟`,
+    await setDoc(
+      doc(db, "tenants", centerId, "meta", "config"),
+      {
+        ...tenantPayload,
+        schoolName: centerName,
+        title: centerName,
+        programType: "diploma",
+        createdAt: serverTimestamp(),
+      },
+      { merge: true },
     );
-    if (!firstConfirm) return;
 
-    const secondConfirm = window.confirm(
-      "تأكيد نهائي: هذه العملية ستحذف روابط سوبر الامتحانات من جدول الربط ومن allowlist عندما تكون الصلاحية خاصة بسوبر امتحانات فقط. هل أنت متأكد؟",
-    );
-    if (!secondConfirm) return;
-
-    setBusy(true);
-    try {
-      for (const row of visibleRows) {
-        const normalizedEmail = String(row.email || "").trim().toLowerCase();
-        const normalizedTenantId = String(row.tenantId || "").trim();
-
-        if (!owner && !sameGovernorate(row.governorate, currentGovernorate)) {
-          continue;
-        }
-
-        const possibleLinkIds = new Set<string>();
-        if (row.id) possibleLinkIds.add(String(row.id));
-        if (normalizedEmail && normalizedTenantId) {
-          possibleLinkIds.add(safeLinkId(normalizedEmail, normalizedTenantId));
-        }
-
-        for (const linkId of Array.from(possibleLinkIds)) {
-          if (!linkId) continue;
-          await deleteDoc(doc(db, EXAM_SUPER_LINKS_COLLECTION, linkId)).catch((error) =>
-            console.warn("Cannot delete exam super link during bulk delete", error),
-          );
-        }
-
-        if (normalizedEmail) {
-          const allowRef = doc(db, "allowlist", normalizedEmail);
-          const allowSnap = await getDoc(allowRef).catch(() => null as any);
-          const allowData = allowSnap?.exists?.() ? (allowSnap.data() as any) : null;
-          const allowTenantId = String(allowData?.tenantId || "").trim();
-          const allowGovernorate = getGovernorateValue(allowData);
-          const canDeleteAllowlist =
-            allowData &&
-            isExamSuperRecord(allowData) &&
-            (owner || sameGovernorate(allowGovernorate, currentGovernorate)) &&
-            (!normalizedTenantId || !allowTenantId || allowTenantId === normalizedTenantId);
-
-          if (canDeleteAllowlist) {
-            await deleteDoc(allowRef).catch((error) =>
-              console.warn("Cannot delete allowlist row during bulk delete", error),
-            );
-          }
-        }
-      }
-
-      resetForm();
-      await loadExamSupers();
-      alert("تم حذف جميع سجلات سوبر امتحانات الدبلوم الظاهرة بنجاح.");
-    } catch (error) {
-      console.error(error);
-      alert("تعذر حذف جميع سجلات سوبر امتحانات الدبلوم. تأكد من الصلاحيات ثم جرّب مرة أخرى.");
-    } finally {
-      setBusy(false);
-    }
+    return { id: centerId, name: centerName, governorate };
   };
 
   const saveExamSuper = async () => {
     if (!canUsePage) {
-      alert("هذه الصفحة متاحة لمالك المنصة أو مشرف المحافظة فقط.");
+      setMessage({ type: "error", text: "هذه الصفحة متاحة لمالك المنصة أو مشرف المحافظة فقط." });
       return;
     }
 
@@ -665,57 +450,71 @@ export default function AddExamSuper12() {
     const normalizedName = String(name || "").trim();
 
     if (!normalizedEmail || !normalizedEmail.includes("@")) {
-      alert("يرجى إدخال بريد إلكتروني صحيح.");
+      setMessage({ type: "warn", text: "يرجى إدخال بريد إلكتروني صحيح." });
       return;
     }
     if (!normalizedName) {
-      alert("يرجى إدخال اسم المستخدم.");
+      setMessage({ type: "warn", text: "يرجى إدخال اسم سوبر الامتحانات." });
       return;
     }
-    let centerForSave: ExamCenterRow | null = null;
+
+    if (isGovernorateSupervisor && currentAuthEmails.includes(normalizedEmail)) {
+      setMessage({
+        type: "error",
+        text:
+          "لا يمكن استخدام بريد الحساب الحالي نفسه كسوبر امتحانات دبلوم، لأن هذا البريد مستخدم للدخول كمشرف محافظة. استخدم بريدًا مستقلًا لسوبر الامتحانات حتى لا يتم كسر الصلاحيات.",
+      });
+      return;
+    }
 
     setBusy(true);
+    setMessage(null);
     try {
-      centerForSave =
-        centerMode === "new" ? await createOrResolveNewCenter() : selectedCenter;
+      const center = await resolveCenterForSave();
 
-      if (!centerForSave) {
-        alert("اختر مركز امتحانات دبلوم من القائمة أو أضف مركزًا جديدًا أولاً.");
-        return;
-      }
-      if (!centerForSave.enabled) {
-        alert("لا يمكن ربط سوبر امتحانات بمركز غير مفعل.");
-        return;
-      }
+      // فحص آمن للسجل القديم إذا كانت الصلاحيات تسمح بالقراءة.
+      // إذا كان البريد موجودًا بصلاحية نظامية أعلى، لا نحاول تحويله إلى exam_super.
+      // مشرف المحافظة قد لا يستطيع قراءة بعض السجلات القديمة؛ لذلك لا نعطل الحفظ لمجرد فشل القراءة.
+      try {
+        const existingSnap = await getDoc(doc(db, "allowlist", normalizedEmail));
+        if (existingSnap.exists()) {
+          const existingData = existingSnap.data() as any;
+          const existingRole = normalize(existingData?.role);
+          const existingGov = getGovernorateValue(existingData);
 
-      const centerGovernorate = getGovernorateValue(centerForSave);
-      if (!owner && !sameGovernorate(centerGovernorate, currentGovernorate)) {
-        alert("لا يمكن ربط سوبر امتحانات بمركز خارج نطاق محافظتك.");
-        return;
-      }
-      const existingSnap = await getDoc(doc(db, "allowlist", normalizedEmail));
-      if (existingSnap.exists()) {
-        const existing = existingSnap.data() as any;
-        const existingTenantId = String(existing?.tenantId || "").trim();
-        const existingRole = String(existing?.role || "").trim();
-        if (existingTenantId && existingTenantId !== centerForSave.id) {
-          const ok = window.confirm(
-            `هذا البريد مرتبط مسبقًا بـ ${existing?.tenantName || existingTenantId} بصلاحية ${existingRole || "غير محددة"}. هل تريد تحديث الربط إلى المركز المختار؟`,
-          );
-          if (!ok) return;
+          if (existingRole && !EXAM_SUPER_ROLE_VALUES.has(existingRole)) {
+            const isProtected = PROTECTED_SYSTEM_ROLE_VALUES.has(existingRole);
+            const govMismatch = existingGov && !sameGovernorate(existingGov, center.governorate || currentGovernorate);
+
+            if (!owner || isProtected || govMismatch) {
+              throw new Error(
+                `هذا البريد موجود مسبقًا في الصلاحيات بدور: ${readableRole(existingData?.role)}. لا يمكن تحويله مباشرة إلى سوبر امتحانات من هذه الصفحة. استخدم بريدًا جديدًا أو احذف/عدّل السجل القديم من صفحة مالك المنصة.`
+              );
+            }
+          }
         }
+      } catch (readOrConflictError: any) {
+        const msg = String(readOrConflictError?.message || "");
+        const permissionReadError =
+          String(readOrConflictError?.code || "").includes("permission") ||
+          msg.toLowerCase().includes("permission") ||
+          msg.toLowerCase().includes("insufficient");
+
+        if (!permissionReadError) throw readOrConflictError;
       }
 
       const payload = buildExamSuperPayload({
         email: normalizedEmail,
         name: normalizedName,
-        tenantId: centerForSave.id,
-        centerName: centerForSave.name,
-        governorate: centerGovernorate || currentGovernorate,
+        tenantId: center.id,
+        centerName: center.name,
+        governorate: center.governorate || currentGovernorate,
         enabled,
         createdBy: String(user?.email || ""),
       });
 
+      // مهم: لا نستخدم getDoc على allowlist هنا.
+      // مشرف المحافظة غالبًا لا يملك صلاحية قراءة بريد غيره قبل إنشاء السجل، وهذا كان سبب Missing permissions.
       await setDoc(
         doc(db, "allowlist", normalizedEmail),
         {
@@ -726,7 +525,7 @@ export default function AddExamSuper12() {
       );
 
       await setDoc(
-        doc(db, EXAM_SUPER_LINKS_COLLECTION, safeLinkId(normalizedEmail, centerForSave.id)),
+        doc(db, EXAM_SUPER_LINKS_COLLECTION, safeLinkId(normalizedEmail, center.id)),
         {
           ...payload,
           createdAt: serverTimestamp(),
@@ -734,203 +533,155 @@ export default function AddExamSuper12() {
         { merge: true },
       );
 
-      if (editingRow) {
-        const oldEmail = String(editingRow.email || "").trim().toLowerCase();
-        const oldTenantId = String(editingRow.tenantId || "").trim();
-        const newLinkId = safeLinkId(normalizedEmail, centerForSave.id);
-        const oldLinkId = safeLinkId(oldEmail, oldTenantId);
-
-        if (oldEmail && oldTenantId && oldLinkId !== newLinkId) {
-          await deleteDoc(doc(db, EXAM_SUPER_LINKS_COLLECTION, oldLinkId)).catch((error) =>
-            console.warn("Cannot delete old exam super link", error),
-          );
-        }
-
-        if (oldEmail && oldEmail !== normalizedEmail) {
-          const oldAllowRef = doc(db, "allowlist", oldEmail);
-          const oldAllowSnap = await getDoc(oldAllowRef).catch(() => null as any);
-          const oldAllowData = oldAllowSnap?.exists?.() ? (oldAllowSnap.data() as any) : null;
-          if (oldAllowData && isExamSuperRecord(oldAllowData)) {
-            await deleteDoc(oldAllowRef).catch((error) =>
-              console.warn("Cannot delete old allowlist row", error),
-            );
-          }
-        }
-      }
-
       resetForm();
+      await loadCenters();
       await loadExamSupers();
-      alert(editingRow ? "تم تعديل بيانات سوبر الامتحانات بنجاح." : "تم حفظ سوبر الامتحانات وربطه بمركز الدبلوم بنجاح.");
-    } catch (error) {
+      setMessage({ type: "ok", text: "تم حفظ سوبر الامتحانات وربطه بمركز الدبلوم بنجاح." });
+    } catch (error: any) {
       console.error(error);
-      const message = error instanceof Error ? error.message : "";
-      alert(message || "تعذر حفظ سوبر الامتحانات. تأكد من الصلاحيات ثم جرّب مرة أخرى.");
+      const rawMessage = String(error?.message || error || "");
+      const permissionDenied =
+        String(error?.code || "").includes("permission") ||
+        rawMessage.toLowerCase().includes("insufficient permissions") ||
+        rawMessage.toLowerCase().includes("permission");
+
+      setMessage({
+        type: "error",
+        text: permissionDenied
+          ? "تعذر الحفظ بسبب الصلاحيات. غالبًا البريد موجود مسبقًا في allowlist بصلاحية مختلفة أو لا يتبع نفس المحافظة. استخدم بريدًا جديدًا لسوبر الامتحانات، أو احذف/عدّل السجل القديم من صفحة مالك المنصة، وتأكد أن مركز الدبلوم داخل نفس المحافظة."
+          : rawMessage || "تعذر حفظ سوبر الامتحانات. تأكد من الصلاحيات ثم جرّب مرة أخرى.",
+      });
     } finally {
       setBusy(false);
     }
   };
 
+  const editRow = (row: ExamSuperRow) => {
+    setEditingRowId(row.id);
+    setEmail(row.email);
+    setName(row.name);
+    setCenterMode("existing");
+    setSelectedCenterId(row.tenantId);
+    setEnabled(row.enabled);
+    setMessage({ type: "warn", text: "تم تحميل السجل للتعديل. عدّل البيانات ثم اضغط حفظ التعديل." });
+  };
+
+  const deleteRow = async (row: ExamSuperRow) => {
+    const ok = window.confirm(`هل تريد حذف سوبر الامتحانات ${row.email}؟`);
+    if (!ok) return;
+    setBusy(true);
+    try {
+      await deleteDoc(doc(db, EXAM_SUPER_LINKS_COLLECTION, safeLinkId(row.email, row.tenantId)));
+      try {
+        await deleteDoc(doc(db, "allowlist", row.email));
+      } catch (innerError) {
+        console.warn("allowlist delete skipped", innerError);
+      }
+      await loadExamSupers();
+      setMessage({ type: "ok", text: "تم حذف السجل من جدول سوبر الامتحانات." });
+    } catch (error: any) {
+      console.error(error);
+      setMessage({ type: "error", text: error?.message || "تعذر حذف السجل." });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggleRowEnabled = async (row: ExamSuperRow, nextEnabled: boolean) => {
+    const actionText = nextEnabled ? "تفعيل" : "إلغاء تفعيل";
+    const ok = window.confirm(
+      nextEnabled
+        ? `هل تريد تفعيل سوبر الامتحانات ${row.email}؟ سيتمكن من الدخول إلى مركز الدبلوم.`
+        : `هل تريد إلغاء تفعيل سوبر الامتحانات ${row.email}؟ لن يتمكن من الدخول إلى مركز الدبلوم.`
+    );
+    if (!ok) return;
+
+    setBusy(true);
+    setMessage(null);
+    try {
+      const patch = {
+        enabled: nextEnabled,
+        active: nextEnabled,
+        updatedAt: serverTimestamp(),
+        updatedBy: String(user?.email || ""),
+      };
+
+      await setDoc(doc(db, "allowlist", row.email), patch, { merge: true });
+      await setDoc(doc(db, EXAM_SUPER_LINKS_COLLECTION, safeLinkId(row.email, row.tenantId)), patch, { merge: true });
+
+      await loadExamSupers();
+      setMessage({
+        type: "ok",
+        text: nextEnabled
+          ? "تم تفعيل سوبر الامتحانات، ويمكنه الآن الدخول إلى مركز الدبلوم."
+          : "تم إلغاء تفعيل سوبر الامتحانات، ولن يستطيع الدخول إلى مركز الدبلوم.",
+      });
+    } catch (error: any) {
+      console.error(error);
+      setMessage({
+        type: "error",
+        text: error?.message || `تعذر تنفيذ ${actionText}. تأكد من الصلاحيات ثم جرّب مرة أخرى.`,
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deleteAllRows = async () => {
+    if (!rows.length) return;
+    const first = window.confirm(`سيتم حذف ${rows.length} سجل من سوبر امتحانات الدبلوم الظاهرة في الجدول. هل تريد المتابعة؟`);
+    if (!first) return;
+    const second = window.confirm("تأكيد نهائي: لا يمكن التراجع عن الحذف الجماعي بعد التنفيذ.");
+    if (!second) return;
+
+    setBusy(true);
+    try {
+      for (const row of rows) {
+        await deleteDoc(doc(db, EXAM_SUPER_LINKS_COLLECTION, safeLinkId(row.email, row.tenantId))).catch(() => undefined);
+        await deleteDoc(doc(db, "allowlist", row.email)).catch(() => undefined);
+      }
+      await loadExamSupers();
+      setMessage({ type: "ok", text: "تم حذف سجلات سوبر الامتحانات الظاهرة في الجدول." });
+    } catch (error: any) {
+      console.error(error);
+      setMessage({ type: "error", text: error?.message || "تعذر حذف جميع السجلات." });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const backPath = location.pathname.includes("platform-super-system") ? "/platform-super-system" : "/super-system";
+
   return (
-    <div
-      dir="rtl"
-      className="add-exam-super12-page"
-      style={{
-        minHeight: "100vh",
-        background: "linear-gradient(180deg, #f8f2e4 0%, #efe3c8 100%)",
-        color: "#111827",
-        padding: 24,
-        fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-      }}
-    >
-      <style>{BLACK_FORM_CSS}</style>
-      <div
-        className="exam-super12-shell"
-        style={{
-          width: "100%",
-          maxWidth: 1480,
-          margin: "0 auto",
-          display: "grid",
-          gap: 18,
-        }}
-      >
-        <div
-          style={{
-            border: "2px solid #c9aa55",
-            borderRadius: 26,
-            background:
-              "linear-gradient(180deg, rgba(255,253,247,0.98), rgba(247,239,218,0.98))",
-            boxShadow: "0 18px 42px rgba(80, 60, 20, 0.13)",
-            padding: 24,
-            display: "grid",
-            gap: 18,
-          }}
-        >
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "minmax(300px, 0.9fr) auto minmax(300px, 0.9fr)",
-              gap: 22,
-              alignItems: "center",
-              border: "1.5px solid #d7bf74",
-              borderRadius: 22,
-              background: "#fffaf0",
-              padding: "18px 24px",
-            }}
-          >
-            <div style={{ display: "grid", gap: 6, fontWeight: 950, textAlign: "right" }}>
-              <div style={{ fontSize: 22 }}>سلطنة عمان</div>
-              <div style={{ fontSize: 20 }}>وزارة  التعليم</div>
-              <div style={{ fontSize: 16, color: "#374151", lineHeight: 1.7 }}>
-                {currentGovernorate
-                  ? `${currentGovernorate}`
-                  : "نطاق إدارة الامتحانات"}
-              </div>
+    <div dir="rtl" className="add-exam-super12-page" style={pageStyle}>
+      <style>{blackFieldCss}</style>
+      <div style={shellStyle}>
+        <div style={officialHeaderStyle}>
+          <img src={MINISTRY_LOGO_URL} alt="وزارة التربية والتعليم" style={{ width: 84, height: 84, objectFit: "contain" }} />
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 900, color: "#6b4e08" }}>سلطنة عمان — وزارة التربية والتعليم</div>
+            <div style={{ fontSize: 30, fontWeight: 950, marginTop: 4 }}>إضافة سوبر امتحانات لمركز دبلوم</div>
+            <div style={{ marginTop: 6, color: "#374151", fontWeight: 800 }}>
+              ربط سوبر امتحانات بمركز امتحانات دبلوم داخل نطاق المحافظة.
             </div>
-
-            <img
-              src={MINISTRY_LOGO_URL}
-              alt="وزارة  التعليم"
-              style={{
-                width: 92,
-                height: 92,
-                objectFit: "contain",
-                border: "1.5px solid #c9aa55",
-                borderRadius: 18,
-                background: "#fffdf7",
-                padding: 8,
-              }}
-            />
-
-            <div style={{ display: "grid", gap: 8, textAlign: "left", direction: "ltr" }}>
-              <div
-                style={{
-                  border: "1px solid #d7bf74",
-                  borderRadius: 14,
-                  padding: "10px 14px",
-                  background: "#fffdf7",
-                  fontWeight: 900,
-                  textAlign: "center",
-                }}
-              >
-                نظام إدارة الامتحانات المطور
-              </div>
-              <div style={{ fontWeight: 850, color: "#374151", textAlign: "center" }}>
-                إضافة وربط سوبر امتحانات الدبلوم العام و ما في مستواه
-              </div>
+            <div style={{ marginTop: 8, color: "#111827", fontWeight: 850 }}>
+              النطاق الحالي: {owner ? "مالك المنصة — كل المحافظات" : currentGovernorate || "غير محدد"}
             </div>
           </div>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr auto",
-              gap: 16,
-              alignItems: "center",
-            }}
-          >
-            <div>
-              <div style={{ fontSize: 30, fontWeight: 1000, color: "#111827" }}>
-                إضافة سوبر امتحانات لمركز دبلوم العام و ما في مستواه
-              </div>
-              <div style={{ marginTop: 8, color: "#374151", fontWeight: 850, lineHeight: 1.8 }}>
-                ربط سوبر امتحانات بمركز امتحانات دبلوم داخل نطاق المحافظة، مع إمكانية اختيار مركز موجود أو إنشاء مركز جديد.
-              </div>
-              <div style={{ marginTop: 8, color: "#6b4f08", fontWeight: 850 }}>
-                المستخدم الحالي: {String(user?.email || "—")}
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => navigate(owner ? "/platform-super-system" : "/super-system")}
-              style={{
-                border: "1.5px solid #b8870b",
-                borderRadius: 14,
-                background: "#fff7df",
-                padding: "13px 22px",
-                fontWeight: 950,
-                cursor: "pointer",
-                minWidth: 190,
-              }}
-            >
-              العودة للبوابة الإشرافية
-            </button>
-          </div>
+          <button type="button" onClick={() => navigate(backPath)} style={secondaryButtonStyle}>
+            العودة للبوابة الإشرافية
+          </button>
         </div>
 
-        {!canUsePage ? (
-          <div
-            style={{
-              border: "1px solid #ef4444",
-              borderRadius: 18,
-              background: "#fff1f2",
-              padding: 18,
-              fontWeight: 900,
-              color: "#7f1d1d",
-            }}
-          >
-            هذه الصفحة متاحة فقط لمالك المنصة أو مشرف المحافظة.
-          </div>
-        ) : null}
+        {!canUsePage ? <Notice type="error" text="هذه الصفحة متاحة فقط لمالك المنصة أو مشرف المحافظة." /> : null}
+        {message ? <Notice type={message.type} text={message.text} onClose={() => setMessage(null)} /> : null}
 
-        <div className="add-exam-super12-content-grid">
-          <section
-            className="exam-super12-form-card"
-            style={{
-              width: "100%",
-              maxWidth: "100%",
-              border: "1.5px solid #c9aa55",
-              borderRadius: 20,
-              background: "#fffdf7",
-              padding: 24,
-              boxShadow: "0 10px 24px rgba(80,60,20,0.08)",
-            }}
-          >
-            <h2 style={{ marginTop: 0, fontSize: 22 }}>بيانات سوبر الامتحانات</h2>
+        <div style={gridStyle}>
+          <section style={cardStyle}>
+            <h2 style={sectionTitleStyle}>{editingRowId ? "تعديل سوبر الامتحانات" : "بيانات سوبر الامتحانات"}</h2>
 
             <div style={{ display: "grid", gap: 14 }}>
-              <label style={{ display: "grid", gap: 7, fontWeight: 900 }}>
-                البريد الإلكتروني
+              <LabeledInput label="البريد الإلكتروني">
                 <input
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -938,10 +689,10 @@ export default function AddExamSuper12() {
                   placeholder="exam-super@example.com"
                   style={fieldStyle}
                 />
-              </label>
+                <span style={hintStyle}>استخدم بريدًا مستقلًا لسوبر الامتحانات، ولا تستخدم بريد مشرف المحافظة أو بريدًا محفوظًا مسبقًا بصلاحية مختلفة.</span>
+              </LabeledInput>
 
-              <label style={{ display: "grid", gap: 7, fontWeight: 900 }}>
-                الاسم
+              <LabeledInput label="الاسم">
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -949,216 +700,113 @@ export default function AddExamSuper12() {
                   placeholder="اسم سوبر الامتحانات"
                   style={fieldStyle}
                 />
-              </label>
+              </LabeledInput>
 
-              <label style={{ display: "grid", gap: 7, fontWeight: 900 }}>
-                المحافظة / النطاق
+              <LabeledInput label="المحافظة / النطاق">
                 <input
-                  value={owner ? "حسب مركز الدبلوم المختار" : currentGovernorate}
-                  readOnly
-                  style={{ ...fieldStyle, background: "#f7efd6" }}
+                  value={owner ? newCenterGovernorate || "حسب مركز الدبلوم المختار" : currentGovernorate}
+                  onChange={(e) => setNewCenterGovernorate(e.target.value)}
+                  readOnly={!owner}
+                  style={{ ...fieldStyle, background: owner ? "#ffffff" : "#f7efd6" }}
                 />
-              </label>
+              </LabeledInput>
 
-              <div style={{ display: "grid", gap: 10 }}>
-                <div style={{ fontWeight: 950 }}>مركز امتحانات الدبلوم</div>
-
+              <div style={{ display: "grid", gap: 8 }}>
+                <div style={labelTextStyle}>مركز امتحانات الدبلوم</div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                   <button
                     type="button"
-                    disabled={!canUsePage || busy}
                     onClick={() => setCenterMode("existing")}
-                    style={centerMode === "existing" ? activeToggleStyle : toggleStyle}
+                    style={centerMode === "existing" ? activeModeButtonStyle : modeButtonStyle}
                   >
                     اختيار من القائمة
                   </button>
                   <button
                     type="button"
-                    disabled={!canUsePage || busy}
                     onClick={() => setCenterMode("new")}
-                    style={centerMode === "new" ? activeToggleStyle : toggleStyle}
+                    style={centerMode === "new" ? activeModeButtonStyle : modeButtonStyle}
                   >
                     إضافة مركز جديد
                   </button>
                 </div>
-
-                {centerMode === "existing" ? (
-                  <label style={{ display: "grid", gap: 7, fontWeight: 900 }}>
-                    اختر مركزًا موجودًا
-                    <select
-                      value={selectedCenterId}
-                      onChange={(e) => setSelectedCenterId(e.target.value)}
-                      disabled={!canUsePage || busy || loading}
-                      style={fieldStyle}
-                    >
-                      <option value="">اختر مركز دبلوم</option>
-                      {centers.map((center) => (
-                        <option key={center.id} value={center.id}>
-                          {center.name} — {center.governorate || "بدون محافظة"} — {center.id}
-                        </option>
-                      ))}
-                    </select>
-                    {!centers.length ? (
-                      <span style={{ color: "#9f1239", fontSize: 13, fontWeight: 800 }}>
-                        لا توجد مراكز دبلوم داخل النطاق. يمكنك إضافة مركز جديد من هذا النموذج.
-                      </span>
-                    ) : null}
-                  </label>
-                ) : (
-                  <div
-                    style={{
-                      display: "grid",
-                      gap: 12,
-                      border: "1px solid #ead69b",
-                      borderRadius: 14,
-                      background: "#fff9e8",
-                      padding: 14,
-                    }}
-                  >
-                    <label style={{ display: "grid", gap: 7, fontWeight: 900 }}>
-                      اسم مركز امتحانات الدبلوم الجديد
-                      <input
-                        value={newCenterName}
-                        onChange={(e) => setNewCenterName(e.target.value)}
-                        disabled={!canUsePage || busy}
-                        placeholder="مثال: مركز امتحانات دبلوم التعليم العام بعزان"
-                        style={fieldStyle}
-                      />
-                    </label>
-
-                    <label style={{ display: "grid", gap: 7, fontWeight: 900 }}>
-                      معرف المركز / tenantId اختياري
-                      <input
-                        value={newCenterId}
-                        onChange={(e) => setNewCenterId(e.target.value)}
-                        disabled={!canUsePage || busy}
-                        placeholder="اتركه فارغًا ليتم إنشاؤه تلقائيًا"
-                        style={fieldStyle}
-                      />
-                    </label>
-
-                    <label style={{ display: "grid", gap: 7, fontWeight: 900 }}>
-                      المحافظة / النطاق للمركز الجديد
-                      <input
-                        value={owner ? newCenterGovernorate : currentGovernorate}
-                        onChange={(e) => setNewCenterGovernorate(e.target.value)}
-                        disabled={!canUsePage || busy || !owner}
-                        placeholder="اسم المحافظة"
-                        style={{ ...fieldStyle, background: owner ? "#ffffff" : "#f7efd6" }}
-                      />
-                    </label>
-
-                    <span style={{ color: "#7c5b07", fontSize: 13, fontWeight: 850 }}>
-                      سيتم إنشاء المركز كـ مركز امتحانات دبلوم ثم ربط سوبر الامتحانات به مباشرة.
-                    </span>
-                  </div>
-                )}
               </div>
 
-              <label style={{ display: "flex", gap: 10, alignItems: "center", fontWeight: 900 }}>
-                <input
-                  type="checkbox"
-                  checked={enabled}
-                  onChange={(e) => setEnabled(e.target.checked)}
-                  disabled={!canUsePage || busy}
-                />
+              {centerMode === "existing" ? (
+                <LabeledInput label="اختر مركزًا موجودًا">
+                  <select
+                    value={selectedCenterId}
+                    onChange={(e) => setSelectedCenterId(e.target.value)}
+                    disabled={!canUsePage || busy || loading}
+                    style={selectFieldStyle}
+                  >
+                    <option value="" style={optionStyle}>اختر مركز دبلوم</option>
+                    {centers.map((center) => (
+                      <option key={center.id} value={center.id} style={optionStyle}>
+                        {center.name} — {center.governorate || "بدون محافظة"} — {center.id}
+                      </option>
+                    ))}
+                  </select>
+                  {!centers.length ? (
+                    <span style={hintStyle}>لا توجد مراكز دبلوم داخل النطاق. يمكنك إضافة مركز جديد من نفس النموذج.</span>
+                  ) : null}
+                </LabeledInput>
+              ) : (
+                <div style={subCardStyle}>
+                  <LabeledInput label="اسم مركز امتحانات الدبلوم الجديد">
+                    <input
+                      value={newCenterName}
+                      onChange={(e) => setNewCenterName(e.target.value)}
+                      disabled={!canUsePage || busy}
+                      placeholder="مثال: مركز امتحانات دبلوم التعليم العام بعزان"
+                      style={fieldStyle}
+                    />
+                  </LabeledInput>
+                  <LabeledInput label="معرف المركز / tenantId اختياري">
+                    <input
+                      value={newCenterId}
+                      onChange={(e) => setNewCenterId(e.target.value)}
+                      disabled={!canUsePage || busy}
+                      placeholder="مثال: azaanD2026"
+                      style={fieldStyle}
+                    />
+                  </LabeledInput>
+                  <div style={hintStyle}>سيتم إنشاء المركز كمركز امتحانات دبلوم ثم ربط سوبر الامتحانات به مباشرة.</div>
+                </div>
+              )}
+
+              <label style={{ display: "flex", gap: 10, alignItems: "center", fontWeight: 900, color: "#111827" }}>
+                <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} disabled={!canUsePage || busy} />
                 مفعل
               </label>
 
-              {editingRow ? (
-                <div
-                  style={{
-                    border: "1px solid #60a5fa",
-                    borderRadius: 12,
-                    background: "#eff6ff",
-                    padding: "10px 12px",
-                    fontWeight: 900,
-                    color: "#1e3a8a",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: 12,
-                    alignItems: "center",
-                  }}
-                >
-                  <span>وضع التعديل: {editingRow.email}</span>
-                  <button type="button" onClick={resetForm} disabled={busy} style={smallButtonStyle}>
+              <div style={{ display: "grid", gridTemplateColumns: editingRowId ? "1fr auto" : "1fr", gap: 10 }}>
+                <button type="button" disabled={!canUsePage || busy} onClick={() => void saveExamSuper()} style={primaryButtonStyle}>
+                  {busy ? "جارٍ الحفظ..." : editingRowId ? "حفظ التعديل" : "حفظ سوبر الامتحانات"}
+                </button>
+                {editingRowId ? (
+                  <button type="button" disabled={busy} onClick={resetForm} style={secondaryButtonStyle}>
                     إلغاء التعديل
                   </button>
-                </div>
-              ) : null}
-
-              <button
-                type="button"
-                disabled={!canUsePage || busy}
-                onClick={() => void saveExamSuper()}
-                style={{
-                  border: "1px solid #9b750e",
-                  borderRadius: 12,
-                  background: busy ? "#e5e7eb" : "linear-gradient(180deg, #f8d66d, #d4af37)",
-                  padding: "13px 18px",
-                  fontWeight: 950,
-                  cursor: busy ? "not-allowed" : "pointer",
-                }}
-              >
-                {busy ? "جارٍ الحفظ..." : editingRow ? "حفظ التعديل" : "حفظ سوبر الامتحانات"}
-              </button>
+                ) : null}
+              </div>
             </div>
           </section>
 
-          <section
-            className="exam-super12-table-card"
-            style={{
-              width: "100%",
-              maxWidth: "100%",
-              border: "1.5px solid #c9aa55",
-              borderRadius: 20,
-              background: "#fffdf7",
-              padding: 24,
-              boxShadow: "0 10px 24px rgba(80,60,20,0.08)",
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
-              <h2 style={{ marginTop: 0, fontSize: 22 }}>سوبر الامتحانات المسجلون</h2>
+          <section style={cardStyle}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", marginBottom: 8 }}>
+              <h2 style={sectionTitleStyle}>سوبر الامتحانات المسجلون</h2>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <button type="button" onClick={() => void loadExamSupers()} disabled={busy} style={smallButtonStyle}>
+                <button type="button" onClick={() => void loadExamSupers()} style={smallButtonStyle}>
                   تحديث
                 </button>
-                <button
-                  type="button"
-                  onClick={() => void deleteAllExamSupers()}
-                  disabled={!canUsePage || busy || !rows.length}
-                  style={{
-                    ...dangerButtonStyle,
-                    opacity: !canUsePage || busy || !rows.length ? 0.55 : 1,
-                    cursor: !canUsePage || busy || !rows.length ? "not-allowed" : "pointer",
-                  }}
-                  title="حذف جميع سجلات سوبر امتحانات الدبلوم الظاهرة في الجدول"
-                >
+                <button type="button" onClick={() => void deleteAllRows()} disabled={!rows.length || busy} style={dangerSmallButtonStyle}>
                   حذف جميع سوبر الامتحانات
                 </button>
               </div>
             </div>
 
-
-              {rowsWarning ? (
-                <div
-                  style={{
-                    marginBottom: 12,
-                    border: "1px solid #f59e0b",
-                    borderRadius: 12,
-                    background: "#fff7ed",
-                    color: "#7c2d12",
-                    padding: "10px 12px",
-                    fontWeight: 850,
-                    lineHeight: 1.7,
-                  }}
-                >
-                  {rowsWarning}
-                </div>
-              ) : null}
-
-            <div className="add-exam-super12-table-wrap">
-              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 900 }}>
+            <div style={{ overflowX: "auto", border: "1px solid #ead9a6", borderRadius: 14 }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 920 }}>
                 <thead>
                   <tr style={{ background: "#f3e5b6" }}>
                     <th style={thStyle}>البريد</th>
@@ -1172,28 +820,25 @@ export default function AddExamSuper12() {
                 <tbody>
                   {rows.length ? (
                     rows.map((row) => (
-                      <tr key={row.id}>
+                      <tr key={`${row.email}-${row.tenantId}`}>
                         <td style={tdStyle}>{row.email}</td>
                         <td style={tdStyle}>{row.name || "—"}</td>
                         <td style={tdStyle}>{row.centerName || row.tenantId}</td>
                         <td style={tdStyle}>{row.governorate || "—"}</td>
-                        <td style={tdStyle}>{row.enabled ? "مفعل" : "غير مفعل"}</td>
                         <td style={tdStyle}>
-                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                            <button
-                              type="button"
-                              onClick={() => startEditExamSuper(row)}
-                              disabled={!canUsePage || busy}
-                              style={smallButtonStyle}
-                            >
+                          <span style={row.enabled ? activeBadgeStyle : inactiveBadgeStyle}>
+                            {row.enabled ? "مفعل" : "غير مفعل"}
+                          </span>
+                        </td>
+                        <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                            <button type="button" onClick={() => editRow(row)} disabled={busy} style={smallButtonStyle}>
                               تعديل
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => void deleteExamSuper(row)}
-                              disabled={!canUsePage || busy}
-                              style={dangerButtonStyle}
-                            >
+                            <button type="button" onClick={() => void toggleRowEnabled(row, !row.enabled)} disabled={busy} style={row.enabled ? dangerSmallButtonStyle : successSmallButtonStyle}>
+                              {row.enabled ? "إلغاء التفعيل" : "تفعيل"}
+                            </button>
+                            <button type="button" onClick={() => void deleteRow(row)} disabled={busy} style={dangerSmallButtonStyle}>
                               حذف
                             </button>
                           </div>
@@ -1203,7 +848,7 @@ export default function AddExamSuper12() {
                   ) : (
                     <tr>
                       <td colSpan={6} style={{ ...tdStyle, textAlign: "center", padding: 18 }}>
-                        لا توجد سجلات حتى الآن، أو أن السجلات القديمة محفوظة بصلاحية مختلفة. اضغط تحديث بعد التأكد من الصلاحيات.
+                        لا توجد سجلات حتى الآن، أو أن السجلات القديمة محفوظة بصلاحية مختلفة. اضغط تحديث بعد الحفظ.
                       </td>
                     </tr>
                   )}
@@ -1217,68 +862,263 @@ export default function AddExamSuper12() {
   );
 }
 
+function LabeledInput(props: { label: string; children: React.ReactNode }) {
+  return (
+    <label style={{ display: "grid", gap: 7, fontWeight: 900, color: "#111827", minWidth: 0 }}>
+      <span style={labelTextStyle}>{props.label}</span>
+      {props.children}
+    </label>
+  );
+}
+
+function Notice(props: { type: "ok" | "warn" | "error"; text: string; onClose?: () => void }) {
+  const palette = {
+    ok: { bg: "#ecfdf5", border: "#10b981", color: "#064e3b" },
+    warn: { bg: "#fffbeb", border: "#f59e0b", color: "#78350f" },
+    error: { bg: "#fff1f2", border: "#ef4444", color: "#7f1d1d" },
+  }[props.type];
+
+  return (
+    <div
+      style={{
+        border: `1.5px solid ${palette.border}`,
+        background: palette.bg,
+        color: palette.color,
+        borderRadius: 16,
+        padding: "13px 16px",
+        fontWeight: 900,
+        display: "flex",
+        justifyContent: "space-between",
+        gap: 12,
+        alignItems: "center",
+      }}
+    >
+      <span>{props.text}</span>
+      {props.onClose ? (
+        <button type="button" onClick={props.onClose} style={{ ...smallButtonStyle, background: "#fff" }}>
+          ×
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+const blackFieldCss = `
+  .add-exam-super12-page input,
+  .add-exam-super12-page select,
+  .add-exam-super12-page textarea,
+  .add-exam-super12-page option {
+    color: #000000 !important;
+    -webkit-text-fill-color: #000000 !important;
+    caret-color: #000000 !important;
+    font-weight: 850 !important;
+  }
+
+  .add-exam-super12-page input::placeholder,
+  .add-exam-super12-page textarea::placeholder {
+    color: #111827 !important;
+    -webkit-text-fill-color: #111827 !important;
+    opacity: 0.75 !important;
+  }
+
+  .add-exam-super12-page input:disabled,
+  .add-exam-super12-page select:disabled,
+  .add-exam-super12-page textarea:disabled {
+    color: #000000 !important;
+    -webkit-text-fill-color: #000000 !important;
+    opacity: 1 !important;
+    background: #f7efd6 !important;
+  }
+`;
+
+const pageStyle: React.CSSProperties = {
+  minHeight: "100vh",
+  background: "linear-gradient(180deg, #f8f2e4 0%, #efe3c8 100%)",
+  color: "#111827",
+  padding: 24,
+  fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+};
+
+const shellStyle: React.CSSProperties = {
+  maxWidth: 1500,
+  margin: "0 auto",
+  display: "grid",
+  gap: 18,
+};
+
+const officialHeaderStyle: React.CSSProperties = {
+  border: "1.5px solid #c9aa55",
+  borderRadius: 24,
+  background: "rgba(255, 252, 242, 0.97)",
+  boxShadow: "0 16px 36px rgba(80, 60, 20, 0.12)",
+  padding: 24,
+  display: "grid",
+  gridTemplateColumns: "auto minmax(0, 1fr) auto",
+  gap: 20,
+  alignItems: "center",
+};
+
+const gridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "minmax(420px, 0.95fr) minmax(620px, 1.25fr)",
+  gap: 18,
+  alignItems: "start",
+};
+
+const cardStyle: React.CSSProperties = {
+  border: "1.5px solid #c9aa55",
+  borderRadius: 22,
+  background: "#fffdf7",
+  padding: 22,
+  boxShadow: "0 10px 24px rgba(80,60,20,0.08)",
+  minWidth: 0,
+  overflow: "hidden",
+};
+
+const subCardStyle: React.CSSProperties = {
+  border: "1px solid #ead9a6",
+  borderRadius: 16,
+  background: "#fffaf0",
+  padding: 14,
+  display: "grid",
+  gap: 12,
+};
+
+const sectionTitleStyle: React.CSSProperties = {
+  marginTop: 0,
+  marginBottom: 16,
+  fontSize: 24,
+  fontWeight: 950,
+  color: "#111827",
+};
+
+const labelTextStyle: React.CSSProperties = {
+  color: "#111827",
+  fontWeight: 900,
+};
+
 const fieldStyle: React.CSSProperties = {
   width: "100%",
-  maxWidth: "100%",
-  minWidth: 0,
+  boxSizing: "border-box",
   border: "1.5px solid #c9aa55",
   borderRadius: 12,
-  padding: "13px 15px",
+  padding: "12px 14px",
   background: "#ffffff",
-  color: "#111827",
+  color: "#000000",
+  WebkitTextFillColor: "#000000",
   fontWeight: 850,
   outline: "none",
 };
 
-const toggleStyle: React.CSSProperties = {
-  border: "1px solid #c9aa55",
-  borderRadius: 12,
-  background: "#ffffff",
+const selectFieldStyle: React.CSSProperties = {
+  ...fieldStyle,
+  color: "#000000",
+  WebkitTextFillColor: "#000000",
+  backgroundColor: "#ffffff",
+};
+
+const optionStyle: React.CSSProperties = {
+  color: "#000000",
+  backgroundColor: "#ffffff",
+  fontWeight: 850,
+};
+
+const hintStyle: React.CSSProperties = {
+  color: "#7c2d12",
+  fontSize: 13,
+  fontWeight: 850,
+};
+
+const primaryButtonStyle: React.CSSProperties = {
+  border: "1px solid #9b750e",
+  borderRadius: 13,
+  background: "linear-gradient(180deg, #f8d66d, #d4af37)",
   color: "#111827",
-  padding: "11px 12px",
+  padding: "14px 18px",
+  fontWeight: 950,
+  cursor: "pointer",
+  boxShadow: "0 10px 20px rgba(120, 80, 0, 0.16)",
+};
+
+const secondaryButtonStyle: React.CSSProperties = {
+  border: "1px solid #b8870b",
+  borderRadius: 12,
+  background: "#fff7df",
+  color: "#111827",
+  padding: "12px 18px",
   fontWeight: 900,
   cursor: "pointer",
 };
 
-const activeToggleStyle: React.CSSProperties = {
-  ...toggleStyle,
+const modeButtonStyle: React.CSSProperties = {
+  ...secondaryButtonStyle,
+  background: "#ffffff",
+  boxShadow: "none",
+};
+
+const activeModeButtonStyle: React.CSSProperties = {
+  ...secondaryButtonStyle,
+  background: "#f6e49f",
   border: "2px solid #9b750e",
-  background: "linear-gradient(180deg, #fff3c4, #f3d36c)",
+  boxShadow: "0 8px 16px rgba(120, 80, 0, 0.12)",
 };
 
 const smallButtonStyle: React.CSSProperties = {
-  border: "1px solid #b8870b",
+  border: "1px solid #c9aa55",
   borderRadius: 10,
   background: "#fff7df",
-  padding: "9px 13px",
+  color: "#111827",
+  padding: "8px 12px",
   fontWeight: 900,
   cursor: "pointer",
 };
 
-const dangerButtonStyle: React.CSSProperties = {
+const dangerSmallButtonStyle: React.CSSProperties = {
+  ...smallButtonStyle,
   border: "1px solid #dc2626",
-  borderRadius: 10,
   background: "#fff1f2",
   color: "#7f1d1d",
-  padding: "9px 13px",
-  fontWeight: 900,
-  cursor: "pointer",
 };
 
-const thStyle: React.CSSProperties = {
-  border: "1px solid #d6c58a",
-  padding: "10px 12px",
-  textAlign: "right",
-  color: "#111827",
+const successSmallButtonStyle: React.CSSProperties = {
+  ...smallButtonStyle,
+  border: "1px solid #16a34a",
+  background: "#ecfdf5",
+  color: "#065f46",
+};
+
+const activeBadgeStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: 999,
+  padding: "5px 12px",
+  background: "#dcfce7",
+  color: "#166534",
+  border: "1px solid #22c55e",
   fontWeight: 950,
 };
 
-const tdStyle: React.CSSProperties = {
-  border: "1px solid #e2d3a3",
-  padding: "10px 12px",
+const inactiveBadgeStyle: React.CSSProperties = {
+  ...activeBadgeStyle,
+  background: "#fff1f2",
+  color: "#991b1b",
+  border: "1px solid #ef4444",
+};
+
+const thStyle: React.CSSProperties = {
+  borderBottom: "1px solid #d6bd75",
+  padding: "12px 10px",
+  textAlign: "right",
+  fontWeight: 950,
   color: "#111827",
-  fontWeight: 800,
+  whiteSpace: "nowrap",
+};
+
+const tdStyle: React.CSSProperties = {
+  borderBottom: "1px solid #efe4bf",
+  padding: "11px 10px",
+  color: "#111827",
+  fontWeight: 750,
   verticalAlign: "top",
-  lineHeight: 1.7,
-  wordBreak: "break-word",
 };
