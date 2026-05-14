@@ -133,6 +133,15 @@ function getTeacherName(a: AnyAssignment): string {
   return a?.teacherName || a?.teacher?.name || a?.teacher || a?.name || a?.teacherLabel || "";
 }
 
+/** ✅ للطباعة فقط: إذا كان اسم المراقب/المعلم ينتهي برقم، لا يظهر الرقم في نافذة الطباعة. */
+function removeTrailingTeacherNumberForPrint(name: string): string {
+  const raw = String(name || "").trim();
+  if (!raw || raw === "—") return raw || "—";
+
+  // يدعم الأرقام الإنجليزية والعربية/الهندية في آخر الاسم: مثال: "أحمد محمد 2" أو "أحمد محمد٢"
+  return raw.replace(/[\s_\-–—]*(?:\(?[0-9٠-٩۰-۹]+\)?)\s*$/u, "").trim() || raw;
+}
+
 function getTaskType(a: AnyAssignment): TaskType | string {
   return (a?.taskType || a?.type || a?.assignmentType || a?.dutyType || "INVIGILATION") as any;
 }
@@ -296,6 +305,12 @@ html, body {
 async function printOnlyElement(el: HTMLElement, title = "report") {
   const clone = el.cloneNode(true) as HTMLElement;
   clone.querySelectorAll(".no-print").forEach((n) => n.remove());
+
+  // ✅ تنظيف أسماء المراقبين/المعلمين داخل نافذة الطباعة فقط بدون تغيير البيانات الأصلية في الصفحة.
+  clone.querySelectorAll("[data-print-teacher-name]").forEach((node) => {
+    const elNode = node as HTMLElement;
+    elNode.textContent = removeTrailingTeacherNumberForPrint(elNode.textContent || "");
+  });
 
   const html = `<!doctype html>
 <html lang="ar" dir="rtl">
@@ -969,7 +984,7 @@ export default function TaskDistributionPrint() {
         <div style={styles.teacherInfoBox}>
           <div style={styles.teacherInfoRow}>
             <span style={styles.teacherInfoLabel}>اسم المعلم:</span>
-            <span style={styles.teacherInfoValue}>{props.teacherName || "—"}</span>
+            <span data-print-teacher-name="true" style={styles.teacherInfoValue}>{props.teacherName || "—"}</span>
           </div>
 
           <div style={styles.teacherInfoRow}>
@@ -1251,7 +1266,7 @@ export default function TaskDistributionPrint() {
                   dailyInvigilators.map((r, idx) => (
                     <tr key={idx}>
                       <td style={styles.tdNum}>{idx + 1}</td>
-                      <td style={styles.td}>{getTeacherName(r) || "—"}</td>
+                      <td data-print-teacher-name="true" style={styles.td}>{getTeacherName(r) || "—"}</td>
                       <td style={styles.td}>{getRoomNumber(r) || "—"}</td>
                       <td style={styles.td}></td>
                     </tr>
@@ -1284,7 +1299,7 @@ export default function TaskDistributionPrint() {
                     dailyReserves.map((r, idx) => (
                       <tr key={idx}>
                         <td style={styles.tdNum}>{idx + 1}</td>
-                        <td style={{ ...styles.td, fontWeight: 900 }}>{getTeacherName(r) || "—"}</td>
+                        <td data-print-teacher-name="true" style={{ ...styles.td, fontWeight: 900 }}>{getTeacherName(r) || "—"}</td>
                         <td style={styles.td}></td>
                       </tr>
                     ))
@@ -1316,7 +1331,7 @@ export default function TaskDistributionPrint() {
                       dailyReviewFree.map((r, idx) => (
                         <tr key={idx}>
                           <td style={styles.tdNum}>{idx + 1}</td>
-                          <td style={{ ...styles.td, fontWeight: 900 }}>{getTeacherName(r) || "—"}</td>
+                          <td data-print-teacher-name="true" style={{ ...styles.td, fontWeight: 900 }}>{getTeacherName(r) || "—"}</td>
                           <td style={styles.td}></td>
                           <td style={styles.td}>فارغ للمراجعة</td>
                         </tr>
