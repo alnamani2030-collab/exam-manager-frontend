@@ -657,9 +657,9 @@ export default function AddExamSuper12() {
       <style>{blackFieldCss}</style>
       <div style={shellStyle}>
         <div style={officialHeaderStyle}>
-          <img src={MINISTRY_LOGO_URL} alt="وزارة التربية والتعليم" style={{ width: 84, height: 84, objectFit: "contain" }} />
+          <img src={MINISTRY_LOGO_URL} alt="وزارة  التعليم" style={{ width: 84, height: 84, objectFit: "contain" }} />
           <div>
-            <div style={{ fontSize: 15, fontWeight: 900, color: "#6b4e08" }}>سلطنة عمان — وزارة التربية والتعليم</div>
+            <div style={{ fontSize: 15, fontWeight: 900, color: "#6b4e08" }}>سلطنة عمان — وزارة  التعليم</div>
             <div style={{ fontSize: 30, fontWeight: 950, marginTop: 4 }}>إضافة سوبر امتحانات لمركز دبلوم</div>
             <div style={{ marginTop: 6, color: "#374151", fontWeight: 800 }}>
               ربط سوبر امتحانات بمركز امتحانات دبلوم داخل نطاق المحافظة.
