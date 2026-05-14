@@ -188,6 +188,11 @@ const TEXT = {
     confirmDelete: "تأكيد الحذف",
     cancel: "إلغاء",
     deleteSuccess: "تم حذف سجل عدم التوفر بنجاح.",
+    printAddedNames: "طباعة الأسماء المضافة",
+    exportExcel: "تصدير Excel",
+    printTitle: "كشف الأسماء المضافة في غياب الكادر التعليمي",
+    excelFileName: "سجل-غياب-الكادر-التعليمي",
+    serial: "م",
     duplicate: "يوجد سجل عدم توفر لهذا المعلم في نفس التاريخ",
     saveError: "تعذر حفظ عدم التوفر في بيانات الجهة الحالية.",
     deleteError: "تعذر حذف سجل عدم التوفر من بيانات الجهة الحالية.",
@@ -235,6 +240,11 @@ const TEXT = {
     confirmDelete: "Confirm delete",
     cancel: "Cancel",
     deleteSuccess: "Unavailability record deleted successfully.",
+    printAddedNames: "Print Added Names",
+    exportExcel: "Export Excel",
+    printTitle: "Added Names - Teaching Staff Unavailability",
+    excelFileName: "teaching-staff-unavailability",
+    serial: "No.",
     duplicate: "An unavailability record already exists for this teacher on the same date",
     saveError: "Failed to save unavailability to the current tenant data.",
     deleteError: "Failed to delete the unavailability record from the current tenant data.",
@@ -514,7 +524,7 @@ export default function Unavailability() {
         periodLabel,
         blocks: (first.blocks?.length ? first.blocks : ["ALL"]) as UnavailabilityBlock[],
         reason: first.reason,
-        subject: String((first as any).examSubject || (first as any).subject || "").trim(),
+        subject: getRuleSubjectText(first),
         sourceIds: sorted.map((x) => x.id),
         sortPeriod,
       });
@@ -770,6 +780,174 @@ export default function Unavailability() {
     } finally {
       setDeleteBusy(false);
     }
+  }
+
+
+
+  function unavailabilityEscapeHtml(value: unknown) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function getRuleSubjectText(rule: any) {
+    return String(
+      rule?.subject ||
+        rule?.examSubject ||
+        rule?.subjectName ||
+        rule?.subjectAr ||
+        rule?.material ||
+        rule?.materialName ||
+        rule?.examSubjectName ||
+        rule?.paperName ||
+        rule?.courseName ||
+        ""
+    ).trim();
+  }
+
+  function buildAddedNamesRows() {
+    return displayRules.map((rule, index) => ({
+      index: index + 1,
+      teacherName: rule.teacherName || t.none,
+      dateISO: rule.dateISO || t.none,
+      periodLabel: rule.periodLabel || t.none,
+      subject: getRuleSubjectText(rule) || t.none,
+      blocks: (rule.blocks?.length ? rule.blocks : ["ALL"])
+        .map((block) => BLOCK_LABEL[block as UnavailabilityBlock] || String(block))
+        .join(t.comma),
+      reason: rule.reason || t.none,
+    }));
+  }
+
+  function buildAddedNamesTableHtml() {
+    const rows = buildAddedNamesRows();
+    const headers = [t.serial, t.teacher, t.date, t.period, t.blockedOn.replace(":", ""), t.reason.replace(" (اختياري)", "").replace(" (Optional)", "")];
+    const body = rows.length
+      ? rows
+          .map(
+            (row) => `
+              <tr>
+                <td>${row.index}</td>
+                <td>${unavailabilityEscapeHtml(row.teacherName)}</td>
+                <td>${unavailabilityEscapeHtml(row.dateISO)}</td>
+                <td>${unavailabilityEscapeHtml(row.periodLabel)}</td>
+                <td>${unavailabilityEscapeHtml(row.blocks)}</td>
+                <td>${unavailabilityEscapeHtml(row.reason)}</td>
+              </tr>`,
+          )
+          .join("")
+      : `<tr><td colspan="6">${unavailabilityEscapeHtml(t.noRecords)}</td></tr>`;
+
+    return `
+      <table>
+        <thead>
+          <tr>${headers.map((header) => `<th>${unavailabilityEscapeHtml(header)}</th>`).join("")}</tr>
+        </thead>
+        <tbody>${body}</tbody>
+      </table>`;
+  }
+
+  function buildOfficialPrintHeaderHtml(title: string, printedAt: string) {
+    return `
+      <section class="officialHeader">
+        <div class="officialSide officialAuthority">
+          <div class="officialLine officialCountry">${unavailabilityEscapeHtml(lang === "ar" ? "سلطنة عمان" : "Sultanate of Oman")}</div>
+          <div class="officialLine officialMinistry">${unavailabilityEscapeHtml(lang === "ar" ? "وزارة التعليم" : "Ministry of Education")}</div>
+          <div class="officialLine">${unavailabilityEscapeHtml(officialGovernorate)}</div>
+          <div class="officialLine officialEntity">${unavailabilityEscapeHtml(officialCenterName)}</div>
+        </div>
+        <div class="officialLogoBox"><img src="${unavailabilityEscapeHtml(officialLogo || UNAVAIL12_DEFAULT_LOGO_URL)}" alt="logo" /></div>
+        <div class="officialSide officialReport">
+          <h1>${unavailabilityEscapeHtml(title)}</h1>
+          <div class="officialLine">${unavailabilityEscapeHtml(officialSemester)}</div>
+          <div class="officialLine">${unavailabilityEscapeHtml(lang === "ar" ? `العام الدراسي ${officialAcademicYear} م` : `Academic Year ${officialAcademicYear}`)}</div>
+          <div class="officialLine">${unavailabilityEscapeHtml(lang === "ar" ? `رمز مركز الامتحان: ${officialCenterCode}` : `Exam Center Code: ${officialCenterCode}`)}</div>
+          <div class="officialLine">${unavailabilityEscapeHtml(lang === "ar" ? `رئيس المركز: ${officialCenterHead}` : `Center Head: ${officialCenterHead}`)}</div>
+          <div class="officialLine">${unavailabilityEscapeHtml(printedAt)}</div>
+        </div>
+      </section>`;
+  }
+
+  function onPrintAddedNames() {
+    const printWindow = window.open("", "_blank", "width=1100,height=800");
+    if (!printWindow) return;
+
+    const title = t.printTitle;
+    const now = new Date().toLocaleString(lang === "ar" ? "ar-OM" : "en-GB");
+    const tableHtml = buildAddedNamesTableHtml();
+    const headerHtml = buildOfficialPrintHeaderHtml(title, now);
+
+    printWindow.document.open();
+    printWindow.document.write(`<!doctype html>
+      <html lang="${lang}" dir="${isRTL ? "rtl" : "ltr"}">
+        <head>
+          <meta charset="utf-8" />
+          <title>${unavailabilityEscapeHtml(title)}</title>
+          <style>
+            @page { size: A4 landscape; margin: 10mm; }
+            * { box-sizing: border-box; }
+            body { font-family: Tahoma, Arial, sans-serif; color: #111827; margin: 0; background: #fff; }
+            .officialHeader { border: 3px solid #d6b35a; border-radius: 18px; padding: 14px 18px; margin-bottom: 14px; display: grid; grid-template-columns: minmax(260px, 1fr) 92px minmax(260px, 1fr); gap: 16px; align-items: center; background: #fffaf0; box-shadow: 0 0 0 1px #111827 inset; }
+            .officialSide { display: grid; gap: 4px; line-height: 1.55; }
+            .officialAuthority { text-align: ${isRTL ? "right" : "left"}; }
+            .officialReport { text-align: ${isRTL ? "left" : "right"}; }
+            .officialReport h1 { margin: 0 0 6px; font-size: 24px; font-weight: 950; text-decoration: underline; text-underline-offset: 6px; }
+            .officialLine { font-size: 13px; font-weight: 900; color: #111827; }
+            .officialCountry, .officialMinistry, .officialEntity { font-size: 15px; font-weight: 950; }
+            .officialLogoBox { width: 86px; height: 86px; margin: 0 auto; border: 3px solid #d6b35a; border-radius: 18px; display: grid; place-items: center; background: #fff; }
+            .officialLogoBox img { width: 76px; height: 76px; object-fit: contain; }
+            table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+            th, td { border: 1px solid #d6b35a; padding: 9px 8px; font-size: 12px; font-weight: 800; vertical-align: top; word-break: break-word; }
+            th { background: #f7e7b2; color: #111827; font-weight: 950; }
+            tr:nth-child(even) td { background: #fffaf0; }
+          </style>
+        </head>
+        <body>
+          ${headerHtml}
+          ${tableHtml}
+          <script>window.onload = function(){ window.print(); };</script>
+        </body>
+      </html>`);
+    printWindow.document.close();
+  }
+
+  function onExportAddedNamesExcel() {
+    const title = t.printTitle;
+    const now = new Date().toLocaleString(lang === "ar" ? "ar-OM" : "en-GB");
+    const tableHtml = buildAddedNamesTableHtml();
+    const headerHtml = buildOfficialPrintHeaderHtml(title, now);
+    const html = `<!doctype html>
+      <html lang="${lang}" dir="${isRTL ? "rtl" : "ltr"}">
+        <head>
+          <meta charset="utf-8" />
+          <style>
+            body { font-family: Tahoma, Arial, sans-serif; color: #111827; }
+            .officialHeader { border: 2px solid #d6b35a; background: #fffaf0; padding: 12px; margin-bottom: 12px; }
+            .officialSide, .officialLine { font-weight: 900; line-height: 1.7; }
+            .officialReport h1 { font-size: 20px; font-weight: 950; margin: 0 0 8px; }
+            .officialLogoBox img { width: 64px; height: 64px; object-fit: contain; }
+            table { border-collapse: collapse; width: 100%; }
+            th, td { border: 1px solid #b68a13; padding: 8px; font-weight: 700; mso-number-format:"\@"; }
+            th { background: #f7e7b2; font-weight: 900; }
+          </style>
+        </head>
+        <body>
+          ${headerHtml}
+          ${tableHtml}
+        </body>
+      </html>`;
+    const blob = new Blob(["\ufeff", html], { type: "application/vnd.ms-excel;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${t.excelFileName}-${unavailabilityLocalISODate()}.xls`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   }
 
   return (
@@ -1179,6 +1357,37 @@ export default function Unavailability() {
       <h2 className="luxFade" style={{ margin: "4px 0 14px", color: "#000000", fontSize: 28, fontWeight: 900, textShadow: "0 4px 18px rgba(212,175,55,0.16)", letterSpacing: "-0.02em" }}>
         {t.currentRecords}
       </h2>
+
+
+      <div
+        className="luxFade"
+        style={{
+          display: "flex",
+          justifyContent: isRTL ? "flex-start" : "flex-end",
+          gap: 10,
+          flexWrap: "wrap",
+          margin: "0 0 16px",
+        }}
+      >
+        <button
+          type="button"
+          onClick={onPrintAddedNames}
+          disabled={!displayRules.length}
+          className="goldBtn"
+          style={{ opacity: displayRules.length ? 1 : 0.55, cursor: displayRules.length ? "pointer" : "not-allowed" }}
+        >
+          🖨️ {t.printAddedNames}
+        </button>
+        <button
+          type="button"
+          onClick={onExportAddedNamesExcel}
+          disabled={!displayRules.length}
+          className="goldBtn"
+          style={{ opacity: displayRules.length ? 1 : 0.55, cursor: displayRules.length ? "pointer" : "not-allowed" }}
+        >
+          📊 {t.exportExcel}
+        </button>
+      </div>
 
       {rules.length === 0 ? (
         <div className="luxFade" style={{ opacity: 0.9, border: "3px dashed #d4af37", borderRadius: 18, padding: 24, background: "#fffaf0" }}>
