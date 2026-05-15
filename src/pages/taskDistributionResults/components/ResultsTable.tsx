@@ -462,6 +462,24 @@ export function ResultsTable(props: ResultsTableProps) {
                               type="button"
                               onClick={(event) => {
                                 event.stopPropagation();
+                                props.onAddToEmpty?.(teacher, sc.key, "INVIGILATION");
+                              }}
+                              style={{
+                                border: "1px solid rgba(37,99,235,.65)",
+                                background: "rgba(37,99,235,.16)",
+                                color: "#1d4ed8",
+                                borderRadius: 999,
+                                padding: "3px 8px",
+                                cursor: "pointer",
+                                fontWeight: 900,
+                              }}
+                            >
+                              + مراقبة
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
                                 props.onAddToEmpty?.(teacher, sc.key, "RESERVE");
                               }}
                               style={{
