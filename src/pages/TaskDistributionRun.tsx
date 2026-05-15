@@ -35,7 +35,7 @@
 // - المعلم الذي يحتوي اسمه على 13 لا يوزع في آخر يوم اختبار (مراقبة/احتياط)
 // - المعلم الذي يحتوي اسمه على 14 لا يوزع في آخر يومين اختبار (مراقبة/احتياط)
 // - المعلم الذي يتم توزيعه مراقبة ثلاث ساعات (180 دقيقة) لا يتم توزيعه مرة أخرى مراقبة ثلاث ساعات
-// - المعلم الذي يحتوي اسمه على رقم 0 لا يتم توزيعه مراقبة في مادة اللغة العربية
+// - المعلم الذي يحتوي اسمه على رقم 3 لا يتم توزيعه مراقبة في مادة اللغة العربية 10 واللغة العربية 11
 //
 // ✅ NEW (حسب طلبك النهائي):
 // ✅ فاضي للتصحيح (CORRECTION_FREE) شرطه:
@@ -451,8 +451,8 @@ function reasonLabel(code?: string) {
       return "مفرّغ للتصحيح";
     case "SPECIALTY_BLOCK":
       return "ممنوع لمعلم المادة";
-    case "ARABIC_ZERO_BLOCK":
-      return "ممنوع لمعلم رقم 0 في مادة اللغة العربية";
+    case "ARABIC_THREE_BLOCK":
+      return "ممنوع لمعلم رقم 3 في مادة اللغة العربية 10/11";
     case "ARABIC_ONCE":
       return "اللغة العربية (مرة واحدة)";
     case "THREE_HOURS_ALREADY":
@@ -654,14 +654,23 @@ function subjectHas12(subject: string) {
   return hasNumInText(subject, 12);
 }
 
-function teacherHas0(name: string) {
+function teacherHas3(name: string) {
   const s = String(name || "");
-  return s.includes("0") || s.includes("٠");
+  return s.includes("3") || s.includes("٣");
 }
 
-function isArabicLanguageSubject(subject: string) {
-  const s = normSubj(subject);
-  return (
+function normalizeArabicIndicDigits(value: string) {
+  const arabicDigits = "٠١٢٣٤٥٦٧٨٩";
+  const persianDigits = "۰۱۲۳۴۵۶۷۸۹";
+  return String(value || "")
+    .replace(/[٠-٩]/g, (ch) => String(arabicDigits.indexOf(ch)))
+    .replace(/[۰-۹]/g, (ch) => String(persianDigits.indexOf(ch)));
+}
+
+function isArabicLanguage10Or11Subject(subject: string) {
+  const normalizedSubject = normalizeArabicIndicDigits(String(subject || ""));
+  const s = normSubj(normalizedSubject);
+  const isArabicSubject =
     s.includes("اللغة العربية") ||
     s.includes("اللغه العربيه") ||
     s.includes("لغة عربية") ||
@@ -670,14 +679,18 @@ function isArabicLanguageSubject(subject: string) {
     s.includes("عربي ") ||
     s.includes("العربية") ||
     s.includes("العربيه") ||
-    s.includes("arabic language")
-  );
+    s.includes("arabic language");
+
+  if (!isArabicSubject) return false;
+
+  const grade = extractGradeFromSubject(normalizedSubject);
+  return grade === 10 || grade === 11;
 }
 
 function isTeacherBlockedFromArabicInvigilation(params: { teacherName: any; subject: any; taskType?: any }) {
   const taskType = String(params?.taskType || "INVIGILATION").trim().toUpperCase();
   if (taskType !== "INVIGILATION") return false;
-  return teacherHas0(String(params?.teacherName || "")) && isArabicLanguageSubject(String(params?.subject || ""));
+  return teacherHas3(String(params?.teacherName || "")) && isArabicLanguage10Or11Subject(String(params?.subject || ""));
 }
 
 function isGrade12TeacherForGrade12Subject(params: { teacherName: any; subject: any; taskType?: any }) {
@@ -1045,7 +1058,7 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
 
     const tName = teacherNameMap.get(teacherId) || "";
     if (isTeacherBlockedFromArabicInvigilation({ teacherName: tName, subject, taskType })) {
-      return { ok: false, reason: "ARABIC_ZERO_BLOCK" as const };
+      return { ok: false, reason: "ARABIC_THREE_BLOCK" as const };
     }
 
     const tQuota = quotaTotals.get(teacherId) || 0;
@@ -4196,8 +4209,8 @@ const GOLD_SUB = "rgba(0,0,0,0.82)";
         return tr("مفرّغ للتصحيح","Freed for correction");
       case "SPECIALTY_BLOCK":
         return tr("ممنوع لمعلم المادة","Blocked for subject teacher");
-      case "ARABIC_ZERO_BLOCK":
-        return tr("ممنوع لمعلم رقم 0 في مادة اللغة العربية","Teacher with 0 is blocked from Arabic Language");
+      case "ARABIC_THREE_BLOCK":
+        return tr("ممنوع لمعلم رقم 3 في مادة اللغة العربية 10/11","Teacher with 3 is blocked from Arabic Language 10/11");
       case "ARABIC_ONCE":
         return tr("اللغة العربية (مرة واحدة)","Arabic once only");
       case "THREE_HOURS_ALREADY":

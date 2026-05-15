@@ -387,10 +387,26 @@ html, body {
 .print-root * { box-shadow: none !important; }
 `;
 
+/** ✅ حذف الأرقام من أسماء المعلمين داخل نافذة الطباعة فقط */
+function stripDigitsFromPrintedTeacherName(value: any): string {
+  return String(value || "")
+    .replace(/[0-9٠-٩۰-۹]+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** ✅ يطبّق حذف الأرقام على العناصر المعلّمة كأسماء معلمين داخل نسخة الطباعة فقط */
+function sanitizeTeacherNamesForPrintOnly(root: HTMLElement) {
+  root.querySelectorAll<HTMLElement>("[data-print-teacher-name='true']").forEach((node) => {
+    node.textContent = stripDigitsFromPrintedTeacherName(node.textContent || "");
+  });
+}
+
 /** ✅ اطبع عنصر فقط (بدون القوائم/الواجهة) + اجعله صفحة واحدة إذا كانت صفحة واحدة فقط */
 async function printOnlyElement(el: HTMLElement, title = "report") {
   const clone = el.cloneNode(true) as HTMLElement;
   clone.querySelectorAll(".no-print").forEach((n) => n.remove());
+  sanitizeTeacherNamesForPrintOnly(clone);
 
   const html = `<!doctype html>
 <html lang="ar" dir="rtl">
@@ -1304,7 +1320,7 @@ export default function TaskDistributionPrint() {
               group.invigilators.map((r, idx) => (
                 <tr key={idx}>
                   <td style={styles.tdNum}>{idx + 1}</td>
-                  <td style={styles.td}>{getTeacherName(r) || "—"}</td>
+                  <td style={styles.td}><span data-print-teacher-name="true">{getTeacherName(r) || "—"}</span></td>
                   <td style={styles.td}>{getRoomNumber(r) || "—"}</td>
                   <td style={styles.td}></td>
                 </tr>
@@ -1337,7 +1353,7 @@ export default function TaskDistributionPrint() {
                 group.reserves.map((r, idx) => (
                   <tr key={idx}>
                     <td style={styles.tdNum}>{idx + 1}</td>
-                    <td style={{ ...styles.td, fontWeight: 900 }}>{getTeacherName(r) || "—"}</td>
+                    <td style={{ ...styles.td, fontWeight: 900 }}><span data-print-teacher-name="true">{getTeacherName(r) || "—"}</span></td>
                     <td style={styles.td}></td>
                   </tr>
                 ))
@@ -1369,7 +1385,7 @@ export default function TaskDistributionPrint() {
                   group.reviewFree.map((r, idx) => (
                     <tr key={idx}>
                       <td style={styles.tdNum}>{idx + 1}</td>
-                      <td style={{ ...styles.td, fontWeight: 900 }}>{getTeacherName(r) || "—"}</td>
+                      <td style={{ ...styles.td, fontWeight: 900 }}><span data-print-teacher-name="true">{getTeacherName(r) || "—"}</span></td>
                       <td style={styles.td}></td>
                       <td style={styles.td}>فارغ للمراجعة</td>
                     </tr>
@@ -1428,7 +1444,7 @@ export default function TaskDistributionPrint() {
         <div style={styles.teacherInfoBox}>
           <div style={styles.teacherInfoRow}>
             <span style={styles.teacherInfoLabel}>اسم المعلم:</span>
-            <span style={styles.teacherInfoValue}>{props.teacherName || "—"}</span>
+            <span style={styles.teacherInfoValue}><span data-print-teacher-name="true">{props.teacherName || "—"}</span></span>
           </div>
 
           <div style={styles.teacherInfoRow}>
