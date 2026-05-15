@@ -31,9 +31,11 @@
 // ✅ الشروط الجديدة (حسب طلبك):
 // - المعلم الذي يحتوي اسمه على 12 يوزع أولاً عند توزيع امتحان مادة تحتوي على 12 (مثال "الرياضة المدرسية 12")
 //   وإن لم يوجد اسم بهذه المواصفات يوزع على باقي الكادر التعليمي
+// - إذا وصل معلم 12 للنصاب، يتم تجاوز النصاب فقط لمراقبة مادة 12، بشرط عدم وجود تعارض مثل المراجعة/التصحيح/نفس الفترة/عدم التوفر
 // - المعلم الذي يحتوي اسمه على 13 لا يوزع في آخر يوم اختبار (مراقبة/احتياط)
 // - المعلم الذي يحتوي اسمه على 14 لا يوزع في آخر يومين اختبار (مراقبة/احتياط)
 // - المعلم الذي يتم توزيعه مراقبة ثلاث ساعات (180 دقيقة) لا يتم توزيعه مرة أخرى مراقبة ثلاث ساعات
+// - المعلم الذي يحتوي اسمه على رقم 0 لا يتم توزيعه مراقبة في مادة اللغة العربية
 //
 // ✅ NEW (حسب طلبك النهائي):
 // ✅ فاضي للتصحيح (CORRECTION_FREE) شرطه:
@@ -449,6 +451,8 @@ function reasonLabel(code?: string) {
       return "مفرّغ للتصحيح";
     case "SPECIALTY_BLOCK":
       return "ممنوع لمعلم المادة";
+    case "ARABIC_ZERO_BLOCK":
+      return "ممنوع لمعلم رقم 0 في مادة اللغة العربية";
     case "ARABIC_ONCE":
       return "اللغة العربية (مرة واحدة)";
     case "THREE_HOURS_ALREADY":
@@ -514,13 +518,45 @@ function buildTeacherSubject1Map(teachers: any[]) {
   return map;
 }
 
+// ✅ توحيد قراءة الفترة في كل مصادر البيانات
+// السبب: بعض الصفحات تحفظ الفترة الثانية كـ PM، وبعضها كـ BM أو نص عربي مثل "الفترة الثانية".
+// أي قيمة غير واضحة تُعامل كفترة أولى حتى لا ينكسر التشغيل.
 function periodToAMPM(p: string): "AM" | "PM" {
-  const x = String(p || "").trim();
-  if (!x) return "AM";
-  if (x === "AM" || x === "PM") return x;
-  if (x.includes("الثانية")) return "PM";
-  if (x.includes("الأولى")) return "AM";
+  const raw = String(p || "").replace(/\s+/g, " ").trim();
+  const lower = raw.toLowerCase();
+  const compact = lower.replace(/[\.\s_-]+/g, "");
+
+  if (
+    raw.includes("الثانية") ||
+    raw.includes("ثانيه") ||
+    raw.includes("مسائية") ||
+    raw.includes("المسائية") ||
+    raw.includes("بعد الظهر") ||
+    raw.includes("بعدالظهر") ||
+    lower.includes("second") ||
+    lower.includes("afternoon") ||
+    lower.includes("evening") ||
+    compact === "pm" ||
+    compact === "bm" ||
+    compact === "p2" ||
+    compact === "period2" ||
+    compact === "secondperiod" ||
+    compact === "2ndperiod" ||
+    compact === "shift2" ||
+    compact === "session2" ||
+    compact === "2" ||
+    compact === "p"
+  ) return "PM";
+
   return "AM";
+}
+
+function periodLabelAr(period: any) {
+  return periodToAMPM(String(period || "")) === "PM" ? "الفترة الثانية" : "الفترة الأولى";
+}
+
+function periodLabelEn(period: any) {
+  return periodToAMPM(String(period || "")) === "PM" ? "Second Period" : "First Period";
 }
 
 function guessInvigilatorsPerRoom(exam: any, constraints: any): number {
@@ -616,6 +652,38 @@ function teacherHas14(name: string) {
 }
 function subjectHas12(subject: string) {
   return hasNumInText(subject, 12);
+}
+
+function teacherHas0(name: string) {
+  const s = String(name || "");
+  return s.includes("0") || s.includes("٠");
+}
+
+function isArabicLanguageSubject(subject: string) {
+  const s = normSubj(subject);
+  return (
+    s.includes("اللغة العربية") ||
+    s.includes("اللغه العربيه") ||
+    s.includes("لغة عربية") ||
+    s.includes("لغه عربيه") ||
+    s === "عربي" ||
+    s.includes("عربي ") ||
+    s.includes("العربية") ||
+    s.includes("العربيه") ||
+    s.includes("arabic language")
+  );
+}
+
+function isTeacherBlockedFromArabicInvigilation(params: { teacherName: any; subject: any; taskType?: any }) {
+  const taskType = String(params?.taskType || "INVIGILATION").trim().toUpperCase();
+  if (taskType !== "INVIGILATION") return false;
+  return teacherHas0(String(params?.teacherName || "")) && isArabicLanguageSubject(String(params?.subject || ""));
+}
+
+function isGrade12TeacherForGrade12Subject(params: { teacherName: any; subject: any; taskType?: any }) {
+  const taskType = String(params?.taskType || "INVIGILATION").trim().toUpperCase();
+  if (taskType !== "INVIGILATION") return false;
+  return subjectHas12(String(params?.subject || "")) && teacherHas12(String(params?.teacherName || ""));
 }
 
 /* ============================================================
@@ -975,6 +1043,11 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
       return { ok: false, reason: "UNAVAILABLE" as const };
     }
 
+    const tName = teacherNameMap.get(teacherId) || "";
+    if (isTeacherBlockedFromArabicInvigilation({ teacherName: tName, subject, taskType })) {
+      return { ok: false, reason: "ARABIC_ZERO_BLOCK" as const };
+    }
+
     const tQuota = quotaTotals.get(teacherId) || 0;
     if (tQuota >= maxTasks) return { ok: false, reason: "MAX_TASKS_REACHED" as const };
 
@@ -991,7 +1064,6 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
     }
 
     // ✅ NEW: شرط 13 / 14 على آخر يوم/آخر يومين (نمنع التوزيع للمراقبة/الاحتياط فقط)
-    const tName = teacherNameMap.get(teacherId) || "";
     if (taskType === "INVIGILATION" || taskType === "RESERVE") {
       if (_lastExamDate0 && teacherHas13(tName) && dateISO === _lastExamDate0) {
         return { ok: false, reason: "BACK_TO_BACK_BLOCK" as const };
@@ -1028,6 +1100,257 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
     }
 
     return { ok: true as const };
+  }
+
+  function normalizeAssignmentTaskTypeLocal(assignment: any): string {
+    return normalizeStoredTaskTypeGlobal((assignment as any)?.taskType || (assignment as any)?.role || (assignment as any)?.type || "");
+  }
+
+  function getAssignmentDateISOForState(assignment: any): string {
+    return workDateISO(String((assignment as any)?.dateISO || (assignment as any)?.date || "").trim());
+  }
+
+  function getAssignmentPeriodForState(assignment: any): "AM" | "PM" {
+    return periodToAMPM(String((assignment as any)?.period || ""));
+  }
+
+  function getAssignmentSubjectForState(assignment: any): string {
+    return String((assignment as any)?.subject || (assignment as any)?.examSubject || "").trim();
+  }
+
+  function getAssignmentCoveredPeriodsForState(assignment: any, taskType: string): ("AM" | "PM")[] {
+    const covers = Array.isArray((assignment as any)?.coversPeriods)
+      ? (assignment as any).coversPeriods.map((p: any) => periodToAMPM(String(p || "")))
+      : [];
+    if (covers.length) return Array.from(new Set(covers));
+    if ((assignment as any)?.fullDay || taskType === "REVIEW_FREE" || taskType === "CORRECTION_FREE") return ["AM", "PM"];
+    return [getAssignmentPeriodForState(assignment)];
+  }
+
+  function rebuildAssignmentStateFromAssignments() {
+    for (const id of teacherIds) {
+      quotaTotals.set(id, 0);
+      invCounts.set(id, 0);
+      occupiedSlots.set(id, new Set<string>());
+      dayHasAnyPeriod.set(id, new Set<string>());
+      teacherHad3HoursInv.set(id, false);
+    }
+    teacherDayFirstInvDuration.clear();
+
+    for (const assignment of assignments) {
+      const teacherId = String((assignment as any)?.teacherId || "").trim();
+      if (!teacherId || !occupiedSlots.has(teacherId)) continue;
+      const taskType = normalizeAssignmentTaskTypeLocal(assignment);
+      const date = getAssignmentDateISOForState(assignment);
+      if (!date) continue;
+
+      for (const coveredPeriod of getAssignmentCoveredPeriodsForState(assignment, taskType)) {
+        occupiedSlots.get(teacherId)!.add(slotKey(date, coveredPeriod));
+      }
+      dayHasAnyPeriod.get(teacherId)!.add(date);
+
+      if (isQuotaTaskType(taskType)) {
+        quotaTotals.set(teacherId, (quotaTotals.get(teacherId) || 0) + 1);
+      }
+
+      if (taskType === "INVIGILATION") {
+        invCounts.set(teacherId, (invCounts.get(teacherId) || 0) + 1);
+        const durationMinutes = Number((assignment as any)?.durationMinutes ?? 0) || 0;
+        const dayKey = `${teacherId}__${date}`;
+        if (!teacherDayFirstInvDuration.has(dayKey) && durationMinutes > 0) {
+          teacherDayFirstInvDuration.set(dayKey, durationMinutes);
+        }
+        if (durationMinutes === 180) {
+          teacherHad3HoursInv.set(teacherId, true);
+        }
+      }
+    }
+  }
+
+  function snapshotAssignmentsForGrade12Swap() {
+    return assignments.map((assignment) => ({ ...(assignment || {}) }));
+  }
+
+  function restoreAssignmentsFromGrade12Snapshot(snapshot: any[]) {
+    assignments.length = 0;
+    assignments.push(...snapshot.map((assignment) => ({ ...(assignment || {}) })));
+    rebuildAssignmentStateFromAssignments();
+  }
+
+  function getAssignmentCommitteeNumber(assignment: any): string {
+    const value =
+      (assignment as any)?.committeeNumber ??
+      (assignment as any)?.committeeNo ??
+      (assignment as any)?.committee ??
+      (assignment as any)?.roomNumber ??
+      (assignment as any)?.roomNo ??
+      (assignment as any)?.room ??
+      "";
+    return String(value ?? "").trim();
+  }
+
+  function sameCommitteeAssignment(a: any, b: any) {
+    const aExamId = String((a as any)?.examId || "").trim();
+    const bExamId = String((b as any)?.examId || "").trim();
+    const aSubject = getAssignmentSubjectForState(a);
+    const bSubject = getAssignmentSubjectForState(b);
+    return (
+      normalizeAssignmentTaskTypeLocal(a) === "INVIGILATION" &&
+      normalizeAssignmentTaskTypeLocal(b) === "INVIGILATION" &&
+      getAssignmentDateISOForState(a) === getAssignmentDateISOForState(b) &&
+      getAssignmentPeriodForState(a) === getAssignmentPeriodForState(b) &&
+      (aExamId && bExamId ? aExamId === bExamId : normalizeSearch(aSubject) === normalizeSearch(bSubject)) &&
+      getAssignmentCommitteeNumber(a) === getAssignmentCommitteeNumber(b)
+    );
+  }
+
+  function replacementKeepsCommitteeBenRule(donorAssignment: any, replacementTeacherId: string) {
+    const taskType = normalizeAssignmentTaskTypeLocal(donorAssignment);
+    if (taskType !== "INVIGILATION") return true;
+
+    const replacementName = teacherNameMap.get(replacementTeacherId) || replacementTeacherId;
+    const otherInvigilators = assignments.filter(
+      (assignment) => assignment !== donorAssignment && sameCommitteeAssignment(assignment, donorAssignment)
+    );
+
+    // إذا كان في اللجنة مراقب واحد فقط، يجب أن يكون البديل يحتوي على "بن" مثل شرط التوزيع الأصلي.
+    if (!otherInvigilators.length) return hasBenInName(replacementName);
+
+    // إذا كان في اللجنة مراقبان، ممنوع أن يصبح الاثنان بدون "بن".
+    const hasBenAmongOthers = otherInvigilators.some((assignment) => hasBenInName(String((assignment as any)?.teacherName || "")));
+    return hasBenAmongOthers || hasBenInName(replacementName);
+  }
+
+  function findReplacementTeacherForMovedAssignment(donorAssignment: any, targetTeacherId: string): string {
+    const taskType = normalizeAssignmentTaskTypeLocal(donorAssignment);
+    if (taskType !== "INVIGILATION" && taskType !== "RESERVE") return "";
+
+    const donorDate = getAssignmentDateISOForState(donorAssignment);
+    const donorPeriod = getAssignmentPeriodForState(donorAssignment);
+    const donorSubject = getAssignmentSubjectForState(donorAssignment) || (taskType === "RESERVE" ? "احتياط" : "");
+    if (!donorDate || !donorSubject) return "";
+
+    const donorTeacherId = String((donorAssignment as any)?.teacherId || "").trim();
+    const candidates = teacherIds
+      .filter((teacherId) => teacherId !== targetTeacherId && teacherId !== donorTeacherId)
+      .map((teacherId, idx) => {
+        const teacherName = teacherNameMap.get(teacherId) || "";
+        return {
+          teacherId,
+          idx,
+          inv: invCounts.get(teacherId) || 0,
+          quota: quotaTotals.get(teacherId) || 0,
+          hasSameDay: (dayHasAnyPeriod.get(teacherId) || new Set<string>()).has(donorDate),
+          is12: teacherHas12(teacherName),
+        };
+      })
+      .sort((a, b) =>
+        a.quota - b.quota ||
+        a.inv - b.inv ||
+        Number(a.hasSameDay) - Number(b.hasSameDay) ||
+        Number(a.is12) - Number(b.is12) ||
+        a.idx - b.idx
+      );
+
+    for (const candidate of candidates) {
+      if (!replacementKeepsCommitteeBenRule(donorAssignment, candidate.teacherId)) continue;
+      const chk = canAssign(candidate.teacherId, donorDate, donorPeriod, taskType, donorSubject, donorAssignment);
+      if (chk.ok) return candidate.teacherId;
+    }
+
+    return "";
+  }
+
+  function tryRehomeExistingAssignmentForGrade12Teacher(params: {
+    teacherId: string;
+    dateISO: string;
+    period: "AM" | "PM";
+    subject: string;
+    meta?: any;
+  }) {
+    const teacherId = String(params.teacherId || "").trim();
+    const teacherName = teacherNameMap.get(teacherId) || "";
+    if (!isGrade12TeacherForGrade12Subject({ teacherName, subject: params.subject, taskType: "INVIGILATION" })) return false;
+    if ((quotaTotals.get(teacherId) || 0) < maxTasks) return false;
+
+    const donorCandidates = assignments
+      .map((assignment, index) => ({ assignment, index }))
+      .filter(({ assignment }) => {
+        const assTeacherId = String((assignment as any)?.teacherId || "").trim();
+        if (assTeacherId !== teacherId) return false;
+        const taskType = normalizeAssignmentTaskTypeLocal(assignment);
+        // لا ننقل المراجعة أو التصحيح لأنها حجز يوم كامل ولا يجب كسرها.
+        return taskType === "RESERVE" || taskType === "INVIGILATION";
+      })
+      .sort((a, b) => {
+        const aDate = getAssignmentDateISOForState(a.assignment);
+        const bDate = getAssignmentDateISOForState(b.assignment);
+        const aPeriod = getAssignmentPeriodForState(a.assignment);
+        const bPeriod = getAssignmentPeriodForState(b.assignment);
+        const aTask = normalizeAssignmentTaskTypeLocal(a.assignment);
+        const bTask = normalizeAssignmentTaskTypeLocal(b.assignment);
+        const aSubject = getAssignmentSubjectForState(a.assignment);
+        const bSubject = getAssignmentSubjectForState(b.assignment);
+        const aSameSlot = aDate === params.dateISO && aPeriod === params.period ? 0 : 1;
+        const bSameSlot = bDate === params.dateISO && bPeriod === params.period ? 0 : 1;
+        if (aSameSlot !== bSameSlot) return aSameSlot - bSameSlot;
+        const aSameDay = aDate === params.dateISO ? 0 : 1;
+        const bSameDay = bDate === params.dateISO ? 0 : 1;
+        if (aSameDay !== bSameDay) return aSameDay - bSameDay;
+        const aTaskPriority = aTask === "RESERVE" ? 0 : 1;
+        const bTaskPriority = bTask === "RESERVE" ? 0 : 1;
+        if (aTaskPriority !== bTaskPriority) return aTaskPriority - bTaskPriority;
+        const aGrade12 = subjectHas12(aSubject) ? 1 : 0;
+        const bGrade12 = subjectHas12(bSubject) ? 1 : 0;
+        if (aGrade12 !== bGrade12) return aGrade12 - bGrade12;
+        return a.index - b.index;
+      });
+
+    for (const donor of donorCandidates) {
+      const replacementTeacherId = findReplacementTeacherForMovedAssignment(donor.assignment, teacherId);
+      if (!replacementTeacherId) continue;
+
+      const snapshot = snapshotAssignmentsForGrade12Swap();
+      const replacementTeacherName = teacherNameMap.get(replacementTeacherId) || replacementTeacherId;
+      assignments[donor.index] = {
+        ...(donor.assignment || {}),
+        teacherId: replacementTeacherId,
+        teacherName: replacementTeacherName,
+        grade12Rebalanced: true,
+        grade12RebalancedFromTeacherId: teacherId,
+        grade12RebalancedFromTeacherName: teacherName,
+        grade12RebalancedReason: "FREE_GRADE12_TEACHER_WITHOUT_QUOTA_OVERRIDE",
+      };
+
+      rebuildAssignmentStateFromAssignments();
+
+      const finalCheck = canAssign(teacherId, params.dateISO, params.period, "INVIGILATION", params.subject, params.meta);
+      if (finalCheck.ok) return true;
+
+      restoreAssignmentsFromGrade12Snapshot(snapshot);
+    }
+
+    return false;
+  }
+
+  function prepareTeacherForAssignment(
+    teacherId: string,
+    dateISO: string,
+    period: "AM" | "PM",
+    taskType: string,
+    subject: string,
+    meta?: any
+  ) {
+    const chk = canAssign(teacherId, dateISO, period, taskType, subject, meta);
+    if (chk.ok) return true;
+
+    const teacherName = teacherNameMap.get(teacherId) || "";
+    if (!isGrade12TeacherForGrade12Subject({ teacherName, subject, taskType })) return false;
+
+    // لا نحاول تجاوز أو نقل التصحيح/المراجعة؛ إذا كان هناك حجز يوم كامل فلن يأخذ مهمة أخرى.
+    if (chk.reason === "CORRECTION_FREE_BLOCK" || chk.reason === "UNAVAILABLE") return false;
+
+    return tryRehomeExistingAssignmentForGrade12Teacher({ teacherId, dateISO, period, subject, meta });
   }
 
   function commitAssign(
@@ -1124,8 +1447,7 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
         : baseCandidates;
 
       for (const c of ordered) {
-        const chk = canAssign(c.id, dateISO, period, taskType, subject, meta);
-        if (!chk.ok) continue;
+        if (!prepareTeacherForAssignment(c.id, dateISO, period, taskType, subject, meta)) continue;
 
         commitAssign(c.id, dateISO, period, taskType, subject, meta);
         rr = (c.idx + 1) % n;
@@ -1138,8 +1460,7 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
     for (let tries = 0; tries < n; tries++) {
       const idx = (rr + tries) % n;
       const teacherId = teacherIds[idx];
-      const chk = canAssign(teacherId, dateISO, period, taskType, subject, meta);
-      if (!chk.ok) continue;
+      if (!prepareTeacherForAssignment(teacherId, dateISO, period, taskType, subject, meta)) continue;
 
       commitAssign(teacherId, dateISO, period, taskType, subject, meta);
       rr = (idx + 1) % n;
@@ -1232,10 +1553,9 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
 
         let ok = false;
         for (const c of candidates) {
-          const chk = canAssign(c.id, dateISO, period, "INVIGILATION", subject, {
+          if (!prepareTeacherForAssignment(c.id, dateISO, period, "INVIGILATION", subject, {
             durationMinutes: Number(exam.durationMinutes ?? 0) || 0,
-          });
-          if (!chk.ok) continue;
+          })) continue;
 
           commitAssign(c.id, dateISO, period, "INVIGILATION", subject, {
             examId: exam.id,
@@ -1320,10 +1640,13 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
         }
 
         for (const c1 of cand1) {
-          const chk1 = canAssign(c1.id, dateISO, period, "INVIGILATION", subject, {
+          const snapBeforeFirstCandidate = snapshotAssignmentsForGrade12Swap();
+          if (!prepareTeacherForAssignment(c1.id, dateISO, period, "INVIGILATION", subject, {
             durationMinutes: Number(exam.durationMinutes ?? 0) || 0,
-          });
-          if (!chk1.ok) continue;
+          })) {
+            restoreAssignmentsFromGrade12Snapshot(snapBeforeFirstCandidate);
+            continue;
+          }
 
           const cand2raw = buildCandidates().filter((c2) => c2.id !== c1.id);
           const cand2 = subj12
@@ -1334,16 +1657,20 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
             // ✅ ممنوع: بدون بن + بدون بن
             if (!c1.ben && !c2.ben) continue;
 
-            const chk2 = canAssign(c2.id, dateISO, period, "INVIGILATION", subject, {
+            const snapBeforeSecondCandidate = snapshotAssignmentsForGrade12Swap();
+            if (!prepareTeacherForAssignment(c2.id, dateISO, period, "INVIGILATION", subject, {
               durationMinutes: Number(exam.durationMinutes ?? 0) || 0,
-            });
-            if (!chk2.ok) continue;
+            })) {
+              restoreAssignmentsFromGrade12Snapshot(snapBeforeSecondCandidate);
+              continue;
+            }
 
             firstPicked = c1;
             secondPicked = c2;
             break;
           }
           if (firstPicked && secondPicked) break;
+          restoreAssignmentsFromGrade12Snapshot(snapBeforeFirstCandidate);
         }
 
         if (!firstPicked || !secondPicked) {
@@ -1709,6 +2036,16 @@ export default function TaskDistributionRun() {
     return list
       .map((e: any) => {
         const dateISO = String(e?.dateISO ?? e?.date ?? "").trim();
+        const rawPeriod = String(
+          e?.period ??
+            e?.periodLabel ??
+            e?.periodName ??
+            e?.shift ??
+            e?.session ??
+            e?.examPeriod ??
+            ""
+        ).trim();
+        const normalizedPeriod = periodToAMPM(rawPeriod);
         return {
           id: String(e?.id ?? "").trim(),
           subject: String(e?.subject ?? "").trim(),
@@ -1717,7 +2054,11 @@ export default function TaskDistributionRun() {
           dayLabel: String(e?.dayLabel ?? "").trim(),
           time: String(e?.time ?? "").trim(),
           durationMinutes: Number(e?.durationMinutes ?? 0) || 0,
-          period: String(e?.period ?? "").trim(),
+          // ✅ حفظ الفترة موحدة حتى لا تظهر الفترة الثانية كأنها الفترة الأولى
+          period: normalizedPeriod,
+          periodRaw: rawPeriod,
+          periodLabelAr: periodLabelAr(normalizedPeriod),
+          periodLabelEn: periodLabelEn(normalizedPeriod),
           roomsCount: Number(e?.roomsCount ?? 0) || 0,
         };
       })
@@ -2103,6 +2444,9 @@ export default function TaskDistributionRun() {
         return false;
       }
 
+      const teacherName = teacherNameMapLocal.get(teacherId) || "";
+      if (isTeacherBlockedFromArabicInvigilation({ teacherName, subject, taskType })) return false;
+
       if ((state.quotaTotals.get(teacherId) || 0) >= maxTasks && isQuotaTaskType(taskType)) return false;
 
       const sk = slotKey(dateISO, period);
@@ -2116,7 +2460,6 @@ export default function TaskDistributionRun() {
         }
       }
 
-      const teacherName = teacherNameMapLocal.get(teacherId) || "";
       if (taskType === "INVIGILATION" || taskType === "RESERVE") {
         if (lastExamDate && teacherHas13(teacherName) && dateISO === lastExamDate) return false;
         if (lastTwoExamDates.size && teacherHas14(teacherName) && lastTwoExamDates.has(dateISO)) return false;
@@ -2231,6 +2574,8 @@ export default function TaskDistributionRun() {
       }
 
       const teacherName = teacherNameMapLocal.get(teacherId) || "";
+      if (isTeacherBlockedFromArabicInvigilation({ teacherName, subject, taskType: "INVIGILATION" })) return false;
+
       if (enableCorrectionFree) {
         const correctionDays = teacherCorrectionDays.get(teacherId);
         if (correctionDays && correctionDays.has(dateISO)) return false;
@@ -2294,6 +2639,8 @@ export default function TaskDistributionRun() {
       }
 
       const teacherName = teacherNameMapLocal.get(teacherId) || "";
+      if (isTeacherBlockedFromArabicInvigilation({ teacherName, subject, taskType: "INVIGILATION" })) return null;
+
       const sk = slotKey(dateISO, period);
       const slots = state.occupiedSlots.get(teacherId) || new Set<string>();
       if (slots.has(sk)) return null;
@@ -2581,7 +2928,7 @@ export default function TaskDistributionRun() {
           teacherName,
           subject: String(targetMeta.subject || donorSubject || row.subjects?.[0] || "").trim(),
           source: "TRANSFER_SAFE",
-          note: tr(`نقل من ${donorDateISO} ${donorPeriod === "PM" ? "الفترة الثانية" : "الفترة الأولى"} (${TASK_TYPE_LABEL_AR[donorTaskType] || donorTaskType})${donorSubject ? ` • ${donorSubject}` : ""}`, `Move from ${donorDateISO} ${donorPeriod === "PM" ? "Second Period" : "First Period"} (${donorTaskType})${donorSubject ? ` • ${translateSubject(donorSubject)}` : ""}`),
+          note: tr(`نقل من ${donorDateISO} ${periodLabelAr(donorPeriod)} (${TASK_TYPE_LABEL_AR[donorTaskType] || donorTaskType})${donorSubject ? ` • ${donorSubject}` : ""}`, `Move from ${donorDateISO} ${periodLabelEn(donorPeriod)} (${donorTaskType})${donorSubject ? ` • ${translateSubject(donorSubject)}` : ""}`),
           transferAssignmentId: donorAssignmentId,
           transferFromDateISO: donorDateISO,
           transferFromPeriod: donorPeriod,
@@ -2816,7 +3163,7 @@ export default function TaskDistributionRun() {
       const firstNames = Array.isArray((firstCritical as any)?.teacherSuggestions)
         ? (firstCritical as any).teacherSuggestions.slice(0, 3).map((item: any) => String(item?.teacherName || '').trim()).filter(Boolean)
         : [];
-      alerts.push(tr(`⚠️ هناك ${criticalSlots.length} فترة حرجة متوقعة بعد احتساب الأهلية الفعلية. أولها ${firstCritical.dateISO} (${firstCritical.period === 'AM' ? 'الفترة الأولى' : 'الفترة الثانية'}) بهامش ${firstCritical.bufferEstimate}.${firstNames.length ? ` أسماء مقترحة مبدئية: ${firstNames.join(' • ')}` : ''}`, `⚠️ There are ${criticalSlots.length} expected critical periods after calculating actual eligibility. The first is ${firstCritical.dateISO} (${firstCritical.period === 'AM' ? 'First Period' : 'Second Period'}) with a margin of ${firstCritical.bufferEstimate}.${firstNames.length ? ` Initial suggested names: ${firstNames.join(' • ')}` : ''}`));
+      alerts.push(tr(`⚠️ هناك ${criticalSlots.length} فترة حرجة متوقعة بعد احتساب الأهلية الفعلية. أولها ${firstCritical.dateISO} (${periodLabelAr(firstCritical.period)}) بهامش ${firstCritical.bufferEstimate}.${firstNames.length ? ` أسماء مقترحة مبدئية: ${firstNames.join(' • ')}` : ''}`, `⚠️ There are ${criticalSlots.length} expected critical periods after calculating actual eligibility. The first is ${firstCritical.dateISO} (${periodLabelEn(firstCritical.period)}) with a margin of ${firstCritical.bufferEstimate}.${firstNames.length ? ` Initial suggested names: ${firstNames.join(' • ')}` : ''}`));
     }
     const rowsWithMasterCoverage = forecastRows.filter((row: any) => (row.assignedInvigilations || 0) || (row.assignedReserve || 0) || (row.assignedReviewFree || 0) || (row.assignedCorrectionFree || 0));
     if (rowsWithMasterCoverage.length) {
@@ -3117,7 +3464,7 @@ export default function TaskDistributionRun() {
       }
       const previousAssignmentSnapshot = JSON.parse(JSON.stringify(currentAssignments[donorIdx]));
       const donorTaskLabel = TASK_TYPE_LABEL_AR[String(suggestion?.transferFromTaskType || normalizeStoredTaskTypeGlobal((previousAssignmentSnapshot as any)?.taskType || (previousAssignmentSnapshot as any)?.role || ""))] || String(suggestion?.transferFromTaskType || "");
-      const donorSlotLabel = `${String(suggestion?.transferFromDateISO || workDateISO(String((previousAssignmentSnapshot as any)?.dateISO || (previousAssignmentSnapshot as any)?.date || "").trim()) || "")} ${String(suggestion?.transferFromPeriod || periodToAMPM(String((previousAssignmentSnapshot as any)?.period || "AM"))) === "PM" ? tr("الفترة الثانية","Second Period") : tr("الفترة الأولى","First Period")}`;
+      const donorSlotLabel = `${String(suggestion?.transferFromDateISO || workDateISO(String((previousAssignmentSnapshot as any)?.dateISO || (previousAssignmentSnapshot as any)?.date || "").trim()) || "")} ${tr(periodLabelAr(String(suggestion?.transferFromPeriod || periodToAMPM(String((previousAssignmentSnapshot as any)?.period || "AM")))), periodLabelEn(String(suggestion?.transferFromPeriod || periodToAMPM(String((previousAssignmentSnapshot as any)?.period || "AM")))))}`;
       const movedAssignment = {
         ...currentAssignments[donorIdx],
         teacherId,
@@ -3138,7 +3485,7 @@ export default function TaskDistributionRun() {
         manualSuggestedNote: String(suggestion?.note || "").trim(),
       };
       const nextAssignments = currentAssignments.map((ass: any, idx: number) => idx === donorIdx ? movedAssignment : ass);
-      note = tr(`🔁 تم نقل ${teacherName} من ${donorSlotLabel} (${donorTaskLabel}) إلى ${dateISO} ${period === "AM" ? "الفترة الأولى" : "الفترة الثانية"}`, `🔁 ${teacherName} was moved from ${donorSlotLabel} (${donorTaskLabel}) to ${dateISO} ${period === "AM" ? "First Period" : "Second Period"}`);
+      note = tr(`🔁 تم نقل ${teacherName} من ${donorSlotLabel} (${donorTaskLabel}) إلى ${dateISO} ${periodLabelAr(period)}`, `🔁 ${teacherName} was moved from ${donorSlotLabel} (${donorTaskLabel}) to ${dateISO} ${periodLabelEn(period)}`);
       const nextRun = ensureExplicitTaskTypes({
         ...currentRun,
         assignments: nextAssignments,
@@ -3200,7 +3547,7 @@ export default function TaskDistributionRun() {
           manualSuggestedNote: String(suggestion?.note || "").trim(),
         };
       });
-      note = tr(`➕ تم تحويل ${teacherName} من احتياط إلى مراقبة في ${dateISO} ${period === "AM" ? "الفترة الأولى" : "الفترة الثانية"}`, `➕ ${teacherName} was converted from reserve to invigilation on ${dateISO} ${period === "AM" ? "First Period" : "Second Period"}`);
+      note = tr(`➕ تم تحويل ${teacherName} من احتياط إلى مراقبة في ${dateISO} ${periodLabelAr(period)}`, `➕ ${teacherName} was converted from reserve to invigilation on ${dateISO} ${periodLabelEn(period)}`);
       const nextRun = ensureExplicitTaskTypes({
         ...currentRun,
         assignments: nextAssignments,
@@ -3265,7 +3612,7 @@ export default function TaskDistributionRun() {
       return { ok: false, message: tr('تعذر تجهيز السجل الجديد للإضافة.','The new record could not be prepared for insertion.') };
     }
 
-    note = `➕ تمت إضافة ${teacherName} إلى الجدول الشامل (${TASK_TYPE_LABEL_AR[preferredTaskType] || preferredTaskType}) في ${dateISO} ${period === "AM" ? "الفترة الأولى" : "الفترة الثانية"}`;
+    note = `➕ تمت إضافة ${teacherName} إلى الجدول الشامل (${TASK_TYPE_LABEL_AR[preferredTaskType] || preferredTaskType}) في ${dateISO} ${periodLabelAr(period)}`;
     const nextRun = ensureExplicitTaskTypes({
       ...currentRun,
       assignments: [...currentAssignments, newAssignment],
@@ -3336,7 +3683,7 @@ export default function TaskDistributionRun() {
       return { ok: false, message: tr(`تعذر التراجع عن ${entry.teacherName} لأن السجل الأصلي لم يعد متاحًا كما كان.`, `Could not undo ${entry.teacherName} because the original record is no longer available as it was.`) };
     }
 
-    const note = tr(`↩️ تم التراجع عن الإضافة اليدوية لـ ${entry.teacherName} في ${entry.dateISO} ${entry.period === "AM" ? "الفترة الأولى" : "الفترة الثانية"}`, `↩️ Manual addition for ${entry.teacherName} was undone on ${entry.dateISO} ${entry.period === "AM" ? "First Period" : "Second Period"}`);
+    const note = tr(`↩️ تم التراجع عن الإضافة اليدوية لـ ${entry.teacherName} في ${entry.dateISO} ${periodLabelAr(entry.period)}`, `↩️ Manual addition for ${entry.teacherName} was undone on ${entry.dateISO} ${periodLabelEn(entry.period)}`);
     const nextRun = ensureExplicitTaskTypes({
       ...currentRun,
       assignments: nextAssignments,
@@ -3849,6 +4196,8 @@ const GOLD_SUB = "rgba(0,0,0,0.82)";
         return tr("مفرّغ للتصحيح","Freed for correction");
       case "SPECIALTY_BLOCK":
         return tr("ممنوع لمعلم المادة","Blocked for subject teacher");
+      case "ARABIC_ZERO_BLOCK":
+        return tr("ممنوع لمعلم رقم 0 في مادة اللغة العربية","Teacher with 0 is blocked from Arabic Language");
       case "ARABIC_ONCE":
         return tr("اللغة العربية (مرة واحدة)","Arabic once only");
       case "THREE_HOURS_ALREADY":
@@ -3902,9 +4251,18 @@ const GOLD_SUB = "rgba(0,0,0,0.82)";
     <div style={page} className="task-run-black-text-scope">
 
       <style>{`
+        /* ✅ توحيد لون كل الخطوط داخل صفحة تشغيل التوزيع إلى الأسود
+           حتى لو كان أي مكوّن داخلي يضع اللون أبيض أو ذهبي أو أي لون سابق */
         .task-run-black-text-scope,
         .task-run-black-text-scope * {
+          color: #000000 !important;
           font-weight: 850;
+          text-shadow: none !important;
+        }
+
+        .task-run-black-text-scope ::placeholder {
+          color: #000000 !important;
+          opacity: 1 !important;
         }
         .task-run-black-text-scope table th,
         .task-run-black-text-scope table td {
@@ -3963,16 +4321,16 @@ const GOLD_SUB = "rgba(0,0,0,0.82)";
         .task-run-black-text-scope svg,
         .task-run-black-text-scope [class*="icon"],
         .task-run-black-text-scope [class*="Icon"] {
-          color: #2563eb !important;
+          color: #000000 !important;
           stroke: currentColor !important;
           fill: none;
         }
-        .task-run-black-text-scope button:nth-of-type(6n+1) svg { color: #1d4ed8 !important; }
-        .task-run-black-text-scope button:nth-of-type(6n+2) svg { color: #15803d !important; }
-        .task-run-black-text-scope button:nth-of-type(6n+3) svg { color: #b91c1c !important; }
-        .task-run-black-text-scope button:nth-of-type(6n+4) svg { color: #7e22ce !important; }
-        .task-run-black-text-scope button:nth-of-type(6n+5) svg { color: #c2410c !important; }
-        .task-run-black-text-scope button:nth-of-type(6n+6) svg { color: #0e7490 !important; }
+        .task-run-black-text-scope button:nth-of-type(6n+1) svg { color: #000000 !important; }
+        .task-run-black-text-scope button:nth-of-type(6n+2) svg { color: #000000 !important; }
+        .task-run-black-text-scope button:nth-of-type(6n+3) svg { color: #000000 !important; }
+        .task-run-black-text-scope button:nth-of-type(6n+4) svg { color: #000000 !important; }
+        .task-run-black-text-scope button:nth-of-type(6n+5) svg { color: #000000 !important; }
+        .task-run-black-text-scope button:nth-of-type(6n+6) svg { color: #000000 !important; }
 
         /* خلفيات وحدود مختلفة لخلايا الجداول */
         .task-run-black-text-scope table th:nth-child(6n+1),

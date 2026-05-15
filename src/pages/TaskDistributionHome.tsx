@@ -104,10 +104,21 @@ function buildResultsData(tenantId: string): ResultsData | null {
   return safeReadMasterTable();
 }
 
+function normalizePeriodForDisplay(period: unknown): "AM" | "PM" | "RAW" {
+  const value = String(period || "").replace(/\s+/g, " ").trim();
+  const lower = value.toLowerCase();
+  const compact = lower.replace(/[\.\s_-]+/g, "");
+
+  if (value.includes("الثانية") || value.includes("ثانيه") || lower.includes("second") || compact === "pm" || compact === "bm" || compact === "p2" || compact === "period2" || compact === "2" || compact === "p") return "PM";
+  if (value.includes("الأولى") || value.includes("اولى") || lower.includes("first") || compact === "am" || compact === "p1" || compact === "period1" || compact === "1" || compact === "a") return "AM";
+  return "RAW";
+}
+
 function periodLabel(period: unknown) {
-  const value = String(period || "");
-  if (value === "AM") return "الفترة الأولى";
-  if (value === "PM") return "الفترة الثانية";
+  const normalized = normalizePeriodForDisplay(period);
+  if (normalized === "AM") return "الفترة الأولى";
+  if (normalized === "PM") return "الفترة الثانية";
+  const value = String(period || "").trim();
   return value || "-";
 }
 

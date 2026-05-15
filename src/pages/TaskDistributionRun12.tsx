@@ -52,7 +52,7 @@ function TaskDistributionReadinessSection(props: any) {
   const note = styles.note || {};
   const pill = styles.pill || {};
 
-  const periodLabel = (period: any) => String(period || "AM") === "PM" ? "الثانية" : "الأولى";
+  const periodLabel = (period: any) => periodToAMPM(String(period || "AM")) === "PM" ? "الثانية" : "الأولى";
   const statusLabel = (status: any) => {
     const s = String(status || "").toUpperCase();
     if (s === "SAFE") return "مريح";
@@ -851,11 +851,20 @@ function buildTeacherSubject1Map(teachers: any[]) {
 }
 
 function periodToAMPM(p: string): "AM" | "PM" {
-  const x = String(p || "").trim();
-  if (!x) return "AM";
-  if (x === "AM" || x === "PM") return x;
-  if (x.includes("الثانية")) return "PM";
-  if (x.includes("الأولى")) return "AM";
+  const raw = String(p || "").replace(/\s+/g, " ").trim();
+  const lower = raw.toLowerCase();
+  const compact = lower.replace(/[\.\s_-]+/g, "");
+  if (
+    raw.includes("الثانية") ||
+    raw.includes("ثانيه") ||
+    lower.includes("second") ||
+    compact === "pm" ||
+    compact === "bm" ||
+    compact === "p2" ||
+    compact === "period2" ||
+    compact === "2" ||
+    compact === "p"
+  ) return "PM";
   return "AM";
 }
 

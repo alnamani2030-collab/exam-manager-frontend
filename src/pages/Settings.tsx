@@ -48,8 +48,30 @@ function dayNameFromISO(iso: string, lang: "ar" | "en"): string {
   return ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"][wd] || "";
 }
 
+function normalizePeriod(value: any): "AM" | "PM" {
+  const raw = String(value ?? "").replace(/\s+/g, " ").trim();
+  const lower = raw.toLowerCase();
+  const compact = lower.replace(/[\.\s_-]+/g, "");
+
+  if (
+    raw.includes("الثانية") ||
+    raw.includes("ثانيه") ||
+    lower.includes("second") ||
+    compact === "pm" ||
+    compact === "bm" ||
+    compact === "p2" ||
+    compact === "period2" ||
+    compact === "2" ||
+    compact === "p"
+  ) {
+    return "PM";
+  }
+
+  return "AM";
+}
+
 function formatPeriodLabel(p: "AM" | "PM" | string, lang: "ar" | "en") {
-  const isPm = String(p || "").toUpperCase() === "PM";
+  const isPm = normalizePeriod(p) === "PM";
   if (lang === "en") return isPm ? "Second Period" : "First Period";
   return isPm ? "الفترة الثانية" : "الفترة الأولى";
 }
@@ -58,9 +80,6 @@ function normalizePhone(raw: string) {
   return String(raw || "").replace(/[^\d]/g, "");
 }
 
-function normalizePeriod(value: any): "AM" | "PM" {
-  return String(value || "").toUpperCase() === "PM" ? "PM" : "AM";
-}
 
 function normalizeSubjectText(value: any) {
   return String(value || "").replace(/\s+/g, " ").trim();
@@ -820,8 +839,7 @@ export default function Settings() {
         const id = String(e?.id ?? e?._id ?? `${e?.dateISO ?? e?.date}-${e?.subject ?? ""}-${e?.period ?? ""}`);
         const dateISO = String(e?.dateISO ?? e?.date ?? "").trim();
         const subject = normalizeSubjectText(e?.subject ?? "");
-        const period =
-          (String(e?.period ?? e?.periodKey ?? e?.p ?? "AM").toUpperCase() === "PM" ? "PM" : "AM") as "AM" | "PM";
+        const period = normalizePeriod(e?.period ?? e?.periodKey ?? e?.p ?? "AM");
         const roomsCount = Number(e?.roomsCount ?? e?.rooms ?? e?.committees ?? 0) || 0;
 
         return {

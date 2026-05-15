@@ -234,40 +234,67 @@ function dayNameFromISO(d: string, lang: "ar" | "en") {
   return new Intl.DateTimeFormat(locale, { weekday: "long" }).format(x);
 }
 
-/** ✅ convert AM/BM/PM to periods */
+function periodToAMPM(value: any): "AM" | "PM" {
+  const raw = String(value ?? "").replace(/\s+/g, " ").trim();
+  const lower = raw.toLowerCase();
+  const compact = lower.replace(/[\.\s_-]+/g, "");
+
+  if (
+    raw.includes("الثانية") ||
+    raw.includes("ثانيه") ||
+    lower.includes("second") ||
+    compact === "pm" ||
+    compact === "bm" ||
+    compact === "p2" ||
+    compact === "period2" ||
+    compact === "2" ||
+    compact === "p"
+  ) {
+    return "PM";
+  }
+
+  return "AM";
+}
+
+/** ✅ convert AM/BM/PM/Arabic labels to periods */
 function formatPeriod(p: string, lang: "ar" | "en") {
   const raw = (p || "").toString().trim();
   if (!raw) return "—";
-
-  const lower = raw.toLowerCase();
-  if (lang === "ar") {
-    if (raw.includes("الأولى")) return "الفترة الأولى";
-    if (raw.includes("الثانية")) return "الفترة الثانية";
-    if (lower === "am" || lower.startsWith("am") || lower === "a" || lower === "a m") return "الفترة الأولى";
-    if (lower === "pm" || lower.startsWith("pm") || lower === "p" || lower === "p m" || lower === "bm" || lower.startsWith("bm") || lower === "b" || lower === "b m") {
-      return "الفترة الثانية";
-    }
-    return raw;
-  }
-
-  if (lower.includes("first period") || raw.includes("الأولى")) return "First Period";
-  if (lower.includes("second period") || raw.includes("الثانية")) return "Second Period";
-  if (lower === "am" || lower.startsWith("am") || lower === "a" || lower === "a m") return "First Period";
-  if (lower === "pm" || lower.startsWith("pm") || lower === "p" || lower === "p m" || lower === "bm" || lower.startsWith("bm") || lower === "b" || lower === "b m") {
-    return "Second Period";
-  }
-  return raw;
+  const isSecond = periodToAMPM(raw) === "PM";
+  if (lang === "en") return isSecond ? "Second Period" : "First Period";
+  return isSecond ? "الفترة الثانية" : "الفترة الأولى";
 }
 
 /** ✅ period key for exam matching */
 function normalizePeriodKey(p: string) {
-  const raw = (p || "").toString();
-  if (raw.includes("الأولى") || /first period/i.test(raw)) return "p1";
-  if (raw.includes("الثانية") || /second period/i.test(raw)) return "p2";
-  const n = raw.trim().toLowerCase().replace(/\./g, "").replace(/\s+/g, " ");
-  if (n === "am" || n.startsWith("am") || n === "a" || n === "a m") return "p1";
-  if (n === "pm" || n.startsWith("pm") || n === "bm" || n.startsWith("bm") || n === "p" || n === "b" || n === "p m" || n === "b m") return "p2";
-  return normalizeText(raw);
+  const raw = (p || "").toString().trim();
+  if (!raw) return "";
+  return periodToAMPM(raw) === "PM" ? "p2" : "p1";
+}
+
+/** ✅ ترتيب الفترات في التقارير اليومية: الأولى ثم الثانية */
+function periodOrderValue(p: string) {
+  const key = normalizePeriodKey(p || "");
+  if (key === "p1") return 1;
+  if (key === "p2") return 2;
+  return 9;
+}
+
+/** ✅ مفتاح موحد للتاريخ + الفترة حتى يظهر احتياط الفترة في كل كشوف نفس اليوم والفترة */
+function datePeriodKey(dateISO: string, period: string) {
+  return `${normalizeISODate(dateISO || "") || "no-date"}|${normalizePeriodKey(period || "") || "no-period"}`;
+}
+
+/** ✅ منع تكرار اسم الاحتياط إذا تكرر داخليًا في أكثر من مادة لنفس الفترة */
+function uniqueAssignmentsByTeacherName(rows: AnyAssignment[]) {
+  const map = new Map<string, AnyAssignment>();
+  for (const row of rows || []) {
+    const name = (getTeacherName(row) || "").trim();
+    if (!name) continue;
+    const key = normalizeText(name);
+    if (!map.has(key)) map.set(key, row);
+  }
+  return Array.from(map.values()).sort((a, b) => (getTeacherName(a) || "").localeCompare(getTeacherName(b) || "", "ar"));
 }
 
 function normalizePhone(raw: string) {
@@ -275,7 +302,7 @@ function normalizePhone(raw: string) {
 }
 
 function normalizePeriod(value: any): "AM" | "PM" {
-  return String(value || "").toUpperCase() === "PM" ? "PM" : "AM";
+  return periodToAMPM(value);
 }
 
 function normalizeSubjectText(value: any) {
@@ -441,6 +468,11 @@ type AnyAssignment = any;
 
 function getTeacherName(a: AnyAssignment): string {
   return a?.teacherName || a?.teacher?.name || a?.teacher || a?.name || a?.teacherLabel || "";
+}
+
+function getPrintableTeacherName(a: AnyAssignment | string): string {
+  const name = typeof a === "string" ? a : getTeacherName(a);
+  return String(name || "").replace(/\s*[0-9٠-٩۰-۹]+\s*$/, "").trim();
 }
 
 function getTaskType(a: AnyAssignment): TaskType | string {
@@ -639,13 +671,13 @@ function getExamDateISO(a: AnyAssignment): string {
   return a?.dateISO || a?.examDateISO || a?.exam?.dateISO || a?.date || "";
 }
 function getExamDayLabel(a: AnyAssignment): string {
-  return a?.dayLabel || a?.examDayLabel || a?.exam?.dayLabel || "";
+  return a?.dayLabel || a?.day || a?.examDayLabel || a?.exam?.dayLabel || a?.exam?.day || "";
 }
 function getExamPeriod(a: AnyAssignment): string {
-  return a?.period || a?.examPeriod || a?.exam?.period || "";
+  return a?.period || a?.periodKey || a?.p || a?.examPeriod || a?.exam?.period || a?.exam?.periodKey || "";
 }
 function getExamTime(a: AnyAssignment): string {
-  return a?.time || a?.examTime || a?.exam?.time || "";
+  return a?.time || a?.examTime || a?.startTime || a?.exam?.time || a?.exam?.startTime || "";
 }
 
 const printWindowCss = `
@@ -1352,20 +1384,38 @@ export default function TaskDistributionPrint() {
     const rows = [...filteredRows];
     if (!rows.length) return [] as any[];
 
-    const floorMonitorRows = (masterTableRows || []).filter((r) => {
-      if (!isFloorMonitorAssignment(r)) return false;
-      if (dateISO && normalizeISODate(getExamDateISO(r)) !== dateISO) return false;
-      if (requestedPeriod && !floorMonitorAppliesToPage(r, normalizeISODate(getExamDateISO(r)), requestedPeriod)) return false;
-      if (teacherNameFilter && getTeacherName(r).trim() !== teacherNameFilter) return false;
+    /**
+     * ✅ الاحتياط مرتبط بالتاريخ + الفترة، وليس بالمادة.
+     * لذلك نأخذه من الجدول الكامل ونكرره داخل كل كشف لنفس التاريخ والفترة.
+     */
+    const dailyBaseRows = (masterTableRows || []).filter((row) => {
+      if (dateISO && normalizeISODate(getExamDateISO(row)) !== dateISO) return false;
+      if (requestedPeriod && normalizePeriodKey(getExamPeriod(row)) !== normalizePeriodKey(requestedPeriod)) return false;
       return true;
     });
+
+    const reserveByDatePeriod = new Map<string, AnyAssignment[]>();
+    for (const row of dailyBaseRows) {
+      if (String(getTaskType(row)).toUpperCase() !== "RESERVE") continue;
+      const key = datePeriodKey(getExamDateISO(row), getExamPeriod(row));
+      const list = reserveByDatePeriod.get(key) || [];
+      list.push(row);
+      reserveByDatePeriod.set(key, list);
+    }
+
+    const floorMonitorRows = dailyBaseRows.filter((r) => isFloorMonitorAssignment(r));
 
     const groups = new Map<string, { subject: string; dISO: string; period: string; dayLabel: string; time: string; rows: AnyAssignment[] }>();
 
     for (const r of rows) {
+      const taskType = String(getTaskType(r)).toUpperCase();
+
+      // ✅ لا ننشئ صفحة مستقلة للاحتياط أو مراقب الدور؛ يتم إضافتهم داخل كشوف نفس التاريخ/الفترة.
+      if (taskType === "RESERVE" || isFloorMonitorAssignment(r)) continue;
+
       const subject = (getExamSubject(r) || "").trim();
       const dISO = normalizeISODate(getExamDateISO(r));
-      const period = getExamPeriod(r) || "";
+      const period = getExamPeriod(r) || "AM";
       if (!subject || !dISO) continue;
 
       const key = `${dISO}__${normalizePeriodKey(period)}__${normalizeText(subject)}`;
@@ -1375,7 +1425,7 @@ export default function TaskDistributionPrint() {
           subject,
           dISO,
           period,
-          dayLabel: meta?.dayLabel || getExamDayLabel(r) || "—",
+          dayLabel: meta?.dayLabel || getExamDayLabel(r) || dayNameFromISO(dISO, lang) || "—",
           time: meta?.time || getExamTime(r) || "—",
           rows: [],
         });
@@ -1397,17 +1447,15 @@ export default function TaskDistributionPrint() {
       .map((g) => ({
         ...g,
         invigilators: sortInvigilators(g.rows.filter((r) => String(getTaskType(r)).toUpperCase() === "INVIGILATION")),
-        reserves: g.rows.filter((r) => String(getTaskType(r)).toUpperCase() === "RESERVE"),
+        reserves: uniqueAssignmentsByTeacherName(reserveByDatePeriod.get(datePeriodKey(g.dISO, g.period)) || []),
         reviewFree: uniqueAssignmentsByTeacher([
-          ...g.rows.filter((r) => isFloorMonitorAssignment(r)),
           ...floorMonitorRows.filter((r) => floorMonitorAppliesToPage(r, g.dISO, g.period)),
         ]),
       }))
       .sort((a, b) => {
         if (a.dISO !== b.dISO) return a.dISO.localeCompare(b.dISO);
-        const pa = normalizePeriodKey(a.period);
-        const pb = normalizePeriodKey(b.period);
-        if (pa !== pb) return pa.localeCompare(pb, lang === "ar" ? "ar" : "en");
+        const po = periodOrderValue(a.period) - periodOrderValue(b.period);
+        if (po !== 0) return po;
         return a.subject.localeCompare(b.subject, lang === "ar" ? "ar" : "en");
       });
 
@@ -1416,7 +1464,7 @@ export default function TaskDistributionPrint() {
         if (b.invigilators.length !== a.invigilators.length) return b.invigilators.length - a.invigilators.length;
         if (b.reserves.length !== a.reserves.length) return b.reserves.length - a.reserves.length;
         if (b.reviewFree.length !== a.reviewFree.length) return b.reviewFree.length - a.reviewFree.length;
-        return normalizePeriodKey(a.period).localeCompare(normalizePeriodKey(b.period), lang === "ar" ? "ar" : "en");
+        return periodOrderValue(a.period) - periodOrderValue(b.period);
       });
       return ranked.length ? [ranked[0]] : [];
     }
@@ -1569,7 +1617,7 @@ export default function TaskDistributionPrint() {
               props.invigilators.map((r, idx) => (
                 <tr key={idx}>
                   <td style={styles.tdNum}>{idx + 1}</td>
-                  <td style={styles.td}>{getTeacherName(r) || "—"}</td>
+                  <td style={styles.td}>{getPrintableTeacherName(r) || "—"}</td>
                   <td style={styles.td}>{getRoomNumber(r) || "—"}</td>
                   <td style={styles.td}></td>
                 </tr>
@@ -1602,7 +1650,7 @@ export default function TaskDistributionPrint() {
                 props.reserves.map((r, idx) => (
                   <tr key={idx}>
                     <td style={styles.tdNum}>{idx + 1}</td>
-                    <td style={{ ...styles.td, fontWeight: 900 }}>{getTeacherName(r) || "—"}</td>
+                    <td style={{ ...styles.td, fontWeight: 900 }}>{getPrintableTeacherName(r) || "—"}</td>
                     <td style={styles.td}></td>
                   </tr>
                 ))
@@ -1634,7 +1682,7 @@ export default function TaskDistributionPrint() {
                   props.reviewFree.map((r, idx) => (
                     <tr key={idx}>
                       <td style={styles.tdNum}>{idx + 1}</td>
-                      <td style={{ ...styles.td, fontWeight: 900 }}>{getTeacherName(r) || "—"}</td>
+                      <td style={{ ...styles.td, fontWeight: 900 }}>{getPrintableTeacherName(r) || "—"}</td>
                       <td style={styles.td}></td>
                       <td style={styles.td}>{tr("مراقب دور", "Floor Monitor")}</td>
                     </tr>
@@ -1695,7 +1743,7 @@ export default function TaskDistributionPrint() {
         <div style={styles.teacherInfoBox}>
           <div style={styles.teacherInfoRow}>
             <span style={styles.teacherInfoLabel}>{tr("اسم المعلم", "Teacher Name")}:</span>
-            <span style={styles.teacherInfoValue}>{props.teacherName || "—"}</span>
+            <span style={styles.teacherInfoValue}>{getPrintableTeacherName(props.teacherName) || "—"}</span>
           </div>
 
           <div style={styles.teacherInfoRow}>

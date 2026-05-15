@@ -47,41 +47,116 @@ function normalizeISODate(d: string) {
   return m ? m[1] : String(d);
 }
 
-/** ✅ convert AM/BM/PM to Arabic periods */
+/** ✅ Period helpers: قراءة الفترة الثانية بشكل موحد داخل صفحة التقارير */
+function normalizePeriodRaw(p: any) {
+  return String(p || "")
+    .trim()
+    .replace(/[إأآ]/g, "ا")
+    .replace(/ى/g, "ي")
+    .replace(/ة/g, "ه")
+    .replace(/\s+/g, " ");
+}
+
+function compactPeriodValue(p: any) {
+  return normalizePeriodRaw(p)
+    .toLowerCase()
+    .replace(/[\u064B-\u065F]/g, "")
+    .replace(/[\.\s_\-:،/]+/g, "")
+    .trim();
+}
+
+function isSecondPeriodValue(p: any) {
+  const raw = normalizePeriodRaw(p).toLowerCase();
+  const compact = compactPeriodValue(p);
+
+  return (
+    raw.includes("الثاني") ||
+    raw.includes("ثاني") ||
+    raw.includes("مسائي") ||
+    raw.includes("بعد الظهر") ||
+    raw.includes("مساء") ||
+    compact === "pm" ||
+    compact === "p" ||
+    compact === "bm" ||
+    compact === "b" ||
+    compact === "p2" ||
+    compact === "period2" ||
+    compact === "second" ||
+    compact === "secondperiod" ||
+    compact === "2" ||
+    compact === "02"
+  );
+}
+
+function isFirstPeriodValue(p: any) {
+  const raw = normalizePeriodRaw(p).toLowerCase();
+  const compact = compactPeriodValue(p);
+
+  return (
+    raw.includes("الاول") ||
+    raw.includes("اول") ||
+    raw.includes("صباح") ||
+    compact === "am" ||
+    compact === "a" ||
+    compact === "p1" ||
+    compact === "period1" ||
+    compact === "first" ||
+    compact === "firstperiod" ||
+    compact === "1" ||
+    compact === "01"
+  );
+}
+
+/** ✅ convert AM/BM/PM/Arabic variants to Arabic periods */
 function formatPeriod(p: string) {
   const raw = (p || "").toString().trim();
   if (!raw) return "—";
-
-  if (raw.includes("الأولى")) return "الفترة الأولى";
-  if (raw.includes("الثانية")) return "الفترة الثانية";
-
-  const n = raw.toLowerCase().replace(/\./g, "").replace(/\s+/g, " ").trim();
-
-  if (n === "am" || n.startsWith("am") || n.includes(" am") || n === "a m" || n === "a") return "الفترة الأولى";
-
-  if (
-    n === "pm" ||
-    n.startsWith("pm") ||
-    n.includes(" pm") ||
-    n === "p m" ||
-    n === "p" ||
-    n === "bm" ||
-    n.startsWith("bm") ||
-    n.includes(" bm") ||
-    n === "b m" ||
-    n === "b"
-  )
-    return "الفترة الثانية";
-
+  if (isSecondPeriodValue(raw)) return "الفترة الثانية";
+  if (isFirstPeriodValue(raw)) return "الفترة الأولى";
   return raw;
 }
 
 /** ✅ period key for exam matching */
 function normalizePeriodKey(p: string) {
-  const fp = formatPeriod(p || "");
-  if (fp.includes("الأولى")) return "p1";
-  if (fp.includes("الثانية")) return "p2";
-  return normalizeText(fp);
+  if (isSecondPeriodValue(p)) return "p2";
+  if (isFirstPeriodValue(p)) return "p1";
+  return normalizeText(formatPeriod(p || ""));
+}
+
+/** ✅ ترتيب الفترات في التقارير اليومية: الأولى ثم الثانية */
+function periodOrderValue(p: string) {
+  const key = normalizePeriodKey(p || "");
+  if (key === "p1") return 1;
+  if (key === "p2") return 2;
+  return 9;
+}
+
+/** ✅ ترتيب أسماء المراقبين داخل كل تقرير حسب رقم اللجنة ثم الاسم */
+function sortInvigilatorsByCommittee(rows: AnyAssignment[]) {
+  return [...(rows || [])].sort((a, b) => {
+    const ra = parseCommitteeNumber(getRoomNumber(a));
+    const rb = parseCommitteeNumber(getRoomNumber(b));
+    if (ra.num !== rb.num) return ra.num - rb.num;
+    if (ra.raw !== rb.raw) return ra.raw.localeCompare(rb.raw, "ar");
+    return (getTeacherName(a) || "").localeCompare(getTeacherName(b) || "", "ar");
+  });
+}
+
+/** ✅ مفتاح موحد للتاريخ + الفترة حتى يظهر احتياط الفترة في كل كشوف نفس اليوم والفترة */
+function datePeriodKey(dateISO: string, period: string) {
+  return `${normalizeISODate(dateISO || "") || "no-date"}|${normalizePeriodKey(period || "") || "no-period"}`;
+}
+
+/** ✅ منع تكرار اسم الاحتياط إذا تكرر داخليًا في أكثر من مادة لنفس الفترة */
+function uniqueAssignmentsByTeacherName(rows: AnyAssignment[]) {
+  const map = new Map<string, AnyAssignment>();
+  for (const row of rows || []) {
+    const name = (getTeacherName(row) || "").trim();
+    if (!name) continue;
+    const key = normalizeText(name);
+    if (!map.has(key)) map.set(key, row);
+  }
+  return Array.from(map.values()).sort((a, b) => (getTeacherName(a) || "").localeCompare(getTeacherName(b) || "", "ar"));
 }
 
 function taskLabel(t: TaskType | string) {
@@ -131,15 +206,6 @@ type AnyAssignment = any;
 
 function getTeacherName(a: AnyAssignment): string {
   return a?.teacherName || a?.teacher?.name || a?.teacher || a?.name || a?.teacherLabel || "";
-}
-
-/** ✅ للطباعة فقط: إذا كان اسم المراقب/المعلم ينتهي برقم، لا يظهر الرقم في نافذة الطباعة. */
-function removeTrailingTeacherNumberForPrint(name: string): string {
-  const raw = String(name || "").trim();
-  if (!raw || raw === "—") return raw || "—";
-
-  // يدعم الأرقام الإنجليزية والعربية/الهندية في آخر الاسم: مثال: "أحمد محمد 2" أو "أحمد محمد٢"
-  return raw.replace(/[\s_\-–—]*(?:\(?[0-9٠-٩۰-۹]+\)?)\s*$/u, "").trim() || raw;
 }
 
 function getTaskType(a: AnyAssignment): TaskType | string {
@@ -245,6 +311,9 @@ function getExamPeriod(a: AnyAssignment): string {
 function getExamTime(a: AnyAssignment): string {
   return a?.time || a?.examTime || a?.exam?.time || "";
 }
+function getAssignmentExamId(a: AnyAssignment): string {
+  return String(a?.examId ?? a?.examID ?? a?.exam?.id ?? a?.slot?.examId ?? "").trim();
+}
 
 /** -------------------------------------------
  * ✅ Print helpers (تقرير فقط + صفحة واحدة للمعلم الفردي)
@@ -270,6 +339,23 @@ html, body {
   overflow: hidden;
   margin: 0 auto;
   position: relative;
+}
+
+/* ✅ عند طباعة عدة كشوف يومية/عدة معلمين: لا نقص الصفحات */
+#print-page.multi-pages {
+  height: auto !important;
+  overflow: visible !important;
+}
+#print-page.multi-pages #fit-target {
+  transform: none !important;
+}
+#print-page.multi-pages .print-sheet {
+  page-break-after: always;
+  break-after: page;
+}
+#print-page.multi-pages .print-sheet:last-child {
+  page-break-after: auto;
+  break-after: auto;
 }
 
 /* ✅ محتوى التقرير سيتم تصغيره تلقائياً */
@@ -306,12 +392,6 @@ async function printOnlyElement(el: HTMLElement, title = "report") {
   const clone = el.cloneNode(true) as HTMLElement;
   clone.querySelectorAll(".no-print").forEach((n) => n.remove());
 
-  // ✅ تنظيف أسماء المراقبين/المعلمين داخل نافذة الطباعة فقط بدون تغيير البيانات الأصلية في الصفحة.
-  clone.querySelectorAll("[data-print-teacher-name]").forEach((node) => {
-    const elNode = node as HTMLElement;
-    elNode.textContent = removeTrailingTeacherNumberForPrint(elNode.textContent || "");
-  });
-
   const html = `<!doctype html>
 <html lang="ar" dir="rtl">
 <head>
@@ -335,9 +415,13 @@ async function printOnlyElement(el: HTMLElement, title = "report") {
         var target = document.getElementById('fit-target');
         if (!target) return;
 
-        // لو فيه أكثر من صفحة (طباعة الكل) لا نضغطها بصفحة واحدة
+        // لو فيه أكثر من صفحة: افتح الطباعة متعددة الصفحات بدون ضغط أو قص
         var sheets = target.querySelectorAll('.print-sheet');
-        if (sheets && sheets.length > 1) return;
+        if (sheets && sheets.length > 1) {
+          var page = document.getElementById('print-page');
+          if (page) page.className = 'multi-pages';
+          return;
+        }
 
         var rect = target.getBoundingClientRect();
         var contentW = Math.max(rect.width, target.scrollWidth || 0);
@@ -675,21 +759,97 @@ export default function TaskDistributionPrint() {
    * Exams index
    * ------------------------------------------ */
   const examsIndex = useMemo(() => {
-    const map = new Map<string, { dayLabel: string; time: string }>();
+    type ExamMeta = {
+      id: string;
+      subject: string;
+      dateISO: string;
+      period: string;
+      periodKey: string;
+      dayLabel: string;
+      time: string;
+    };
+
+    const exact = new Map<string, ExamMeta>();
+    const bySubjectDate = new Map<string, ExamMeta[]>();
+    const byId = new Map<string, ExamMeta>();
+
     for (const ex of examsList || []) {
-      const s = normalizeText(ex?.subject || "");
+      const subject = String(ex?.subject || "").trim();
+      const s = normalizeText(subject);
       const d = normalizeISODate(ex?.dateISO || "");
-      const p = normalizePeriodKey(ex?.period || "");
-      if (!s || !d || !p) continue;
-      const key = `${s}|${d}|${p}`;
-      if (!map.has(key)) map.set(key, { dayLabel: (ex?.dayLabel || "").trim(), time: (ex?.time || "").trim() });
+      const period = String(ex?.period || "").trim();
+      const periodKey = normalizePeriodKey(period || "");
+      if (!s || !d || !periodKey) continue;
+
+      const meta: ExamMeta = {
+        id: String((ex as any)?.id ?? (ex as any)?.examId ?? "").trim(),
+        subject,
+        dateISO: d,
+        period,
+        periodKey,
+        dayLabel: String(ex?.dayLabel || "").trim(),
+        time: String(ex?.time || "").trim(),
+      };
+
+      const exactKey = `${s}|${d}|${periodKey}`;
+      if (!exact.has(exactKey)) exact.set(exactKey, meta);
+
+      const subjectDateKey = `${s}|${d}`;
+      const list = bySubjectDate.get(subjectDateKey) || [];
+      list.push(meta);
+      bySubjectDate.set(subjectDateKey, list);
+
+      if (meta.id && !byId.has(meta.id)) byId.set(meta.id, meta);
     }
-    return map;
+
+    for (const list of bySubjectDate.values()) {
+      list.sort((a, b) => periodOrderValue(a.period) - periodOrderValue(b.period) || a.subject.localeCompare(b.subject, "ar"));
+    }
+
+    return { exact, bySubjectDate, byId };
   }, [examsList]);
 
-  function lookupExamMeta(subject: string, dISO: string, period: string) {
-    const key = `${normalizeText(subject)}|${normalizeISODate(dISO)}|${normalizePeriodKey(period)}`;
-    return examsIndex.get(key) || null;
+  function lookupExamMeta(subject: string, dISO: string, period: string, time?: string) {
+    const s = normalizeText(subject);
+    const d = normalizeISODate(dISO);
+    const p = normalizePeriodKey(period);
+    if (!s || !d) return null;
+
+    if (p) {
+      const exactKey = `${s}|${d}|${p}`;
+      const exactMatch = examsIndex.exact.get(exactKey);
+      if (exactMatch) return exactMatch;
+    }
+
+    const subjectDateRows = examsIndex.bySubjectDate.get(`${s}|${d}`) || [];
+    if (subjectDateRows.length === 1) return subjectDateRows[0];
+
+    const wantedTime = String(time || "").trim();
+    if (wantedTime) {
+      const byTime = subjectDateRows.find((ex) => String(ex.time || "").trim() === wantedTime);
+      if (byTime) return byTime;
+    }
+
+    if (p) {
+      const byPeriod = subjectDateRows.find((ex) => ex.periodKey === p);
+      if (byPeriod) return byPeriod;
+    }
+
+    return null;
+  }
+
+  function lookupExamMetaForRow(row: AnyAssignment) {
+    const examId = getAssignmentExamId(row);
+    if (examId) {
+      const byId = examsIndex.byId.get(examId);
+      if (byId) return byId;
+    }
+
+    return lookupExamMeta(getExamSubject(row), getExamDateISO(row), getExamPeriod(row), getExamTime(row));
+  }
+
+  function getResolvedExamPeriod(row: AnyAssignment) {
+    return lookupExamMetaForRow(row)?.period || getExamPeriod(row) || "";
   }
 
   /** -------------------------------------------
@@ -908,6 +1068,113 @@ export default function TaskDistributionPrint() {
     return filteredRows.filter((r) => getTaskType(r) === "REVIEW_FREE");
   }, [filteredRows, reportType]);
 
+
+  /** -------------------------------------------
+   * ✅ كل التقارير اليومية عند فتح الصفحة
+   * الترتيب: التاريخ تصاعديًا، ثم الفترة الأولى، ثم الفترة الثانية، ثم المادة.
+   * إذا كان هناك أكثر من مادة في نفس الفترة يتم فصل كل مادة في كشف مستقل.
+   * ------------------------------------------ */
+  const dailyReportGroups = useMemo(() => {
+    if (reportType !== "daily") return [];
+
+    /**
+     * ✅ مهم:
+     * الكشوف اليومية مفصولة حسب المادة، لكن الاحتياط يكون حسب اليوم + الفترة فقط.
+     * لذلك يتم استخراج احتياط الفترة من الجدول الكامل، ثم إظهاره في كل كشوف نفس التاريخ والفترة.
+     */
+    const dailyBaseRows = (masterTableRows || []).filter((row) => {
+      if (!dateISO) return true;
+      return normalizeISODate(getExamDateISO(row) || "") === dateISO;
+    });
+
+    const reserveByDatePeriod = new Map<string, AnyAssignment[]>();
+    for (const row of dailyBaseRows) {
+      if (getTaskType(row) !== "RESERVE") continue;
+      const meta = lookupExamMetaForRow(row);
+      const reserveDate = meta?.dateISO || normalizeISODate(getExamDateISO(row) || "");
+      const reservePeriod = meta?.period || getExamPeriod(row) || "";
+      const key = datePeriodKey(reserveDate, reservePeriod);
+      const list = reserveByDatePeriod.get(key) || [];
+      list.push(row);
+      reserveByDatePeriod.set(key, list);
+    }
+
+    const map = new Map<
+      string,
+      {
+        key: string;
+        dateISO: string;
+        period: string;
+        subject: string;
+        dayLabel: string;
+        time: string;
+        invigilators: AnyAssignment[];
+        reserves: AnyAssignment[];
+        reviewFree: AnyAssignment[];
+      }
+    >();
+
+    for (const row of filteredRows || []) {
+      const task = getTaskType(row);
+
+      // ✅ لا ننشئ كشفًا مستقلًا للاحتياط حسب المادة؛ الاحتياط سيضاف لاحقًا حسب التاريخ + الفترة.
+      if (task === "RESERVE") continue;
+
+      const meta = lookupExamMetaForRow(row);
+      const date = meta?.dateISO || normalizeISODate(getExamDateISO(row) || "");
+      const period = meta?.period || getExamPeriod(row) || "";
+      const subject = meta?.subject || getExamSubject(row) || "";
+      const periodKey = normalizePeriodKey(period);
+      const subjectKey = normalizeText(subject || "بدون مادة");
+      const key = `${date || "no-date"}|${periodKey || "no-period"}|${subjectKey || "no-subject"}`;
+
+      let group = map.get(key);
+      if (!group) {
+        group = {
+          key,
+          dateISO: date,
+          period,
+          subject,
+          dayLabel: meta?.dayLabel || getExamDayLabel(row) || "",
+          time: meta?.time || getExamTime(row) || "",
+          invigilators: [],
+          reserves: [],
+          reviewFree: [],
+        };
+        map.set(key, group);
+      } else if (meta) {
+        if (!group.dayLabel && meta.dayLabel) group.dayLabel = meta.dayLabel;
+        if (!group.time && meta.time) group.time = meta.time;
+        if (!normalizePeriodKey(group.period) && meta.period) group.period = meta.period;
+      }
+
+      if (task === "INVIGILATION") group.invigilators.push(row);
+      else if (task === "REVIEW_FREE") group.reviewFree.push(row);
+    }
+
+    return Array.from(map.values())
+      .map((group) => {
+        const sharedReserveRows = reserveByDatePeriod.get(datePeriodKey(group.dateISO, group.period)) || [];
+
+        return {
+          ...group,
+          invigilators: sortInvigilatorsByCommittee(group.invigilators),
+          reserves: uniqueAssignmentsByTeacherName(sharedReserveRows),
+          reviewFree: [...group.reviewFree].sort((a, b) => (getTeacherName(a) || "").localeCompare(getTeacherName(b) || "", "ar")),
+        };
+      })
+      .sort((a, b) => {
+        const da = a.dateISO || "9999-99-99";
+        const db = b.dateISO || "9999-99-99";
+        if (da !== db) return da.localeCompare(db);
+
+        const po = periodOrderValue(a.period) - periodOrderValue(b.period);
+        if (po !== 0) return po;
+
+        return (a.subject || "").localeCompare(b.subject || "", "ar");
+      });
+  }, [filteredRows, masterTableRows, reportType, dateISO, examsIndex]);
+
   /** -------------------------------------------
    * WhatsApp text
    * ------------------------------------------ */
@@ -939,9 +1206,8 @@ export default function TaskDistributionPrint() {
         const db = normalizeISODate(getExamDateISO(b));
         if (da !== db) return da.localeCompare(db);
 
-        const pa = formatPeriod(getExamPeriod(a));
-        const pb = formatPeriod(getExamPeriod(b));
-        if (pa !== pb) return pa.localeCompare(pb, "ar");
+        const po = periodOrderValue(getResolvedExamPeriod(a)) - periodOrderValue(getResolvedExamPeriod(b));
+        if (po !== 0) return po;
 
         return (getExamSubject(a) || "").toString().localeCompare((getExamSubject(b) || "").toString(), "ar");
       });
@@ -953,8 +1219,186 @@ export default function TaskDistributionPrint() {
   }, [reportType, teacherNameFilter, teacherOptions, masterTableRows, subjectFilter]);
 
   /** -------------------------------------------
-   * Teacher sheet
+   * Daily sheet
    * ------------------------------------------ */
+  function DailySheet(props: {
+    group: {
+      dateISO: string;
+      period: string;
+      subject: string;
+      dayLabel: string;
+      time: string;
+      invigilators: AnyAssignment[];
+      reserves: AnyAssignment[];
+      reviewFree: AnyAssignment[];
+    };
+    pageBreak?: boolean;
+    createdAtISO: string;
+  }) {
+    const group = props.group;
+
+    return (
+      <div className="print-sheet print-daily" style={{ ...styles.sheet, ...(props.pageBreak ? styles.pageBreak : {}) }}>
+        <div style={styles.headerGrid}>
+          <div style={styles.headerRight}>
+            <div style={styles.headerRightLine}>{schoolHeader.countryName}</div>
+            <div style={styles.headerRightLine}>{schoolHeader.ministryName}</div>
+            <div style={styles.headerRightLine}>{schoolHeader.directorateName}</div>
+            <div style={styles.headerRightLine}>{schoolHeader.schoolName}</div>
+          </div>
+
+          <div style={styles.headerCenter}>
+            <img src={logoUrl} alt="شعار" style={{ width: 80, height: 80, objectFit: "contain" }} />
+          </div>
+
+          <div style={styles.headerLeft}>
+            <div style={styles.headerLeftTitle}>كشف مراقبة امتحان</div>
+            <div style={styles.headerLeftSub}>{schoolHeader.semesterLabel}</div>
+            <div style={styles.headerLeftSub}>العام الدراسي {schoolHeader.yearLabel}</div>
+          </div>
+        </div>
+
+        <div style={styles.hr} />
+
+        <div style={styles.examBarWide}>
+          <div style={styles.examBarWideInner}>
+            <div style={styles.examBarWideItem}>
+              <span style={styles.examLabel}>الفترة:</span> <span style={styles.examValue}>{formatPeriod(group.period)}</span>
+            </div>
+            <div style={styles.examBarWideSep}>|</div>
+
+            <div style={styles.examBarWideItem}>
+              <span style={styles.examLabel}>اليوم:</span> <span style={styles.examValue}>{group.dayLabel || "—"}</span>
+            </div>
+            <div style={styles.examBarWideSep}>|</div>
+
+            <div style={styles.examBarWideItem}>
+              <span style={styles.examLabel}>الوقت:</span> <span style={styles.examValue}>{group.time || "—"}</span>
+            </div>
+
+            <div style={styles.examBarWideItem}>
+              <span style={styles.examLabel}>المادة:</span> <span style={styles.examValue}>{group.subject || "—"}</span>
+            </div>
+
+            <div style={styles.examBarWideItem}>
+              <span style={styles.examLabel}>التاريخ:</span> <span style={styles.examValue}>{group.dateISO || "—"}</span>
+            </div>
+          </div>
+        </div>
+
+        <div style={styles.chipRow}>
+          <div style={styles.chip}>كشف بأسماء المراقبين</div>
+        </div>
+
+        <table style={styles.table}>
+          <thead>
+            <tr>
+              <th style={{ ...styles.th, width: 56, textAlign: "center" }}>م</th>
+              <th style={{ ...styles.th }}>اسم المراقب</th>
+              <th style={{ ...styles.th, width: 140 }}>رقم اللجنة</th>
+              <th style={{ ...styles.th, width: 140 }}>التوقيع</th>
+            </tr>
+          </thead>
+          <tbody>
+            {group.invigilators.length ? (
+              group.invigilators.map((r, idx) => (
+                <tr key={idx}>
+                  <td style={styles.tdNum}>{idx + 1}</td>
+                  <td style={styles.td}>{getTeacherName(r) || "—"}</td>
+                  <td style={styles.td}>{getRoomNumber(r) || "—"}</td>
+                  <td style={styles.td}></td>
+                </tr>
+              ))
+            ) : (
+              Array.from({ length: 12 }).map((_, i) => (
+                <tr key={i}>
+                  <td style={styles.tdNum}>{i + 1}</td>
+                  <td style={styles.td}></td>
+                  <td style={styles.td}></td>
+                  <td style={styles.td}></td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+
+        <div style={styles.reserveBlock}>
+          <div style={styles.reserveTitle}>المراقبون الاحتياط</div>
+          <table style={styles.reserveTable}>
+            <thead>
+              <tr>
+                <th style={{ ...styles.th, width: 56, textAlign: "center" }}>م</th>
+                <th style={{ ...styles.th }}>اسم المراقب الاحتياط</th>
+                <th style={{ ...styles.th, width: 200 }}>التوقيع</th>
+              </tr>
+            </thead>
+            <tbody>
+              {group.reserves.length ? (
+                group.reserves.map((r, idx) => (
+                  <tr key={idx}>
+                    <td style={styles.tdNum}>{idx + 1}</td>
+                    <td style={{ ...styles.td, fontWeight: 900 }}>{getTeacherName(r) || "—"}</td>
+                    <td style={styles.td}></td>
+                  </tr>
+                ))
+              ) : (
+                Array.from({ length: 2 }).map((_, i) => (
+                  <tr key={i}>
+                    <td style={styles.tdNum}>{i + 1}</td>
+                    <td style={styles.td}></td>
+                    <td style={styles.td}></td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+
+          <div style={{ marginTop: 14 }}>
+            <div style={styles.reserveTitle}>المعلمون الفارغون للمراجعة</div>
+            <table style={styles.reserveTable}>
+              <thead>
+                <tr>
+                  <th style={{ ...styles.th, width: 56, textAlign: "center" }}>م</th>
+                  <th style={{ ...styles.th }}>اسم المعلم</th>
+                  <th style={{ ...styles.th, width: 200 }}>التوقيع</th>
+                  <th style={{ ...styles.th, width: 220 }}>ملاحظات</th>
+                </tr>
+              </thead>
+              <tbody>
+                {group.reviewFree.length ? (
+                  group.reviewFree.map((r, idx) => (
+                    <tr key={idx}>
+                      <td style={styles.tdNum}>{idx + 1}</td>
+                      <td style={{ ...styles.td, fontWeight: 900 }}>{getTeacherName(r) || "—"}</td>
+                      <td style={styles.td}></td>
+                      <td style={styles.td}>فارغ للمراجعة</td>
+                    </tr>
+                  ))
+                ) : (
+                  Array.from({ length: 1 }).map((_, i) => (
+                    <tr key={i}>
+                      <td style={styles.tdNum}>{i + 1}</td>
+                      <td style={styles.td}></td>
+                      <td style={styles.td}></td>
+                      <td style={styles.td}>فارغ للمراجعة</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div style={styles.bottomSigRow}>
+          <div style={styles.bottomSigCell}>رئيس الكنترول</div>
+          <div style={styles.bottomSigCell}>مدير المدرسة</div>
+        </div>
+
+        <div style={styles.footerNote}>تم إنشاء التقرير من نظام توزيع مهام المراقبة — {props.createdAtISO || ""}</div>
+      </div>
+    );
+  }
+
   function TeacherSheet(props: { teacherName: string; rows: AnyAssignment[]; pageBreak?: boolean; createdAtISO: string }) {
     const employeeNo = getTeacherEmployeeNoByName(props.teacherName);
 
@@ -984,7 +1428,7 @@ export default function TaskDistributionPrint() {
         <div style={styles.teacherInfoBox}>
           <div style={styles.teacherInfoRow}>
             <span style={styles.teacherInfoLabel}>اسم المعلم:</span>
-            <span data-print-teacher-name="true" style={styles.teacherInfoValue}>{props.teacherName || "—"}</span>
+            <span style={styles.teacherInfoValue}>{props.teacherName || "—"}</span>
           </div>
 
           <div style={styles.teacherInfoRow}>
@@ -1016,10 +1460,10 @@ export default function TaskDistributionPrint() {
           <tbody>
             {props.rows.length ? (
               props.rows.map((r, idx) => {
-                const sub = getExamSubject(r) || "";
-                const dISO = normalizeISODate(getExamDateISO(r)) || "";
-                const per = getExamPeriod(r) || "";
-                const meta = lookupExamMeta(sub, dISO, per);
+                const meta = lookupExamMetaForRow(r);
+                const sub = meta?.subject || getExamSubject(r) || "";
+                const dISO = meta?.dateISO || normalizeISODate(getExamDateISO(r)) || "";
+                const per = meta?.period || getExamPeriod(r) || "";
                 const day = meta?.dayLabel || getExamDayLabel(r) || "—";
 
                 return (
@@ -1198,166 +1642,24 @@ export default function TaskDistributionPrint() {
 
       {/* ✅ PRINT AREA: هذا هو التقرير */}
       <div id="print-area" ref={printAreaRef}>
-        {/* DAILY REPORT */}
+        {/* DAILY REPORTS: تظهر كلها مرتبة حسب التاريخ ثم الفترة الأولى ثم الثانية */}
         {reportType === "daily" && (
-          <div className="print-sheet print-daily" style={styles.sheet}>
-            <div style={styles.headerGrid}>
-              <div style={styles.headerRight}>
-                <div style={styles.headerRightLine}>{schoolHeader.countryName}</div>
-                <div style={styles.headerRightLine}>{schoolHeader.ministryName}</div>
-                <div style={styles.headerRightLine}>{schoolHeader.directorateName}</div>
-                <div style={styles.headerRightLine}>{schoolHeader.schoolName}</div>
+          <>
+            {dailyReportGroups.length ? (
+              dailyReportGroups.map((group, index) => (
+                <DailySheet
+                  key={group.key}
+                  group={group}
+                  pageBreak={index < dailyReportGroups.length - 1}
+                  createdAtISO={safeRun.createdAtISO || ""}
+                />
+              ))
+            ) : (
+              <div className="print-sheet print-daily" style={styles.sheet}>
+                <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 10 }}>لا توجد بيانات يومية لعرضها.</div>
               </div>
-
-              <div style={styles.headerCenter}>
-                <img src={logoUrl} alt="شعار" style={{ width: 80, height: 80, objectFit: "contain" }} />
-              </div>
-
-              <div style={styles.headerLeft}>
-                <div style={styles.headerLeftTitle}>كشف مراقبة امتحان</div>
-                <div style={styles.headerLeftSub}>{schoolHeader.semesterLabel}</div>
-                <div style={styles.headerLeftSub}>العام الدراسي {schoolHeader.yearLabel}</div>
-              </div>
-            </div>
-
-            <div style={styles.hr} />
-
-            <div style={styles.examBarWide}>
-              <div style={styles.examBarWideInner}>
-                <div style={styles.examBarWideItem}>
-                  <span style={styles.examLabel}>الفترة:</span> <span style={styles.examValue}>{formatPeriod(headerExamInfo.period)}</span>
-                </div>
-                <div style={styles.examBarWideSep}>|</div>
-
-                <div style={styles.examBarWideItem}>
-                  <span style={styles.examLabel}>اليوم:</span> <span style={styles.examValue}>{headerExamInfo.dayLabel || "—"}</span>
-                </div>
-                <div style={styles.examBarWideSep}>|</div>
-
-                <div style={styles.examBarWideItem}>
-                  <span style={styles.examLabel}>الوقت:</span> <span style={styles.examValue}>{headerExamInfo.time || "—"}</span>
-                </div>
-
-                <div style={styles.examBarWideItem}>
-                  <span style={styles.examLabel}>المادة:</span> <span style={styles.examValue}>{headerExamInfo.subject || "—"}</span>
-                </div>
-
-                <div style={styles.examBarWideItem}>
-                  <span style={styles.examLabel}>التاريخ:</span> <span style={styles.examValue}>{headerExamInfo.dISO || "—"}</span>
-                </div>
-              </div>
-            </div>
-
-            <div style={styles.chipRow}>
-              <div style={styles.chip}>كشف بأسماء المراقبين</div>
-            </div>
-
-            <table style={styles.table}>
-              <thead>
-                <tr>
-                  <th style={{ ...styles.th, width: 56, textAlign: "center" }}>م</th>
-                  <th style={{ ...styles.th }}>اسم المراقب</th>
-                  <th style={{ ...styles.th, width: 140 }}>رقم اللجنة</th>
-                  <th style={{ ...styles.th, width: 140 }}>التوقيع</th>
-                </tr>
-              </thead>
-              <tbody>
-                {dailyInvigilators.length ? (
-                  dailyInvigilators.map((r, idx) => (
-                    <tr key={idx}>
-                      <td style={styles.tdNum}>{idx + 1}</td>
-                      <td data-print-teacher-name="true" style={styles.td}>{getTeacherName(r) || "—"}</td>
-                      <td style={styles.td}>{getRoomNumber(r) || "—"}</td>
-                      <td style={styles.td}></td>
-                    </tr>
-                  ))
-                ) : (
-                  Array.from({ length: 12 }).map((_, i) => (
-                    <tr key={i}>
-                      <td style={styles.tdNum}>{i + 1}</td>
-                      <td style={styles.td}></td>
-                      <td style={styles.td}></td>
-                      <td style={styles.td}></td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-
-            <div style={styles.reserveBlock}>
-              <div style={styles.reserveTitle}>المراقبون الاحتياط</div>
-              <table style={styles.reserveTable}>
-                <thead>
-                  <tr>
-                    <th style={{ ...styles.th, width: 56, textAlign: "center" }}>م</th>
-                    <th style={{ ...styles.th }}>اسم المراقب الاحتياط</th>
-                    <th style={{ ...styles.th, width: 200 }}>التوقيع</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {dailyReserves.length ? (
-                    dailyReserves.map((r, idx) => (
-                      <tr key={idx}>
-                        <td style={styles.tdNum}>{idx + 1}</td>
-                        <td data-print-teacher-name="true" style={{ ...styles.td, fontWeight: 900 }}>{getTeacherName(r) || "—"}</td>
-                        <td style={styles.td}></td>
-                      </tr>
-                    ))
-                  ) : (
-                    Array.from({ length: 2 }).map((_, i) => (
-                      <tr key={i}>
-                        <td style={styles.tdNum}>{i + 1}</td>
-                        <td style={styles.td}></td>
-                        <td style={styles.td}></td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-
-              <div style={{ marginTop: 14 }}>
-                <div style={styles.reserveTitle}>المعلمون الفارغون للمراجعة</div>
-                <table style={styles.reserveTable}>
-                  <thead>
-                    <tr>
-                      <th style={{ ...styles.th, width: 56, textAlign: "center" }}>م</th>
-                      <th style={{ ...styles.th }}>اسم المعلم</th>
-                      <th style={{ ...styles.th, width: 200 }}>التوقيع</th>
-                      <th style={{ ...styles.th, width: 220 }}>ملاحظات</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {dailyReviewFree.length ? (
-                      dailyReviewFree.map((r, idx) => (
-                        <tr key={idx}>
-                          <td style={styles.tdNum}>{idx + 1}</td>
-                          <td data-print-teacher-name="true" style={{ ...styles.td, fontWeight: 900 }}>{getTeacherName(r) || "—"}</td>
-                          <td style={styles.td}></td>
-                          <td style={styles.td}>فارغ للمراجعة</td>
-                        </tr>
-                      ))
-                    ) : (
-                      Array.from({ length: 1 }).map((_, i) => (
-                        <tr key={i}>
-                          <td style={styles.tdNum}>{i + 1}</td>
-                          <td style={styles.td}></td>
-                          <td style={styles.td}></td>
-                          <td style={styles.td}>فارغ للمراجعة</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div style={styles.bottomSigRow}>
-              <div style={styles.bottomSigCell}>رئيس الكنترول</div>
-              <div style={styles.bottomSigCell}>مدير المدرسة</div>
-            </div>
-
-            <div style={styles.footerNote}>تم إنشاء التقرير من نظام توزيع مهام المراقبة — {safeRun.createdAtISO || ""}</div>
-          </div>
+            )}
+          </>
         )}
 
         {/* TEACHER REPORT */}
@@ -1383,9 +1685,14 @@ export default function TaskDistributionPrint() {
             {teacherNameFilter && (
               <TeacherSheet
                 teacherName={teacherNameFilter}
-                rows={[...filteredRows].sort((a, b) =>
-                  normalizeISODate(getExamDateISO(a)).localeCompare(normalizeISODate(getExamDateISO(b)))
-                )}
+                rows={[...filteredRows].sort((a, b) => {
+                  const da = normalizeISODate(lookupExamMetaForRow(a)?.dateISO || getExamDateISO(a));
+                  const db = normalizeISODate(lookupExamMetaForRow(b)?.dateISO || getExamDateISO(b));
+                  if (da !== db) return da.localeCompare(db);
+                  const po = periodOrderValue(getResolvedExamPeriod(a)) - periodOrderValue(getResolvedExamPeriod(b));
+                  if (po !== 0) return po;
+                  return (getExamSubject(a) || "").localeCompare(getExamSubject(b) || "", "ar");
+                })}
                 createdAtISO={safeRun.createdAtISO || ""}
               />
             )}

@@ -455,8 +455,21 @@ export default function TaskDistributionResults() {
 
   const formatPeriod = React.useCallback(
     (period?: string) => {
-      const p = String(period || "AM").toUpperCase();
-      return p === "PM" || p === "BM"
+      const raw = String(period || "AM").replace(/\s+/g, " ").trim();
+      const lower = raw.toLowerCase();
+      const compact = lower.replace(/[\.\s_-]+/g, "");
+      const isSecond =
+        raw.includes("الثانية") ||
+        raw.includes("ثانيه") ||
+        lower.includes("second") ||
+        compact === "pm" ||
+        compact === "bm" ||
+        compact === "p2" ||
+        compact === "period2" ||
+        compact === "2" ||
+        compact === "p";
+
+      return isSecond
         ? tr("الفترة الثانية", "Second Period")
         : tr("الفترة الأولى", "First Period");
     },
