@@ -6,6 +6,8 @@
 // ✅ FIX 5: عمود "المادة" في تقرير المعلم أصبح بنفس عرض عمود "الفترة" لتجنب تكسير النص
 // ✅ NEW: إظهار الرقم الوظيفي للمعلم في تقرير المعلم (فردي) عبر صفحة الكادر التعليمي employeeNo
 // ✅ تحديث تلقائي لصفحة التقرير عند تغيّر: Run + master/all/results + الشعار + بيانات المدرسة + الامتحانات + الكادر التعليمي
+// ✅ NEW: طباعة الكل تتكيّف تلقائيًا مع A4 بحيث لا ينقسم تقرير المعلم الواحد إلى صفحتين
+// ✅ FIX: الكشوف اليومية الطويلة لا تنكسر بين صفحتين؛ كل كشف يومي يتم ضغطه داخل صفحة A4 واحدة
 // عبر: RUN_UPDATED_EVENT + focus + storage + interval (لنفس التبويب)
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -332,59 +334,102 @@ html, body {
   font-family: system-ui, -apple-system, "Segoe UI", Tahoma, Arial, sans-serif;
 }
 
-/* ✅ صفحة ثابتة بقياس A4 (مع margin في @page) */
+/* ✅ الحاوية العامة لا تتحكم في القص؛ كل كشف يتحكم في صفحة A4 الخاصة به */
 #print-page {
   width: 194mm;          /* 210 - (8*2) */
-  height: 281mm;         /* 297 - (8*2) */
-  overflow: hidden;
+  height: auto !important;
+  overflow: visible !important;
   margin: 0 auto;
   position: relative;
 }
 
-/* ✅ عند طباعة عدة كشوف يومية/عدة معلمين: لا نقص الصفحات */
-#print-page.multi-pages {
-  height: auto !important;
-  overflow: visible !important;
-}
-#print-page.multi-pages #fit-target {
+#fit-target {
+  width: 194mm !important;
   transform: none !important;
-}
-#print-page.multi-pages .print-sheet {
-  page-break-after: always;
-  break-after: page;
-}
-#print-page.multi-pages .print-sheet:last-child {
-  page-break-after: auto;
-  break-after: auto;
+  transform-origin: top right;
 }
 
-/* ✅ محتوى التقرير سيتم تصغيره تلقائياً */
-#fit-target {
-  transform-origin: top right;  /* RTL */
+/* ✅ كل كشف/تقرير = صفحة A4 واحدة داخل مساحة الطباعة */
+.print-root .print-sheet {
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  width: 194mm !important;
+  height: 281mm !important;       /* 297 - (8*2) */
+  min-height: 281mm !important;
+  max-height: 281mm !important;
+  margin: 0 auto !important;
+  background: #fff !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+  position: relative !important;
+  page-break-after: always !important;
+  break-after: page !important;
+  page-break-inside: avoid !important;
+  break-inside: avoid !important;
+}
+
+.print-root .print-sheet:last-child {
+  page-break-after: auto !important;
+  break-after: auto !important;
+}
+
+/* ✅ يتم لف محتوى كل كشف داخله ثم تصغيره تلقائيًا */
+.print-root .sheet-fit-inner {
+  width: 194mm !important;
+  min-width: 194mm !important;
+  max-width: 194mm !important;
+  transform-origin: top right !important;
+  box-sizing: border-box !important;
 }
 
 /* تنظيف */
 .no-print { display: none !important; }
 
-/* تنسيق الطباعة داخل النافذة */
-.print-root .print-sheet {
-  box-shadow: none !important;
-  border-radius: 0 !important;
-  width: auto !important;
-  min-height: auto !important;
-  margin: 0 !important;
-  background: #fff !important;
-  padding: 0 !important;
+/* ضغط عام لزيادة فرصة بقاء التقرير داخل صفحة واحدة */
+.print-root table {
+  width: 100% !important;
+  table-layout: fixed !important;
+  border-collapse: collapse !important;
+}
+.print-root th {
+  padding: 4px 5px !important;
+  font-size: 10.5px !important;
+  line-height: 1.15 !important;
+}
+.print-root td {
+  padding: 4px 5px !important;
+  font-size: 10.5px !important;
+  height: 22px !important;
+  line-height: 1.15 !important;
+}
+.print-root th, .print-root td {
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
-/* ضغط بسيط لزيادة فرصة صفحة واحدة */
-.print-root table { width: 100% !important; table-layout: fixed !important; border-collapse: collapse !important; }
-.print-root th { padding: 6px 6px !important; font-size: 12px !important; }
-.print-root td { padding: 6px 6px !important; font-size: 12px !important; height: 26px !important; }
-.print-root th, .print-root td { word-break: break-word; overflow-wrap: anywhere; }
+/* ضغط إضافي للكشف اليومي لأنه أكثر عرضة للكسر بسبب كثرة المراقبين */
+.print-root .print-daily table { margin-top: 0 !important; }
+.print-root .print-daily th {
+  padding: 3px 4px !important;
+  font-size: 10px !important;
+  line-height: 1.1 !important;
+}
+.print-root .print-daily td {
+  padding: 3px 4px !important;
+  font-size: 10px !important;
+  height: 19px !important;
+  line-height: 1.1 !important;
+}
+.print-root .print-daily img {
+  max-width: 58px !important;
+  max-height: 58px !important;
+}
 
 /* منع فواصل غريبة */
-.print-root * { box-shadow: none !important; }
+.print-root * {
+  box-shadow: none !important;
+}
 `;
 
 /** ✅ حذف الأرقام من أسماء المعلمين داخل نافذة الطباعة فقط */
@@ -427,28 +472,84 @@ async function printOnlyElement(el: HTMLElement, title = "report") {
       var maxW = 194 * pxPerMm; // printable area
       var maxH = 281 * pxPerMm;
 
+      function wrapSheetContent(sheet) {
+        if (!sheet) return null;
+        var existing = sheet.querySelector(':scope > .sheet-fit-inner');
+        if (existing) return existing;
+
+        var inner = document.createElement('div');
+        inner.className = 'sheet-fit-inner';
+        while (sheet.firstChild) inner.appendChild(sheet.firstChild);
+        sheet.appendChild(inner);
+        return inner;
+      }
+
+      function measureInner(inner) {
+        if (!inner) return { width: 0, height: 0 };
+        inner.style.transform = 'none';
+        inner.style.transformOrigin = 'top right';
+
+        var rect = inner.getBoundingClientRect();
+        return {
+          width: Math.max(rect.width || 0, inner.scrollWidth || 0),
+          height: Math.max(rect.height || 0, inner.scrollHeight || 0)
+        };
+      }
+
+      function fitOneSheetToA4(sheet) {
+        if (!sheet) return;
+
+        sheet.style.width = '194mm';
+        sheet.style.height = '281mm';
+        sheet.style.minHeight = '281mm';
+        sheet.style.maxHeight = '281mm';
+        sheet.style.overflow = 'hidden';
+        sheet.style.boxSizing = 'border-box';
+        sheet.style.pageBreakInside = 'avoid';
+        sheet.style.breakInside = 'avoid';
+
+        var inner = wrapSheetContent(sheet);
+        if (!inner) return;
+        inner.style.width = '194mm';
+        inner.style.maxWidth = '194mm';
+        inner.style.transform = 'none';
+        inner.style.transformOrigin = 'top right';
+        inner.style.boxSizing = 'border-box';
+
+        var size = measureInner(inner);
+        if (!size.width || !size.height) return;
+
+        var scaleW = maxW / size.width;
+        var scaleH = maxH / size.height;
+        var scale = Math.min(scaleW, scaleH, 1);
+
+        // أمان بسيط حتى لا يلامس آخر سطر نهاية الصفحة في Chrome Print Preview
+        if (scale < 1) scale = Math.max(scale - 0.015, 0.55);
+
+        inner.style.transform = 'scale(' + scale + ')';
+        sheet.setAttribute('data-a4-fit-scale', String(Math.round(scale * 1000) / 1000));
+      }
+
+      function fitAllSheetsToA4(sheets) {
+        var page = document.getElementById('print-page');
+        if (page) page.className = 'a4-pages-ready';
+
+        Array.prototype.forEach.call(sheets || [], function (sheet) {
+          fitOneSheetToA4(sheet);
+        });
+      }
+
       function fitToOnePage() {
         var target = document.getElementById('fit-target');
         if (!target) return;
 
-        // لو فيه أكثر من صفحة: افتح الطباعة متعددة الصفحات بدون ضغط أو قص
         var sheets = target.querySelectorAll('.print-sheet');
-        if (sheets && sheets.length > 1) {
-          var page = document.getElementById('print-page');
-          if (page) page.className = 'multi-pages';
+        if (sheets && sheets.length) {
+          // ✅ مهم: نطبّق التكييف على كل كشف حتى لو كان كشفًا واحدًا فقط.
+          // الاعتماد على scale للحاوية العامة قد يجعل Chrome يكسر الكشف الطويل إلى صفحتين.
+          fitAllSheetsToA4(sheets);
           return;
         }
-
-        var rect = target.getBoundingClientRect();
-        var contentW = Math.max(rect.width, target.scrollWidth || 0);
-        var contentH = Math.max(rect.height, target.scrollHeight || 0);
-        if (!contentW || !contentH) return;
-
-        var scaleW = maxW / contentW;
-        var scaleH = maxH / contentH;
-        var scale = Math.min(scaleW, scaleH, 1);
-
-        target.style.transform = 'scale(' + scale + ')';
       }
 
       function whenImagesReady(cb) {
@@ -468,10 +569,12 @@ async function printOnlyElement(el: HTMLElement, title = "report") {
       window.addEventListener('load', function () {
         whenImagesReady(function () {
           fitToOnePage();
+          setTimeout(fitToOnePage, 80);
           setTimeout(function () {
+            fitToOnePage();
             window.focus();
             window.print();
-          }, 60);
+          }, 220);
         });
       });
     })();
@@ -1104,15 +1207,29 @@ export default function TaskDistributionPrint() {
     });
 
     const reserveByDatePeriod = new Map<string, AnyAssignment[]>();
+    const reviewFreeByDate = new Map<string, AnyAssignment[]>();
+
     for (const row of dailyBaseRows) {
-      if (getTaskType(row) !== "RESERVE") continue;
+      const task = getTaskType(row);
       const meta = lookupExamMetaForRow(row);
-      const reserveDate = meta?.dateISO || normalizeISODate(getExamDateISO(row) || "");
-      const reservePeriod = meta?.period || getExamPeriod(row) || "";
-      const key = datePeriodKey(reserveDate, reservePeriod);
-      const list = reserveByDatePeriod.get(key) || [];
-      list.push(row);
-      reserveByDatePeriod.set(key, list);
+      const rowDate = meta?.dateISO || normalizeISODate(getExamDateISO(row) || "");
+
+      if (task === "RESERVE") {
+        const reservePeriod = meta?.period || getExamPeriod(row) || "";
+        const key = datePeriodKey(rowDate, reservePeriod);
+        const list = reserveByDatePeriod.get(key) || [];
+        list.push(row);
+        reserveByDatePeriod.set(key, list);
+        continue;
+      }
+
+      // ✅ فاضي للمراجعة يظهر داخل كشوف نفس اليوم فقط، ولا ينشئ كشفًا مستقلًا فارغًا.
+      if (task === "REVIEW_FREE") {
+        if (!rowDate) continue;
+        const list = reviewFreeByDate.get(rowDate) || [];
+        list.push(row);
+        reviewFreeByDate.set(rowDate, list);
+      }
     }
 
     const map = new Map<
@@ -1133,8 +1250,9 @@ export default function TaskDistributionPrint() {
     for (const row of filteredRows || []) {
       const task = getTaskType(row);
 
-      // ✅ لا ننشئ كشفًا مستقلًا للاحتياط حسب المادة؛ الاحتياط سيضاف لاحقًا حسب التاريخ + الفترة.
-      if (task === "RESERVE") continue;
+      // ✅ لا ننشئ كشفًا مستقلًا للاحتياط أو المراجعة أو التصحيح.
+      // ✅ التصحيح لا يمثل امتحان مراقبة، لذلك لا يظهر ككشف يومي فارغ في الطباعة.
+      if (task === "RESERVE" || task === "REVIEW_FREE" || task === "CORRECTION_FREE") continue;
 
       const meta = lookupExamMetaForRow(row);
       const date = meta?.dateISO || normalizeISODate(getExamDateISO(row) || "");
@@ -1171,12 +1289,13 @@ export default function TaskDistributionPrint() {
     return Array.from(map.values())
       .map((group) => {
         const sharedReserveRows = reserveByDatePeriod.get(datePeriodKey(group.dateISO, group.period)) || [];
+        const sharedReviewRows = reviewFreeByDate.get(group.dateISO) || [];
 
         return {
           ...group,
           invigilators: sortInvigilatorsByCommittee(group.invigilators),
           reserves: uniqueAssignmentsByTeacherName(sharedReserveRows),
-          reviewFree: [...group.reviewFree].sort((a, b) => (getTeacherName(a) || "").localeCompare(getTeacherName(b) || "", "ar")),
+          reviewFree: uniqueAssignmentsByTeacherName(sharedReviewRows),
         };
       })
       .sort((a, b) => {
