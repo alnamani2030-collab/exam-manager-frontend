@@ -26,6 +26,10 @@ function stableRunSignature(run: any) {
   }
 }
 
+export function getResultsRunSignature(run: any) {
+  return stableRunSignature(run);
+}
+
 export function shouldRefreshResultsRun(eventTenantId: string, currentTenantId: string) {
   const tid = String(eventTenantId || "").trim();
   const current = String(currentTenantId || "").trim();
@@ -33,6 +37,14 @@ export function shouldRefreshResultsRun(eventTenantId: string, currentTenantId: 
   return !tid || tid === current;
 }
 
+/**
+ * Loads the current run, ensures UID values exist, and writes it back only if changed.
+ *
+ * Important:
+ * saveRun is called with silent:true so this helper does not emit RUN_UPDATED_EVENT again.
+ * This prevents:
+ * saveRun -> RUN_UPDATED_EVENT -> useResultsRunSync.refresh -> saveRun -> loop
+ */
 export function loadAndPersistResultsRun(tenantId: string) {
   const loaded = loadRun(tenantId);
   const withUids = ensureUidsOnRun(loaded);
