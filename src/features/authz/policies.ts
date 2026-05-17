@@ -44,6 +44,20 @@ const ROLE_CAPS: Record<SaaSRole, Capability[]> = {
     "SYNC_ADMIN",
     "SETTINGS_MANAGE",
   ],
+  exam_super: [
+    "USERS_MANAGE",
+    "TENANT_READ",
+    "TENANT_WRITE",
+    "TEACHERS_MANAGE",
+    "EXAMS_MANAGE",
+    "ROOMS_MANAGE",
+    "DISTRIBUTION_RUN",
+    "REPORTS_VIEW",
+    "ARCHIVE_MANAGE",
+    "AUDIT_VIEW",
+    "SYNC_ADMIN",
+    "SETTINGS_MANAGE",
+  ],
 };
 
 export function normalizeRoles(input: unknown): SaaSRole[] {
@@ -190,6 +204,7 @@ export function canManageAdminSystemRole(snapshot: AuthzSnapshot, role: string):
       "user",
       "tenant_admin",
       "admin", // legacy
+      "exam_super",
       "super",
       "ministry_super",
       "super_admin",
@@ -197,7 +212,7 @@ export function canManageAdminSystemRole(snapshot: AuthzSnapshot, role: string):
   }
 
   if (canAccessCapability(snapshot, "SUPER_USERS_MANAGE")) {
-    return ["user", "tenant_admin", "admin", "super", "ministry_super"].includes(normalizedRole);
+    return ["user", "tenant_admin", "admin", "exam_super", "super", "ministry_super"].includes(normalizedRole);
   }
 
   if (canAccessCapability(snapshot, "USERS_MANAGE")) {
@@ -211,6 +226,7 @@ export function listAdminSystemAssignableRoles(snapshot: AuthzSnapshot): SaaSRol
   const roles: SaaSRole[] = [];
 
   if (canManageAdminSystemRole(snapshot, "tenant_admin")) roles.push("tenant_admin");
+  if (canManageAdminSystemRole(snapshot, "exam_super")) roles.push("exam_super");
   if (canManageAdminSystemRole(snapshot, "super")) roles.push("super");
   if (canManageAdminSystemRole(snapshot, "ministry_super")) roles.push("ministry_super");
   if (canManageAdminSystemRole(snapshot, "super_admin")) roles.push("super_admin");
@@ -225,6 +241,7 @@ export function resolvePrimaryRoleLabel(snapshot: AuthzSnapshot): string {
 
   if (roles.includes("ministry_super")) return "سوبر الوزارة";
   if (roles.includes("super")) return "سوبر المحافظات";
+  if (roles.includes("exam_super")) return "سوبر الامتحانات";
   if (roles.includes("tenant_admin")) return "أدمن المدرسة";
 
   return "مستخدم";

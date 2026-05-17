@@ -33,6 +33,15 @@ export function resolveRoleBadgeStyle(
     };
   }
 
+  if (roles.includes("exam_super")) {
+    return {
+      label: "سوبر الامتحانات",
+      color: "#60a5fa",
+      background: "rgba(96,165,250,0.12)",
+      border: "1px solid rgba(96,165,250,0.28)",
+    };
+  }
+
   if (roles.includes("tenant_admin")) {
     return {
       label: "أدمن المدرسة",
