@@ -1,4 +1,4 @@
-import { loadRun, saveRun } from "../../../utils/taskDistributionStorage";
+import { loadRun, loadRunPreferCloud, saveRun } from "../../../utils/taskDistributionStorage";
 import { ensureUidsOnRun } from "../uidUtils";
 
 function stableRunSignature(run: any) {
@@ -48,6 +48,25 @@ export function loadAndPersistResultsRun(tenantId: string) {
       source: "results-sync",
       syncMaster: true,
     });
+  }
+
+  return withUids;
+}
+
+export async function loadAndPersistResultsRunFromCloud(tenantId: string) {
+  const loaded = await loadRunPreferCloud(tenantId);
+  const withUids = ensureUidsOnRun(loaded);
+
+  if (!withUids) return withUids;
+
+  try {
+    saveRun(tenantId, withUids as any, {
+      silent: true,
+      source: "results-cloud-sync",
+      syncMaster: true,
+    });
+  } catch {
+    // ignore persistence errors during cloud refresh
   }
 
   return withUids;
