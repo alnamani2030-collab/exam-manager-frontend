@@ -126,6 +126,24 @@ function getTenantType(data: any) {
   return "school";
 }
 
+
+const GOVERNORATE_FIELD_CANDIDATES = [
+  "governorate",
+  "tenantGovernorate",
+  "regionAr",
+  "governorateAr",
+  "scopeGovernorate",
+  "gov",
+];
+
+const FIRESTORE_IN_LIMIT = 30;
+
+function chunkArray<T>(items: T[], size: number) {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
 function isOwnerRole(role: string) {
   return ["super_admin", "platform_owner", "owner", "مالك المنصة"].includes(role);
 }
@@ -239,14 +257,36 @@ export default function PermissionsAudit() {
       const auditRows: AuditRow[] = [];
 
       try {
-        const tenantSnap = await getDocs(collection(db, "tenants"));
-        tenantSnap.forEach((docSnap) => {
-          const data = docSnap.data() as any;
+        const tenantDocs = new Map<string, any>();
+
+        if (isOwner || !currentGovernorate) {
+          const tenantSnap = await getDocs(collection(db, "tenants"));
+          tenantSnap.forEach((docSnap) => tenantDocs.set(docSnap.id, { id: docSnap.id, data: docSnap.data() }));
+        } else {
+          let successCount = 0;
+
+          for (const fieldName of GOVERNORATE_FIELD_CANDIDATES) {
+            try {
+              const tenantSnap = await getDocs(query(collection(db, "tenants"), where(fieldName, "==", currentGovernorate)));
+              tenantSnap.forEach((docSnap) => tenantDocs.set(docSnap.id, { id: docSnap.id, data: docSnap.data() }));
+              successCount += 1;
+            } catch {
+              // بعض الحقول قد لا تكون مستخدمة في قاعدة البيانات؛ نكمل باقي الحقول.
+            }
+          }
+
+          if (successCount === 0) {
+            throw new Error("لم تنجح أي قراءة مفلترة بالمحافظة من مجموعة tenants");
+          }
+        }
+
+        tenantDocs.forEach((entry) => {
+          const data = entry.data as any;
           const gov = getGovernorateFromAny(data);
           if (!isOwner && currentGovernorate && !sameGovernorate(gov, currentGovernorate)) return;
-          tenantMap[docSnap.id] = {
-            id: docSnap.id,
-            name: getTenantName(data) || docSnap.id,
+          tenantMap[entry.id] = {
+            id: entry.id,
+            name: getTenantName(data) || entry.id,
             governorate: gov,
             tenantType: getTenantType(data),
           };
@@ -256,22 +296,44 @@ export default function PermissionsAudit() {
       }
 
       try {
-        const allowQuery =
-          isOwner || !currentGovernorate
-            ? collection(db, "allowlist")
-            : query(collection(db, "allowlist"), where("governorate", "==", currentGovernorate));
-        const allowSnap = await getDocs(allowQuery as any);
-        allowSnap.forEach((docSnap) => {
-          const data = docSnap.data() as any;
+        const allowDocs = new Map<string, any>();
+
+        if (isOwner || !currentGovernorate) {
+          const allowSnap = await getDocs(collection(db, "allowlist"));
+          allowSnap.forEach((docSnap) => allowDocs.set(docSnap.id, { id: docSnap.id, data: docSnap.data() }));
+        } else {
+          for (const fieldName of GOVERNORATE_FIELD_CANDIDATES) {
+            try {
+              const allowSnap = await getDocs(query(collection(db, "allowlist"), where(fieldName, "==", currentGovernorate)));
+              allowSnap.forEach((docSnap) => allowDocs.set(docSnap.id, { id: docSnap.id, data: docSnap.data() }));
+            } catch {
+              // نكمل باقي حقول المحافظة.
+            }
+          }
+
+          const tenantIds = Object.keys(tenantMap).filter(Boolean);
+          for (const tenantIdChunk of chunkArray(tenantIds, FIRESTORE_IN_LIMIT)) {
+            if (!tenantIdChunk.length) continue;
+            try {
+              const allowSnap = await getDocs(query(collection(db, "allowlist"), where("tenantId", "in", tenantIdChunk)));
+              allowSnap.forEach((docSnap) => allowDocs.set(docSnap.id, { id: docSnap.id, data: docSnap.data() }));
+            } catch {
+              // بعض قواعد البيانات القديمة قد لا تحتوي tenantId في كل السجلات.
+            }
+          }
+        }
+
+        allowDocs.forEach((entry) => {
+          const data = entry.data as any;
           const tenantId = String(data?.tenantId || data?.effectiveTenantId || "").trim();
           const tenant = tenantMap[tenantId];
           const gov = getGovernorateFromAny(data, tenant);
           if (!isOwner && currentGovernorate && !sameGovernorate(gov, currentGovernorate)) return;
           const rowRole = String(data?.role || "").trim();
           auditRows.push({
-            id: `allowlist:${docSnap.id}`,
-            email: String(data?.email || docSnap.id || "").trim(),
-            name: getNameFromAny(data) || String(data?.email || docSnap.id || "").split("@")[0],
+            id: `allowlist:${entry.id}`,
+            email: String(data?.email || entry.id || "").trim(),
+            name: getNameFromAny(data) || String(data?.email || entry.id || "").split("@")[0],
             role: rowRole,
             roleLabel: roleLabel(rowRole),
             governorate: gov,
@@ -288,21 +350,43 @@ export default function PermissionsAudit() {
       }
 
       try {
-        const extraQuery =
-          isOwner || !currentGovernorate
-            ? collection(db, "governorateExamSupers")
-            : query(collection(db, "governorateExamSupers"), where("governorate", "==", currentGovernorate));
-        const extraSnap = await getDocs(extraQuery as any);
-        extraSnap.forEach((docSnap) => {
-          const data = docSnap.data() as any;
+        const extraDocs = new Map<string, any>();
+
+        if (isOwner || !currentGovernorate) {
+          const extraSnap = await getDocs(collection(db, "governorateExamSupers"));
+          extraSnap.forEach((docSnap) => extraDocs.set(docSnap.id, { id: docSnap.id, data: docSnap.data() }));
+        } else {
+          for (const fieldName of GOVERNORATE_FIELD_CANDIDATES) {
+            try {
+              const extraSnap = await getDocs(query(collection(db, "governorateExamSupers"), where(fieldName, "==", currentGovernorate)));
+              extraSnap.forEach((docSnap) => extraDocs.set(docSnap.id, { id: docSnap.id, data: docSnap.data() }));
+            } catch {
+              // نكمل باقي حقول المحافظة.
+            }
+          }
+
+          const tenantIds = Object.keys(tenantMap).filter(Boolean);
+          for (const tenantIdChunk of chunkArray(tenantIds, FIRESTORE_IN_LIMIT)) {
+            if (!tenantIdChunk.length) continue;
+            try {
+              const extraSnap = await getDocs(query(collection(db, "governorateExamSupers"), where("tenantId", "in", tenantIdChunk)));
+              extraSnap.forEach((docSnap) => extraDocs.set(docSnap.id, { id: docSnap.id, data: docSnap.data() }));
+            } catch {
+              // نكمل بدون إيقاف الصفحة.
+            }
+          }
+        }
+
+        extraDocs.forEach((entry) => {
+          const data = entry.data as any;
           const tenantId = String(data?.tenantId || "").trim();
           const tenant = tenantMap[tenantId];
           const gov = getGovernorateFromAny(data, tenant);
           if (!isOwner && currentGovernorate && !sameGovernorate(gov, currentGovernorate)) return;
-          const email = String(data?.email || docSnap.id || "").trim();
+          const email = String(data?.email || entry.id || "").trim();
           if (auditRows.some((r) => normalizeText(r.email) === normalizeText(email) && normalizeText(r.tenantId) === normalizeText(tenantId))) return;
           auditRows.push({
-            id: `governorateExamSupers:${docSnap.id}`,
+            id: `governorateExamSupers:${entry.id}`,
             email,
             name: getNameFromAny(data) || email.split("@")[0],
             role: "exam_super",
