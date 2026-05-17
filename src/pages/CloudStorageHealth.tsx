@@ -18,6 +18,8 @@ import {
   deleteCloudBackup,
   fetchCloudBackup,
   listCloudBackups,
+  shouldBackupLocalStorageKey,
+  shouldRestoreLocalStorageKey,
   validateBackupFile,
 } from "../utils/dbBackupManager";
 
@@ -383,12 +385,7 @@ function readLocalStorageSummary() {
       const key = window.localStorage.key(i) || "";
       total += 1;
       if (key.includes("cloud-cache") || key.includes(":cache:")) cache += 1;
-      if (
-        key.startsWith("exam-manager:") ||
-        key.startsWith("school-exam-manager:") ||
-        key.startsWith("task-distribution:") ||
-        key.includes("examRoomAssignments")
-      ) {
+      if (shouldBackupLocalStorageKey(key)) {
         synced += 1;
       }
     }
@@ -455,16 +452,7 @@ function collectTenantLocalStorageSnapshot(tenantId: string) {
   try {
     for (let i = 0; i < window.localStorage.length; i += 1) {
       const key = window.localStorage.key(i) || "";
-      const belongsToApp =
-        key.startsWith("exam-manager:") ||
-        key.startsWith("school-exam-manager:") ||
-        key.startsWith("task-distribution:") ||
-        key.includes("examRoomAssignments") ||
-        key.includes("cloudLocalStorage") ||
-        key.includes("cloud-storage");
-      const belongsToTenant = !target || key.includes(target) || !key.includes("tenant:");
-
-      if (belongsToApp && belongsToTenant) {
+      if (shouldBackupLocalStorageKey(key, target)) {
         rows.push({ key, value: String(window.localStorage.getItem(key) || "") });
       }
     }
@@ -715,7 +703,7 @@ async function restoreFullProgramBackupFromFirestore(tenantId: string, backupId:
   if (typeof window !== "undefined" && Array.isArray(localRows)) {
     localRows.forEach((item) => {
       const key = String(item?.key || "").trim();
-      if (!key) return;
+      if (!key || !shouldRestoreLocalStorageKey(key, tenantId)) return;
       window.localStorage.setItem(key, String(item?.value || ""));
     });
   }
@@ -923,7 +911,7 @@ export default function CloudStorageHealth() {
         if (typeof manager.importDatabase !== "function") {
           throw new Error(tr("دالة الاستعادة غير متاحة في مدير النسخ.", "Restore function is not available."));
         }
-        manager.importDatabase(cloudFile, { prefix: "exam-manager" });
+        manager.importDatabase(cloudFile, { prefix: "exam-manager", tenantId: tid });
         window.dispatchEvent(new Event("exam-manager:cloud-storage:changed"));
         setActionMessage(
           tr(
@@ -1162,8 +1150,11 @@ export default function CloudStorageHealth() {
           retentionPolicyVersion: "v1",
           retentionRole: "latest",
           retentionAnchorISO: createdAt,
+          retentionDemotedAtISO: null,
           retentionExpiresAtISO: isoFromMs(addMonthsMs(new Date(createdAt).getTime(), LATEST_BACKUP_RETENTION_MONTHS)),
           retentionUpdatedAtISO: createdAt,
+          retentionLabelAr: "آخر نسخة - تحفظ لمدة ستة أشهر",
+          retentionLabelEn: "Latest backup - kept for six months",
           totalCollections: FULL_BACKUP_COLLECTIONS.length,
           totalRecords,
           totalChunks,
@@ -1192,8 +1183,11 @@ export default function CloudStorageHealth() {
         createdBy,
         retentionRole: "latest",
         retentionAnchorISO: createdAt,
+        retentionDemotedAtISO: null,
         retentionExpiresAtISO: isoFromMs(addMonthsMs(new Date(createdAt).getTime(), LATEST_BACKUP_RETENTION_MONTHS)),
         retentionUpdatedAtISO: createdAt,
+        retentionLabelAr: "آخر نسخة - تحفظ لمدة ستة أشهر",
+        retentionLabelEn: "Latest backup - kept for six months",
         totalRecords,
         totalChunks,
         note: tr("نسخة كاملة مستقلة", "Full isolated backup"),
