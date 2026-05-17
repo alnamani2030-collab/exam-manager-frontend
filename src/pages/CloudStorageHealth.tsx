@@ -50,6 +50,11 @@ type CloudBackupRow = {
   totalRecords?: unknown;
   totalChunks?: unknown;
   source?: unknown;
+  retentionRole?: unknown;
+  retentionAnchorISO?: unknown;
+  retentionDemotedAtISO?: unknown;
+  retentionExpiresAtISO?: unknown;
+  retentionUpdatedAtISO?: unknown;
   [key: string]: unknown;
 };
 
@@ -267,6 +272,104 @@ function getBackupSizeLabel(item: CloudBackupRow): string {
   const totalChunks = numberFromUnknown(item.totalChunks || item.collectionsCount);
   if (totalRecords || totalChunks) return `${totalRecords} records / ${totalChunks} chunks`;
   return "—";
+}
+
+const STANDARD_BACKUP_RETENTION_DAYS = 21;
+const LATEST_BACKUP_RETENTION_MONTHS = 6;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+type BackupRetentionInfo = {
+  backupId: string;
+  role: "latest" | "standard";
+  anchorMs: number;
+  expiresMs: number;
+  anchorISO: string;
+  expiresAtISO: string;
+  demotedAtISO?: string;
+  expired: boolean;
+};
+
+function isoFromMs(ms: number) {
+  return new Date(ms).toISOString();
+}
+
+function addMonthsMs(ms: number, months: number) {
+  const d = new Date(ms);
+  const day = d.getDate();
+  d.setMonth(d.getMonth() + months);
+
+  // If adding months overflows into the following month, keep the last valid day.
+  // Example: Jan 31 + 1 month -> Feb 28/29 instead of Mar 3.
+  if (d.getDate() < day) d.setDate(0);
+  return d.getTime();
+}
+
+function parseBackupIdTimeMs(id: string): number {
+  const match = String(id || "").match(/(\d{12,})/);
+  if (!match) return 0;
+  const value = Number(match[1]);
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+function getBackupCreatedMs(item: CloudBackupRow): number {
+  return getBackupSortTime(item) || parseBackupIdTimeMs(String(item?.id || ""));
+}
+
+function computeBackupRetentionInfo(item: CloudBackupRow, latestBackupId: string, nowMs = Date.now()): BackupRetentionInfo {
+  const backupId = String(item?.id || "").trim();
+  const createdMs = getBackupCreatedMs(item) || nowMs;
+  const isLatest = !!backupId && backupId === latestBackupId;
+
+  if (isLatest) {
+    const expiresMs = addMonthsMs(createdMs, LATEST_BACKUP_RETENTION_MONTHS);
+    return {
+      backupId,
+      role: "latest",
+      anchorMs: createdMs,
+      expiresMs,
+      anchorISO: isoFromMs(createdMs),
+      expiresAtISO: isoFromMs(expiresMs),
+      expired: nowMs >= expiresMs,
+    };
+  }
+
+  const storedDemotionMs = timestampMsFromUnknown(item.retentionDemotedAtISO);
+  const canStoreDemotion = isFullProgramBackup(item);
+  const anchorMs = storedDemotionMs || (canStoreDemotion ? nowMs : createdMs);
+  const expiresMs = anchorMs + STANDARD_BACKUP_RETENTION_DAYS * MS_PER_DAY;
+
+  return {
+    backupId,
+    role: "standard",
+    anchorMs,
+    expiresMs,
+    anchorISO: isoFromMs(anchorMs),
+    demotedAtISO: isoFromMs(anchorMs),
+    expiresAtISO: isoFromMs(expiresMs),
+    expired: nowMs >= expiresMs,
+  };
+}
+
+function formatRetentionDate(iso: string, lang: "ar" | "en") {
+  const ms = timestampMsFromUnknown(iso);
+  if (!ms) return "—";
+  return new Date(ms).toLocaleDateString(lang === "ar" ? "ar" : "en", { year: "numeric", month: "2-digit", day: "2-digit" });
+}
+
+function getBackupRetentionLabel(item: CloudBackupRow, latestBackupId: string, lang: "ar" | "en") {
+  if (!String(item?.id || "").trim()) return "—";
+  const info = computeBackupRetentionInfo(item, latestBackupId);
+  const expiry = formatRetentionDate(info.expiresAtISO, lang);
+
+  if (lang === "ar") {
+    return info.role === "latest"
+      ? `آخر نسخة: محفوظة 6 أشهر حتى ${expiry}`
+      : `نسخة سابقة: تحذف بعد 3 أسابيع في ${expiry}`;
+  }
+
+  return info.role === "latest"
+    ? `Latest backup: kept for 6 months until ${expiry}`
+    : `Previous backup: deleted after 3 weeks on ${expiry}`;
 }
 
 function readLocalStorageSummary() {
@@ -505,6 +608,47 @@ async function deleteFirestoreBackupDoc(tenantId: string, backupId: string) {
   await deleteDoc(doc(db, "tenants", tenantId, "backups", backupId));
 }
 
+async function updateFirestoreBackupRetention(tenantId: string, item: CloudBackupRow, info: BackupRetentionInfo) {
+  const backupId = String(item?.id || "").trim();
+  if (!tenantId || !backupId || !isFullProgramBackup(item)) return;
+
+  const payload: Record<string, any> = {
+    retentionPolicyVersion: "v1",
+    retentionRole: info.role,
+    retentionAnchorISO: info.anchorISO,
+    retentionExpiresAtISO: info.expiresAtISO,
+    retentionUpdatedAtISO: new Date().toISOString(),
+  };
+
+  if (info.role === "latest") {
+    payload.retentionLabelAr = "آخر نسخة - تحفظ لمدة ستة أشهر";
+    payload.retentionLabelEn = "Latest backup - kept for six months";
+    payload.retentionDemotedAtISO = null;
+  } else {
+    payload.retentionLabelAr = "نسخة سابقة - تحذف بعد ثلاثة أسابيع";
+    payload.retentionLabelEn = "Previous backup - deleted after three weeks";
+    payload.retentionDemotedAtISO = String(item.retentionDemotedAtISO || info.demotedAtISO || info.anchorISO);
+  }
+
+  await setDoc(doc(db, "tenants", tenantId, "backups", backupId), payload, { merge: true });
+}
+
+async function deleteAnyCloudBackup(tenantId: string, item: CloudBackupRow) {
+  const backupId = String(item?.id || "").trim();
+  if (!tenantId || !backupId) return;
+
+  if (isFullProgramBackup(item)) {
+    await deleteFirestoreBackupDoc(tenantId, backupId);
+    return;
+  }
+
+  try {
+    await deleteCloudBackup(tenantId, backupId);
+  } catch {
+    await deleteFirestoreBackupDoc(tenantId, backupId);
+  }
+}
+
 type RestoredFullBackupRows = Record<string, Array<{ id: string; data: any }>>;
 
 function extractRowsFromFullBackupChunks(chunks: Array<Record<string, any>>): RestoredFullBackupRows {
@@ -615,6 +759,70 @@ export default function CloudStorageHealth() {
   const [pendingBackupAction, setPendingBackupAction] = useState<PendingBackupAction>(null);
   const localSummary = useMemo(() => readLocalStorageSummary(), [lastCheckedAt, actionMessage]);
 
+  async function enforceCloudBackupRetentionPolicy(items: CloudBackupRow[]) {
+    const sortedItems = mergeBackupRows(items || []);
+    if (!tid || !sortedItems.length) return sortedItems;
+
+    const latestBackupId = String(sortedItems[0]?.id || "").trim();
+    if (!latestBackupId) return sortedItems;
+
+    // لا نحذف تلقائيًا أثناء وضع المشاهدة فقط، حتى لا يكسر مشرف المحافظة وضع العرض فقط.
+    if (readOnly) return sortedItems;
+
+    const nowMs = Date.now();
+    const keptRows: CloudBackupRow[] = [];
+    let deletedCount = 0;
+    let updatedCount = 0;
+
+    for (const item of sortedItems) {
+      const backupId = String(item?.id || "").trim();
+      if (!backupId) continue;
+
+      const retention = computeBackupRetentionInfo(item, latestBackupId, nowMs);
+
+      if (retention.expired) {
+        try {
+          await deleteAnyCloudBackup(tid, item);
+          deletedCount += 1;
+        } catch {
+          keptRows.push(item);
+        }
+        continue;
+      }
+
+      const rowWithRetention: CloudBackupRow = {
+        ...item,
+        retentionRole: retention.role,
+        retentionAnchorISO: retention.anchorISO,
+        retentionExpiresAtISO: retention.expiresAtISO,
+        retentionDemotedAtISO: retention.role === "standard" ? String(item.retentionDemotedAtISO || retention.demotedAtISO || retention.anchorISO) : "",
+      };
+
+      keptRows.push(rowWithRetention);
+
+      try {
+        if (isFullProgramBackup(item)) {
+          await updateFirestoreBackupRetention(tid, item, retention);
+          updatedCount += 1;
+        }
+      } catch {
+        // لا نوقف تحميل الصفحة إذا فشل تحديث بيانات سياسة الاحتفاظ.
+      }
+    }
+
+    if (deletedCount > 0) {
+      setActionMessage(
+        tr(
+          `تم حذف ${deletedCount} نسخة سحابية منتهية المدة حسب سياسة الاحتفاظ: النسخ السابقة 3 أسابيع، وآخر نسخة 6 أشهر.`,
+          `Deleted ${deletedCount} expired cloud backup(s) according to the retention policy: previous backups 3 weeks, latest backup 6 months.`
+        )
+      );
+    } else if (updatedCount > 0) {
+      // تحديث صامت للمدة فقط، بدون إزعاج المستخدم برسالة جديدة كل مرة.
+    }
+
+    return mergeBackupRows(keptRows);
+  }
 
   async function refreshCloudBackupVersions() {
     if (!tid) return;
@@ -637,7 +845,7 @@ export default function CloudStorageHealth() {
       errors.push(errorMessage(error));
     }
 
-    const merged = mergeBackupRows(allItems);
+    const merged = await enforceCloudBackupRetentionPolicy(allItems);
     setCloudBackups(merged);
 
     if (errors.length && !merged.length) {
@@ -951,6 +1159,11 @@ export default function CloudStorageHealth() {
           createdAt: serverTimestamp(),
           createdAtISO: createdAt,
           createdBy,
+          retentionPolicyVersion: "v1",
+          retentionRole: "latest",
+          retentionAnchorISO: createdAt,
+          retentionExpiresAtISO: isoFromMs(addMonthsMs(new Date(createdAt).getTime(), LATEST_BACKUP_RETENTION_MONTHS)),
+          retentionUpdatedAtISO: createdAt,
           totalCollections: FULL_BACKUP_COLLECTIONS.length,
           totalRecords,
           totalChunks,
@@ -977,6 +1190,10 @@ export default function CloudStorageHealth() {
         tenantId: tid,
         createdAtISO: createdAt,
         createdBy,
+        retentionRole: "latest",
+        retentionAnchorISO: createdAt,
+        retentionExpiresAtISO: isoFromMs(addMonthsMs(new Date(createdAt).getTime(), LATEST_BACKUP_RETENTION_MONTHS)),
+        retentionUpdatedAtISO: createdAt,
         totalRecords,
         totalChunks,
         note: tr("نسخة كاملة مستقلة", "Full isolated backup"),
@@ -1359,6 +1576,12 @@ export default function CloudStorageHealth() {
             "This creates a full backup for this tenant only and uploads it under the current tenant path, keeping each school or diploma center separated."
           )}
         </p>
+        <div style={{ ...miniBoxStyle(), marginBottom: 14, borderColor: "rgba(124, 58, 237, 0.28)", background: "#f5f3ff" }}>
+          {tr(
+            "سياسة الاحتفاظ التلقائي: كل النسخ السابقة تبقى 3 أسابيع ثم تحذف من السحابة، وآخر نسخة تم إنشاؤها تبقى 6 أشهر. عند إنشاء نسخة جديدة تصبح النسخة التي قبلها نسخة سابقة وتبدأ مدة 3 أسابيع لها.",
+            "Automatic retention policy: previous backups are kept for 3 weeks then deleted from the cloud, while the latest created backup is kept for 6 months. When a new backup is created, the one before it becomes a previous backup and its 3-week retention starts."
+          )}
+        </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
           <button
             type="button"
@@ -1438,7 +1661,12 @@ export default function CloudStorageHealth() {
                         {backupId || "—"}
                       </td>
                       <td style={tableCellStyle()}>{formatBackupDate(getBackupCreatedValue(item), lang)}</td>
-                      <td style={tableCellStyle()}>{typeLabel}</td>
+                      <td style={tableCellStyle()}>
+                        <div>{typeLabel}</div>
+                        <div style={{ marginTop: 6, color: "#5b21b6", fontWeight: 900, fontSize: 12, lineHeight: 1.55 }}>
+                          {getBackupRetentionLabel(item, String(cloudBackups[0]?.id || ""), lang)}
+                        </div>
+                      </td>
                       <td style={tableCellStyle()}>{getBackupSizeLabel(item)}</td>
                       <td style={tableCellStyle()}>
                         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
