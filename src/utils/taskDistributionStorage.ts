@@ -4,6 +4,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  onSnapshot,
   orderBy,
   query,
   serverTimestamp,
@@ -194,15 +195,23 @@ function archiveCollectionRef(tenantId: string) {
 
 function writeRunLocal(tenantId: string, run: DistributionRun | null, source: string) {
   const tid = safeTenantId(tenantId);
+  const key = taskDistributionKey(tid);
+  const previousSignature = safeReadRunSignature(tid);
 
   if (!run) {
-    localStorage.removeItem(taskDistributionKey(tid));
+    const hadValue = Boolean(localStorage.getItem(key));
+    localStorage.removeItem(key);
+    if (hadValue) dispatchRunUpdated(tid, source);
     return;
   }
 
-  localStorage.setItem(taskDistributionKey(tid), JSON.stringify(run));
+  const nextSignature = stableRunSignature(run);
+  localStorage.setItem(key, JSON.stringify(run));
   syncMasterTableWithRun(run);
-  dispatchRunUpdated(tid, source);
+
+  if (!previousSignature || previousSignature !== nextSignature) {
+    dispatchRunUpdated(tid, source);
+  }
 }
 
 export function listArchivedRuns(tenantId: string): ArchivedDistributionRun[] {
@@ -387,11 +396,58 @@ export async function loadRunCloud(tenantId: string): Promise<DistributionRun | 
   return (data?.run || null) as DistributionRun | null;
 }
 
+/**
+ * Commercial source-of-truth helper.
+ * Firestore is checked first; localStorage is used only as a cache/fallback.
+ */
+export async function loadRunPreferCloud(tenantId: string): Promise<DistributionRun | null> {
+  const tid = safeTenantId(tenantId);
+  try {
+    const cloudRun = await loadRunCloud(tid);
+    if (cloudRun) {
+      writeRunLocal(tid, cloudRun, "cloud-preferred");
+      return cloudRun;
+    }
+  } catch (error) {
+    console.warn("[taskDistributionStorage] cloud run read failed; using local cache", error);
+  }
+
+  return loadRun(tid);
+}
+
 export async function syncRunFromCloud(tenantId: string): Promise<DistributionRun | null> {
-  const run = await loadRunCloud(tenantId);
-  if (!run) return loadRun(tenantId);
-  writeRunLocal(tenantId, run, "cloud-sync");
-  return run;
+  return loadRunPreferCloud(tenantId);
+}
+
+/**
+ * Realtime subscription for official reports/results.
+ * The callback receives Firestore data when available and keeps localStorage as cache only.
+ */
+export function subscribeRunCloud(
+  tenantId: string,
+  onChange: (run: DistributionRun | null) => void,
+  onError?: (error: unknown) => void,
+) {
+  const tid = safeTenantId(tenantId);
+
+  return onSnapshot(
+    runDocRef(tid),
+    (snap) => {
+      if (!snap.exists()) {
+        onChange(loadRun(tid));
+        return;
+      }
+
+      const data = snap.data() as any;
+      const cloudRun = (data?.run || null) as DistributionRun | null;
+      if (cloudRun) writeRunLocal(tid, cloudRun, "cloud-realtime");
+      onChange(cloudRun || loadRun(tid));
+    },
+    (error) => {
+      onError?.(error);
+      onChange(loadRun(tid));
+    },
+  );
 }
 
 export function saveRun(
