@@ -204,6 +204,7 @@ export default function AdminUsersSection(props: any) {
                         <option value="super_admin">مالك المنصة / super_admin</option>
                         <option value="ministry_super">سوبر الوزارة</option>
                         <option value="super">سوبر المحافظات</option>
+                        <option value="exam_super">سوبر الامتحانات</option>
                         <option value="tenant_admin">أدمن المدرسة</option>
                         <option value="admin">أدمن المدرسة (legacy)</option>
                         <option value="user">مستخدم</option>
@@ -222,7 +223,7 @@ export default function AdminUsersSection(props: any) {
                           }}
                           style={{ padding: "10px 12px", borderRadius: 12, background: "rgba(2,6,23,0.55)", border: "1px solid rgba(255,255,255,0.14)", color: "#e5e7eb", minWidth: 240 }}
                         >
-                          <option value="">-- اختر المدرسة --</option>
+                          <option value="">{isExamSuperRole(currentRole) ? "-- اختر مركز الامتحانات --" : "-- اختر المدرسة --"}</option>
                           {visibleTenants.map((t: any) => <option key={t.id} value={t.id}>{(t.name || t.id)} ({t.id})</option>)}
                         </select>
                       ) : <div style={{ opacity: 0.8, fontSize: 13 }}>—</div>}
