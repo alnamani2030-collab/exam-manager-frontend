@@ -14,7 +14,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { loadTenantArray, writeTenantAudit } from "../services/tenantData";
-import { loadRun, RUN_UPDATED_EVENT, subscribeRunCloud, syncRunFromCloud, taskDistributionKey } from "../utils/taskDistributionStorage";
+import { loadRun, RUN_UPDATED_EVENT, taskDistributionKey } from "../utils/taskDistributionStorage";
 import type { TaskType } from "../contracts/taskDistributionContract";
 
 /** -------------------------------------------
@@ -815,36 +815,13 @@ export default function TaskDistributionPrint() {
     }
   }
 
-  function refreshRunCloudFirst() {
-    void syncRunFromCloud(tenantId)
-      .then((cloudRun) => {
-        if (cloudRun) {
-          setRun(cloudRun);
-          setStorageTick((x) => x + 1);
-        } else {
-          setRun(loadRun(tenantId));
-        }
-      })
-      .catch(() => setRun(loadRun(tenantId)));
-  }
-
   useEffect(() => {
     refreshFromStorage();
-    refreshRunCloudFirst();
     refreshRosterFromFirestore();
-
-    const unsubscribeRunCloud = subscribeRunCloud(
-      tenantId,
-      (cloudRun) => {
-        setRun(cloudRun || loadRun(tenantId));
-        setStorageTick((x) => x + 1);
-      },
-      () => undefined,
-    );
 
     const onRunUpdated = (e: any) => {
       const tid = String(e?.detail?.tenantId || "").trim();
-      if (!tid || tid === String(tenantId)) refreshRunCloudFirst();
+      if (!tid || tid === String(tenantId)) refreshFromStorage();
     };
 
     const onStorage = (e: StorageEvent) => {
@@ -861,27 +838,20 @@ export default function TaskDistributionPrint() {
       }
     };
 
-    const onFocus = () => {
-      refreshRunCloudFirst();
-      refreshFromStorage();
-    };
-
     window.addEventListener(RUN_UPDATED_EVENT, onRunUpdated as any);
     window.addEventListener("storage", onStorage);
-    window.addEventListener("focus", onFocus);
+    window.addEventListener("focus", refreshFromStorage);
 
     const iv = window.setInterval(() => {
-      refreshRunCloudFirst();
       refreshFromStorage();
       // تحديث دوري خفيف لضمان تزامن الطباعة
       refreshRosterFromFirestore();
     }, 2500);
 
     return () => {
-      unsubscribeRunCloud();
       window.removeEventListener(RUN_UPDATED_EVENT, onRunUpdated as any);
       window.removeEventListener("storage", onStorage);
-      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("focus", refreshFromStorage);
       window.clearInterval(iv);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
