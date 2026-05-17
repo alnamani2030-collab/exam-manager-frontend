@@ -23,41 +23,172 @@ import { safeTenantId } from "./superSystemShared";
 
 const MINISTRY_LOGO_URL = "https://i.imgur.com/vdDhSMh.png";
 
+type SubscribeSuperTenantsScope = {
+  canSeeAllGovs?: boolean;
+  myGov?: string;
+};
+
+const SCHOOL_ADMIN_ROLE_VALUES = new Set([
+  "tenant_admin",
+  "admin",
+  "school_admin",
+  "school-admin",
+  "admin_school",
+  "school-admin-user",
+  "schooladmin",
+  "tenant-admin",
+  "مدير المدرسة",
+  "مديرة المدرسة",
+  "أدمن المدرسة",
+  "ادمن المدرسة",
+  "مسؤول المدرسة",
+  "مسؤولة المدرسة",
+  "مشرف المدرسة",
+]);
+
+function normalizeRoleValue(value: unknown) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function getRowGovernorate(...items: any[]) {
+  for (const item of items) {
+    if (!item) continue;
+    const value =
+      item?.governorate ??
+      item?.tenantGovernorate ??
+      item?.regionAr ??
+      item?.governorateAr ??
+      item?.scopeGovernorate ??
+      item?.gov ??
+      "";
+    const normalized = String(value || "").trim();
+    if (normalized) return normalized;
+  }
+  return "";
+}
+
+function timestampToMillis(value: any) {
+  try {
+    if (value && typeof value.toMillis === "function") return Number(value.toMillis()) || 0;
+    if (typeof value === "number") return value;
+    if (typeof value === "string") {
+      const ms = Date.parse(value);
+      return Number.isFinite(ms) ? ms : 0;
+    }
+  } catch {}
+  return 0;
+}
+
+async function readTenantRowFromDocs(tenantId: string, fallback?: Record<string, unknown>): Promise<SuperSystemTenant | null> {
+  const id = String(tenantId || "").trim();
+  if (!id) return null;
+
+  let base: Record<string, unknown> = {};
+  let cfg: Record<string, unknown> = {};
+
+  try {
+    const tenantSnap = await getDoc(doc(db, "tenants", id));
+    if (tenantSnap.exists()) base = (tenantSnap.data() as Record<string, unknown>) || {};
+  } catch {
+    base = {};
+  }
+
+  try {
+    const cfgSnap = await getDoc(doc(db, "tenants", id, "meta", "config"));
+    if (cfgSnap.exists()) cfg = (cfgSnap.data() as Record<string, unknown>) || {};
+  } catch {
+    cfg = {};
+  }
+
+  const sourceName =
+    base?.name ??
+    cfg?.schoolNameAr ??
+    cfg?.centerNameAr ??
+    fallback?.schoolName ??
+    fallback?.tenantName ??
+    fallback?.name ??
+    id;
+
+  return {
+    id,
+    name: String(sourceName || id),
+    enabled: base?.enabled !== false && fallback?.enabled !== false,
+    updatedAt: base?.updatedAt ?? fallback?.updatedAt,
+    governorate: getRowGovernorate(base, cfg, fallback),
+  } satisfies SuperSystemTenant;
+}
+
+async function loadTenantRowsFromGovernorateAllowlist(governorate: string) {
+  const gov = String(governorate || "").trim();
+  if (!gov) return [] as SuperSystemTenant[];
+
+  const allowRef = collection(db, "allowlist");
+  const snaps = await Promise.allSettled([
+    getDocs(query(allowRef, where("governorate", "==", gov), limit(500))),
+    getDocs(query(allowRef, where("tenantGovernorate", "==", gov), limit(500))),
+  ]);
+
+  const linkedByTenant = new Map<string, Record<string, unknown>>();
+
+  for (const result of snaps) {
+    if (result.status !== "fulfilled") continue;
+
+    for (const d of result.value.docs) {
+      const data = (d.data() as Record<string, unknown>) || {};
+      const role = normalizeRoleValue(data.role);
+      if (!SCHOOL_ADMIN_ROLE_VALUES.has(role)) continue;
+
+      const tenantId = String(data.tenantId || data.schoolTenantId || "").trim();
+      if (!tenantId || linkedByTenant.has(tenantId)) continue;
+      linkedByTenant.set(tenantId, data);
+    }
+  }
+
+  const rows = await Promise.all(
+    Array.from(linkedByTenant.entries()).map(([tenantId, fallback]) =>
+      readTenantRowFromDocs(tenantId, fallback),
+    ),
+  );
+
+  return rows.filter(Boolean) as SuperSystemTenant[];
+}
+
+function mergeTenantRows(primaryRows: SuperSystemTenant[], extraRows: SuperSystemTenant[]) {
+  const map = new Map<string, SuperSystemTenant>();
+
+  for (const row of [...extraRows, ...primaryRows]) {
+    if (!row?.id) continue;
+    map.set(row.id, { ...(map.get(row.id) || {}), ...row });
+  }
+
+  return Array.from(map.values()).sort(
+    (a, b) => timestampToMillis((b as any).updatedAt) - timestampToMillis((a as any).updatedAt) || String(a.name || a.id).localeCompare(String(b.name || b.id), "ar"),
+  );
+}
+
 export function subscribeSuperTenants(
   onData: (rows: SuperSystemTenant[]) => void,
   onError?: (error: unknown) => void,
+  scope: SubscribeSuperTenantsScope = {},
 ): Unsubscribe {
-  const qTenants = query(collection(db, "tenants"), orderBy("updatedAt", "desc"), limit(500));
+  const scopedGovernorate = !scope.canSeeAllGovs ? String(scope.myGov || "").trim() : "";
+
+  // ✅ بعد تقوية firestore.rules لا يجوز لمشرف المحافظة طلب كل tenants ثم فلترتها في الواجهة.
+  // لذلك يكون استعلام سوبر المحافظة مقيدًا بمحافظته، مع fallback من allowlist لإظهار المدارس القديمة
+  // التي كان tenant root فيها لا يحتوي governorate لكن ربط الأدمن يحتوي المحافظة.
+  const qTenants = scopedGovernorate
+    ? query(collection(db, "tenants"), where("governorate", "==", scopedGovernorate), limit(500))
+    : query(collection(db, "tenants"), orderBy("updatedAt", "desc"), limit(500));
 
   return onSnapshot(
     qTenants,
     async (snap) => {
-      const rows = await Promise.all(
-        snap.docs.map(async (d) => {
-          const base = (d.data() as Record<string, unknown>) || {};
-          const id = d.id;
-
-          let governorate = "";
-          try {
-            const cfg = await getDoc(doc(db, "tenants", id, "meta", "config"));
-            governorate = String(
-              (cfg.data() as Record<string, unknown> | undefined)?.governorate ?? "",
-            ).trim();
-          } catch {
-            governorate = "";
-          }
-
-          return {
-            id,
-            name: String(base?.name ?? id),
-            enabled: base?.enabled !== false,
-            updatedAt: base?.updatedAt,
-            governorate,
-          } satisfies SuperSystemTenant;
-        }),
+      const primaryRows = await Promise.all(
+        snap.docs.map((d) => readTenantRowFromDocs(d.id, (d.data() as Record<string, unknown>) || {})),
       );
 
-      onData(rows);
+      const extraRows = scopedGovernorate ? await loadTenantRowsFromGovernorateAllowlist(scopedGovernorate) : [];
+      onData(mergeTenantRows(primaryRows.filter(Boolean) as SuperSystemTenant[], extraRows));
     },
     (error) => onError?.(error),
   );
