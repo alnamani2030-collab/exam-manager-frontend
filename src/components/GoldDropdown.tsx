@@ -17,6 +17,20 @@ const DARK_BG_2 = "#0a1630";
 const GOLD = "#d4af37";
 const BORDER = "rgba(212,175,55,0.22)";
 
+function normalizeSearchText(value: any) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\u064B-\u065F\u0670]/g, "")
+    .replace(/[إأآا]/g, "ا")
+    .replace(/ى/g, "ي")
+    .replace(/ة/g, "ه")
+    .replace(/ؤ/g, "و")
+    .replace(/ئ/g, "ي")
+    .replace(/ـ/g, "")
+    .replace(/\s+/g, " ");
+}
+
 export default function GoldDropdown({
   value,
   options,
@@ -27,14 +41,28 @@ export default function GoldDropdown({
 }: Props) {
   const btnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
   const [pos, setPos] = useState<{ left: number; top: number; width: number }>({ left: 0, top: 0, width: 240 });
 
   const selectedLabel = useMemo(() => {
     const found = options.find((o) => o.value === value);
     return found?.label ?? "";
   }, [value, options]);
+
+  const filteredOptions = useMemo(() => {
+    const q = normalizeSearchText(search);
+    if (!q) return options;
+
+    return options.filter((o) => {
+      const haystack = normalizeSearchText(`${o.label || ""} ${o.value || ""}`);
+      return haystack.includes(q);
+    });
+  }, [options, search]);
+
+  const firstEnabledFilteredOption = useMemo(() => filteredOptions.find((o) => !o.disabled), [filteredOptions]);
 
   const computePos = () => {
     const el = btnRef.current;
@@ -52,6 +80,18 @@ export default function GoldDropdown({
     computePos();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, value]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    setSearch("");
+    const focusTimer = window.setTimeout(() => {
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    }, 30);
+
+    return () => window.clearTimeout(focusTimer);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -107,6 +147,17 @@ export default function GoldDropdown({
 
   const menu = open
     ? createPortal(
+        <>
+          <style>{`
+            .gold-dropdown-search-input::placeholder {
+              color: rgba(255,255,255,0.78) !important;
+              -webkit-text-fill-color: rgba(255,255,255,0.78) !important;
+            }
+            .gold-dropdown-search-input::-webkit-input-placeholder {
+              color: rgba(255,255,255,0.78) !important;
+              -webkit-text-fill-color: rgba(255,255,255,0.78) !important;
+            }
+          `}</style>
         <div
           ref={menuRef}
           style={{
@@ -114,7 +165,7 @@ export default function GoldDropdown({
             left: pos.left,
             top: pos.top,
             width: pos.width,
-            maxHeight: 360,
+            maxHeight: 420,
             overflow: "auto",
             background: `linear-gradient(180deg, ${DARK_BG_2}, ${DARK_BG})`,
             border: `1px solid ${BORDER}`,
@@ -124,7 +175,6 @@ export default function GoldDropdown({
             padding: 6,
           }}
         >
-          {/* عنوان صغير (اختياري) */}
           <div
             style={{
               padding: "8px 10px",
@@ -139,43 +189,101 @@ export default function GoldDropdown({
             {placeholder}
           </div>
 
-          {options.map((o) => {
-            const isSelected = o.value === value;
-            return (
-              <button
-                key={o.value + o.label}
-                disabled={o.disabled}
-                onClick={() => {
-                  if (o.disabled) return;
-                  onChange(o.value);
-                  setOpen(false);
-                }}
-                style={{
-                  width: "100%",
-                  textAlign: "right",
-                  border: "none",
-                  borderRadius: 12,
-                  padding: "10px 10px",
-                  background: isSelected ? "rgba(212,175,55,0.14)" : "transparent",
-                  color: o.disabled ? "rgba(212,175,55,0.35)" : GOLD,
-                  fontWeight: 900,
-                  cursor: o.disabled ? "not-allowed" : "pointer",
-                  transition: "background .12s ease",
-                }}
-                onMouseEnter={(e) => {
-                  if (o.disabled) return;
-                  (e.currentTarget.style.background = isSelected ? "rgba(212,175,55,0.18)" : "rgba(255,255,255,0.06)");
-                }}
-                onMouseLeave={(e) => {
-                  if (o.disabled) return;
-                  (e.currentTarget.style.background = isSelected ? "rgba(212,175,55,0.14)" : "transparent");
-                }}
-              >
-                {o.label}
-              </button>
-            );
-          })}
-        </div>,
+          <input
+            className="gold-dropdown-search-input"
+            ref={searchInputRef}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                e.preventDefault();
+                setOpen(false);
+                btnRef.current?.focus();
+                return;
+              }
+
+              if (e.key === "Enter" && firstEnabledFilteredOption) {
+                e.preventDefault();
+                onChange(firstEnabledFilteredOption.value);
+                setSearch("");
+                setOpen(false);
+                btnRef.current?.focus();
+              }
+            }}
+            placeholder="اكتب للبحث داخل المواد..."
+            style={{
+              width: "100%",
+              boxSizing: "border-box",
+              marginBottom: 6,
+              padding: "10px 12px",
+              borderRadius: 12,
+              border: `1px solid ${BORDER}`,
+              outline: "none",
+              background: "rgba(11,18,32,0.92)",
+              color: "#ffffff",
+              WebkitTextFillColor: "#ffffff",
+              caretColor: "#ffffff",
+              fontWeight: 900,
+              fontSize: 13,
+              direction: "rtl",
+            }}
+          />
+
+          {filteredOptions.length ? (
+            filteredOptions.map((o) => {
+              const isSelected = o.value === value;
+              return (
+                <button
+                  key={o.value + o.label}
+                  disabled={o.disabled}
+                  onClick={() => {
+                    if (o.disabled) return;
+                    onChange(o.value);
+                    setSearch("");
+                    setOpen(false);
+                  }}
+                  style={{
+                    width: "100%",
+                    textAlign: "right",
+                    border: "none",
+                    borderRadius: 12,
+                    padding: "10px 10px",
+                    background: isSelected ? "rgba(212,175,55,0.14)" : "transparent",
+                    color: o.disabled ? "rgba(212,175,55,0.35)" : GOLD,
+                    fontWeight: 900,
+                    cursor: o.disabled ? "not-allowed" : "pointer",
+                    transition: "background .12s ease",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (o.disabled) return;
+                    e.currentTarget.style.background = isSelected ? "rgba(212,175,55,0.18)" : "rgba(255,255,255,0.06)";
+                  }}
+                  onMouseLeave={(e) => {
+                    if (o.disabled) return;
+                    e.currentTarget.style.background = isSelected ? "rgba(212,175,55,0.14)" : "transparent";
+                  }}
+                >
+                  {o.label}
+                </button>
+              );
+            })
+          ) : (
+            <div
+              style={{
+                padding: "14px 10px",
+                borderRadius: 12,
+                background: "rgba(255,255,255,0.05)",
+                color: GOLD,
+                fontWeight: 900,
+                textAlign: "center",
+                opacity: 0.85,
+              }}
+            >
+              لا توجد مواد مطابقة للبحث
+            </div>
+          )}
+        </div>
+        </>,
         document.body
       )
     : null;
