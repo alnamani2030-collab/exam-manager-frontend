@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo } from "react";
 import { signOut } from "firebase/auth";
+import { useLocation } from "react-router-dom";
 import { auth } from "../firebase/firebase";
 import { normalizeAllowlistRole } from "./auth-helpers";
 import { SUPER_ADMIN_TENANT_ID, type AuthCtx, type Role } from "./types";
@@ -25,6 +26,17 @@ function getStoredTenantId() {
   }
 }
 
+function getTenantIdFromTenantPath(pathname: string) {
+  const path = String(pathname || "").trim();
+  const match = path.match(/^\/t\/([^/?#]+)/);
+  if (!match) return "";
+  try {
+    return decodeURIComponent(match[1] || "").trim();
+  } catch {
+    return String(match[1] || "").trim();
+  }
+}
+
 
 const DISABLE_FUNCTIONS = String(import.meta.env.VITE_DISABLE_FUNCTIONS ?? "true") === "true";
 const IS_DEV = Boolean(import.meta.env.DEV);
@@ -38,6 +50,8 @@ export function useAuth() {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const location = useLocation();
+  const routeTenantId = useMemo(() => getTenantIdFromTenantPath(location.pathname), [location.pathname]);
   const session = useAuthSessionState();
 
   const { user, allow, userProfile, claims, loading, refreshAllow, setAllow, setUserProfile, setClaims } = session;
@@ -97,7 +111,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const storedTenantId = getStoredTenantId();
 
     if (platformOwner) {
-      return support.isSupportMode && support.supportTenantId ? support.supportTenantId : SUPER_ADMIN_TENANT_ID;
+      if (support.isSupportMode && support.supportTenantId) return support.supportTenantId;
+
+      // عند دخول مالك المنصة إلى مدرسة من المسار /t/:tenantId يجب أن تصبح هذه المدرسة
+      // هي مصدر البيانات. سابقًا كان يرجع SUPER_ADMIN_TENANT_ID، فتظهر صفحات المدرسة فارغة.
+      if (routeTenantId) return routeTenantId;
+
+      return SUPER_ADMIN_TENANT_ID;
+    }
+
+    if (isSuper && routeTenantId) {
+      return routeTenantId;
     }
 
     if (isSuper && storedTenantId) {
@@ -106,7 +130,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (!base) return null;
     return base || null;
-  }, [allow?.tenantId, claims?.tenantId, userProfile?.tenantId, platformOwner, support.isSupportMode, support.supportTenantId, isSuper]);
+  }, [allow?.tenantId, claims?.tenantId, userProfile?.tenantId, platformOwner, support.isSupportMode, support.supportTenantId, isSuper, routeTenantId]);
 
   const effectiveRole = useMemo<Role | null>(() => {
     if (!user?.email) return null;
@@ -134,11 +158,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       // Legacy pages still read these keys. Keep them in sync from the authenticated allowlist
       // so a new device using the same school email opens the same tenant instead of local/default data.
-      if (tid && tid !== SUPER_ADMIN_TENANT_ID && !platformOwner && role !== "super") {
+      if (tid && tid !== SUPER_ADMIN_TENANT_ID && ((!platformOwner && role !== "super") || routeTenantId)) {
         window.localStorage.setItem("tenantId", tid);
         window.localStorage.setItem("effectiveTenantId", tid);
+        window.localStorage.setItem("selectedTenantId", tid);
         window.sessionStorage.setItem("tenantId", tid);
         window.sessionStorage.setItem("effectiveTenantId", tid);
+        window.sessionStorage.setItem("selectedTenantId", tid);
       }
 
       if (role) {
@@ -148,7 +174,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // Legacy sync must not block login.
     }
-  }, [effectiveTenantId, allow?.tenantId, allow?.role, claims?.tenantId, claims?.role, userProfile?.tenantId, effectiveRole, platformOwner]);
+  }, [effectiveTenantId, allow?.tenantId, allow?.role, claims?.tenantId, claims?.role, userProfile?.tenantId, effectiveRole, platformOwner, routeTenantId]);
 
   const logout = async () => {
     try {
