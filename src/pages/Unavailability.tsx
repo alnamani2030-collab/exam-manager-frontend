@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { newId } from "../api/db";
 import { useAuth } from "../auth/AuthContext";
 import { useI18n } from "../i18n/I18nProvider";
@@ -247,6 +247,7 @@ export default function Unavailability() {
   const { effectiveTenantId, user } = useAuth() as any;
   const { lang, isRTL } = useI18n();
   const tenantId = String(effectiveTenantId || "").trim();
+  const currentUserId = String(user?.email || user?.uid || "").trim();
   const t = TEXT[lang];
 
   const BLOCK_LABEL: Record<UnavailabilityBlock, string> = {
@@ -270,6 +271,9 @@ export default function Unavailability() {
   const [deleteTarget, setDeleteTarget] = useState<DisplayRule | null>(null);
   const [deleteNotice, setDeleteNotice] = useState<{ kind: "success" | "error"; message: string } | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
+  const [importBusy, setImportBusy] = useState(false);
+  const [importMessage, setImportMessage] = useState("");
   const [officialSchoolData, setOfficialSchoolData] = useState<SchoolOfficialData>(() => readSchoolOfficialData());
   const [officialLogo, setOfficialLogo] = useState<string>(() => readSchoolOfficialLogo());
 
@@ -408,6 +412,8 @@ export default function Unavailability() {
       return a.teacherName.localeCompare(b.teacherName, lang === "ar" ? "ar" : "en");
     });
   }, [rules, t, lang]);
+
+  const visibleRecordCount = displayRules.length;
 
   const fieldStyle: React.CSSProperties = {
     width: "100%",
@@ -718,6 +724,359 @@ export default function Unavailability() {
     return () => window.removeEventListener(UNAVAIL_UPDATED_EVENT, on as any);
   }, [tenantId]);
 
+
+  function importNormalizeText(value: unknown) {
+    return String(value ?? "")
+      .replace(/[\u200e\u200f]/g, "")
+      .replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)))
+      .replace(/[۰-۹]/g, (d) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)))
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function importNormalizeDate(value: unknown) {
+    const raw = importNormalizeText(value);
+    if (!raw) return "";
+
+    if (/^\d+(\.\d+)?$/.test(raw)) {
+      const serial = Number(raw);
+      if (Number.isFinite(serial) && serial > 20000 && serial < 90000) {
+        const base = new Date(1899, 11, 30);
+        base.setDate(base.getDate() + Math.floor(serial));
+        return unavailabilityLocalISODate(base);
+      }
+    }
+
+    const iso = raw.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/);
+    if (iso) {
+      return `${iso[1]}-${iso[2].padStart(2, "0")}-${iso[3].padStart(2, "0")}`;
+    }
+
+    const local = raw.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
+    if (local) {
+      const day = local[1].padStart(2, "0");
+      const month = local[2].padStart(2, "0");
+      const year = local[3].length === 2 ? `20${local[3]}` : local[3];
+      return `${year}-${month}-${day}`;
+    }
+
+    const parsed = new Date(raw);
+    if (!Number.isNaN(parsed.getTime())) {
+      return unavailabilityLocalISODate(parsed);
+    }
+
+    return "";
+  }
+
+  function importPeriodValue(value: unknown): UnavailabilityPeriod[] {
+    const text = importNormalizeText(value).toLowerCase();
+    if (!text || text.includes("كامل") || text.includes("full") || (text.includes("am") && text.includes("pm"))) {
+      return ["AM", "PM"];
+    }
+    if (text.includes("pm") || text.includes("الثانية") || text.includes("مساء") || text.includes("2")) {
+      return ["PM"];
+    }
+    return ["AM"];
+  }
+
+  function importBlocksValue(value: unknown): UnavailabilityBlock[] {
+    const text = importNormalizeText(value).toLowerCase();
+    if (!text || text.includes("كل") || text.includes("all")) return ["ALL"];
+
+    const next = new Set<UnavailabilityBlock>();
+    if (text.includes("مراق") || text.includes("invig")) next.add("INVIGILATION");
+    if (text.includes("احتياط") || text.includes("reserve")) next.add("RESERVE");
+    if (text.includes("مراجع") || text.includes("مراجعة") || text.includes("review")) next.add("REVIEW_FREE");
+    if (text.includes("تصحيح") || text.includes("correct")) next.add("CORRECTION_FREE");
+
+    return next.size ? Array.from(next) : ["ALL"];
+  }
+
+  function importRowsFromExcelText(text: string) {
+    const source = String(text || "");
+    if (/<table[\s>]/i.test(source)) {
+      const doc = new DOMParser().parseFromString(source, "text/html");
+      const table = doc.querySelector("table");
+      if (!table) return [] as string[][];
+      return Array.from(table.querySelectorAll("tr")).map((tr) =>
+        Array.from(tr.querySelectorAll("th,td")).map((cell) => importNormalizeText(cell.textContent || ""))
+      );
+    }
+
+    return source
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const delimiter = line.includes("\t") ? "\t" : line.includes(";") ? ";" : ",";
+        return line.split(delimiter).map((cell) => importNormalizeText(cell.replace(/^"|"$/g, "")));
+      });
+  }
+
+  function importXmlTextContent(node: Element | null) {
+    return importNormalizeText(node?.textContent || "");
+  }
+
+  function importColumnLettersToIndex(ref: string) {
+    const letters = String(ref || "").replace(/[^A-Za-z]/g, "").toUpperCase();
+    let index = 0;
+    for (let i = 0; i < letters.length; i += 1) {
+      index = index * 26 + (letters.charCodeAt(i) - 64);
+    }
+    return Math.max(0, index - 1);
+  }
+
+  async function importInflateRaw(data: Uint8Array) {
+    const DecompressionStreamCtor = (window as any).DecompressionStream;
+    if (!DecompressionStreamCtor) {
+      throw new Error("XLSX_DECOMPRESSION_NOT_SUPPORTED");
+    }
+
+    // ✅ TypeScript/DOM fix:
+    // BlobPart accepts ArrayBuffer, not every Uint8Array<ArrayBufferLike> shape.
+    // Copy the bytes into a clean ArrayBuffer to avoid SharedArrayBuffer typing conflicts.
+    const arrayBuffer = new ArrayBuffer(data.byteLength);
+    new Uint8Array(arrayBuffer).set(data);
+
+    const stream = new Blob([arrayBuffer]).stream().pipeThrough(new DecompressionStreamCtor("deflate-raw"));
+    const buffer = await new Response(stream).arrayBuffer();
+    return new Uint8Array(buffer);
+  }
+
+  async function importReadZipText(entries: Map<string, { compression: number; data: Uint8Array }>, path: string) {
+    const entry = entries.get(path);
+    if (!entry) return "";
+
+    let bytes = entry.data;
+    if (entry.compression === 8) bytes = await importInflateRaw(bytes);
+    else if (entry.compression !== 0) throw new Error("UNSUPPORTED_ZIP_COMPRESSION");
+
+    return new TextDecoder("utf-8").decode(bytes);
+  }
+
+  function importParseZipEntries(buffer: ArrayBuffer) {
+    const bytes = new Uint8Array(buffer);
+    const view = new DataView(buffer);
+    const entries = new Map<string, { compression: number; data: Uint8Array }>();
+
+    let eocd = -1;
+    for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 66000); i -= 1) {
+      if (view.getUint32(i, true) === 0x06054b50) {
+        eocd = i;
+        break;
+      }
+    }
+    if (eocd < 0) throw new Error("INVALID_XLSX_ZIP");
+
+    const centralDirOffset = view.getUint32(eocd + 16, true);
+    const centralDirSize = view.getUint32(eocd + 12, true);
+    let offset = centralDirOffset;
+    const end = centralDirOffset + centralDirSize;
+
+    while (offset < end && view.getUint32(offset, true) === 0x02014b50) {
+      const compression = view.getUint16(offset + 10, true);
+      const compressedSize = view.getUint32(offset + 20, true);
+      const fileNameLength = view.getUint16(offset + 28, true);
+      const extraLength = view.getUint16(offset + 30, true);
+      const commentLength = view.getUint16(offset + 32, true);
+      const localHeaderOffset = view.getUint32(offset + 42, true);
+      const nameBytes = bytes.slice(offset + 46, offset + 46 + fileNameLength);
+      const name = new TextDecoder("utf-8").decode(nameBytes);
+
+      if (view.getUint32(localHeaderOffset, true) === 0x04034b50) {
+        const localNameLength = view.getUint16(localHeaderOffset + 26, true);
+        const localExtraLength = view.getUint16(localHeaderOffset + 28, true);
+        const dataStart = localHeaderOffset + 30 + localNameLength + localExtraLength;
+        const data = bytes.slice(dataStart, dataStart + compressedSize);
+        entries.set(name, { compression, data });
+      }
+
+      offset += 46 + fileNameLength + extraLength + commentLength;
+    }
+
+    return entries;
+  }
+
+  async function importRowsFromXlsxArrayBuffer(buffer: ArrayBuffer) {
+    const entries = importParseZipEntries(buffer);
+    const sharedStringsXml = await importReadZipText(entries, "xl/sharedStrings.xml").catch(() => "");
+    const sharedStrings: string[] = [];
+
+    if (sharedStringsXml) {
+      const doc = new DOMParser().parseFromString(sharedStringsXml, "application/xml");
+      Array.from(doc.querySelectorAll("si")).forEach((si) => {
+        const parts = Array.from(si.querySelectorAll("t")).map((node) => node.textContent || "");
+        sharedStrings.push(importNormalizeText(parts.join("")));
+      });
+    }
+
+    let sheetPath = "xl/worksheets/sheet1.xml";
+    if (!entries.has(sheetPath)) {
+      const firstSheet = Array.from(entries.keys()).find((name) => /^xl\/worksheets\/sheet\d+\.xml$/i.test(name));
+      if (firstSheet) sheetPath = firstSheet;
+    }
+
+    const sheetXml = await importReadZipText(entries, sheetPath);
+    if (!sheetXml) return [] as string[][];
+
+    const sheetDoc = new DOMParser().parseFromString(sheetXml, "application/xml");
+    const out: string[][] = [];
+
+    Array.from(sheetDoc.querySelectorAll("sheetData row")).forEach((row) => {
+      const values: string[] = [];
+      Array.from(row.querySelectorAll("c")).forEach((cell) => {
+        const ref = cell.getAttribute("r") || "";
+        const index = importColumnLettersToIndex(ref);
+        const type = cell.getAttribute("t") || "";
+        let value = "";
+
+        if (type === "s") {
+          const sharedIndex = Number(importXmlTextContent(cell.querySelector("v")));
+          value = Number.isFinite(sharedIndex) ? sharedStrings[sharedIndex] || "" : "";
+        } else if (type === "inlineStr") {
+          value = importXmlTextContent(cell.querySelector("is"));
+        } else {
+          value = importXmlTextContent(cell.querySelector("v"));
+        }
+
+        values[index] = importNormalizeText(value);
+      });
+      out.push(values.map((x) => importNormalizeText(x || "")));
+    });
+
+    return out;
+  }
+
+  function readImportedFileAsArrayBuffer(file: File) {
+    return new Promise<ArrayBuffer>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as ArrayBuffer);
+      reader.onerror = () => reject(reader.error || new Error("File read failed"));
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  function importColumnIndex(header: string[], names: string[], fallback: number) {
+    const normalized = header.map((item) => importNormalizeText(item).toLowerCase());
+    const index = normalized.findIndex((item) => names.some((name) => item.includes(name.toLowerCase())));
+    return index >= 0 ? index : fallback;
+  }
+
+  function readImportedFileAsText(file: File) {
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(reader.error || new Error("File read failed"));
+      reader.readAsText(file, "utf-8");
+    });
+  }
+
+  async function onImportExcelFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setImportBusy(true);
+    setImportMessage(lang === "ar" ? "جاري استيراد ملف Excel..." : "Importing Excel file...");
+
+    try {
+      const isXlsx = /\.xlsx$/i.test(file.name || "");
+      const matrix = (isXlsx
+        ? await importRowsFromXlsxArrayBuffer(await readImportedFileAsArrayBuffer(file))
+        : importRowsFromExcelText(await readImportedFileAsText(file))
+      ).filter((row) => row.some(Boolean));
+      const headerRowIndex = matrix.findIndex((row) =>
+        row.some((cell) => /المعلم|teacher/i.test(importNormalizeText(cell))) &&
+        row.some((cell) => /التاريخ|date/i.test(importNormalizeText(cell)))
+      );
+      const header = headerRowIndex >= 0 ? matrix[headerRowIndex] : ["م", "المعلم", "التاريخ", "الفترة", "المادة", "المنع على", "سبب"];
+      const body = matrix.slice(headerRowIndex >= 0 ? headerRowIndex + 1 : 1);
+
+      const teacherCol = importColumnIndex(header, ["المعلم", "teacher"], 1);
+      const dateCol = importColumnIndex(header, ["التاريخ", "date"], 2);
+      const periodCol = importColumnIndex(header, ["الفترة", "period"], 3);
+      const subjectCol = importColumnIndex(header, ["مادة", "المادة", "subject", "exam subject"], 4);
+      const blocksCol = importColumnIndex(header, ["المنع", "blocked", "block"], 5);
+      const reasonCol = importColumnIndex(header, ["سبب", "reason"], 6);
+
+      const teacherByName = new Map<string, { id: string; name: string }>();
+      teachers.forEach((teacher) => {
+        teacherByName.set(importNormalizeText(teacher.name).toLowerCase(), teacher);
+      });
+
+      const occupied = new Set<string>();
+      rules.forEach((rule) => occupied.add(`${rule.teacherId}__${rule.dateISO}__${rule.period}`));
+
+      const createdAt = Date.now();
+      const createdRules: UnavailabilityRule[] = [];
+      let skipped = 0;
+      let unmatched = 0;
+
+      for (const row of body) {
+        const importedTeacherName = importNormalizeText(row[teacherCol]);
+        const importedDate = importNormalizeDate(row[dateCol]);
+        if (!importedTeacherName || !importedDate) continue;
+
+        const matchedTeacher = teacherByName.get(importedTeacherName.toLowerCase());
+        if (!matchedTeacher) {
+          unmatched += 1;
+          continue;
+        }
+
+        const targetPeriods = importPeriodValue(row[periodCol]);
+        const importedSubject = importNormalizeText(row[subjectCol]) || undefined;
+        const importedBlocks = importBlocksValue(row[blocksCol]);
+        const importedReason = importNormalizeText(row[reasonCol]) || undefined;
+
+        for (const p of targetPeriods) {
+          const key = `${matchedTeacher.id}__${importedDate}__${p}`;
+          if (occupied.has(key)) {
+            skipped += 1;
+            continue;
+          }
+          occupied.add(key);
+          createdRules.push(({
+            id: newId(),
+            teacherId: matchedTeacher.id,
+            teacherName: matchedTeacher.name,
+            dateISO: importedDate,
+            period: p,
+            examSubject: importedSubject,
+            blocks: importedBlocks,
+            reason: importedReason,
+            createdAt: createdAt + createdRules.length,
+          } as UnavailabilityRule));
+        }
+      }
+
+      if (!createdRules.length) {
+        setImportMessage(lang === "ar"
+          ? `لم يتم استيراد سجلات جديدة. تم تخطي ${skipped} تكرار، ولم يتم العثور على ${unmatched} اسم في قائمة المعلمين.`
+          : `No new records imported. Skipped ${skipped} duplicates and ${unmatched} unmatched names.`);
+        return;
+      }
+
+      const nextRules = [...createdRules, ...rules];
+      saveUnavailability(nextRules, tenantId);
+      setRules(nextRules);
+
+      await persistUnavailabilityToTenant({
+        tenantId,
+        rules: nextRules,
+        by: currentUserId || undefined,
+      });
+
+      window.dispatchEvent(new CustomEvent(UNAVAIL_UPDATED_EVENT, { detail: { tenantId } }));
+      setImportMessage(lang === "ar"
+        ? `تم استيراد ${createdRules.length} سجل بنجاح. تم تخطي ${skipped} تكرار، وعدد الأسماء غير المطابقة ${unmatched}.`
+        : `Imported ${createdRules.length} records successfully. Skipped ${skipped} duplicates and ${unmatched} unmatched names.`);
+    } catch {
+      setImportMessage(lang === "ar" ? "تعذر استيراد ملف Excel. تأكد من ترتيب الأعمدة: المعلم، التاريخ، الفترة، المادة، المنع على، سبب. إذا كان الملف xlsx احفظه بصيغة Excel حديثة واضحة أو CSV ثم أعد المحاولة." : "Could not import the Excel file. Please check the column order: teacher, date, period, subject, blocked on, reason. If this is an xlsx file, save it as a clean modern Excel file or CSV and try again.");
+    } finally {
+      setImportBusy(false);
+      event.target.value = "";
+    }
+  }
+
   function toggleBlock(block: UnavailabilityBlock) {
     setBlocks((prev) => {
       const set = new Set(prev);
@@ -877,7 +1236,15 @@ export default function Unavailability() {
 
   function buildAddedNamesTableHtml() {
     const rows = buildAddedNamesRows();
-    const headers = [t.serial, t.teacher, t.date, t.period, t.blockedOn.replace(":", ""), t.reason.replace(" (اختياري)", "").replace(" (Optional)", "")];
+    const headers = [
+      t.serial,
+      t.teacher,
+      t.date,
+      t.period,
+      t.subject,
+      t.blockedOn.replace(":", ""),
+      t.reason.replace(" (اختياري)", "").replace(" (Optional)", ""),
+    ];
     const body = rows.length
       ? rows
           .map(
@@ -887,12 +1254,13 @@ export default function Unavailability() {
                 <td>${unavailabilityEscapeHtml(row.teacherName)}</td>
                 <td>${unavailabilityEscapeHtml(row.dateISO)}</td>
                 <td>${unavailabilityEscapeHtml(row.periodLabel)}</td>
+                <td>${unavailabilityEscapeHtml(row.subject)}</td>
                 <td>${unavailabilityEscapeHtml(row.blocks)}</td>
                 <td>${unavailabilityEscapeHtml(row.reason)}</td>
               </tr>`,
           )
           .join("")
-      : `<tr><td colspan="6">${unavailabilityEscapeHtml(t.noRecords)}</td></tr>`;
+      : `<tr><td colspan="7">${unavailabilityEscapeHtml(t.noRecords)}</td></tr>`;
 
     return `
       <table>
@@ -1053,7 +1421,7 @@ export default function Unavailability() {
       <div className="luxFade" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 12, marginBottom: 16 }}>
         {[
           { label: t.teachersCount, value: teachers.length || 0 },
-          { label: t.currentRecords, value: rules.length || 0 },
+          { label: t.currentRecords, value: visibleRecordCount || 0 },
           { label: t.selectedTeacher, value: teacherName || t.none },
         ].map((item) => (
           <div key={item.label} className="statCard">
@@ -1320,6 +1688,15 @@ export default function Unavailability() {
       </h2>
 
 
+      <input
+        ref={importInputRef}
+        type="file"
+        accept=".xlsx,.xls,.html,.htm,.csv,.txt"
+        onChange={onImportExcelFile}
+        style={{ display: "none" }}
+      />
+
+
       <div
         className="luxFade"
         style={{
@@ -1329,7 +1706,18 @@ export default function Unavailability() {
           flexWrap: "wrap",
           margin: "0 0 16px",
         }}
-      >
+      >        <button
+          type="button"
+          onClick={() => importInputRef.current?.click()}
+          disabled={importBusy}
+          className="goldBtn"
+          style={{ padding: "10px 14px", opacity: importBusy ? 0.68 : 1, cursor: importBusy ? "wait" : "pointer" }}
+        >
+          {importBusy
+            ? lang === "ar" ? "جاري الاستيراد..." : "Importing..."
+            : lang === "ar" ? "📥 استيراد Excel" : "📥 Import Excel"}
+        </button>
+
         <button
           type="button"
           onClick={onPrintAddedNames}
@@ -1337,7 +1725,7 @@ export default function Unavailability() {
           className="goldBtn"
           style={{ opacity: displayRules.length ? 1 : 0.55, cursor: displayRules.length ? "pointer" : "not-allowed" }}
         >
-          🖨️ {t.printAddedNames}
+          🖨️ {lang === "ar" ? "طباعة سجل الغياب" : t.printAddedNames}
         </button>
         <button
           type="button"
@@ -1350,7 +1738,25 @@ export default function Unavailability() {
         </button>
       </div>
 
-      {rules.length === 0 ? (
+      
+      {importMessage ? (
+        <div
+          className="luxFade"
+          style={{
+            border: "2px solid #2563eb",
+            borderRadius: 16,
+            background: "#eff6ff",
+            color: "#111827",
+            fontWeight: 1000,
+            padding: "12px 16px",
+            marginBottom: 14,
+          }}
+        >
+          {importMessage}
+        </div>
+      ) : null}
+
+{displayRules.length === 0 ? (
         <div className="luxFade unavailability-empty-state">
           {t.noRecords}
         </div>
