@@ -389,6 +389,37 @@ export type ReplaceOptions = {
  * Preserved behavior:
  * uses writeActivityLog service.
  */
+function normalizeAuditAction(value: unknown) {
+  const raw = clean(value).toUpperCase().replace(/[\s\-]+/g, "_");
+  return raw || "SYSTEM";
+}
+
+function normalizeAuditActor(by?: string) {
+  const value = clean(by);
+  if (!value) return { actorUid: undefined as string | undefined, actorEmail: undefined as string | undefined };
+  if (value.includes("@")) return { actorUid: undefined, actorEmail: value };
+  return { actorUid: value, actorEmail: undefined };
+}
+
+function normalizeAuditMeta(meta: any) {
+  if (!meta || typeof meta !== "object") return meta ?? null;
+
+  // Avoid accidentally sending very large objects to the audit function.
+  // Full records are still supported, but huge arrays are summarized.
+  const out: AnyRecord = { ...meta };
+  for (const key of Object.keys(out)) {
+    const value = out[key];
+    if (Array.isArray(value) && value.length > 40) {
+      out[key] = {
+        type: "array-summary",
+        count: value.length,
+        sample: value.slice(0, 5),
+      };
+    }
+  }
+  return out;
+}
+
 export async function writeTenantAudit(
   tenantId: string,
   payload: {
@@ -400,15 +431,22 @@ export async function writeTenantAudit(
   },
 ) {
   const tid = safeTenantId(tenantId);
+  if (!tid) return;
+
+  const action = normalizeAuditAction(payload.action);
+  const entity = clean(payload.entity) || "system";
+  const meta = normalizeAuditMeta(payload.meta);
+  const actor = normalizeAuditActor(payload.by);
 
   await writeActivityLog(tid, {
-    level: "info",
-    action: (payload.action?.toUpperCase?.() as any) || "SYSTEM",
-    entityType: payload.entity,
-    entityId: payload.entityId,
-    message: payload.meta?.summary || `${payload.action} ${payload.entity}`,
-    actorEmail: payload.by,
-    after: payload.meta ?? null,
+    level: action.includes("DELETE") || action.includes("RESTORE") ? "warning" : "info",
+    action: (action as any) || "SYSTEM",
+    entityType: entity,
+    entityId: clean(payload.entityId) || undefined,
+    message: meta?.summary || `${action} ${entity}`,
+    actorUid: actor.actorUid,
+    actorEmail: actor.actorEmail,
+    after: meta ?? null,
   });
 }
 
