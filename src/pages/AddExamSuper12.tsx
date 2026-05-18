@@ -279,10 +279,10 @@ export default function AddExamSuper12() {
   const loadCenters = async () => {
     setLoading(true);
     try {
-      const snap = await getDocs(collection(db, "tenants"));
-      const list: ExamCenterRow[] = [];
+      const tenantsRef = collection(db, "tenants");
+      const listMap = new Map<string, ExamCenterRow>();
 
-      snap.forEach((docSnap) => {
+      const addCenterFromSnapshot = (docSnap: any) => {
         const data = docSnap.data() as any;
         const row = { id: docSnap.id, ...data } as any;
         if (!isExamCenterTenant(row)) return;
@@ -290,21 +290,56 @@ export default function AddExamSuper12() {
         const governorate = getGovernorateValue(row);
         if (!owner && !sameGovernorate(governorate, currentGovernorate)) return;
 
-        list.push({
+        listMap.set(docSnap.id, {
           id: docSnap.id,
           name: String(data?.name || data?.centerName || data?.schoolName || docSnap.id),
           governorate,
           enabled: data?.enabled !== false,
         });
-      });
+      };
 
+      if (owner) {
+        const snap = await getDocs(tenantsRef);
+        snap.forEach(addCenterFromSnapshot);
+      } else {
+        const governorate = String(currentGovernorate || "").trim();
+        if (!governorate) {
+          setCenters([]);
+          return;
+        }
+
+        // بعد تقوية firestore.rules لا يجوز لمشرف المحافظة قراءة كل tenants ثم فلترتها من الواجهة.
+        // لذلك نقرأ المراكز باستعلامات مقيدة بالمحافظة نفسها. بعض السجلات القديمة قد تستخدم
+        // tenantGovernorate أو regionAr بدل governorate، لذلك نحاول أكثر من حقل بدون إظهار تحذير
+        // إذا فشل أحد الاستعلامات، ونكتفي بالنتائج المسموحة.
+        const governorateFields = ["governorate", "tenantGovernorate", "regionAr", "governorateAr", "scopeGovernorate"];
+        let successfulReads = 0;
+        let lastError: unknown = null;
+
+        for (const field of governorateFields) {
+          try {
+            const snap = await getDocs(query(tenantsRef, where(field, "==", governorate)));
+            successfulReads += 1;
+            snap.forEach(addCenterFromSnapshot);
+          } catch (error) {
+            lastError = error;
+            console.warn(`tenants query by ${field} skipped`, error);
+          }
+        }
+
+        if (!successfulReads && lastError) {
+          throw lastError;
+        }
+      }
+
+      const list = Array.from(listMap.values());
       list.sort((a, b) => `${a.governorate} ${a.name}`.localeCompare(`${b.governorate} ${b.name}`, "ar"));
       setCenters(list);
     } catch (error) {
       console.error(error);
       setMessage({
         type: "warn",
-        text: "تعذر تحميل مراكز الدبلوم من السحابة. يمكنك إضافة مركز جديد إذا كانت الصلاحيات تسمح بذلك.",
+        text: "تعذر تحميل مراكز الدبلوم من السحابة. تأكد أن مراكز الدبلوم تحمل نفس محافظة مشرف المحافظة، أو أضف مركزًا جديدًا من النموذج.",
       });
     } finally {
       setLoading(false);
