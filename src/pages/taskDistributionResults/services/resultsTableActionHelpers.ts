@@ -1,11 +1,42 @@
 import { isTeacherUnavailable } from '../../../utils/taskDistributionUnavailability';
 import { parseColKey } from './resultsDragDropRules';
 
+function normalizeArabicPeriodText(value: any) {
+  return String(value ?? '')
+    .replace(/[إأآ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .replace(/[ً-ٰٟ]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function periodToAMPM(value: any): 'AM' | 'PM' {
-  const raw = String(value ?? '').replace(/\s+/g, ' ').trim();
+  const raw = normalizeArabicPeriodText(value);
   const lower = raw.toLowerCase();
-  const compact = lower.replace(/[\.\s_-]+/g, '');
-  if (raw.includes('الثانية') || raw.includes('ثانيه') || lower.includes('second') || compact === 'pm' || compact === 'bm' || compact === 'p2' || compact === 'period2' || compact === '2' || compact === 'p') return 'PM';
+  const compact = lower.replace(/[\.\s_\-:،/]+/g, '');
+  if (
+    raw.includes('الثاني') ||
+    raw.includes('ثاني') ||
+    raw.includes('مسائي') ||
+    raw.includes('مساء') ||
+    raw.includes('بعد الظهر') ||
+    lower.includes('second') ||
+    lower.includes('afternoon') ||
+    lower.includes('evening') ||
+    compact === 'pm' ||
+    compact === 'bm' ||
+    compact === 'p2' ||
+    compact === 'period2' ||
+    compact === 'secondperiod' ||
+    compact === '2ndperiod' ||
+    compact === 'shift2' ||
+    compact === 'session2' ||
+    compact === '2' ||
+    compact === '02' ||
+    compact === 'p' ||
+    compact === 'b'
+  ) return 'PM';
   return 'AM';
 }
 
