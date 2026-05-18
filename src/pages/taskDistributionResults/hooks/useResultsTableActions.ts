@@ -5,6 +5,7 @@ import { addTaskToResultsEmptyCell, deleteAssignmentFromResultsRun, deleteAssign
 import { getAssignmentsInCell, isDraggableTaskType } from "../services/resultsDragDropRules";
 import { createResultsCellUnavailabilityResolver } from "../services/resultsTableActionResolvers";
 import { buildResultsExcelExportPayload } from "../services/resultsTableActionPayloads";
+import { writeTenantAudit } from "../../../services/tenantData";
 
 
 const MUTATION_BLOCK_MSG_AR = "وضع المشاهدة فقط: لا يمكن تعديل جدول النتائج.";
@@ -90,6 +91,91 @@ function normalizeManualTaskType(value: any) {
   return raw;
 }
 
+
+function getAuditActor(auth: any) {
+  return String(
+    auth?.user?.email ||
+      auth?.profile?.email ||
+      auth?.userProfile?.email ||
+      auth?.user?.uid ||
+      auth?.profile?.uid ||
+      auth?.userProfile?.uid ||
+      "",
+  ).trim();
+}
+
+function getAuditActionFromNote(note?: string) {
+  const text = String(note || "").trim();
+  if (/حذف|delete|remove/i.test(text)) return "MANUAL_DELETE_TASK";
+  if (/إضافة|اضافة|add/i.test(text)) return "MANUAL_ADD_TASK";
+  if (/تبديل|swap/i.test(text)) return "MANUAL_SWAP_TASK";
+  if (/نقل|move/i.test(text)) return "MANUAL_MOVE_TASK";
+  if (/تعارض|conflict/i.test(text)) return "MANUAL_EDIT_WITH_WARNING";
+  return "MANUAL_EDIT_RESULTS";
+}
+
+function countTaskTypes(assignments: any[]) {
+  const out: Record<string, number> = {};
+  for (const item of Array.isArray(assignments) ? assignments : []) {
+    const taskType = String(item?.taskType || "UNKNOWN").trim() || "UNKNOWN";
+    out[taskType] = (out[taskType] || 0) + 1;
+  }
+  return out;
+}
+
+function countChangedAssignments(before: any[], after: any[]) {
+  const beforeMap = new Map<string, string>();
+  for (const item of Array.isArray(before) ? before : []) {
+    const uid = String(item?.__uid || item?.id || "").trim();
+    if (!uid) continue;
+    beforeMap.set(uid, JSON.stringify(item || {}));
+  }
+
+  let changed = 0;
+  for (const item of Array.isArray(after) ? after : []) {
+    const uid = String(item?.__uid || item?.id || "").trim();
+    if (!uid || beforeMap.get(uid) !== JSON.stringify(item || {})) changed += 1;
+    if (uid) beforeMap.delete(uid);
+  }
+
+  return changed + beforeMap.size;
+}
+
+function writeResultsManualAudit(args: {
+  tenantId: string;
+  auth: any;
+  run: any;
+  before: any[];
+  after: any[];
+  note?: string;
+}) {
+  const tenantId = String(args.tenantId || "").trim();
+  if (!tenantId) return;
+
+  const before = Array.isArray(args.before) ? args.before : [];
+  const after = Array.isArray(args.after) ? args.after : [];
+  const action = getAuditActionFromNote(args.note);
+
+  void writeTenantAudit(tenantId, {
+    action,
+    entity: "task_distribution_results",
+    by: getAuditActor(args.auth) || undefined,
+    entityId: String(args.run?.runId || "latest"),
+    meta: {
+      summary: String(args.note || "تم تعديل جدول النتائج يدويًا").slice(0, 500),
+      runId: String(args.run?.runId || ""),
+      runCreatedAtISO: String(args.run?.createdAtISO || ""),
+      editedAtISO: new Date().toISOString(),
+      beforeCount: before.length,
+      afterCount: after.length,
+      changedAssignmentsCount: countChangedAssignments(before, after),
+      beforeTaskTypes: countTaskTypes(before),
+      afterTaskTypes: countTaskTypes(after),
+      source: "task-distribution-results-manual-edit",
+    },
+  }).catch(() => undefined);
+}
+
 function buildMutationBlockReason(auth: any, tenantId: string) {
   if (!String(tenantId || "").trim()) return MISSING_TENANT_MSG_AR;
   if (isReadOnlyResultsSession(auth)) return MUTATION_BLOCK_MSG_AR;
@@ -155,10 +241,23 @@ export function useResultsTableActions({
     unavailReasonMap,
   });
 
+  const auditedPersistEditedAssignments = (nextAssignments: any[], note?: string, opts?: { skipUndo?: boolean }) => {
+    const beforeAssignments = Array.isArray(run?.assignments) ? run.assignments : [];
+    persistEditedAssignments(nextAssignments, note, opts);
+    writeResultsManualAudit({
+      tenantId,
+      auth,
+      run,
+      before: beforeAssignments,
+      after: Array.isArray(nextAssignments) ? nextAssignments : [],
+      note,
+    });
+  };
+
   const dragDropActions = useResultsDragDropActions({
     run,
     colKeyToExamId,
-    persistEditedAssignments,
+    persistEditedAssignments: auditedPersistEditedAssignments,
     getUnavailabilityReasonForCell,
     markCellBlocked,
     normalizeSubject,
@@ -171,7 +270,7 @@ export function useResultsTableActions({
           run,
           uid,
           normalizeSubject,
-          persistEditedAssignments,
+          persistEditedAssignments: auditedPersistEditedAssignments,
         });
       };
 
@@ -190,7 +289,7 @@ export function useResultsTableActions({
           colKeyToExamId,
           examKeyToCommittees,
           invigilatorsPerRoomForSubject,
-          persistEditedAssignments,
+          persistEditedAssignments: auditedPersistEditedAssignments,
         });
       };
 
@@ -201,7 +300,7 @@ export function useResultsTableActions({
           run,
           subColKey,
           normalizeSubject,
-          persistEditedAssignments,
+          persistEditedAssignments: auditedPersistEditedAssignments,
         });
       };
 
