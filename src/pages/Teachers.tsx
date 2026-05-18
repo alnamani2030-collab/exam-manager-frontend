@@ -153,7 +153,7 @@ function safeParseTeachers(v: string | null): Teacher[] {
     return arr
       .map((x) => ({
         id: String(x.id ?? "").trim() || genId(),
-        employeeNo: String(x.employeeNo ?? "").trim(),
+        employeeNo: normalizeEmployeeNoDigits(x.employeeNo),
         fullName: String(x.fullName ?? "").trim(),
         subject1: String(x.subject1 ?? "").trim(),
         subject2: String(x.subject2 ?? "").trim(),
@@ -187,6 +187,23 @@ function normalizeHeader(h: string) {
     .toLowerCase()
     .replace(/\s+/g, "")
     .replace(/[^\u0600-\u06FFa-z0-9]/g, "");
+}
+
+function normalizeEmployeeNoDigits(value: any) {
+  return String(value ?? "")
+    .trim()
+    .replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)))
+    .replace(/[۰-۹]/g, (d) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)))
+    .replace(/\s+/g, "");
+}
+
+function isEmployeeNoDigitsOnly(value: any) {
+  const v = normalizeEmployeeNoDigits(value);
+  return /^\d+$/.test(v);
+}
+
+function employeeNoInputDigitsOnly(value: any) {
+  return normalizeEmployeeNoDigits(value).replace(/\D+/g, "");
 }
 
 function getCell(row: any, keys: string[]) {
@@ -229,7 +246,7 @@ function parseTeachersFromObjects(rows: any[]): Teacher[] {
 
       return {
         id: genId(),
-        employeeNo: employeeNo.trim(),
+        employeeNo: normalizeEmployeeNoDigits(employeeNo),
         fullName: fullName.trim(),
         subject1: subject1.trim(),
         subject2: subject2.trim(),
@@ -430,22 +447,24 @@ export default function Teachers() {
   }, [teachers, query]);
 
   function validateBasics(t: Teacher) {
-    if (!t.employeeNo.trim()) return { ok: false, msg: tr("الرقم الوظيفي مطلوب.", "Employee number is required.") };
+    const employeeNo = normalizeEmployeeNoDigits(t.employeeNo);
+    if (!employeeNo) return { ok: false, msg: tr("الرقم الوظيفي مطلوب.", "Employee number is required.") };
+    if (!isEmployeeNoDigitsOnly(employeeNo)) return { ok: false, msg: tr("الرقم الوظيفي يجب أن يكون أرقام فقط.", "Employee number must contain digits only.") };
     if (!t.fullName.trim()) return { ok: false, msg: tr("الاسم الكامل مطلوب.", "Full name is required.") };
     return { ok: true, msg: "" };
   }
 
   function findDuplicates(employeeNo: string, ignoreId?: string | null) {
-    const key = employeeNo.trim();
+    const key = normalizeEmployeeNoDigits(employeeNo);
     if (!key) return [];
-    return teachers.filter((t) => t.employeeNo.trim() === key && t.id !== ignoreId);
+    return teachers.filter((t) => normalizeEmployeeNoDigits(t.employeeNo) === key && t.id !== ignoreId);
   }
 
   function openDupModal(employeeNo: string, ignoreId: string | null, pending: Teacher, context: "add" | "edit") {
     const candidates = findDuplicates(employeeNo, ignoreId);
     setDupModal({
       open: true,
-      employeeNo: employeeNo.trim(),
+      employeeNo: normalizeEmployeeNoDigits(employeeNo),
       candidates,
       pending,
       context,
@@ -460,15 +479,16 @@ export default function Teachers() {
   }
 
   function saveAdd() {
-    const basic = validateBasics(newTeacher);
+    const preparedTeacher = { ...newTeacher, employeeNo: normalizeEmployeeNoDigits(newTeacher.employeeNo) };
+    const basic = validateBasics(preparedTeacher);
     if (!basic.ok) return alert(basic.msg);
 
-    const dups = findDuplicates(newTeacher.employeeNo, null);
+    const dups = findDuplicates(preparedTeacher.employeeNo, null);
     if (dups.length) {
-      return openDupModal(newTeacher.employeeNo, null, { ...newTeacher }, "add");
+      return openDupModal(preparedTeacher.employeeNo, null, { ...preparedTeacher }, "add");
     }
 
-    setTeachers((prev) => [{ ...newTeacher, id: newTeacher.id || genId() }, ...prev]);
+    setTeachers((prev) => [{ ...preparedTeacher, id: preparedTeacher.id || genId() }, ...prev]);
     setAdding(false);
     setNewTeacher({ ...emptyTeacher, id: genId() });
   }
@@ -483,15 +503,16 @@ export default function Teachers() {
   function saveEdit() {
     if (!editingId) return;
 
-    const basic = validateBasics(edit);
+    const preparedTeacher = { ...edit, employeeNo: normalizeEmployeeNoDigits(edit.employeeNo) };
+    const basic = validateBasics(preparedTeacher);
     if (!basic.ok) return alert(basic.msg);
 
-    const dups = findDuplicates(edit.employeeNo, editingId);
+    const dups = findDuplicates(preparedTeacher.employeeNo, editingId);
     if (dups.length) {
-      return openDupModal(edit.employeeNo, editingId, { ...edit }, "edit");
+      return openDupModal(preparedTeacher.employeeNo, editingId, { ...preparedTeacher }, "edit");
     }
 
-    setTeachers((prev) => prev.map((t) => (t.id === editingId ? { ...edit, id: editingId } : t)));
+    setTeachers((prev) => prev.map((t) => (t.id === editingId ? { ...preparedTeacher, id: editingId } : t)));
     setEditingId(null);
     setEdit({ ...emptyTeacher, id: "" });
   }
@@ -604,29 +625,44 @@ export default function Teachers() {
   }
 
   function mergeImported(incoming: Teacher[]) {
-    if (!incoming.length) return alert(tr("لا توجد بيانات صالحة للاستيراد.", "No valid data found for import."));
+    const normalizedIncoming = incoming.map((t: any) => ({ ...t, employeeNo: normalizeEmployeeNoDigits(t.employeeNo) })) as any[];
+    const invalidEmployeeNoCount = normalizedIncoming.filter((t: any) => t.employeeNo && !isEmployeeNoDigitsOnly(t.employeeNo)).length;
+    const validIncoming = normalizedIncoming.filter((t: any) => t.employeeNo && isEmployeeNoDigitsOnly(t.employeeNo)) as any[];
 
-    const existingByNo = new Map(teachers.map((t) => [t.employeeNo.trim(), t]));
+    if (invalidEmployeeNoCount > 0) {
+      alert(
+        tr(
+          `تم تجاهل ${invalidEmployeeNoCount} سجل لأن الرقم الوظيفي يجب أن يكون أرقام فقط.`,
+          `${invalidEmployeeNoCount} record(s) were skipped because employee number must contain digits only.`
+        )
+      );
+    }
+
+    if (!validIncoming.length) return alert(tr("لا توجد بيانات صالحة للاستيراد.", "No valid data found for import."));
+
+    const existingByNo = new Map<string, any>(teachers.map((t: any) => [normalizeEmployeeNoDigits(t.employeeNo), t]));
     const next = [...teachers];
 
-    for (const t of incoming) {
-      const key = t.employeeNo.trim();
+    for (const t of validIncoming) {
+      const key = normalizeEmployeeNoDigits(t.employeeNo);
       if (!key) continue;
 
       if (existingByNo.has(key)) {
-        const old = existingByNo.get(key)!;
+        const old: any = existingByNo.get(key)!;
         const ok = confirm(
           tr(
-            `⚠️ الرقم الوظيفي (${key}) موجود بالفعل باسم: (${old.fullName}).\nهل تريد استبدال البيانات بالاسم الجديد: (${t.fullName}) ؟`,
-            `⚠️ Employee number (${key}) already exists under: (${old.fullName}).\nDo you want to replace it with the new name: (${t.fullName})?`
+            `⚠️ الرقم الوظيفي (${key}) موجود بالفعل باسم: (${old.fullName}).
+هل تريد استبدال البيانات بالاسم الجديد: (${t.fullName}) ؟`,
+            `⚠️ Employee number (${key}) already exists under: (${old.fullName}).
+Do you want to replace it with the new name: (${t.fullName})?`
           )
         );
         if (ok) {
           const idx = next.findIndex((x) => x.id === old.id);
-          if (idx >= 0) next[idx] = { ...t, id: old.id };
+          if (idx >= 0) next[idx] = { ...t, id: old.id, employeeNo: key };
         }
       } else {
-        next.unshift({ ...t, id: t.id || genId() });
+        next.unshift({ ...t, id: t.id || genId(), employeeNo: key });
       }
     }
 
@@ -642,7 +678,7 @@ export default function Teachers() {
 
     if (!selectedId) return;
 
-    const pending = dupModal.pending;
+    const pending = { ...dupModal.pending, employeeNo: normalizeEmployeeNoDigits(dupModal.pending.employeeNo) };
 
     setTeachers((prev) => prev.map((t) => (t.id === selectedId ? { ...pending, id: selectedId } : t)));
 
@@ -1376,12 +1412,15 @@ export default function Teachers() {
               <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("الرقم الوظيفي", "Employee Number")}</div>
               <input
                 style={inputStyle}
+                inputMode="numeric"
+                pattern="[0-9]*"
                 value={adding ? newTeacher.employeeNo : edit.employeeNo}
-                onChange={(e) =>
+                onChange={(e) => {
+                  const employeeNo = employeeNoInputDigitsOnly(e.target.value);
                   adding
-                    ? setNewTeacher({ ...newTeacher, employeeNo: e.target.value })
-                    : setEdit({ ...edit, employeeNo: e.target.value })
-                }
+                    ? setNewTeacher({ ...newTeacher, employeeNo })
+                    : setEdit({ ...edit, employeeNo });
+                }}
               />
             </div>
 
