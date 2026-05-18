@@ -174,6 +174,40 @@ export function useTenantArrayState<T>(options: UseTenantArrayStateOptions<T>) {
     return () => window.clearTimeout(timer);
   }, [items, tenantId, enqueueSave, debounceMs, enabled]);
 
+
+  useEffect(() => {
+    if (!enabled || !tenantId) return;
+
+    const onTenantDataChanged = (event: Event) => {
+      const detail = (event as CustomEvent)?.detail || {};
+      const changedTenantId = String(detail?.tenantId || "").trim();
+      if (changedTenantId && changedTenantId !== String(tenantId).trim()) return;
+
+      // Reload from Firestore when another tab/page updates the same tenant collection.
+      // This keeps the current device and other opened pages aligned with the cloud.
+      void (async () => {
+        try {
+          const next = await load(tenantId);
+          suppressNextSaveRef.current += 1;
+          replaceItemsFromSource(Array.isArray(next) ? next : []);
+          setError(null);
+          setLoaded(true);
+          didLoadRef.current = true;
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "failed_to_reload_after_cloud_change");
+        }
+      })();
+    };
+
+    window.addEventListener("exam-manager:tenant-data-changed", onTenantDataChanged as EventListener);
+    window.addEventListener("exam-manager:cloud-storage:changed", onTenantDataChanged as EventListener);
+
+    return () => {
+      window.removeEventListener("exam-manager:tenant-data-changed", onTenantDataChanged as EventListener);
+      window.removeEventListener("exam-manager:cloud-storage:changed", onTenantDataChanged as EventListener);
+    };
+  }, [tenantId, enabled, load, replaceItemsFromSource]);
+
   async function reload() {
     if (!enabled || !tenantId) {
       suppressNextSaveRef.current += 1;

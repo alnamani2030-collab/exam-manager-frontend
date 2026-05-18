@@ -124,6 +124,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, [effectiveTenantId, user?.uid, user?.email, effectiveRole, support.isSupportMode, platformOwner]);
 
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const tid = String(effectiveTenantId || allow?.tenantId || claims?.tenantId || userProfile?.tenantId || "").trim();
+    const role = String(effectiveRole || allow?.role || claims?.role || "").trim();
+
+    try {
+      // Legacy pages still read these keys. Keep them in sync from the authenticated allowlist
+      // so a new device using the same school email opens the same tenant instead of local/default data.
+      if (tid && tid !== SUPER_ADMIN_TENANT_ID && !platformOwner && role !== "super") {
+        window.localStorage.setItem("tenantId", tid);
+        window.localStorage.setItem("effectiveTenantId", tid);
+        window.sessionStorage.setItem("tenantId", tid);
+        window.sessionStorage.setItem("effectiveTenantId", tid);
+      }
+
+      if (role) {
+        window.localStorage.setItem("effectiveRole", role);
+        window.sessionStorage.setItem("effectiveRole", role);
+      }
+    } catch {
+      // Legacy sync must not block login.
+    }
+  }, [effectiveTenantId, allow?.tenantId, allow?.role, claims?.tenantId, claims?.role, userProfile?.tenantId, effectiveRole, platformOwner]);
+
   const logout = async () => {
     try {
       await signOut(auth);

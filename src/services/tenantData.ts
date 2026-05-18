@@ -142,6 +142,12 @@ function hasCache(tenantId: string, subCollection: string): boolean {
   }
 }
 
+function hasUsableArrayCache(value: unknown): boolean {
+  // Empty/stale cache is a common reason why a second device shows no data.
+  // Only use cache as an immediate response when it actually contains rows.
+  return Array.isArray(value) && value.length > 0;
+}
+
 function readCache<T>(tenantId: string, subCollection: string, fallback: T): T {
   if (typeof localStorage === "undefined") return fallback;
   return safeJsonParse<T>(localStorage.getItem(cacheKey(tenantId, subCollection)), fallback);
@@ -307,11 +313,15 @@ export async function loadTenantArray<T extends AnyRecord = AnyRecord>(
 
   const cached = readCache<(T & { id: string })[]>(tid, sub, []);
   const canUseCache = options?.cacheFallback !== false && hasCache(tid, sub);
-  const fastCache = options?.fastCache !== false;
 
-  // مهم للأداء: لو عندنا كاش محلي من آخر قراءة، نعرضه فورًا
-  // ونحدثه من Firestore في الخلفية. هذا يمنع تأخير فتح الصفحات.
-  if (fastCache && canUseCache) {
+  // Cloud-first by default:
+  // - We no longer return local cache immediately unless the caller explicitly asks for fastCache.
+  // - Never use an empty local cache as a fast answer; otherwise another device may show no rows
+  //   even though Firestore already has data.
+  const fastCache = options?.fastCache === true;
+  const canReturnFastCache = fastCache && canUseCache && hasUsableArrayCache(cached);
+
+  if (canReturnFastCache) {
     refreshTenantArrayCacheInBackground<T>(tid, sub, constraints);
     return cached;
   }
@@ -517,6 +527,7 @@ export async function replaceTenantArray<T extends { id: string }>(
 
   await commitBatchOperations(operations);
   writeCache(tid, sub, normalizedRows);
+  notifyTenantDataChanged(tid, sub);
 
   const auditEntity = options?.audit?.entity || subCollection;
   const auditMeta = options?.audit?.meta;
@@ -646,6 +657,7 @@ export async function upsertTenantRow<T extends AnyRecord = AnyRecord>(
   const cached = readCache<any[]>(tid, sub, []);
   const withoutOld = cached.filter((item) => clean(item?.id) !== normalized.id);
   writeCache(tid, sub, [normalized, ...withoutOld]);
+  notifyTenantDataChanged(tid, sub);
 
   const auditEntity = options?.audit?.entity || sub;
   await writeTenantAudit(tid, {
@@ -694,6 +706,7 @@ export async function deleteTenantRow(
     sub,
     cached.filter((item) => clean(item?.id) !== id),
   );
+  notifyTenantDataChanged(tid, sub);
 
   const auditEntity = options?.audit?.entity || sub;
   await writeTenantAudit(tid, {
@@ -721,6 +734,7 @@ export async function clearTenantCollection(tenantId: string, subCollection: str
   await commitBatchOperations(operations);
 
   writeCache(tid, sub, []);
+  notifyTenantDataChanged(tid, sub);
 }
 
 /**
