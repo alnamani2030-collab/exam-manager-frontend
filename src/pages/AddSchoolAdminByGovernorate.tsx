@@ -218,29 +218,80 @@ export default function AddSchoolAdminByGovernorate() {
     [tenants, selectedTenantId],
   );
 
+  const buildTenantRowFromDoc = (item: any): (TenantRow & { raw: any }) => {
+    const data = item.data() as any;
+    return {
+      id: item.id,
+      name: tenantNameOf({ id: item.id, ...data }),
+      governorate: getGovernorateValue(data),
+      active: data?.enabled !== false && data?.active !== false,
+      raw: data,
+    };
+  };
+
+  const mergeTenantRows = (rows: Array<TenantRow & { raw: any }>) => {
+    const map = new Map<string, TenantRow & { raw: any }>();
+    for (const row of rows) {
+      if (!row?.id) continue;
+      if (isExamCenterTenant(row.raw)) continue;
+      if (!canSeeAllGovs && !sameGovernorate(row.governorate, myGov)) continue;
+      if (!map.has(row.id)) map.set(row.id, row);
+    }
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, "ar"));
+  };
+
   const loadTenants = async () => {
     setError("");
     setLoading(true);
     try {
-      const snap = await getDocs(collection(db, "tenants"));
-      const rows = snap.docs
-        .map((item) => {
-          const data = item.data() as any;
-          return {
-            id: item.id,
-            name: tenantNameOf({ id: item.id, ...data }),
-            governorate: getGovernorateValue(data),
-            active: data?.enabled !== false && data?.active !== false,
-            raw: data,
-          } as TenantRow & { raw: any };
-        })
-        .filter((tenant: any) => !isExamCenterTenant(tenant.raw))
-        .filter((tenant) => (canSeeAllGovs ? true : sameGovernorate(tenant.governorate, myGov)))
-        .sort((a, b) => a.name.localeCompare(b.name, "ar"));
+      let rows: Array<TenantRow & { raw: any }> = [];
 
-      setTenants(rows);
-      if (!selectedTenantId && rows[0]?.id) setSelectedTenantId(rows[0].id);
+      if (canSeeAllGovs) {
+        const snap = await getDocs(collection(db, "tenants"));
+        rows = snap.docs.map(buildTenantRowFromDoc);
+      } else {
+        const gov = normalizeText(myGov);
+        if (!gov) {
+          setTenants([]);
+          setSelectedTenantId("");
+          setError("لا توجد محافظة واضحة للمستخدم الحالي، لذلك لا يمكن تحميل المدارس.");
+          return;
+        }
+
+        // مهم بعد تقوية firestore.rules:
+        // مشرف المحافظة لا يطلب كل المدارس، بل يستعلم عن مدارس محافظته فقط.
+        // نبحث في أكثر من حقل لأن بعض السجلات القديمة تحفظ المحافظة بأسماء مختلفة.
+        const governorateFields = ["governorate", "tenantGovernorate", "regionAr", "governorateAr", "scopeGovernorate", "gov"];
+        const byId = new Map<string, TenantRow & { raw: any }>();
+        const errors: string[] = [];
+
+        for (const field of governorateFields) {
+          try {
+            const snap = await getDocs(query(collection(db, "tenants"), where(field, "==", gov)));
+            for (const item of snap.docs) {
+              const row = buildTenantRowFromDoc(item);
+              if (!byId.has(row.id)) byId.set(row.id, row);
+            }
+          } catch (err: any) {
+            errors.push(err?.message || field);
+          }
+        }
+
+        rows = Array.from(byId.values());
+
+        if (!rows.length && errors.length) {
+          throw new Error(errors[0] || "Missing or insufficient permissions");
+        }
+      }
+
+      const normalizedRows = mergeTenantRows(rows);
+      setTenants(normalizedRows);
+      if (!normalizedRows.some((tenant) => tenant.id === selectedTenantId)) {
+        setSelectedTenantId(normalizedRows[0]?.id || "");
+      }
     } catch (err: any) {
+      setTenants([]);
+      setSelectedTenantId("");
       setError(err?.message || "تعذر تحميل المدارس. تأكد من الصلاحيات أو الاتصال بالسحابة.");
     } finally {
       setLoading(false);

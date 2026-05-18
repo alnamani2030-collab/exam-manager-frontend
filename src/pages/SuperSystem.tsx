@@ -244,6 +244,19 @@ export default function SuperSystem() {
   const isRegionalSuper = !isOwner && !isMinistryViewer;
   const canSeeAllGovs = isOwner || isMinistryViewer;
 
+  // ✅ فتح الروابط الرئيسية بتحميل كامل للصفحة بدلاً من انتقال داخلي فقط.
+  // السبب: بعض صفحات السوبر تعتمد على تحميل صلاحيات/tenant من البداية،
+  // ومع الانتقال الداخلي كانت تظهر شاشة سوداء حتى يتم تحديث الصفحة يدويًا.
+  const openSystemPage = React.useCallback((path: string) => {
+    const target = String(path || "").trim();
+    if (!target) return;
+    try {
+      window.location.assign(target);
+    } catch {
+      navigate(target);
+    }
+  }, [navigate]);
+
   const {
     tenants,
     setTenants,
@@ -1447,11 +1460,11 @@ export default function SuperSystem() {
 
           <div className="super-header-left">
             {isOwner ? (
-              <button className="super-btn" onClick={() => navigate("/system")}>
+              <button className="super-btn" onClick={() => openSystemPage("/system")}>
                 لوحة مالك المنصة
               </button>
             ) : null}
-            <button className="super-btn" onClick={() => navigate("/")}>العودة</button>
+            <button className="super-btn" onClick={() => openSystemPage("/")}>العودة</button>
             <button className="super-btn danger" onClick={() => logout()}>تسجيل خروج</button>
           </div>
         </div>
@@ -1499,7 +1512,7 @@ export default function SuperSystem() {
               <button
                 className="super-card"
                 disabled={isMinistryViewer}
-                onClick={() => navigate(isOwner ? "/platform-super-system/add-school-admin" : "/super-system/add-school-admin")}
+                onClick={() => openSystemPage(isOwner ? "/platform-super-system/add-school-admin" : "/super-system/add-school-admin")}
                 style={{ borderColor: "rgba(212,175,55,0.72)", background: "linear-gradient(135deg, rgba(212,175,55,0.22), rgba(255,255,255,0.04))" }}
               >
                 <div className="super-card-title">➕ إضافة أدمن مدرسة</div>
@@ -1508,7 +1521,7 @@ export default function SuperSystem() {
 
               <button
                 className="super-card"
-                onClick={() => navigate("/school-admins")}
+                onClick={() => openSystemPage("/school-admins")}
               >
                 <div className="super-card-title">أدمنات المدارس في المحافظة</div>
                 <div className="super-card-desc">عرض جميع أدمنات المدارس حسب المحافظة ثم فتح نظام المدرسة للمشاهدة والمتابعة.</div>
@@ -1601,7 +1614,7 @@ export default function SuperSystem() {
               <button
                 className="super-card"
                 disabled={isMinistryViewer}
-                onClick={() => navigate(isOwner ? "/platform-super-system/add-exam-super12" : "/super-system/add-exam-super12")}
+                onClick={() => openSystemPage(isOwner ? "/platform-super-system/add-exam-super12" : "/super-system/add-exam-super12")}
                 style={{ borderColor: "rgba(212,175,55,0.72)", background: "linear-gradient(135deg, rgba(212,175,55,0.22), rgba(255,255,255,0.04))" }}
               >
                 <div className="super-card-title">➕ إضافة سوبر امتحانات دبلوم</div>
@@ -1610,7 +1623,7 @@ export default function SuperSystem() {
 
               <button
                 className="super-card"
-                onClick={() => navigate("/exam-supers")}
+                onClick={() => openSystemPage("/exam-supers")}
               >
                 <div className="super-card-title">سوبر الامتحانات في المحافظة</div>
                 <div className="super-card-desc">عرض جميع سوبر الامتحانات ضمن النطاق المسموح ثم فتح مركز الامتحانات للمشاهدة والمتابعة.</div>
@@ -1649,22 +1662,22 @@ export default function SuperSystem() {
                 gap: 12,
               }}
             >
-              <button className="super-card" onClick={() => navigate("/programs-gateway")}>
+              <button className="super-card" onClick={() => openSystemPage("/programs-gateway")}>
                 <div className="super-card-title">فتح البوابة التشغيلية</div>
                 <div className="super-card-desc">الانتقال إلى البوابة التشغيلية لاختيار البرنامج أو القوائم الإشرافية.</div>
               </button>
 
-              <button className="super-card" onClick={() => navigate("/system/permissions-audit")}>
+              <button className="super-card" onClick={() => openSystemPage("/system/permissions-audit")}>
                 <div className="super-card-title">فحص الصلاحيات والربط</div>
                 <div className="super-card-desc">مراجعة المستخدمين والأدوار والمحافظة وربط المدارس ومراكز الدبلوم، مع فتح النطاق للمشاهدة فقط عند مشرف المحافظة.</div>
               </button>
 
-              <button className="super-card" onClick={() => navigate("/system/commercial-readiness")}>
+              <button className="super-card" onClick={() => openSystemPage("/system/commercial-readiness")}>
                 <div className="super-card-title">لوحة الجاهزية التجارية</div>
                 <div className="super-card-desc">مراجعة حالة الصلاحيات، السحابة، المشاهدة فقط، النسخ الاحتياطي، وروابط الفحص قبل التشغيل التجاري.</div>
               </button>
 
-              <button className="super-card" onClick={() => navigate("/system/audit-log")}>
+              <button className="super-card" onClick={() => openSystemPage("/system/audit-log")}>
                 <div className="super-card-title">سجل العمليات</div>
                 <div className="super-card-desc">متابعة إجراءات الحفظ والحذف والاستيراد والتوزيع والاستعادة أثناء الاختبار والتشغيل التجاري.</div>
               </button>
