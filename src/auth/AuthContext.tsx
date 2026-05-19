@@ -124,8 +124,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return routeTenantId;
     }
 
-    if (isSuper && storedTenantId) {
-      return storedTenantId;
+    // سوبر المحافظة لا يجب أن يعتمد على tenantId مخزّن من جلسة قديمة عند فتح /super-system.
+    // عند دخول مدرسة محددة عبر /t/:tenantId نستخدم routeTenantId فقط، أما بوابة السوبر فتقرأ كـ system.
+    if (isSuper) {
+      return SUPER_ADMIN_TENANT_ID;
     }
 
     if (!base) return null;

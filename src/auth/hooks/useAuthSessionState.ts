@@ -45,22 +45,29 @@ export function useAuthSessionState() {
       const aSnap = await getDoc(doc(db, "allowlist", email));
       if (aSnap.exists()) {
         const a = aSnap.data() as any;
-        if (a?.enabled === true && String(a?.tenantId ?? "").trim()) {
-          const roleBase = effectiveAllow?.role ?? a?.role;
+        if (a?.enabled === true) {
+          const roleBase = a?.role ?? effectiveAllow?.role;
           const r = normalizeAllowlistRole(roleBase, email, a?.governorate);
           const roles = normalizeStoredSaaSRoles(a?.roles);
-          effectiveAllow = {
-            email,
-            enabled: effectiveAllow?.enabled ?? true,
-            role: r,
-            roles: roles.length ? roles : mapAllowRoleToSaaSRoles({ allowRole: r, email, governorate: a?.governorate }),
-            tenantId: r === "super" || r === "super_admin" ? SUPER_ADMIN_TENANT_ID : String(effectiveAllow?.tenantId ?? a.tenantId).trim(),
-            userName: a?.userName ?? undefined,
-            schoolName: a?.schoolName ?? undefined,
-            governorate: a?.governorate ?? undefined,
-            name: a?.name ?? undefined,
-          } as AllowDoc;
-          setAllow(effectiveAllow);
+          const isGlobalRole = r === "super" || r === "ministry_super" || r === "super_admin";
+          const tenantFromDoc = String(a?.tenantId ?? effectiveAllow?.tenantId ?? "").trim();
+          const tenantId = isGlobalRole ? SUPER_ADMIN_TENANT_ID : tenantFromDoc;
+
+          // سوبر المحافظة قد لا يكون مرتبطًا بمدرسة محددة، لذلك لا نرفضه بسبب غياب tenantId.
+          if (tenantId || isGlobalRole) {
+            effectiveAllow = {
+              email,
+              enabled: true,
+              role: r,
+              roles: roles.length ? roles : mapAllowRoleToSaaSRoles({ allowRole: r, email, governorate: a?.governorate }),
+              tenantId: tenantId || SUPER_ADMIN_TENANT_ID,
+              userName: a?.userName ?? undefined,
+              schoolName: a?.schoolName ?? undefined,
+              governorate: a?.governorate ?? undefined,
+              name: a?.name ?? undefined,
+            } as AllowDoc;
+            setAllow(effectiveAllow);
+          }
         }
       }
     } catch {}
