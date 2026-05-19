@@ -1151,7 +1151,7 @@ export default function Exams() {
   const fullScreenOverlay: React.CSSProperties = {
     position: "fixed",
     inset: 0,
-    zIndex: 2147483647,
+    zIndex: 9000,
     padding: 18,
     background: "linear-gradient(180deg, rgba(250,246,232,0.985), rgba(242,232,202,0.985))",
     overflow: "hidden",
@@ -1172,13 +1172,17 @@ export default function Exams() {
 
   const inputStyle: React.CSSProperties = {
     background: "#fffdf6",
-    color: "#050505",
+    backgroundColor: "#fffdf6",
+    color: "#000000",
+    WebkitTextFillColor: "#000000",
+    caretColor: "#000000",
+    colorScheme: "light",
     border: "2px solid rgba(212,175,55,0.78)",
     borderRadius: 14,
     padding: "10px 12px",
     outline: "none",
     width: "100%",
-    fontWeight: 800,
+    fontWeight: 1000,
   };
 
   const tableWrap: React.CSSProperties = {
@@ -1301,11 +1305,111 @@ export default function Exams() {
       </div>
     </div>
 
+        {tableFullScreen && (adding || editingId != null) && (
+          <div className="schoolExamsFullscreenEditForm" style={{ ...card, position: "relative", zIndex: 3, marginBottom: 12, padding: 14, overflow: "visible" }}>
+            <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(4, minmax(220px, 1fr))" }}>
+              <div>
+                <div style={{ fontWeight: 950, marginBottom: 7, color: "#111827" }}>{tr("المادة", "Subject")}</div>
+                <GoldDropdown
+                  value={current.subject}
+                  options={SUBJECT_OPTIONS}
+                  placeholder={tr("— اختر المادة —", "— Select Subject —")}
+                  onChange={(v) => setCurrent({ subject: v })}
+                />
+              </div>
+
+              <div>
+                <div style={{ fontWeight: 950, marginBottom: 7, color: "#111827" }}>{tr("التاريخ", "Date")}</div>
+                <input
+                  style={inputStyle}
+                  type="date"
+                  value={current.dateISO}
+                  onChange={(e) => {
+                    const nextDateISO = e.target.value;
+                    setCurrent({
+                      dateISO: nextDateISO,
+                      dayLabel: nextDateISO ? dayFromISO(nextDateISO, lang) : "",
+                    });
+                  }}
+                />
+              </div>
+
+              <div>
+                <div style={{ fontWeight: 950, marginBottom: 7, color: "#111827" }}>{tr("اليوم", "Day")}</div>
+                <input
+                  style={inputStyle}
+                  placeholder={tr("يُحسب تلقائيًا إن تركت فارغًا", "Calculated automatically if left blank")}
+                  value={current.dayLabel}
+                  onChange={(e) => setCurrent({ dayLabel: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <div style={{ fontWeight: 950, marginBottom: 7, color: "#111827" }}>{tr("الوقت", "Time")}</div>
+                <input style={inputStyle} value={current.time} onChange={(e) => setCurrent({ time: e.target.value })} />
+              </div>
+
+              <div>
+                <div style={{ fontWeight: 950, marginBottom: 7, color: "#111827" }}>{tr("الفترة", "Period")}</div>
+                <GoldDropdown
+                  value={current.period}
+                  options={PERIOD_OPTIONS}
+                  placeholder={tr("— اختر الفترة —", "— Select Period —")}
+                  onChange={(v) => setCurrent({ period: v })}
+                />
+              </div>
+
+              <div>
+                <div style={{ fontWeight: 950, marginBottom: 7, color: "#111827" }}>{tr("المدة (دقيقة)", "Duration (Minutes)")}</div>
+                <input
+                  style={inputStyle}
+                  type="number"
+                  value={String(current.durationMinutes)}
+                  onChange={(e) => setCurrent({ durationMinutes: Number(e.target.value) || 0 })}
+                />
+              </div>
+
+              <div>
+                <div style={{ fontWeight: 950, marginBottom: 7, color: "#111827" }}>{tr("القاعات", "Rooms")}</div>
+                <input
+                  style={inputStyle}
+                  type="number"
+                  min={1}
+                  value={String(current.roomsCount)}
+                  onChange={(e) => setCurrent({ roomsCount: Math.max(1, Number(e.target.value) || 1) })}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+              {editingId != null ? (
+                <>
+                  <button style={btn("#10b981", "#07101f")} onClick={saveEdit}>
+                    {tr("حفظ التعديل", "Save Changes")}
+                  </button>
+                  <button style={btn("#1f2937", "#d4af37")} onClick={() => setEditingId(null)}>
+                    {tr("إلغاء", "Cancel")}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button style={btn("#10b981", "#07101f")} onClick={saveAdd}>
+                    {tr("حفظ", "Save")}
+                  </button>
+                  <button style={btn("#1f2937", "#d4af37")} onClick={() => setAdding(false)}>
+                    {tr("إلغاء", "Cancel")}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
     <div
       className="examTable3D"
       style={{
         ...tableWrap,
-        maxHeight: tableFullScreen ? "calc(100vh - 140px)" : (tableWrap.maxHeight as any),
+        maxHeight: tableFullScreen ? ((adding || editingId != null) ? "calc(100vh - 410px)" : "calc(100vh - 140px)") : (tableWrap.maxHeight as any),
       }}
     >
       <table style={{ width: "100%", minWidth: 1100 }}>
@@ -1393,6 +1497,47 @@ export default function Exams() {
 
   return (
     <div style={pageStyle} ref={topRef} className="examsScheduleOuterCardTextBlackOnly schoolExamsOfficialPage">
+      <style>{`
+        .schoolExamsFullscreenPortal .schoolExamsFullscreenEditForm,
+        .schoolExamsFullscreenPortal .schoolExamsFullscreenEditForm * {
+          color: #000000 !important;
+          -webkit-text-fill-color: #000000 !important;
+          text-shadow: none !important;
+        }
+
+        .schoolExamsFullscreenPortal .schoolExamsFullscreenEditForm input,
+        .schoolExamsFullscreenPortal .schoolExamsFullscreenEditForm textarea,
+        .schoolExamsFullscreenPortal .schoolExamsFullscreenEditForm select {
+          background: #fffdf6 !important;
+          background-color: #fffdf6 !important;
+          color: #000000 !important;
+          -webkit-text-fill-color: #000000 !important;
+          caret-color: #000000 !important;
+          color-scheme: light !important;
+          font-weight: 1000 !important;
+          text-shadow: none !important;
+        }
+
+        .schoolExamsFullscreenPortal .schoolExamsFullscreenEditForm input::placeholder,
+        .schoolExamsFullscreenPortal .schoolExamsFullscreenEditForm textarea::placeholder {
+          color: #000000 !important;
+          -webkit-text-fill-color: #000000 !important;
+          opacity: 0.75 !important;
+          font-weight: 1000 !important;
+        }
+
+        .schoolExamsFullscreenPortal .schoolExamsFullscreenEditForm input[type="date"]::-webkit-datetime-edit,
+        .schoolExamsFullscreenPortal .schoolExamsFullscreenEditForm input[type="date"]::-webkit-datetime-edit-fields-wrapper,
+        .schoolExamsFullscreenPortal .schoolExamsFullscreenEditForm input[type="date"]::-webkit-datetime-edit-text,
+        .schoolExamsFullscreenPortal .schoolExamsFullscreenEditForm input[type="date"]::-webkit-datetime-edit-month-field,
+        .schoolExamsFullscreenPortal .schoolExamsFullscreenEditForm input[type="date"]::-webkit-datetime-edit-day-field,
+        .schoolExamsFullscreenPortal .schoolExamsFullscreenEditForm input[type="date"]::-webkit-datetime-edit-year-field {
+          color: #000000 !important;
+          -webkit-text-fill-color: #000000 !important;
+          font-weight: 1000 !important;
+        }
+      `}</style>
+
       <style>{`
         .examsScheduleOuterCardTextBlackOnly .scheduleOuterCardText,
         .examsScheduleOuterCardTextBlackOnly .scheduleOuterCardText * {
@@ -1788,7 +1933,7 @@ export default function Exams() {
           </div>
         </div>
 
-        {(adding || editingId != null) && (
+        {!tableFullScreen && (adding || editingId != null) && (
           <div style={card}>
             <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(4, minmax(220px, 1fr))" }}>
               <div>

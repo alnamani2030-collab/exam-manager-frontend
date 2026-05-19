@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { type Teacher } from "../services/teachers.service";
 import { useI18n } from "../i18n/I18nProvider";
 import { useAuth } from "../auth/AuthContext";
@@ -595,6 +596,204 @@ type DupModalState = {
   context: "add" | "edit";
 };
 
+
+
+type SearchableDropdownOption = { value: string; label: string };
+
+function SearchableDropdown({
+  value,
+  options,
+  placeholder,
+  onChange,
+  inputStyle,
+  direction = "rtl",
+  zIndex = 2147483647,
+}: {
+  value: string;
+  options: SearchableDropdownOption[];
+  placeholder?: string;
+  onChange: (value: string) => void;
+  inputStyle: React.CSSProperties;
+  direction?: "rtl" | "ltr";
+  zIndex?: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [menuRect, setMenuRect] = useState<DOMRect | null>(null);
+  const rootRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const searchRef = useRef<HTMLInputElement | null>(null);
+
+  const selected = options.find((option) => String(option.value) === String(value));
+  const selectedLabel = selected?.label || placeholder || "—";
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredOptions = useMemo(
+    () =>
+      !normalizedSearch
+        ? options
+        : options.filter((option) =>
+            `${option.label} ${option.value}`.toLowerCase().includes(normalizedSearch)
+          ),
+    [normalizedSearch, options]
+  );
+
+  useEffect(() => {
+    if (!open) return;
+
+    const updatePosition = () => {
+      if (rootRef.current) setMenuRect(rootRef.current.getBoundingClientRect());
+    };
+
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (rootRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    document.addEventListener("mousedown", closeOnOutsideClick);
+
+    const focusTimer = window.setTimeout(() => searchRef.current?.focus(), 30);
+
+    return () => {
+      window.clearTimeout(focusTimer);
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+      document.removeEventListener("mousedown", closeOnOutsideClick);
+    };
+  }, [open]);
+
+  const menu =
+    open && menuRect && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            ref={menuRef}
+            dir={direction}
+            style={{
+              position: "fixed",
+              top: Math.min(menuRect.bottom + 6, window.innerHeight - 380),
+              left: menuRect.left,
+              width: Math.max(menuRect.width, 260),
+              maxWidth: "min(92vw, 520px)",
+              background: "#fffdf7",
+              color: "#000000",
+              WebkitTextFillColor: "#000000",
+              border: "3px solid #d4af37",
+              borderRadius: 18,
+              boxShadow: "0 22px 70px rgba(0,0,0,0.34)",
+              padding: 10,
+              zIndex,
+              overflow: "hidden",
+            }}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <input
+              ref={searchRef}
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder={direction === "rtl" ? "بحث داخل القائمة..." : "Search inside list..."}
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                minHeight: 44,
+                borderRadius: 14,
+                border: "2px solid #d4af37",
+                background: "#f8f4e8",
+                color: "#000000",
+                WebkitTextFillColor: "#000000",
+                caretColor: "#000000",
+                fontWeight: 1000,
+                fontSize: 15,
+                outline: "none",
+                padding: "10px 12px",
+                marginBottom: 8,
+              }}
+            />
+
+            <div style={{ maxHeight: 280, overflowY: "auto", display: "grid", gap: 6 }}>
+              {filteredOptions.length ? (
+                filteredOptions.map((option) => (
+                  <button
+                    key={`${option.value || "__empty__"}-${option.label}`}
+                    type="button"
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      onChange(option.value);
+                      setSearch("");
+                      setOpen(false);
+                    }}
+                    style={{
+                      border: option.value === value ? "3px solid #16a34a" : "2px solid rgba(212,175,55,0.55)",
+                      borderRadius: 14,
+                      background: option.value === value ? "#ecfdf5" : "#f8f4e8",
+                      color: "#000000",
+                      WebkitTextFillColor: "#000000",
+                      fontWeight: 1000,
+                      textAlign: direction === "rtl" ? "right" : "left",
+                      padding: "10px 12px",
+                      cursor: "pointer",
+                      minHeight: 42,
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                ))
+              ) : (
+                <div
+                  style={{
+                    padding: 12,
+                    borderRadius: 14,
+                    background: "#f8f4e8",
+                    border: "2px solid rgba(212,175,55,0.55)",
+                    color: "#000000",
+                    WebkitTextFillColor: "#000000",
+                    fontWeight: 1000,
+                  }}
+                >
+                  {direction === "rtl" ? "لا توجد نتائج" : "No results"}
+                </div>
+              )}
+            </div>
+          </div>,
+          document.body
+        )
+      : null;
+
+  return (
+    <>
+      <button
+        ref={rootRef}
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        style={{
+          ...inputStyle,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 10,
+          cursor: "pointer",
+          textAlign: direction === "rtl" ? "right" : "left",
+          background: "#f8f4e8",
+          color: "#000000",
+          WebkitTextFillColor: "#000000",
+          fontWeight: 1000,
+          position: "relative",
+          zIndex: Math.min(zIndex - 2, 2147483645),
+        }}
+      >
+        <span style={{ color: "#000000", WebkitTextFillColor: "#000000", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {selectedLabel}
+        </span>
+        <span style={{ color: "#000000", WebkitTextFillColor: "#000000", fontWeight: 1000 }}>⌄</span>
+      </button>
+      {menu}
+    </>
+  );
+}
+
 export default function Teachers() {
   const { lang, isRTL } = useI18n();
   const auth = useAuth() as any;
@@ -883,6 +1082,37 @@ export default function Teachers() {
         background: linear-gradient(180deg,#7a5c00,#4a3600) !important;
         color: #fff1c4 !important;
       }
+
+
+      /* ✅ إصلاح القوائم المنسدلة داخل وضع ملء الشاشة */
+      body [role="listbox"],
+      body [role="option"],
+      body [role="combobox"],
+      body [aria-haspopup="listbox"],
+      body .gold-dropdown,
+      body .goldDropdown,
+      body [class*="GoldDropdown"],
+      body [class*="goldDropdown"],
+      body [class*="gold-dropdown"],
+      body [class*="dropdown"],
+      body [class*="Dropdown"] {
+        pointer-events: auto !important;
+        z-index: 2147483647 !important;
+      }
+
+      body [role="listbox"],
+      body [class*="menu"],
+      body [class*="Menu"],
+      body [class*="options"],
+      body [class*="Options"] {
+        pointer-events: auto !important;
+        z-index: 2147483647 !important;
+      }
+
+      .fullscreenEditDropdownFix,
+      .fullscreenEditDropdownFix * {
+        pointer-events: auto !important;
+      }
     `;
 
     document.head.appendChild(style);
@@ -898,6 +1128,117 @@ export default function Teachers() {
       document.body.style.overflow = prev;
     };
   }, [tableFullScreen]);
+
+
+  useEffect(() => {
+    const style = document.createElement("style");
+    style.setAttribute("data-fullscreen-dropdown-black-text-fix", "true");
+    style.innerHTML = `
+      /* ✅ تثبيت لون نص القوائم المنسدلة بالأسود داخل وخارج ملء الشاشة */
+      body select,
+      body select option,
+      body select optgroup,
+      body [role="combobox"],
+      body [aria-haspopup="listbox"],
+      body [role="button"][aria-haspopup="listbox"],
+      body [role="listbox"],
+      body [role="option"],
+      body .gold-dropdown,
+      body .goldDropdown,
+      body [class*="GoldDropdown"],
+      body [class*="goldDropdown"],
+      body [class*="gold-dropdown"],
+      body [class*="dropdown"],
+      body [class*="Dropdown"] {
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+        font-weight: 1000 !important;
+        text-shadow: none !important;
+        caret-color: #000000 !important;
+        color-scheme: light !important;
+      }
+
+      body select option,
+      body select optgroup,
+      body [role="listbox"],
+      body [role="option"],
+      body .gold-dropdown,
+      body .goldDropdown,
+      body [class*="GoldDropdown"],
+      body [class*="goldDropdown"],
+      body [class*="gold-dropdown"] {
+        background: #f8f4e8 !important;
+        background-color: #f8f4e8 !important;
+      }
+
+      body [role="combobox"] *,
+      body [aria-haspopup="listbox"] *,
+      body [role="button"][aria-haspopup="listbox"] *,
+      body [role="listbox"] *,
+      body [role="option"] *,
+      body .gold-dropdown *,
+      body .goldDropdown *,
+      body [class*="GoldDropdown"] *,
+      body [class*="goldDropdown"] *,
+      body [class*="gold-dropdown"] *,
+      body [class*="dropdown"] *,
+      body [class*="Dropdown"] * {
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+        font-weight: 1000 !important;
+        text-shadow: none !important;
+      }
+
+      .teachers12PreviousChangesScope select,
+      .teachers12PreviousChangesScope select option,
+      .teachers12PreviousChangesScope [role="listbox"],
+      .teachers12PreviousChangesScope [role="option"],
+      .rooms12PageRoot select,
+      .rooms12PageRoot select option,
+      .rooms12PageRoot [role="listbox"],
+      .rooms12PageRoot [role="option"],
+      .teachersFullscreenOverlay select,
+      .teachersFullscreenOverlay select option,
+      .roomsFullscreenOverlay select,
+      .roomsFullscreenOverlay select option {
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+        font-weight: 1000 !important;
+        text-shadow: none !important;
+      }
+
+      .teachers12FullscreenTopLayer {
+        position: fixed !important;
+        inset: 0 !important;
+        top: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        left: 0 !important;
+        width: 100vw !important;
+        height: 100dvh !important;
+        max-width: none !important;
+        z-index: 2147483600 !important;
+        transform: translateZ(0) !important;
+        isolation: isolate !important;
+        pointer-events: auto !important;
+      }
+
+      .teachers12FullscreenTopLayer .teachersTable3D {
+        position: relative !important;
+        z-index: 2147483601 !important;
+        background: #fffdf7 !important;
+      }
+
+      .teachers12FullscreenTopLayer .teachersTable3D table {
+        position: relative !important;
+        z-index: 2147483602 !important;
+      }
+    `;
+    document.head.appendChild(style);
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
 
   const filtered = useMemo(() => {
     const q = query.trim();
@@ -1233,7 +1574,7 @@ export default function Teachers() {
     position: "fixed",
     inset: 0,
     background: "rgba(0,0,0,0.45)",
-    zIndex: 9999,
+    zIndex: 2147483647,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -1249,6 +1590,150 @@ export default function Teachers() {
     boxShadow: "0 0 0 6px rgba(245,232,170,0.35) inset, 0 22px 80px rgba(150,120,20,0.18)",
     color: "#000000",
     direction: isRTL ? "rtl" : "ltr",
+  };
+
+  const renderTeacherEntryForm = (insideFullScreen = false) => {
+    if (!(adding || editingId)) return null;
+
+    const formCardStyle: React.CSSProperties = insideFullScreen
+      ? {
+          ...card,
+          marginBottom: 0,
+          padding: 14,
+          borderRadius: 22,
+          maxHeight: "none",
+          overflow: "visible",
+          position: "relative",
+          zIndex: 2147483647,
+          flex: "0 0 auto",
+          background: "linear-gradient(180deg, #fffdf7 0%, #f8f4e8 100%)",
+        }
+      : card;
+
+    return (
+        <div className={insideFullScreen ? "fullscreenEditDropdownFix" : undefined} style={formCardStyle}>
+          <div
+            style={{
+              display: "grid",
+              gap: 12,
+              gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+              alignItems: "end",
+            }}
+          >
+            <div>
+              <div style={{ fontWeight: 1000, marginBottom: 6, color: "#000000" }}>{tr("الرقم الوظيفي", "Employee Number")}</div>
+              <input
+                style={inputStyle}
+                value={adding ? newTeacher.employeeNo : edit.employeeNo}
+                onChange={(e) =>
+                  adding
+                    ? setNewTeacher({ ...newTeacher, employeeNo: e.target.value })
+                    : setEdit({ ...edit, employeeNo: e.target.value })
+                }
+              />
+            </div>
+
+            <div>
+              <div style={{ fontWeight: 1000, marginBottom: 6, color: "#000000" }}>{tr("اسم المعلم", "Teacher Name")}</div>
+              <input
+                style={inputStyle}
+                value={adding ? newTeacher.fullName : edit.fullName}
+                onChange={(e) =>
+                  adding
+                    ? setNewTeacher({ ...newTeacher, fullName: e.target.value })
+                    : setEdit({ ...edit, fullName: e.target.value })
+                }
+              />
+            </div>
+
+            <div>
+              <div style={{ fontWeight: 1000, marginBottom: 6, color: "#000000" }}>{tr("التخصص 1", "Specialization 1")}</div>
+              <SearchableDropdown
+                value={adding ? newTeacher.subject1 : edit.subject1}
+                options={SUBJECT_OPTIONS}
+                placeholder={tr("— اختر التخصص —", "— Select Specialization —")}
+                onChange={(v) =>
+                  adding ? setNewTeacher({ ...newTeacher, subject1: v }) : setEdit({ ...edit, subject1: v })
+                }
+                inputStyle={inputStyle}
+                direction={isRTL ? "rtl" : "ltr"}
+                zIndex={insideFullScreen ? 2147483647 : 999999}
+              />
+            </div>
+
+            <div>
+              <div style={{ fontWeight: 1000, marginBottom: 6, color: "#000000" }}>{tr("التخصص 2", "Specialization 2")}</div>
+              <SearchableDropdown
+                value={adding ? newTeacher.subject2 : edit.subject2}
+                options={SUBJECT_OPTIONS}
+                placeholder={tr("— اختر التخصص —", "— Select Specialization —")}
+                onChange={(v) =>
+                  adding ? setNewTeacher({ ...newTeacher, subject2: v }) : setEdit({ ...edit, subject2: v })
+                }
+                inputStyle={inputStyle}
+                direction={isRTL ? "rtl" : "ltr"}
+                zIndex={insideFullScreen ? 2147483647 : 999999}
+              />
+            </div>
+
+            <div>
+              <div style={{ fontWeight: 1000, marginBottom: 6, color: "#000000" }}>{tr("الهاتف", "Phone")}</div>
+              <input
+                style={inputStyle}
+                value={adding ? newTeacher.phone : edit.phone}
+                onChange={(e) =>
+                  adding
+                    ? setNewTeacher({ ...newTeacher, phone: e.target.value })
+                    : setEdit({ ...edit, phone: e.target.value })
+                }
+              />
+            </div>
+
+            <div>
+              <div style={{ fontWeight: 1000, marginBottom: 6, color: "#000000" }}>{tr("رقم الحساب", "Account Number")}</div>
+              <input
+                style={inputStyle}
+                value={adding ? getTeacherAccountNo(newTeacher as TeacherAccountFields) : getTeacherAccountNo(edit as TeacherAccountFields)}
+                onChange={(e) =>
+                  adding
+                    ? setNewTeacher(setTeacherAccountNo(newTeacher, e.target.value))
+                    : setEdit(setTeacherAccountNo(edit, e.target.value))
+                }
+              />
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              gap: 10,
+              marginTop: 14,
+              flexWrap: "wrap",
+              justifyContent: isRTL ? "flex-start" : "flex-end",
+            }}
+          >
+            {adding ? (
+              <>
+                <button style={btn("#10b981", "#000000")} onClick={saveAdd}>
+                  {tr("حفظ", "Save")}
+                </button>
+                <button style={btn("#fffdf7", "#000000")} onClick={() => setAdding(false)}>
+                  {tr("إلغاء", "Cancel")}
+                </button>
+              </>
+            ) : (
+              <>
+                <button style={btn("#10b981", "#000000")} onClick={saveEdit}>
+                  {tr("حفظ التعديل", "Save Changes")}
+                </button>
+                <button style={btn("#fffdf7", "#000000")} onClick={() => setEditingId(null)}>
+                  {tr("إلغاء", "Cancel")}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+    );
   };
 
   return (
@@ -1692,187 +2177,44 @@ export default function Teachers() {
         </div>
       </div>
 
-      {(adding || editingId) && (
-        <div style={card}>
+      {!tableFullScreen && renderTeacherEntryForm()}
+
+      {tableFullScreen && typeof document !== "undefined"
+        ? createPortal(
           <div
-            style={{
-              display: "grid",
-              gap: 12,
-              gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
-              alignItems: "end",
-            }}
-          >
-            <div>
-              <div style={{ fontWeight: 1000, marginBottom: 6, color: "#000000" }}>{tr("الرقم الوظيفي", "Employee Number")}</div>
-              <input
-                style={inputStyle}
-                value={adding ? newTeacher.employeeNo : edit.employeeNo}
-                onChange={(e) =>
-                  adding
-                    ? setNewTeacher({ ...newTeacher, employeeNo: e.target.value })
-                    : setEdit({ ...edit, employeeNo: e.target.value })
-                }
-              />
-            </div>
-
-            <div>
-              <div style={{ fontWeight: 1000, marginBottom: 6, color: "#000000" }}>{tr("اسم المعلم", "Teacher Name")}</div>
-              <input
-                style={inputStyle}
-                value={adding ? newTeacher.fullName : edit.fullName}
-                onChange={(e) =>
-                  adding
-                    ? setNewTeacher({ ...newTeacher, fullName: e.target.value })
-                    : setEdit({ ...edit, fullName: e.target.value })
-                }
-              />
-            </div>
-
-            <div>
-              <div style={{ fontWeight: 1000, marginBottom: 6, color: "#000000" }}>{tr("التخصص 1", "Specialization 1")}</div>
-              <select
-                value={adding ? newTeacher.subject1 : edit.subject1}
-                onChange={(e) =>
-                  adding ? setNewTeacher({ ...newTeacher, subject1: e.target.value }) : setEdit({ ...edit, subject1: e.target.value })
-                }
-                style={{
-                  ...inputStyle,
-                  background: "#f8f4e8",
-                  backgroundColor: "#f8f4e8",
-                  color: "#000000",
-                  WebkitTextFillColor: "#000000",
-                  fontWeight: 1000,
-                  appearance: "auto",
-                  WebkitAppearance: "menulist",
-                  MozAppearance: "menulist",
-                  cursor: "pointer",
-                }}
-              >
-                {SUBJECT_OPTIONS.map((item) => (
-                  <option
-                    key={item.value || "empty-subject1"}
-                    value={item.value}
-                    style={{ backgroundColor: "#f8f4e8", color: "#000000", fontWeight: 1000 }}
-                  >
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <div style={{ fontWeight: 1000, marginBottom: 6, color: "#000000" }}>{tr("التخصص 2", "Specialization 2")}</div>
-              <select
-                value={adding ? newTeacher.subject2 : edit.subject2}
-                onChange={(e) =>
-                  adding ? setNewTeacher({ ...newTeacher, subject2: e.target.value }) : setEdit({ ...edit, subject2: e.target.value })
-                }
-                style={{
-                  ...inputStyle,
-                  background: "#f8f4e8",
-                  backgroundColor: "#f8f4e8",
-                  color: "#000000",
-                  WebkitTextFillColor: "#000000",
-                  fontWeight: 1000,
-                  appearance: "auto",
-                  WebkitAppearance: "menulist",
-                  MozAppearance: "menulist",
-                  cursor: "pointer",
-                }}
-              >
-                {SUBJECT_OPTIONS.map((item) => (
-                  <option
-                    key={item.value || "empty-subject2"}
-                    value={item.value}
-                    style={{ backgroundColor: "#f8f4e8", color: "#000000", fontWeight: 1000 }}
-                  >
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <div style={{ fontWeight: 1000, marginBottom: 6, color: "#000000" }}>{tr("الهاتف", "Phone")}</div>
-              <input
-                style={inputStyle}
-                value={adding ? newTeacher.phone : edit.phone}
-                onChange={(e) =>
-                  adding
-                    ? setNewTeacher({ ...newTeacher, phone: e.target.value })
-                    : setEdit({ ...edit, phone: e.target.value })
-                }
-              />
-            </div>
-
-            <div>
-              <div style={{ fontWeight: 1000, marginBottom: 6, color: "#000000" }}>{tr("رقم الحساب", "Account Number")}</div>
-              <input
-                style={inputStyle}
-                value={adding ? getTeacherAccountNo(newTeacher as TeacherAccountFields) : getTeacherAccountNo(edit as TeacherAccountFields)}
-                onChange={(e) =>
-                  adding
-                    ? setNewTeacher(setTeacherAccountNo(newTeacher, e.target.value))
-                    : setEdit(setTeacherAccountNo(edit, e.target.value))
-                }
-              />
-            </div>
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              gap: 10,
-              marginTop: 14,
-              flexWrap: "wrap",
-              justifyContent: isRTL ? "flex-start" : "flex-end",
-            }}
-          >
-            {adding ? (
-              <>
-                <button style={btn("#10b981", "#000000")} onClick={saveAdd}>
-                  {tr("حفظ", "Save")}
-                </button>
-                <button style={btn("#fffdf7", "#000000")} onClick={() => setAdding(false)}>
-                  {tr("إلغاء", "Cancel")}
-                </button>
-              </>
-            ) : (
-              <>
-                <button style={btn("#10b981", "#000000")} onClick={saveEdit}>
-                  {tr("حفظ التعديل", "Save Changes")}
-                </button>
-                <button style={btn("#fffdf7", "#000000")} onClick={() => setEditingId(null)}>
-                  {tr("إلغاء", "Cancel")}
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      <div
+        className={tableFullScreen ? "teachersFullscreenOverlay teachers12FullscreenTopLayer" : undefined}
         style={
           tableFullScreen
             ? {
                 ...card,
                 position: "fixed",
                 inset: 0,
+                top: 0,
+                right: 0,
+                bottom: 0,
+                left: 0,
                 width: "100vw",
-                height: "100vh",
-                zIndex: 9999,
+                height: "100dvh",
+                maxWidth: "none",
+                zIndex: 2147483600,
                 marginBottom: 0,
                 borderRadius: 0,
                 padding: 12,
                 background: PAGE_BG,
-                overflow: "hidden",
+                overflow: "visible",
                 border: `5px solid ${GOLD_BORDER}`,
                 boxShadow: "0 30px 80px rgba(0,0,0,0.65)",
+                display: "flex",
+                transform: "translateZ(0)",
+                isolation: "isolate",
+                pointerEvents: "auto",
+                flexDirection: "column",
+                gap: 10,
               }
             : card
         }
       >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: tableFullScreen ? 0 : 10, flex: tableFullScreen ? "0 0 auto" : undefined, position: "relative", zIndex: tableFullScreen ? 2147483646 : 1 }}>
           <div style={{ fontWeight: 900, color: "#000000" }}>{tr("قائمة الكادر التعليمي", "Teaching Staff List")}</div>
 
           <button
@@ -1884,16 +2226,143 @@ export default function Teachers() {
           </button>
         </div>
 
+        {tableFullScreen && renderTeacherEntryForm(true)}
+
         <div
           className="teachersTable3D"
           style={
             tableFullScreen
               ? {
-                  height: "calc(100vh - 70px)",
+                  flex: "1 1 auto",
+                  minHeight: 0,
+                  height: "auto",
                   overflow: "auto",
                   borderRadius: 16,
                   border: `4px solid ${GOLD_BORDER}`,
                   position: "relative",
+                  zIndex: 2147483601,
+                  isolation: "isolate",
+                  background: "#fffdf7",
+                  boxShadow: "0 18px 42px rgba(0,0,0,0.22)",
+                }
+              : {
+                  ...tableWrap,
+                  position: "relative",
+                }
+          }
+        >
+          <table style={tableStyle3D}>
+            <thead>
+              <tr>
+                <th style={thStyle} className="col-emp">{tr("الرقم الوظيفي", "Employee Number")}</th>
+                <th style={thStyle} className="col-name">{tr("اسم المعلم", "Teacher Name")}</th>
+                <th style={thStyle}>{tr("التخصص 1", "Specialization 1")}</th>
+                <th style={thStyle}>{tr("التخصص 2", "Specialization 2")}</th>
+                <th style={thStyle}>{tr("الهاتف", "Phone")}</th>
+                <th style={thStyle}>{tr("رقم الحساب", "Account Number")}</th>
+                <th style={thStyle}>{tr("الإجراءات", "Actions")}</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr>
+                  <td style={tdStyle} colSpan={7}>
+                    {tr("لا توجد بيانات.", "No data found.")}
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((t) => (
+                  <tr key={t.id}>
+                    <td style={tdStyle} className="col-emp">{t.employeeNo}</td>
+                    <td style={{ ...tdStyle, color: "#000000", fontWeight: 1000 }} className="col-name"><span style={{ color: "#000000", fontWeight: 900, WebkitTextFillColor: "#000000", textShadow: "none" }}>{t.fullName}</span></td>
+                    <td style={tdStyle}>{translateSubject(t.subject1)}</td>
+                    <td style={tdStyle}>{translateSubject(t.subject2)}</td>
+                    <td style={tdStyle}>{t.phone}</td>
+                    <td style={tdStyle}>{getTeacherAccountNo(t as TeacherAccountFields)}</td>
+                    <td style={tdStyle}>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button style={btn("#60a5fa", "#000000")} onClick={() => startEdit(t)}>
+                          {tr("✏️ تعديل", "✏️ Edit")}
+                        </button>
+                        <button style={btn("#ef4444", "#000000")} onClick={() => removeTeacher(t.id)}>
+                          {tr("🗑 حذف", "🗑 Delete")}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>,
+          document.body
+        )
+        : (
+          <div
+        className={tableFullScreen ? "teachersFullscreenOverlay teachers12FullscreenTopLayer" : undefined}
+        style={
+          tableFullScreen
+            ? {
+                ...card,
+                position: "fixed",
+                inset: 0,
+                top: 0,
+                right: 0,
+                bottom: 0,
+                left: 0,
+                width: "100vw",
+                height: "100dvh",
+                maxWidth: "none",
+                zIndex: 2147483600,
+                marginBottom: 0,
+                borderRadius: 0,
+                padding: 12,
+                background: PAGE_BG,
+                overflow: "visible",
+                border: `5px solid ${GOLD_BORDER}`,
+                boxShadow: "0 30px 80px rgba(0,0,0,0.65)",
+                display: "flex",
+                transform: "translateZ(0)",
+                isolation: "isolate",
+                pointerEvents: "auto",
+                flexDirection: "column",
+                gap: 10,
+              }
+            : card
+        }
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: tableFullScreen ? 0 : 10, flex: tableFullScreen ? "0 0 auto" : undefined, position: "relative", zIndex: tableFullScreen ? 2147483646 : 1 }}>
+          <div style={{ fontWeight: 900, color: "#000000" }}>{tr("قائمة الكادر التعليمي", "Teaching Staff List")}</div>
+
+          <button
+            style={btn(tableFullScreen ? "#ef4444" : "#fffdf7", "#000000")}
+            onClick={() => setTableFullScreen((v) => !v)}
+            title={tableFullScreen ? tr("عودة للحجم الطبيعي", "Return to normal size") : tr("تكبير الجدول ملء الشاشة", "Fullscreen table")}
+          >
+            {tableFullScreen ? tr("إغلاق ملء الشاشة", "Exit Fullscreen") : tr("ملء الشاشة", "Fullscreen")}
+          </button>
+        </div>
+
+        {tableFullScreen && renderTeacherEntryForm(true)}
+
+        <div
+          className="teachersTable3D"
+          style={
+            tableFullScreen
+              ? {
+                  flex: "1 1 auto",
+                  minHeight: 0,
+                  height: "auto",
+                  overflow: "auto",
+                  borderRadius: 16,
+                  border: `4px solid ${GOLD_BORDER}`,
+                  position: "relative",
+                  zIndex: 2147483601,
+                  isolation: "isolate",
+                  background: "#fffdf7",
+                  boxShadow: "0 18px 42px rgba(0,0,0,0.22)",
                 }
               : {
                   ...tableWrap,
@@ -1947,6 +2416,7 @@ export default function Teachers() {
           </table>
         </div>
       </div>
+        )}
     </div>
   );
 }

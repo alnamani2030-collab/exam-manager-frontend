@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import GoldDropdown from "../components/GoldDropdown";
 import { type Teacher } from "../services/teachers.service";
 import { useTeachersData } from "../hooks/useTeachersData";
 import { useI18n } from "../i18n/I18nProvider";
@@ -329,6 +328,204 @@ type DupModalState = {
   context: "add" | "edit";
 };
 
+
+
+type SearchableDropdownOption = { value: string; label: string };
+
+function SearchableDropdown({
+  value,
+  options,
+  placeholder,
+  onChange,
+  inputStyle,
+  direction = "rtl",
+  zIndex = 2147483647,
+}: {
+  value: string;
+  options: SearchableDropdownOption[];
+  placeholder?: string;
+  onChange: (value: string) => void;
+  inputStyle: React.CSSProperties;
+  direction?: "rtl" | "ltr";
+  zIndex?: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [menuRect, setMenuRect] = useState<DOMRect | null>(null);
+  const rootRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const searchRef = useRef<HTMLInputElement | null>(null);
+
+  const selected = options.find((option) => String(option.value) === String(value));
+  const selectedLabel = selected?.label || placeholder || "—";
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredOptions = useMemo(
+    () =>
+      !normalizedSearch
+        ? options
+        : options.filter((option) =>
+            `${option.label} ${option.value}`.toLowerCase().includes(normalizedSearch)
+          ),
+    [normalizedSearch, options]
+  );
+
+  useEffect(() => {
+    if (!open) return;
+
+    const updatePosition = () => {
+      if (rootRef.current) setMenuRect(rootRef.current.getBoundingClientRect());
+    };
+
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (rootRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    document.addEventListener("mousedown", closeOnOutsideClick);
+
+    const focusTimer = window.setTimeout(() => searchRef.current?.focus(), 30);
+
+    return () => {
+      window.clearTimeout(focusTimer);
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+      document.removeEventListener("mousedown", closeOnOutsideClick);
+    };
+  }, [open]);
+
+  const menu =
+    open && menuRect && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            ref={menuRef}
+            dir={direction}
+            style={{
+              position: "fixed",
+              top: Math.min(menuRect.bottom + 6, window.innerHeight - 380),
+              left: menuRect.left,
+              width: Math.max(menuRect.width, 260),
+              maxWidth: "min(92vw, 520px)",
+              background: "#fffdf7",
+              color: "#000000",
+              WebkitTextFillColor: "#000000",
+              border: "3px solid #d4af37",
+              borderRadius: 18,
+              boxShadow: "0 22px 70px rgba(0,0,0,0.34)",
+              padding: 10,
+              zIndex,
+              overflow: "hidden",
+            }}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <input
+              ref={searchRef}
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder={direction === "rtl" ? "بحث داخل القائمة..." : "Search inside list..."}
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                minHeight: 44,
+                borderRadius: 14,
+                border: "2px solid #d4af37",
+                background: "#f8f4e8",
+                color: "#000000",
+                WebkitTextFillColor: "#000000",
+                caretColor: "#000000",
+                fontWeight: 1000,
+                fontSize: 15,
+                outline: "none",
+                padding: "10px 12px",
+                marginBottom: 8,
+              }}
+            />
+
+            <div style={{ maxHeight: 280, overflowY: "auto", display: "grid", gap: 6 }}>
+              {filteredOptions.length ? (
+                filteredOptions.map((option) => (
+                  <button
+                    key={`${option.value || "__empty__"}-${option.label}`}
+                    type="button"
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      onChange(option.value);
+                      setSearch("");
+                      setOpen(false);
+                    }}
+                    style={{
+                      border: option.value === value ? "3px solid #16a34a" : "2px solid rgba(212,175,55,0.55)",
+                      borderRadius: 14,
+                      background: option.value === value ? "#ecfdf5" : "#f8f4e8",
+                      color: "#000000",
+                      WebkitTextFillColor: "#000000",
+                      fontWeight: 1000,
+                      textAlign: direction === "rtl" ? "right" : "left",
+                      padding: "10px 12px",
+                      cursor: "pointer",
+                      minHeight: 42,
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                ))
+              ) : (
+                <div
+                  style={{
+                    padding: 12,
+                    borderRadius: 14,
+                    background: "#f8f4e8",
+                    border: "2px solid rgba(212,175,55,0.55)",
+                    color: "#000000",
+                    WebkitTextFillColor: "#000000",
+                    fontWeight: 1000,
+                  }}
+                >
+                  {direction === "rtl" ? "لا توجد نتائج" : "No results"}
+                </div>
+              )}
+            </div>
+          </div>,
+          document.body
+        )
+      : null;
+
+  return (
+    <>
+      <button
+        ref={rootRef}
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        style={{
+          ...inputStyle,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 10,
+          cursor: "pointer",
+          textAlign: direction === "rtl" ? "right" : "left",
+          background: "#f8f4e8",
+          color: "#000000",
+          WebkitTextFillColor: "#000000",
+          fontWeight: 1000,
+          position: "relative",
+          zIndex: Math.min(zIndex - 2, 2147483645),
+        }}
+      >
+        <span style={{ color: "#000000", WebkitTextFillColor: "#000000", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {selectedLabel}
+        </span>
+        <span style={{ color: "#000000", WebkitTextFillColor: "#000000", fontWeight: 1000 }}>⌄</span>
+      </button>
+      {menu}
+    </>
+  );
+}
+
 export default function Teachers() {
   const { lang, isRTL } = useI18n();
   const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
@@ -408,6 +605,37 @@ export default function Teachers() {
         background: linear-gradient(180deg,#7a5c00,#4a3600) !important;
         color: #fff1c4 !important;
       }
+
+
+      /* ✅ إصلاح القوائم المنسدلة داخل وضع ملء الشاشة */
+      body [role="listbox"],
+      body [role="option"],
+      body [role="combobox"],
+      body [aria-haspopup="listbox"],
+      body .gold-dropdown,
+      body .goldDropdown,
+      body [class*="GoldDropdown"],
+      body [class*="goldDropdown"],
+      body [class*="gold-dropdown"],
+      body [class*="dropdown"],
+      body [class*="Dropdown"] {
+        pointer-events: auto !important;
+        z-index: 2147483647 !important;
+      }
+
+      body [role="listbox"],
+      body [class*="menu"],
+      body [class*="Menu"],
+      body [class*="options"],
+      body [class*="Options"] {
+        pointer-events: auto !important;
+        z-index: 2147483647 !important;
+      }
+
+      .fullscreenEditDropdownFix,
+      .fullscreenEditDropdownFix * {
+        pointer-events: auto !important;
+      }
     `;
 
     document.head.appendChild(style);
@@ -427,6 +655,90 @@ export default function Teachers() {
       document.body.classList.remove("teachers-table-fullscreen-open");
     };
   }, [tableFullScreen]);
+
+
+  useEffect(() => {
+    const style = document.createElement("style");
+    style.setAttribute("data-fullscreen-dropdown-black-text-fix", "true");
+    style.innerHTML = `
+      /* ✅ تثبيت لون نص القوائم المنسدلة بالأسود داخل وخارج ملء الشاشة */
+      body select,
+      body select option,
+      body select optgroup,
+      body [role="combobox"],
+      body [aria-haspopup="listbox"],
+      body [role="button"][aria-haspopup="listbox"],
+      body [role="listbox"],
+      body [role="option"],
+      body .gold-dropdown,
+      body .goldDropdown,
+      body [class*="GoldDropdown"],
+      body [class*="goldDropdown"],
+      body [class*="gold-dropdown"],
+      body [class*="dropdown"],
+      body [class*="Dropdown"] {
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+        font-weight: 1000 !important;
+        text-shadow: none !important;
+        caret-color: #000000 !important;
+        color-scheme: light !important;
+      }
+
+      body select option,
+      body select optgroup,
+      body [role="listbox"],
+      body [role="option"],
+      body .gold-dropdown,
+      body .goldDropdown,
+      body [class*="GoldDropdown"],
+      body [class*="goldDropdown"],
+      body [class*="gold-dropdown"] {
+        background: #f8f4e8 !important;
+        background-color: #f8f4e8 !important;
+      }
+
+      body [role="combobox"] *,
+      body [aria-haspopup="listbox"] *,
+      body [role="button"][aria-haspopup="listbox"] *,
+      body [role="listbox"] *,
+      body [role="option"] *,
+      body .gold-dropdown *,
+      body .goldDropdown *,
+      body [class*="GoldDropdown"] *,
+      body [class*="goldDropdown"] *,
+      body [class*="gold-dropdown"] *,
+      body [class*="dropdown"] *,
+      body [class*="Dropdown"] * {
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+        font-weight: 1000 !important;
+        text-shadow: none !important;
+      }
+
+      .teachers12PreviousChangesScope select,
+      .teachers12PreviousChangesScope select option,
+      .teachers12PreviousChangesScope [role="listbox"],
+      .teachers12PreviousChangesScope [role="option"],
+      .rooms12PageRoot select,
+      .rooms12PageRoot select option,
+      .rooms12PageRoot [role="listbox"],
+      .rooms12PageRoot [role="option"],
+      .teachersFullscreenOverlay select,
+      .teachersFullscreenOverlay select option,
+      .roomsFullscreenOverlay select,
+      .roomsFullscreenOverlay select option {
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+        font-weight: 1000 !important;
+        text-shadow: none !important;
+      }
+    `;
+    document.head.appendChild(style);
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
 
   const filtered = useMemo(() => {
     const q = query.trim();
@@ -471,11 +783,19 @@ export default function Teachers() {
     });
   }
 
+  function scrollToTopAfterRender(delay = 80) {
+    window.setTimeout(() => {
+      topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, delay);
+  }
+
   function startAdd() {
+    // عند الإضافة من أي وضع، أغلق ملء الشاشة أولاً حتى يظهر نموذج الإدخال ولا يبقى مخفيًا خلف الجدول.
+    if (tableFullScreen) setTableFullScreen(false);
     setAdding(true);
     setEditingId(null);
     setNewTeacher({ ...emptyTeacher, id: genId() });
-    setTimeout(() => topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+    scrollToTopAfterRender(tableFullScreen ? 160 : 50);
   }
 
   function saveAdd() {
@@ -496,8 +816,11 @@ export default function Teachers() {
   function startEdit(t: Teacher) {
     setAdding(false);
     setEditingId(t.id);
-    setEdit({ ...t });
-    setTimeout(() => topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+    setEdit({ ...emptyTeacher, ...t, employeeNo: normalizeEmployeeNoDigits(t.employeeNo) });
+
+    // في الوضع العادي ننتقل لنموذج التعديل أعلى الصفحة.
+    // في ملء الشاشة سيظهر النموذج داخل نافذة ملء الشاشة نفسها، لذلك لا نغلقها.
+    if (!tableFullScreen) scrollToTopAfterRender(50);
   }
 
   function saveEdit() {
@@ -789,7 +1112,7 @@ Do you want to replace it with the new name: (${t.fullName})?`
     position: "fixed",
     inset: 0,
     background: "rgba(0,0,0,0.45)",
-    zIndex: 9999,
+    zIndex: 2147483647,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -807,6 +1130,189 @@ Do you want to replace it with the new name: (${t.fullName})?`
     direction: isRTL ? "rtl" : "ltr",
   };
 
+
+
+  const renderFullscreenSafeSubjectDropdown = (
+    value: string,
+    onChange: (value: string) => void,
+    insideFullScreen = false
+  ) => (
+    <SearchableDropdown
+      value={value}
+      options={SUBJECT_OPTIONS}
+      placeholder={tr("— اختر المادة —", "— Select Subject —")}
+      onChange={onChange}
+      inputStyle={inputStyle}
+      direction={isRTL ? "rtl" : "ltr"}
+      zIndex={insideFullScreen ? 2147483647 : 999999}
+    />
+  );
+
+  const renderTeacherForm = (insideFullScreen = false) =>
+    adding || editingId ? (
+        <div
+          className={insideFullScreen ? "fullscreenEditDropdownFix" : undefined}
+          style={{
+            ...card,
+            ...(insideFullScreen
+              ? {
+                  marginBottom: 10,
+                  padding: 14,
+                  borderRadius: 18,
+                  maxHeight: "none",
+                  overflow: "visible",
+                  flex: "0 0 auto",
+                  position: "relative",
+                  zIndex: 2147483647,
+                  background: "linear-gradient(180deg, #fffdf7 0%, #fbf3df 100%)",
+                  boxShadow: "0 8px 20px rgba(90,70,20,0.16)",
+                }
+              : {}),
+          }}
+        >
+          <div
+            style={{
+              display: "grid",
+              gap: 10,
+              gridTemplateColumns: insideFullScreen
+                ? "repeat(auto-fit, minmax(220px, 1fr))"
+                : "repeat(4, minmax(220px, 1fr))",
+            }}
+          >
+            <div>
+              <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("الاسم الكامل", "Full Name")}</div>
+              <input
+                style={inputStyle}
+                value={adding ? newTeacher.fullName : edit.fullName}
+                onChange={(e) =>
+                  adding
+                    ? setNewTeacher({ ...newTeacher, fullName: e.target.value })
+                    : setEdit({ ...edit, fullName: e.target.value })
+                }
+              />
+            </div>
+
+            <div>
+              <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("الرقم الوظيفي", "Employee Number")}</div>
+              <input
+                style={inputStyle}
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={adding ? newTeacher.employeeNo : edit.employeeNo}
+                onChange={(e) => {
+                  const employeeNo = employeeNoInputDigitsOnly(e.target.value);
+                  adding
+                    ? setNewTeacher({ ...newTeacher, employeeNo })
+                    : setEdit({ ...edit, employeeNo });
+                }}
+              />
+            </div>
+
+            <div>
+              <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("المادة 1", "Subject 1")}</div>
+              {renderFullscreenSafeSubjectDropdown(
+                adding ? newTeacher.subject1 : edit.subject1,
+                (v) =>
+                  adding ? setNewTeacher({ ...newTeacher, subject1: v }) : setEdit({ ...edit, subject1: v }),
+                insideFullScreen
+              )}
+            </div>
+
+            <div>
+              <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("المادة 2", "Subject 2")}</div>
+              {renderFullscreenSafeSubjectDropdown(
+                adding ? newTeacher.subject2 : edit.subject2,
+                (v) =>
+                  adding ? setNewTeacher({ ...newTeacher, subject2: v }) : setEdit({ ...edit, subject2: v }),
+                insideFullScreen
+              )}
+            </div>
+
+            <div>
+              <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("المادة 3", "Subject 3")}</div>
+              {renderFullscreenSafeSubjectDropdown(
+                adding ? newTeacher.subject3 : edit.subject3,
+                (v) =>
+                  adding ? setNewTeacher({ ...newTeacher, subject3: v }) : setEdit({ ...edit, subject3: v }),
+                insideFullScreen
+              )}
+            </div>
+
+            <div>
+              <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("المادة 4", "Subject 4")}</div>
+              {renderFullscreenSafeSubjectDropdown(
+                adding ? newTeacher.subject4 : edit.subject4,
+                (v) =>
+                  adding ? setNewTeacher({ ...newTeacher, subject4: v }) : setEdit({ ...edit, subject4: v }),
+                insideFullScreen
+              )}
+            </div>
+
+            <div>
+              <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("الصفوف", "Grades")}</div>
+              <input
+                style={inputStyle}
+                placeholder={tr("مثال: 10-5", "Example: 10-5")}
+                value={adding ? newTeacher.grades : edit.grades}
+                onChange={(e) =>
+                  adding
+                    ? setNewTeacher({ ...newTeacher, grades: e.target.value })
+                    : setEdit({ ...edit, grades: e.target.value })
+                }
+              />
+            </div>
+
+            <div>
+              <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("الهاتف", "Phone")}</div>
+              <input
+                style={inputStyle}
+                value={adding ? newTeacher.phone : edit.phone}
+                onChange={(e) =>
+                  adding
+                    ? setNewTeacher({ ...newTeacher, phone: e.target.value })
+                    : setEdit({ ...edit, phone: e.target.value })
+                }
+              />
+            </div>
+
+            <div style={{ gridColumn: "1 / -1" }}>
+              <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("ملاحظات", "Notes")}</div>
+              <textarea
+                style={{ ...inputStyle, minHeight: 80 }}
+                value={adding ? newTeacher.notes : edit.notes}
+                onChange={(e) =>
+                  adding
+                    ? setNewTeacher({ ...newTeacher, notes: e.target.value })
+                    : setEdit({ ...edit, notes: e.target.value })
+                }
+              />
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+            {adding ? (
+              <>
+                <button style={btn("#10b981", "#000000")} onClick={saveAdd}>
+                  {tr("حفظ", "Save")}
+                </button>
+                <button style={btn("#fffdf7", "#000000")} onClick={() => setAdding(false)}>
+                  {tr("إلغاء", "Cancel")}
+                </button>
+              </>
+            ) : (
+              <>
+                <button style={btn("#10b981", "#000000")} onClick={saveEdit}>
+                  {tr("حفظ التعديل", "Save Changes")}
+                </button>
+                <button style={btn("#fffdf7", "#000000")} onClick={() => setEditingId(null)}>
+                  {tr("إلغاء", "Cancel")}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+    ) : null;
+
   const renderTeachersTableSection = () => (
       <div
         className={tableFullScreen ? "teachersFullscreenOverlay" : undefined}
@@ -818,15 +1324,18 @@ Do you want to replace it with the new name: (${t.fullName})?`
                 inset: 0,
                 width: "100vw",
                 height: "100dvh",
-                zIndex: 2147483647,
+                zIndex: 2147483000,
                 marginBottom: 0,
                 borderRadius: 0,
                 padding: "14px 16px 16px",
                 background: "linear-gradient(180deg, #fffdf7 0%, #f6efd9 100%)",
-                overflow: "hidden",
+                overflow: "visible",
                 border: `6px solid ${GOLD_BORDER}`,
                 boxShadow: "0 30px 90px rgba(0,0,0,0.48)",
                 isolation: "isolate",
+                display: "flex",
+                flexDirection: "column",
+                gap: 10,
               }
             : card
         }
@@ -860,12 +1369,16 @@ Do you want to replace it with the new name: (${t.fullName})?`
           </button>
         </div>
 
+        {tableFullScreen && renderTeacherForm(true)}
+
         <div
           className="teachersTable3D"
           style={
             tableFullScreen
               ? {
-                  height: "calc(100dvh - 96px)",
+                  flex: 1,
+                  minHeight: 0,
+                  height: "auto",
                   overflow: "auto",
                   borderRadius: 18,
                   border: `4px solid ${GOLD_BORDER}`,
@@ -1392,150 +1905,7 @@ Do you want to replace it with the new name: (${t.fullName})?`
         </div>
       </div>
 
-      {(adding || editingId) && (
-        <div style={card}>
-          <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(4, minmax(220px, 1fr))" }}>
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("الاسم الكامل", "Full Name")}</div>
-              <input
-                style={inputStyle}
-                value={adding ? newTeacher.fullName : edit.fullName}
-                onChange={(e) =>
-                  adding
-                    ? setNewTeacher({ ...newTeacher, fullName: e.target.value })
-                    : setEdit({ ...edit, fullName: e.target.value })
-                }
-              />
-            </div>
-
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("الرقم الوظيفي", "Employee Number")}</div>
-              <input
-                style={inputStyle}
-                inputMode="numeric"
-                pattern="[0-9]*"
-                value={adding ? newTeacher.employeeNo : edit.employeeNo}
-                onChange={(e) => {
-                  const employeeNo = employeeNoInputDigitsOnly(e.target.value);
-                  adding
-                    ? setNewTeacher({ ...newTeacher, employeeNo })
-                    : setEdit({ ...edit, employeeNo });
-                }}
-              />
-            </div>
-
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("المادة 1", "Subject 1")}</div>
-              <GoldDropdown
-                value={adding ? newTeacher.subject1 : edit.subject1}
-                options={SUBJECT_OPTIONS}
-                placeholder={tr("— اختر المادة —", "— Select Subject —")}
-                onChange={(v) =>
-                  adding ? setNewTeacher({ ...newTeacher, subject1: v }) : setEdit({ ...edit, subject1: v })
-                }
-              />
-            </div>
-
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("المادة 2", "Subject 2")}</div>
-              <GoldDropdown
-                value={adding ? newTeacher.subject2 : edit.subject2}
-                options={SUBJECT_OPTIONS}
-                placeholder={tr("— اختر المادة —", "— Select Subject —")}
-                onChange={(v) =>
-                  adding ? setNewTeacher({ ...newTeacher, subject2: v }) : setEdit({ ...edit, subject2: v })
-                }
-              />
-            </div>
-
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("المادة 3", "Subject 3")}</div>
-              <GoldDropdown
-                value={adding ? newTeacher.subject3 : edit.subject3}
-                options={SUBJECT_OPTIONS}
-                placeholder={tr("— اختر المادة —", "— Select Subject —")}
-                onChange={(v) =>
-                  adding ? setNewTeacher({ ...newTeacher, subject3: v }) : setEdit({ ...edit, subject3: v })
-                }
-              />
-            </div>
-
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("المادة 4", "Subject 4")}</div>
-              <GoldDropdown
-                value={adding ? newTeacher.subject4 : edit.subject4}
-                options={SUBJECT_OPTIONS}
-                placeholder={tr("— اختر المادة —", "— Select Subject —")}
-                onChange={(v) =>
-                  adding ? setNewTeacher({ ...newTeacher, subject4: v }) : setEdit({ ...edit, subject4: v })
-                }
-              />
-            </div>
-
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("الصفوف", "Grades")}</div>
-              <input
-                style={inputStyle}
-                placeholder={tr("مثال: 10-5", "Example: 10-5")}
-                value={adding ? newTeacher.grades : edit.grades}
-                onChange={(e) =>
-                  adding
-                    ? setNewTeacher({ ...newTeacher, grades: e.target.value })
-                    : setEdit({ ...edit, grades: e.target.value })
-                }
-              />
-            </div>
-
-            <div>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("الهاتف", "Phone")}</div>
-              <input
-                style={inputStyle}
-                value={adding ? newTeacher.phone : edit.phone}
-                onChange={(e) =>
-                  adding
-                    ? setNewTeacher({ ...newTeacher, phone: e.target.value })
-                    : setEdit({ ...edit, phone: e.target.value })
-                }
-              />
-            </div>
-
-            <div style={{ gridColumn: "1 / -1" }}>
-              <div style={{ fontWeight: 900, marginBottom: 6, color: "#000000" }}>{tr("ملاحظات", "Notes")}</div>
-              <textarea
-                style={{ ...inputStyle, minHeight: 80 }}
-                value={adding ? newTeacher.notes : edit.notes}
-                onChange={(e) =>
-                  adding
-                    ? setNewTeacher({ ...newTeacher, notes: e.target.value })
-                    : setEdit({ ...edit, notes: e.target.value })
-                }
-              />
-            </div>
-          </div>
-
-          <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-            {adding ? (
-              <>
-                <button style={btn("#10b981", "#000000")} onClick={saveAdd}>
-                  {tr("حفظ", "Save")}
-                </button>
-                <button style={btn("#fffdf7", "#000000")} onClick={() => setAdding(false)}>
-                  {tr("إلغاء", "Cancel")}
-                </button>
-              </>
-            ) : (
-              <>
-                <button style={btn("#10b981", "#000000")} onClick={saveEdit}>
-                  {tr("حفظ التعديل", "Save Changes")}
-                </button>
-                <button style={btn("#fffdf7", "#000000")} onClick={() => setEditingId(null)}>
-                  {tr("إلغاء", "Cancel")}
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      )}
+      {!tableFullScreen && renderTeacherForm(false)}
 
       {tableFullScreen && typeof document !== "undefined"
         ? createPortal(renderTeachersTableSection(), document.body)
