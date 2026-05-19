@@ -12,10 +12,11 @@ type Props = {
   width?: number | string;
 };
 
-const DARK_BG = "#0b1220";
-const DARK_BG_2 = "#0a1630";
+const FIELD_BG = "#fffdf6";
+const FIELD_BG_2 = "#f8f2df";
+const TEXT = "#000000";
 const GOLD = "#d4af37";
-const BORDER = "rgba(212,175,55,0.22)";
+const BORDER = "rgba(120, 89, 14, 0.48)";
 
 function normalizeSearchText(value: any) {
   return String(value || "")
@@ -123,8 +124,8 @@ export default function GoldDropdown({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
-    background: DARK_BG,
-    color: GOLD,
+    background: FIELD_BG,
+    color: TEXT,
     border: `1px solid ${BORDER}`,
     borderRadius: 14,
     padding: "11px 12px",
@@ -139,7 +140,7 @@ export default function GoldDropdown({
     height: 0,
     borderLeft: "6px solid transparent",
     borderRight: "6px solid transparent",
-    borderTop: `8px solid ${GOLD}`,
+    borderTop: `8px solid ${TEXT}`,
     opacity: 0.95,
     transform: open ? "rotate(180deg)" : "rotate(0deg)",
     transition: "transform .15s ease",
@@ -150,12 +151,12 @@ export default function GoldDropdown({
         <>
           <style>{`
             .gold-dropdown-search-input::placeholder {
-              color: rgba(255,255,255,0.78) !important;
-              -webkit-text-fill-color: rgba(255,255,255,0.78) !important;
+              color: rgba(0,0,0,0.55) !important;
+              -webkit-text-fill-color: rgba(0,0,0,0.55) !important;
             }
             .gold-dropdown-search-input::-webkit-input-placeholder {
-              color: rgba(255,255,255,0.78) !important;
-              -webkit-text-fill-color: rgba(255,255,255,0.78) !important;
+              color: rgba(0,0,0,0.55) !important;
+              -webkit-text-fill-color: rgba(0,0,0,0.55) !important;
             }
           `}</style>
         <div
@@ -167,11 +168,11 @@ export default function GoldDropdown({
             width: pos.width,
             maxHeight: 420,
             overflow: "auto",
-            background: `linear-gradient(180deg, ${DARK_BG_2}, ${DARK_BG})`,
+            background: `linear-gradient(180deg, ${FIELD_BG}, ${FIELD_BG_2})`,
             border: `1px solid ${BORDER}`,
             borderRadius: 14,
-            zIndex: 99999,
-            boxShadow: "0 20px 60px rgba(0,0,0,0.45)",
+            zIndex: 2147483647,
+            boxShadow: "0 22px 65px rgba(0,0,0,0.24)",
             padding: 6,
           }}
         >
@@ -179,8 +180,8 @@ export default function GoldDropdown({
             style={{
               padding: "8px 10px",
               borderRadius: 10,
-              background: "rgba(212,175,55,0.08)",
-              color: GOLD,
+              background: "rgba(212,175,55,0.18)",
+              color: TEXT,
               fontWeight: 1000,
               fontSize: 12,
               marginBottom: 6,
@@ -219,10 +220,10 @@ export default function GoldDropdown({
               borderRadius: 12,
               border: `1px solid ${BORDER}`,
               outline: "none",
-              background: "rgba(11,18,32,0.92)",
-              color: "#ffffff",
-              WebkitTextFillColor: "#ffffff",
-              caretColor: "#ffffff",
+              background: "#ffffff",
+              color: "#000000",
+              WebkitTextFillColor: "#000000",
+              caretColor: "#000000",
               fontWeight: 900,
               fontSize: 13,
               direction: "rtl",
@@ -234,6 +235,7 @@ export default function GoldDropdown({
               const isSelected = o.value === value;
               return (
                 <button
+                  type="button"
                   key={o.value + o.label}
                   disabled={o.disabled}
                   onClick={() => {
@@ -249,14 +251,15 @@ export default function GoldDropdown({
                     borderRadius: 12,
                     padding: "10px 10px",
                     background: isSelected ? "rgba(212,175,55,0.14)" : "transparent",
-                    color: o.disabled ? "rgba(212,175,55,0.35)" : GOLD,
+                    color: o.disabled ? "rgba(0,0,0,0.35)" : TEXT,
+                    WebkitTextFillColor: o.disabled ? "rgba(0,0,0,0.35)" : TEXT,
                     fontWeight: 900,
                     cursor: o.disabled ? "not-allowed" : "pointer",
                     transition: "background .12s ease",
                   }}
                   onMouseEnter={(e) => {
                     if (o.disabled) return;
-                    e.currentTarget.style.background = isSelected ? "rgba(212,175,55,0.18)" : "rgba(255,255,255,0.06)";
+                    e.currentTarget.style.background = isSelected ? "rgba(212,175,55,0.26)" : "rgba(212,175,55,0.14)";
                   }}
                   onMouseLeave={(e) => {
                     if (o.disabled) return;
@@ -272,8 +275,8 @@ export default function GoldDropdown({
               style={{
                 padding: "14px 10px",
                 borderRadius: 12,
-                background: "rgba(255,255,255,0.05)",
-                color: GOLD,
+                background: "rgba(212,175,55,0.12)",
+                color: TEXT,
                 fontWeight: 900,
                 textAlign: "center",
                 opacity: 0.85,
