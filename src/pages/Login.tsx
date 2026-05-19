@@ -1,5 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   GoogleAuthProvider,
   onAuthStateChanged,
@@ -106,7 +105,23 @@ function normalizeAllowlistData(email: string, raw: Partial<AllowlistDoc> | null
     (data as any).role = "super_admin";
   } else if (r === "ministry_super" || r === "ministry super" || r === "ministry-super") {
     (data as any).role = "ministry_super";
-  } else if (r === "super" || r === "governorate_super" || r === "governorate-super" || r === "سوبر المحافظة" || r === "مشرف المحافظة") {
+  } else if (
+    r === "super" ||
+    r === "governorate_super" ||
+    r === "governorate-super" ||
+    r === "super_governorate" ||
+    r === "super-governorate" ||
+    r === "regional_super" ||
+    r === "regional-super" ||
+    r === "super_regional" ||
+    r === "super-regional" ||
+    r === "governorate super" ||
+    r === "regional super" ||
+    r === "سوبر المحافظة" ||
+    r === "سوبر المحافظات" ||
+    r === "مشرف المحافظة" ||
+    r === "مشرف المحافظات"
+  ) {
     (data as any).role = "super";
   } else if (
     r === "exam_super" ||
@@ -129,7 +144,12 @@ function normalizeAllowlistData(email: string, raw: Partial<AllowlistDoc> | null
     (data as any).role = "user";
   }
 
-  if (!data.tenantId) data.tenantId = "default";
+  const normalizedRole = String((data as any).role || "").trim().toLowerCase();
+  if (normalizedRole === "super_admin" || normalizedRole === "ministry_super" || normalizedRole === "super") {
+    data.tenantId = "system";
+  } else if (!data.tenantId) {
+    data.tenantId = "default";
+  }
 
   return data as AllowlistDoc;
 }
@@ -210,20 +230,86 @@ async function fetchAllowlist(email: string): Promise<AllowlistDoc | null> {
   }
 }
 
+function cleanRoleValue(role: any) {
+  return String(role || "").trim().toLowerCase().replace(/\s+/g, "_").replace(/-/g, "_");
+}
+
+function cleanTenantValue(tenantId: any) {
+  return String(tenantId || "").trim();
+}
+
 function resolveAllowlistHomePath(user: User | null, allow: AllowlistDoc | null): string {
-  if (allow?.enabled && allow?.role === "exam_super" && allow?.tenantId) {
-    return `/t/${allow.tenantId}/dashboard12`;
-  }
+  const role = cleanRoleValue(allow?.role);
+  const tenantId = cleanTenantValue(allow?.tenantId);
+
+  if (!allow?.enabled) return "/login";
+
+  // ✅ توجيه صريح حتى لا نعتمد على resolveHomePath إذا كان لا يعرف مسارات المشروع الحالية.
+  if (role === "super_admin") return "/super";
+  if (role === "ministry_super") return "/super";
+  if (role === "super" || role === "governorate_super") return "/super-system";
+  if (role === "exam_super") return tenantId && tenantId !== "default" ? `/t/${tenantId}/dashboard12` : "/dashboard12";
+  if (role === "tenant_admin" || role === "admin") return tenantId && tenantId !== "default" ? `/t/${tenantId}` : "/";
 
   return resolveHomePath(
     buildAuthzSnapshot({
       user,
       profile: allow,
       tenantId: allow?.tenantId ?? null,
-      isSuperAdmin: allow?.role === "super_admin",
-      isSuper: allow?.role === "super",
+      isSuperAdmin: role === "super_admin",
+      isSuper: role === "super" || role === "governorate_super",
     })
   );
+}
+
+function persistLoginContext(allow: AllowlistDoc | null) {
+  if (typeof window === "undefined" || !allow) return;
+
+  const role = cleanRoleValue(allow.role);
+  const rawTenantId = cleanTenantValue(allow.tenantId);
+  const tenantId = role === "super_admin" || role === "ministry_super" || role === "super" ? "system" : rawTenantId;
+
+  const clearKeys = [
+    "governorateSuperReadOnly",
+    "viewAsReadOnly",
+    "readOnly",
+    "governorateSuperViewTenantId",
+    "viewAsTenantId",
+    "governorateSuperViewExpiresAt",
+  ];
+
+  for (const key of clearKeys) {
+    try { window.sessionStorage.removeItem(key); } catch {}
+    try { window.localStorage.removeItem(key); } catch {}
+  }
+
+  const pairs: Array<[string, string]> = [
+    ["loginRole", role],
+    ["loginEmail", String(allow.email || "").trim().toLowerCase()],
+  ];
+
+  if (tenantId) {
+    pairs.push(["tenantId", tenantId]);
+    pairs.push(["effectiveTenantId", tenantId]);
+    pairs.push(["selectedTenantId", tenantId]);
+    pairs.push(["lastTenantId", tenantId]);
+  }
+
+  for (const [key, value] of pairs) {
+    try { window.localStorage.setItem(key, value); } catch {}
+    try { window.sessionStorage.setItem(key, value); } catch {}
+  }
+}
+
+function hardRedirectToAllowlistHome(user: User | null, allow: AllowlistDoc | null) {
+  const path = resolveAllowlistHomePath(user, allow);
+  persistLoginContext(allow);
+
+  if (typeof window !== "undefined") {
+    window.location.replace(path);
+  }
+
+  return path;
 }
 
 function translateRoleLabel(label: string, lang: Lang): string {
@@ -242,7 +328,6 @@ function translateRoleLabel(label: string, lang: Lang): string {
 }
 
 export default function Login() {
-  const navigate = useNavigate();
   const { lang, setLang } = useI18n();
   const t = STR[lang as Lang] || STR.ar;
 
@@ -277,6 +362,19 @@ export default function Login() {
     if (!fbUser?.email) return false;
     return !!profile?.enabled;
   }, [fbUser, profile]);
+
+  const autoRedirectedRef = useRef(false);
+
+  useEffect(() => {
+    if (!fbUser || !profile?.enabled || busy || autoRedirectedRef.current) return;
+
+    autoRedirectedRef.current = true;
+    const timer = window.setTimeout(() => {
+      hardRedirectToAllowlistHome(fbUser, profile);
+    }, 350);
+
+    return () => window.clearTimeout(timer);
+  }, [fbUser, profile, busy]);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
@@ -341,7 +439,7 @@ export default function Login() {
       if (!effectiveAllow?.enabled) {
         setError(t.errNotAllowed);
       } else {
-        navigate(resolveAllowlistHomePath(res.user, effectiveAllow), { replace: true });
+        hardRedirectToAllowlistHome(res.user, effectiveAllow);
       }
     } catch (e: any) {
       if (e?.code === "auth/popup-closed-by-user") {
@@ -387,7 +485,7 @@ export default function Login() {
       const effectiveAllow = allow || cached;
 
       if (effectiveAllow?.enabled) {
-        navigate(resolveAllowlistHomePath(fbUser, effectiveAllow), { replace: true });
+        hardRedirectToAllowlistHome(fbUser, effectiveAllow);
       }
     } catch {
       setError(t.errGeneric);
@@ -401,6 +499,7 @@ export default function Login() {
     setError("");
 
     try {
+      autoRedirectedRef.current = false;
       await signOut(auth);
       setFbUser(null);
       setProfile(null);
@@ -906,11 +1005,7 @@ export default function Login() {
                   {isAllowed && (
                     <button
                       style={{ ...styles.actionBtn, ...styles.primaryBtn }}
-                      onClick={() =>
-                        navigate(resolveAllowlistHomePath(fbUser, profile), {
-                          replace: true,
-                        })
-                      }
+                      onClick={() => hardRedirectToAllowlistHome(fbUser, profile)}
                       disabled={busy}
                     >
                       {t.okGo}
