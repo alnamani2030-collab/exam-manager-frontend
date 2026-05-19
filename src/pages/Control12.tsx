@@ -305,7 +305,11 @@ export default function SchoolControl() {
     const safeTenantId = encodeURIComponent(String(tenantId || "").trim());
     const cleanRoute = String(route || "").replace(/^\/+/, "");
     if (!safeTenantId || !cleanRoute) return;
-    navigate(`/t/${safeTenantId}/${cleanRoute}`);
+
+    const targetPath = `/t/${safeTenantId}/${cleanRoute}`;
+
+    // يفتح النموذج داخل نفس صفحة البرنامج، وليس في تبويب خارجي.
+    navigate(targetPath);
   };
 
   const [schoolConfig, setSchoolConfig] = useState<SchoolConfig>({});
