@@ -43,119 +43,8 @@ export const makeBackupId = () => "b_" + new Date().toISOString().replace(/[:.]/
 export const lastBackupKey = (tenantId: string) =>
   `exam-manager:cloud-backup:last:${tenantId}`;
 
-
 // =========================
-// Cloud backup retention policy
-// =========================
-// كل النسخ السابقة: 3 أسابيع. آخر نسخة: 6 أشهر.
-export const STANDARD_BACKUP_RETENTION_DAYS = 21;
-export const LATEST_BACKUP_RETENTION_MONTHS = 6;
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
-
-function isoFromMs(ms: number) {
-  return new Date(ms).toISOString();
-}
-
-function addMonthsMs(ms: number, months: number) {
-  const d = new Date(ms);
-  const day = d.getDate();
-  d.setMonth(d.getMonth() + months);
-  if (d.getDate() < day) d.setDate(0);
-  return d.getTime();
-}
-
-function timestampMsFromUnknown(value: any): number {
-  if (!value) return 0;
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string") {
-    const ms = Date.parse(value);
-    return Number.isFinite(ms) ? ms : 0;
-  }
-  if (typeof value?.toMillis === "function") {
-    const ms = Number(value.toMillis());
-    return Number.isFinite(ms) ? ms : 0;
-  }
-  if (typeof value?.seconds === "number") return value.seconds * 1000;
-  return 0;
-}
-
-function getBackupCreatedMs(row: any): number {
-  return (
-    timestampMsFromUnknown(row?.meta?.createdAtISO) ||
-    timestampMsFromUnknown(row?.createdAtISO) ||
-    timestampMsFromUnknown(row?.createdAt) ||
-    Date.now()
-  );
-}
-
-function buildLatestRetentionFields(createdAtISO: string) {
-  const createdMs = timestampMsFromUnknown(createdAtISO) || Date.now();
-  return {
-    retentionPolicyVersion: "v1",
-    retentionRole: "latest",
-    retentionAnchorISO: isoFromMs(createdMs),
-    retentionDemotedAtISO: null,
-    retentionExpiresAtISO: isoFromMs(addMonthsMs(createdMs, LATEST_BACKUP_RETENTION_MONTHS)),
-    retentionUpdatedAtISO: new Date().toISOString(),
-    retentionLabelAr: "آخر نسخة - تحفظ لمدة ستة أشهر",
-    retentionLabelEn: "Latest backup - kept for six months",
-  };
-}
-
-function buildStandardRetentionFields(demotedOrCreatedAtISO: string) {
-  const anchorMs = timestampMsFromUnknown(demotedOrCreatedAtISO) || Date.now();
-  return {
-    retentionPolicyVersion: "v1",
-    retentionRole: "standard",
-    retentionAnchorISO: isoFromMs(anchorMs),
-    retentionDemotedAtISO: isoFromMs(anchorMs),
-    retentionExpiresAtISO: isoFromMs(anchorMs + STANDARD_BACKUP_RETENTION_DAYS * MS_PER_DAY),
-    retentionUpdatedAtISO: new Date().toISOString(),
-    retentionLabelAr: "نسخة سابقة - تحذف بعد ثلاثة أسابيع",
-    retentionLabelEn: "Previous backup - deleted after three weeks",
-  };
-}
-
-function isDbBackupManagerDoc(row: any) {
-  return row?.meta?.schema === DB_BACKUP_SCHEMA && String(row?.backupType || "") !== "full-program";
-}
-
-async function enforceDbBackupRetentionAfterUpload(tenantId: string, latestBackupId: string) {
-  if (!tenantId || !latestBackupId) return;
-  try {
-    const ref = collection(db, "tenants", tenantId, "backups");
-    const snap = await getDocs(query(ref, orderBy("meta.createdAtISO", "desc"), limit(100)));
-    const nowMs = Date.now();
-
-    for (const row of snap.docs) {
-      const data = row.data() as any;
-      if (!isDbBackupManagerDoc(data)) continue;
-
-      if (row.id === latestBackupId) {
-        const createdISO = String(data?.meta?.createdAtISO || data?.createdAtISO || new Date().toISOString());
-        await setDoc(row.ref, buildLatestRetentionFields(createdISO), { merge: true });
-        continue;
-      }
-
-      const existingDemotionISO = String(data?.retentionDemotedAtISO || "").trim();
-      const createdISO = String(data?.meta?.createdAtISO || data?.createdAtISO || new Date(getBackupCreatedMs(data)).toISOString());
-      const anchorISO = existingDemotionISO || new Date().toISOString();
-      const expiresMs = (timestampMsFromUnknown(anchorISO) || nowMs) + STANDARD_BACKUP_RETENTION_DAYS * MS_PER_DAY;
-
-      if (nowMs >= expiresMs) {
-        await deleteDoc(row.ref);
-        continue;
-      }
-
-      await setDoc(row.ref, buildStandardRetentionFields(existingDemotionISO || anchorISO || createdISO), { merge: true });
-    }
-  } catch {
-    // سياسة الاحتفاظ لا يجب أن تكسر إنشاء النسخة نفسها.
-  }
-}
-
-// =========================
-// Safe localStorage backup / restore filters
+// Safe localStorage key filter
 // =========================
 const LOCAL_STORAGE_KEY_DENY_PARTS = [
   "token",
@@ -186,6 +75,7 @@ const LOCAL_STORAGE_KEY_DENY_PARTS = [
 export function shouldBackupLocalStorageKey(rawKey: unknown, tenantId?: string) {
   const key = String(rawKey || "").trim();
   if (!key) return false;
+
   const lower = key.toLowerCase();
   if (LOCAL_STORAGE_KEY_DENY_PARTS.some((part) => lower.includes(part))) return false;
 
@@ -201,7 +91,7 @@ export function shouldBackupLocalStorageKey(rawKey: unknown, tenantId?: string) 
   const targetTenantId = String(tenantId || "").trim();
   if (!targetTenantId) return true;
 
-  // المفاتيح العامة الآمنة التي لا تحمل tenant محدد مسموح بها.
+  // Safe general app keys are allowed. Tenant-specific keys must match the active tenant.
   if (!lower.includes("tenant:") && !lower.includes("tenantid") && !key.includes(targetTenantId)) return true;
   return key.includes(targetTenantId);
 }
@@ -376,14 +266,12 @@ export function previewImport(file: DbBackupFile, prefix = "exam-manager") {
   };
 }
 
-export function importDatabase(file: DbBackupFile, opts?: { prefix?: string; dryRun?: boolean; tenantId?: string }) {
+export function importDatabase(file: DbBackupFile, opts?: { prefix?: string; dryRun?: boolean }) {
   const expectedPrefix = opts?.prefix || "exam-manager";
   const payload = getPayloadFromFile(file);
   const parsed = parseBackupPayload(payload);
 
-  const entries = Object.entries(parsed.data || {}).filter(
-    ([k]) => k.startsWith(expectedPrefix) && shouldRestoreLocalStorageKey(k, opts?.tenantId)
-  );
+  const entries = Object.entries(parsed.data || {}).filter(([k]) => k.startsWith(expectedPrefix) && shouldRestoreLocalStorageKey(k, file.meta?.tenantId));
 
   if (opts?.dryRun) return { willSet: entries.length };
 
@@ -404,40 +292,123 @@ export async function uploadBackupToCloud(args: {
   backupId?: string;
   file: DbBackupFile;
 }) {
+  const tenantId = String(args.tenantId || "").trim();
+  if (!tenantId || tenantId === "default") {
+    throw new Error("Invalid tenantId for cloud backup");
+  }
+
   const id = args.backupId || makeBackupId();
-  const ref = doc(db, "tenants", args.tenantId, "backups", id);
-  const createdAtISO = String(args.file?.meta?.createdAtISO || new Date().toISOString());
+  const ref = doc(db, "tenants", tenantId, "backups", id);
+
+  validateBackupFile(args.file);
+
+  // Firestore has a hard 1 MiB document limit.
+  // Never store the full payload/chunks array inside the parent backup document.
+  // Store only metadata in tenants/{tenantId}/backups/{backupId}, then store the payload
+  // in tenants/{tenantId}/backups/{backupId}/chunks/{chunkId}.
+  const payloadChunks = args.file.data.chunks?.length
+    ? args.file.data.chunks
+    : typeof args.file.data.payload === "string"
+      ? splitToChunks(args.file.data.payload, MAX_CHUNK_BYTES)
+      : [];
+
+  if (!payloadChunks.length) throw new Error("Missing backup payload");
+
+  const byteLen = payloadChunks.reduce((sum, part) => sum + strByteLen(part), 0);
 
   await setDoc(ref, {
-    ...args.file,
     backupId: id,
-    ...buildLatestRetentionFields(createdAtISO),
+    tenantId,
+    createdAtISO: args.file.meta.createdAtISO,
+    createdAtMs: Date.now(),
+    backupType: "local-storage-snapshot",
+    version: DB_BACKUP_SCHEMA,
+    meta: {
+      ...args.file.meta,
+      tenantId,
+    },
+    data: {
+      encoding: "json",
+      chunked: true,
+      chunkCount: payloadChunks.length,
+      byteLen,
+    },
   });
 
-  await enforceDbBackupRetentionAfterUpload(args.tenantId, id);
+  for (let index = 0; index < payloadChunks.length; index += 1) {
+    const payload = payloadChunks[index];
+    await setDoc(doc(db, "tenants", tenantId, "backups", id, "chunks", `payload-${String(index + 1).padStart(4, "0")}`), {
+      tenantId,
+      backupId: id,
+      collectionName: "__meta__",
+      index: index + 1,
+      storageKind: "rows",
+      payload,
+      payloadBytes: strByteLen(payload),
+      createdAtISO: args.file.meta.createdAtISO,
+    });
+  }
 
   try {
-    localStorage.setItem(lastBackupKey(args.tenantId), new Date().toISOString());
+    localStorage.setItem(lastBackupKey(tenantId), new Date().toISOString());
   } catch {}
 
   return id;
 }
 
 export async function listCloudBackups(tenantId: string, max = 50) {
-  const ref = collection(db, "tenants", tenantId, "backups");
+  const safeTenantId = String(tenantId || "").trim();
+  if (!safeTenantId || safeTenantId === "default") return [];
+
+  const ref = collection(db, "tenants", safeTenantId, "backups");
   const q = query(ref, orderBy("meta.createdAtISO", "desc"), limit(max));
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
 }
 
 export async function fetchCloudBackup(tenantId: string, backupId: string): Promise<DbBackupFile> {
-  const ref = doc(db, "tenants", tenantId, "backups", backupId);
+  const safeTenantId = String(tenantId || "").trim();
+  if (!safeTenantId || safeTenantId === "default") throw new Error("Invalid tenantId for cloud backup");
+
+  const ref = doc(db, "tenants", safeTenantId, "backups", backupId);
   const snap = await getDoc(ref);
   if (!snap.exists()) throw new Error("Backup not found");
   const data = snap.data() as any;
-  return { meta: data.meta, data: data.data };
+
+  // Legacy support: old documents may contain the payload directly in the parent document.
+  if (typeof data?.data?.payload === "string" || Array.isArray(data?.data?.chunks)) {
+    return { meta: data.meta, data: data.data };
+  }
+
+  const chunksRef = collection(db, "tenants", safeTenantId, "backups", backupId, "chunks");
+  const chunksSnap = await getDocs(query(chunksRef, orderBy("index", "asc")));
+  const chunks = chunksSnap.docs
+    .map((item) => item.data() as any)
+    .filter((item) => typeof item.payload === "string")
+    .sort((a, b) => Number(a.index || 0) - Number(b.index || 0))
+    .map((item) => String(item.payload || ""));
+
+  if (!chunks.length) throw new Error("Backup payload chunks were not found");
+
+  return {
+    meta: data.meta,
+    data: {
+      encoding: "json",
+      chunked: true,
+      chunks,
+      chunkCount: chunks.length,
+      byteLen: chunks.reduce((sum, part) => sum + strByteLen(part), 0),
+    },
+  };
 }
 
 export async function deleteCloudBackup(tenantId: string, backupId: string) {
-  await deleteDoc(doc(db, "tenants", tenantId, "backups", backupId));
+  const safeTenantId = String(tenantId || "").trim();
+  if (!safeTenantId || safeTenantId === "default") throw new Error("Invalid tenantId for cloud backup");
+
+  const chunksSnap = await getDocs(collection(db, "tenants", safeTenantId, "backups", backupId, "chunks"));
+  for (const chunkDoc of chunksSnap.docs) {
+    await deleteDoc(doc(db, "tenants", safeTenantId, "backups", backupId, "chunks", chunkDoc.id));
+  }
+  await deleteDoc(doc(db, "tenants", safeTenantId, "backups", backupId));
 }
