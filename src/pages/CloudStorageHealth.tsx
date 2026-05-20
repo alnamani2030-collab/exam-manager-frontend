@@ -911,7 +911,7 @@ export default function CloudStorageHealth() {
         if (typeof manager.importDatabase !== "function") {
           throw new Error(tr("دالة الاستعادة غير متاحة في مدير النسخ.", "Restore function is not available."));
         }
-        manager.importDatabase(cloudFile, { prefix: "exam-manager", tenantId: tid });
+        manager.importDatabase(cloudFile, { prefix: "exam-manager" });
         window.dispatchEvent(new Event("exam-manager:cloud-storage:changed"));
         setActionMessage(
           tr(
