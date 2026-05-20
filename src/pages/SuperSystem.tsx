@@ -924,9 +924,11 @@ export default function SuperSystem() {
       setTenantAdminBusy(true);
       try {
         const allowRef = collection(db, "allowlist");
+        const tenantSource = (Array.isArray(visibleTenants) && visibleTenants.length ? visibleTenants : tenants)
+          .filter((t: any) => isSchoolTenant(t));
 
         const tenantsMap = new Map<string, { tenantName: string; governorate: string }>(
-          tenants.map((t: any) => [
+          tenantSource.map((t: any) => [
             String(t.id || "").trim(),
             {
               tenantName: String(t.name || t.id || ""),
@@ -935,50 +937,102 @@ export default function SuperSystem() {
           ]),
         );
 
-        const q = !canSeeAllGovs
-          ? query(
-              allowRef,
-              where("role", "in", ["tenant_admin", "admin"]),
-              where("governorate", "==", String(myGov || "").trim()),
-            )
-          : query(allowRef, where("role", "in", ["tenant_admin", "admin"]));
-        const snap = await getDocs(q);
-
         const rows: TenantAdminLinkRow[] = [];
         const seen = new Set<string>();
 
-        for (const docSnap of snap.docs as QueryDocumentSnapshot<DocumentData>[]) {
-          const data = docSnap.data() as any;
-          const tenantId = String(data?.tenantId || "").trim();
-          const email = String(data?.email || docSnap.id || "").trim().toLowerCase();
-          if (!tenantId || !email) continue;
-
-          const tenantMeta = tenantsMap.get(tenantId);
-          const tenantDocSnap = await getDoc(doc(db, "tenants", tenantId));
-          if (!tenantDocSnap.exists()) continue;
-
-          const tenantDocData = tenantDocSnap.data() as any;
-          if (!isSchoolTenant(tenantDocData)) continue;
-
-          const effectiveGovernorate = getGovernorateValue(tenantDocData, tenantMeta, data);
-
-          if (!canSeeAllGovs && !sameGovernorate(effectiveGovernorate, myGov)) {
-            continue;
-          }
+        const addRow = (row: TenantAdminLinkRow) => {
+          const tenantId = String(row.tenantId || "").trim();
+          const email = String(row.email || "").trim().toLowerCase();
+          if (!tenantId || !email) return;
 
           const key = `${tenantId}__${email}`;
-          if (seen.has(key)) continue;
+          if (seen.has(key)) return;
           seen.add(key);
 
           rows.push({
             tenantId,
-            tenantName: String(
-              tenantDocData?.name || data?.schoolName || data?.tenantName || tenantMeta?.tenantName || tenantId,
-            ),
+            tenantName: String(row.tenantName || tenantId).trim(),
             email,
           });
+        };
+
+        // القراءة الأولى من allowlist مع فلتر المحافظة كما كان، حفاظًا على قواعد Firestore الحالية.
+        // بعض السجلات القديمة لا تظهر هنا لأن حقل المحافظة قد يكون ناقصًا أو مختلفًا.
+        try {
+          const q = !canSeeAllGovs
+            ? query(
+                allowRef,
+                where("role", "in", ["tenant_admin", "admin"]),
+                where("governorate", "==", String(myGov || "").trim()),
+              )
+            : query(allowRef, where("role", "in", ["tenant_admin", "admin"]));
+          const snap = await getDocs(q);
+
+          for (const docSnap of snap.docs as QueryDocumentSnapshot<DocumentData>[]) {
+            const data = docSnap.data() as any;
+            const tenantId = String(data?.tenantId || "").trim();
+            const email = String(data?.email || docSnap.id || "").trim().toLowerCase();
+            if (!tenantId || !email) continue;
+
+            const tenantMeta = tenantsMap.get(tenantId);
+            let tenantDocData: any = null;
+
+            try {
+              const tenantDocSnap = await getDoc(doc(db, "tenants", tenantId));
+              tenantDocData = tenantDocSnap.exists() ? tenantDocSnap.data() : null;
+            } catch (tenantError) {
+              console.warn("تعذر قراءة بيانات المدرسة أثناء تحميل جدول الأدمن.", tenantError);
+            }
+
+            const effectiveTenantData = tenantDocData || tenantMeta || data;
+            if (!isSchoolTenant(effectiveTenantData)) continue;
+
+            const effectiveGovernorate = getGovernorateValue(tenantDocData, tenantMeta, data);
+            if (!canSeeAllGovs && !sameGovernorate(effectiveGovernorate, myGov)) {
+              continue;
+            }
+
+            addRow({
+              tenantId,
+              tenantName: String(
+                tenantDocData?.name || data?.schoolName || data?.tenantName || tenantMeta?.tenantName || tenantId,
+              ),
+              email,
+            });
+          }
+        } catch (allowlistError) {
+          console.warn("تعذر تحميل جدول الأدمن من allowlist، سيتم استخدام روابط المدارس كبديل.", allowlistError);
         }
 
+        // القراءة الثانية مكمّلة من tenantAdminLinks / المدرسة المحددة.
+        // هذا يعالج اختفاء البيانات عندما يكون ربط الأدمن موجودًا، لكن جدول allowlist لا يعيده بسبب اختلاف حقل المحافظة.
+        for (const tenant of tenantSource as any[]) {
+          const tenantId = String(tenant?.id || "").trim();
+          if (!tenantId) continue;
+
+          const tenantGovernorate = getGovernorateValue(tenant);
+          if (!canSeeAllGovs && !sameGovernorate(tenantGovernorate, myGov)) {
+            continue;
+          }
+
+          try {
+            const existingAdmin = await getExistingLinkByTenant(tenantId);
+            const email = String(existingAdmin?.email || "").trim().toLowerCase();
+            if (!email) continue;
+
+            addRow({
+              tenantId,
+              tenantName: String(existingAdmin?.schoolName || tenant?.name || tenantId),
+              email,
+            });
+          } catch (linkError) {
+            console.warn("تعذر قراءة رابط أدمن المدرسة.", linkError);
+          }
+        }
+
+        rows.sort((a, b) =>
+          String(a.tenantName || a.tenantId).localeCompare(String(b.tenantName || b.tenantId), "ar"),
+        );
         setTenantAdminRows(rows);
       } catch (e) {
         console.error(e);
@@ -988,7 +1042,7 @@ export default function SuperSystem() {
     };
 
     void run();
-  }, [tenants, canSeeAllGovs, myGov, editReloadTick, selectedTenantId]);
+  }, [tenants, visibleTenants, canSeeAllGovs, myGov, editReloadTick, selectedTenantId]);
 
   const createTenant = async () => {
     if (isMinistryViewer) {
