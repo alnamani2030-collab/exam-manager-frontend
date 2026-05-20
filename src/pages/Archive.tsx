@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { formatArchiveTitle, type ArchivedDistributionRun } from "../utils/taskDistributionStorage";
 import { useArchiveItems } from "../features/archive/hooks/useArchiveItems";
@@ -129,7 +129,11 @@ export default function Archive() {
   const { lang } = useI18n();
   const tr = React.useCallback((ar: string, en: string) => (lang === "ar" ? ar : en), [lang]);
   const { tenantId: tenantFromContext } = useTenant() as any;
-  const tenantId = String(tenantFromContext || user?.tenantId || "default").trim() || "default";
+  const routeParams = useParams() as any;
+  const routeTenantId = String(
+    routeParams?.tenantId || routeParams?.tenant || routeParams?.id || routeParams?.schoolId || routeParams?.centerId || ""
+  ).trim();
+  const tenantId = String(routeTenantId || tenantFromContext || user?.tenantId || "").trim();
 
   const [tick, setTick] = useState(0);
   const [isTableFull, setIsTableFull] = useState(false);

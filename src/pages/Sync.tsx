@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState, useEffect } from "react";
 
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { useTenant } from "../tenant/TenantContext";
 import { useI18n } from "../i18n/I18nProvider";
@@ -294,9 +294,13 @@ export default function Sync() {
   const { lang } = useI18n();
   const tr = React.useCallback((ar: string, en: string) => (lang === "ar" ? ar : en), [lang]);
   const { tenantId: tenantFromContext } = useTenant() as any;
+  const routeParams = useParams() as any;
   const { reloadAll } = useAppData() as any;
 
-  const tenantId = String(tenantFromContext || user?.tenantId || "default").trim() || "default";
+  const routeTenantId = String(
+    routeParams?.tenantId || routeParams?.tenant || routeParams?.id || routeParams?.schoolId || routeParams?.centerId || ""
+  ).trim();
+  const tenantId = String(routeTenantId || tenantFromContext || user?.tenantId || "").trim();
   const isDiploma12Sync = React.useMemo(
     () => String(location?.pathname || "").includes("/sync12"),
     [location?.pathname],
