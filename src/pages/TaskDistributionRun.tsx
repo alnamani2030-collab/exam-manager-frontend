@@ -455,6 +455,8 @@ function reasonLabel(code?: string) {
       return "ممنوع لمعلم رقم 3 في مادة اللغة العربية 10/11";
     case "ARABIC_ONCE":
       return "اللغة العربية (مرة واحدة)";
+    case "GRADE12_SUBJECT_ALREADY_ASSIGNED":
+      return "تم توزيعه سابقًا في مادة 12 أخرى";
     case "THREE_HOURS_ALREADY":
       return "مراقبة 3 ساعات سبق تنفيذها";
     case "UNAVAILABLE":
@@ -699,6 +701,25 @@ function isGrade12TeacherForGrade12Subject(params: { teacherName: any; subject: 
   return subjectHas12(String(params?.subject || "")) && teacherHas12(String(params?.teacherName || ""));
 }
 
+
+function grade12SubjectKey(subject: any) {
+  const raw = normalizeArabicIndicDigits(String(subject || "").trim());
+  if (!subjectHas12(raw)) return "";
+  return normalizeSearch(raw);
+}
+
+function hasTeacherAlreadyDifferentGrade12Subject(
+  teacherGrade12SubjectMap: Map<string, string>,
+  teacherId: string,
+  subject: any,
+) {
+  const nextSubjectKey = grade12SubjectKey(subject);
+  if (!nextSubjectKey) return false;
+
+  const previousSubjectKey = String(teacherGrade12SubjectMap.get(String(teacherId || "").trim()) || "").trim();
+  return Boolean(previousSubjectKey && previousSubjectKey !== nextSubjectKey);
+}
+
 /* ============================================================
    ✅ Randomization helpers (لجعل كل تشغيل مختلف مع أقل عجز)
 ============================================================ */
@@ -878,6 +899,9 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
 
   // ✅ NEW: منع تكرار مراقبة 3 ساعات
   const teacherHad3HoursInv = new Map<string, boolean>(); // teacherId -> true إذا أخذ 180 دقيقة مرة
+
+  // ✅ منع معلم رقم 12 من مراقبة أكثر من مادة صف 12 مختلفة
+  const teacherGrade12InvigilationSubject = new Map<string, string>(); // teacherId -> normalized grade 12 subject
 
   teacherIds.forEach((id) => {
     quotaTotals.set(id, 0);
@@ -1061,6 +1085,13 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
       return { ok: false, reason: "ARABIC_THREE_BLOCK" as const };
     }
 
+    if (
+      isGrade12TeacherForGrade12Subject({ teacherName: tName, subject, taskType }) &&
+      hasTeacherAlreadyDifferentGrade12Subject(teacherGrade12InvigilationSubject, teacherId, subject)
+    ) {
+      return { ok: false, reason: "GRADE12_SUBJECT_ALREADY_ASSIGNED" as const };
+    }
+
     const tQuota = quotaTotals.get(teacherId) || 0;
     if (tQuota >= maxTasks) return { ok: false, reason: "MAX_TASKS_REACHED" as const };
 
@@ -1097,8 +1128,7 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
     // ✅ منع فترتين لنفس المعلم في نفس اليوم افتراضيًا
     {
       const datesSet = dayHasAnyPeriod.get(teacherId) || new Set<string>();
-      const slotsAny = occupiedSlots.get(teacherId) || new Set<string>();
-      const hasSameDay = datesSet.has(dateISO) || Array.from(slotsAny).some((x) => x.startsWith(`${dateISO}__`));
+      const hasSameDay = datesSet.has(dateISO);
       if (hasSameDay) {
         const allowedGlobal = isTwoPeriodsAllowedOnDate(dateISO, constraints);
         if (!allowedGlobal) {
@@ -1149,6 +1179,7 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
       teacherHad3HoursInv.set(id, false);
     }
     teacherDayFirstInvDuration.clear();
+    teacherGrade12InvigilationSubject.clear();
 
     for (const assignment of assignments) {
       const teacherId = String((assignment as any)?.teacherId || "").trim();
@@ -1175,6 +1206,15 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
         }
         if (durationMinutes === 180) {
           teacherHad3HoursInv.set(teacherId, true);
+        }
+
+        const assignmentSubject = getAssignmentSubjectForState(assignment);
+        const teacherName = teacherNameMap.get(teacherId) || "";
+        const grade12Key = grade12SubjectKey(assignmentSubject);
+        if (grade12Key && isGrade12TeacherForGrade12Subject({ teacherName, subject: assignmentSubject, taskType })) {
+          if (!teacherGrade12InvigilationSubject.has(teacherId)) {
+            teacherGrade12InvigilationSubject.set(teacherId, grade12Key);
+          }
         }
       }
     }
@@ -1360,10 +1400,26 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
     const teacherName = teacherNameMap.get(teacherId) || "";
     if (!isGrade12TeacherForGrade12Subject({ teacherName, subject, taskType })) return false;
 
-    // لا نحاول تجاوز أو نقل التصحيح/المراجعة؛ إذا كان هناك حجز يوم كامل فلن يأخذ مهمة أخرى.
-    if (chk.reason === "CORRECTION_FREE_BLOCK" || chk.reason === "UNAVAILABLE") return false;
+    // لا نحاول تجاوز أو نقل التصحيح/المراجعة أو شرط مادة 12 المختلفة.
+    if (
+      chk.reason === "CORRECTION_FREE_BLOCK" ||
+      chk.reason === "UNAVAILABLE" ||
+      chk.reason === "GRADE12_SUBJECT_ALREADY_ASSIGNED"
+    ) return false;
 
     return tryRehomeExistingAssignmentForGrade12Teacher({ teacherId, dateISO, period, subject, meta });
+  }
+
+  // ✅ تحسين الأداء: لا نأخذ Snapshot كامل من الجدول إلا في حالة واحدة فقط
+  // وهي حالة معلم 12 وصل للنصاب ويحتاج إعادة تسكين أحد تكليفاته.
+  // هذا يحافظ على نفس الشروط، لكنه يمنع نسخ آلاف السجلات مع كل محاولة عادية.
+  function needsGrade12RehomeSnapshot(teacherId: string, taskType: string, subject: string) {
+    if (taskType !== "INVIGILATION") return false;
+    const teacherName = teacherNameMap.get(teacherId) || "";
+    return (
+      isGrade12TeacherForGrade12Subject({ teacherName, subject, taskType }) &&
+      (quotaTotals.get(teacherId) || 0) >= maxTasks
+    );
   }
 
   function commitAssign(
@@ -1396,6 +1452,12 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
       if (dur === 180) {
         teacherHad3HoursInv.set(teacherId, true);
       }
+
+      const teacherName = teacherNameMap.get(teacherId) || "";
+      const grade12Key = grade12SubjectKey(subject);
+      if (grade12Key && isGrade12TeacherForGrade12Subject({ teacherName, subject, taskType })) {
+        teacherGrade12InvigilationSubject.set(teacherId, grade12Key);
+      }
     }
 
     assignments.push({
@@ -1423,10 +1485,7 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
 
       const baseCandidates = teacherIds
         .map((id, idx) => {
-          const slotsSet = occupiedSlots.get(id) || new Set<string>();
-          const hasSameDay =
-            (dayHasAnyPeriod.get(id) || new Set<string>()).has(dateISO) ||
-            Array.from(slotsSet).some((x) => x.startsWith(`${dateISO}__`));
+          const hasSameDay = (dayHasAnyPeriod.get(id) || new Set<string>()).has(dateISO);
           const firstDur = teacherDayFirstInvDuration.get(`${id}__${dateISO}`) ?? 999999;
 
           const name = teacherNameMap.get(id) || "";
@@ -1529,10 +1588,7 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
 
         const candidatesAll = teacherIds
           .map((id, idx) => {
-            const slotsSet = occupiedSlots.get(id) || new Set<string>();
-            const hasSameDay =
-              (dayHasAnyPeriod.get(id) || new Set<string>()).has(dateISO) ||
-              Array.from(slotsSet).some((x) => x.startsWith(`${dateISO}__`));
+            const hasSameDay = (dayHasAnyPeriod.get(id) || new Set<string>()).has(dateISO);
             const firstDur = teacherDayFirstInvDuration.get(`${id}__${dateISO}`) ?? 999999;
             const name = teacherNameMap.get(id) || "";
             return {
@@ -1614,10 +1670,7 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
         const buildCandidates = () =>
           teacherIds
             .map((id, idx) => {
-              const slotsSet = occupiedSlots.get(id) || new Set<string>();
-              const hasSameDay =
-                (dayHasAnyPeriod.get(id) || new Set<string>()).has(dateISO) ||
-                Array.from(slotsSet).some((x) => x.startsWith(`${dateISO}__`));
+              const hasSameDay = (dayHasAnyPeriod.get(id) || new Set<string>()).has(dateISO);
               const firstDur = teacherDayFirstInvDuration.get(`${id}__${dateISO}`) ?? 999999;
               const name = teacherNameMap.get(id) || "";
               return {
@@ -1653,11 +1706,12 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
         }
 
         for (const c1 of cand1) {
-          const snapBeforeFirstCandidate = snapshotAssignmentsForGrade12Swap();
+          const needFirstSnapshot = needsGrade12RehomeSnapshot(c1.id, "INVIGILATION", subject);
+          const snapBeforeFirstCandidate = needFirstSnapshot ? snapshotAssignmentsForGrade12Swap() : null;
           if (!prepareTeacherForAssignment(c1.id, dateISO, period, "INVIGILATION", subject, {
             durationMinutes: Number(exam.durationMinutes ?? 0) || 0,
           })) {
-            restoreAssignmentsFromGrade12Snapshot(snapBeforeFirstCandidate);
+            if (snapBeforeFirstCandidate) restoreAssignmentsFromGrade12Snapshot(snapBeforeFirstCandidate);
             continue;
           }
 
@@ -1670,11 +1724,12 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
             // ✅ ممنوع: بدون بن + بدون بن
             if (!c1.ben && !c2.ben) continue;
 
-            const snapBeforeSecondCandidate = snapshotAssignmentsForGrade12Swap();
+            const needSecondSnapshot = needsGrade12RehomeSnapshot(c2.id, "INVIGILATION", subject);
+            const snapBeforeSecondCandidate = needSecondSnapshot ? snapshotAssignmentsForGrade12Swap() : null;
             if (!prepareTeacherForAssignment(c2.id, dateISO, period, "INVIGILATION", subject, {
               durationMinutes: Number(exam.durationMinutes ?? 0) || 0,
             })) {
-              restoreAssignmentsFromGrade12Snapshot(snapBeforeSecondCandidate);
+              if (snapBeforeSecondCandidate) restoreAssignmentsFromGrade12Snapshot(snapBeforeSecondCandidate);
               continue;
             }
 
@@ -1683,7 +1738,7 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
             break;
           }
           if (firstPicked && secondPicked) break;
-          restoreAssignmentsFromGrade12Snapshot(snapBeforeFirstCandidate);
+          if (snapBeforeFirstCandidate) restoreAssignmentsFromGrade12Snapshot(snapBeforeFirstCandidate);
         }
 
         if (!firstPicked || !secondPicked) {
@@ -2110,6 +2165,7 @@ export default function TaskDistributionRun() {
   const [unavailabilityVersion, setUnavailabilityVersion] = useState(0);
   const [masterTableVersion, setMasterTableVersion] = useState(0);
   const [manualSuggestionHistory, setManualSuggestionHistory] = useState<ManualSuggestionHistoryEntry[]>(() => loadManualSuggestionHistory(tenantId));
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
 
   const allExamDatesSorted: string[] = useMemo(() => {
@@ -2354,6 +2410,7 @@ export default function TaskDistributionRun() {
       const dayHasAnyPeriod = new Map<string, Set<string>>();
       const teacherDayFirstInvDuration = new Map<string, number>();
       const teacherHad3HoursInv = new Map<string, boolean>();
+      const teacherGrade12InvigilationSubject = new Map<string, string>();
       for (const teacherId of teacherIds) {
         quotaTotals.set(teacherId, 0);
         invCounts.set(teacherId, 0);
@@ -2361,7 +2418,7 @@ export default function TaskDistributionRun() {
         dayHasAnyPeriod.set(teacherId, new Set<string>());
         teacherHad3HoursInv.set(teacherId, false);
       }
-      return { quotaTotals, invCounts, occupiedSlots, dayHasAnyPeriod, teacherDayFirstInvDuration, teacherHad3HoursInv };
+      return { quotaTotals, invCounts, occupiedSlots, dayHasAnyPeriod, teacherDayFirstInvDuration, teacherHad3HoursInv, teacherGrade12InvigilationSubject };
     }
 
     function buildSimulationArtifactsFromAssignments(sourceAssignments: any[]) {
@@ -2405,6 +2462,15 @@ export default function TaskDistributionRun() {
             state.teacherHad3HoursInv.set(teacherId, true);
           }
 
+          const assignmentSubject = String((ass as any)?.subject || (ass as any)?.examSubject || "").trim();
+          const teacherName = teacherNameMapLocal.get(teacherId) || String((ass as any)?.teacherName || teacherId).trim();
+          const grade12Key = grade12SubjectKey(assignmentSubject);
+          if (grade12Key && isGrade12TeacherForGrade12Subject({ teacherName, subject: assignmentSubject, taskType })) {
+            if (!state.teacherGrade12InvigilationSubject.has(teacherId)) {
+              state.teacherGrade12InvigilationSubject.set(teacherId, grade12Key);
+            }
+          }
+
           const examKey = String((ass as any)?.examId || `${key}__${String((ass as any)?.subject || "").trim()}`).trim();
           const committeeNo = Math.max(1, Number((ass as any)?.committeeNo || (ass as any)?.committeeNumber || (ass as any)?.roomNo || (ass as any)?.roomNumber || 1) || 1);
           if (!committeeMap.has(examKey)) committeeMap.set(examKey, new Map<number, any[]>());
@@ -2438,6 +2504,7 @@ export default function TaskDistributionRun() {
         dayHasAnyPeriod: new Map(Array.from(state.dayHasAnyPeriod.entries()).map(([teacherId, dates]: any) => [teacherId, new Set(Array.from(dates))])),
         teacherDayFirstInvDuration: new Map(state.teacherDayFirstInvDuration),
         teacherHad3HoursInv: new Map(state.teacherHad3HoursInv),
+        teacherGrade12InvigilationSubject: new Map(state.teacherGrade12InvigilationSubject || []),
       };
     }
 
@@ -2459,6 +2526,11 @@ export default function TaskDistributionRun() {
 
       const teacherName = teacherNameMapLocal.get(teacherId) || "";
       if (isTeacherBlockedFromArabicInvigilation({ teacherName, subject, taskType })) return false;
+
+      if (
+        isGrade12TeacherForGrade12Subject({ teacherName, subject, taskType }) &&
+        hasTeacherAlreadyDifferentGrade12Subject(state.teacherGrade12InvigilationSubject || new Map<string, string>(), teacherId, subject)
+      ) return false;
 
       if ((state.quotaTotals.get(teacherId) || 0) >= maxTasks && isQuotaTaskType(taskType)) return false;
 
@@ -2513,6 +2585,13 @@ export default function TaskDistributionRun() {
         }
         if (durationMinutes === 180) {
           state.teacherHad3HoursInv.set(teacherId, true);
+        }
+
+        const teacherName = teacherNameMapLocal.get(teacherId) || "";
+        const grade12Key = grade12SubjectKey(subject);
+        if (grade12Key && isGrade12TeacherForGrade12Subject({ teacherName, subject, taskType })) {
+          if (!state.teacherGrade12InvigilationSubject) state.teacherGrade12InvigilationSubject = new Map<string, string>();
+          state.teacherGrade12InvigilationSubject.set(teacherId, grade12Key);
         }
       }
     }
@@ -2588,6 +2667,10 @@ export default function TaskDistributionRun() {
 
       const teacherName = teacherNameMapLocal.get(teacherId) || "";
       if (isTeacherBlockedFromArabicInvigilation({ teacherName, subject, taskType: "INVIGILATION" })) return false;
+      if (
+        isGrade12TeacherForGrade12Subject({ teacherName, subject, taskType: "INVIGILATION" }) &&
+        hasTeacherAlreadyDifferentGrade12Subject(state.teacherGrade12InvigilationSubject || new Map<string, string>(), teacherId, subject)
+      ) return false;
 
       if (enableCorrectionFree) {
         const correctionDays = teacherCorrectionDays.get(teacherId);
@@ -2923,7 +3006,10 @@ export default function TaskDistributionRun() {
           return aTeacher.localeCompare(bTeacher, "ar");
         });
 
+      let checkedTransferDonors = 0;
       for (const donor of donorAssignments) {
+        checkedTransferDonors += 1;
+        if (checkedTransferDonors > 80) break;
         const donorTaskType = normalizeStoredTaskType((donor.ass as any)?.taskType || (donor.ass as any)?.role || "");
         const teacherId = String((donor.ass as any)?.teacherId || "").trim();
         if (!teacherId || seenTeacherIds.has(teacherId)) continue;
@@ -3076,10 +3162,14 @@ export default function TaskDistributionRun() {
         const correctionFreeEstimate = latestTeachers.filter((t: any) => (teacherCorrectionDays.get(String(t?.id || "").trim()) || new Set<string>()).has(row.dateISO)).length;
         const effectiveReviewImpact = Math.max(reviewFreeEstimate, row.slotAssignments.rev);
         const effectiveCorrectionImpact = Math.max(correctionFreeEstimate, row.slotAssignments.cor);
-        const simulation = simulateSlotFillability(row, row.slotAssignments, daysWithMasterInvShortage.has(String(row.dateISO || "")));
+        const hasRealGap = row.remainingInvigilations > 0 || row.remainingReserve > 0;
+        // ✅ تحسين الأداء: لا نعمل محاكاة ثقيلة للفترات المكتملة أصلًا.
+        // الفترات المكتملة تظل SAFE، والمحاكاة التفصيلية تعمل فقط عند وجود عجز فعلي.
+        const simulation = hasRealGap
+          ? simulateSlotFillability(row, row.slotAssignments, daysWithMasterInvShortage.has(String(row.dateISO || "")))
+          : { additionalInvigilations: 0, additionalReserve: 0 };
         const availableEstimate = Math.max(0, simulation.additionalInvigilations + simulation.additionalReserve);
         const bufferEstimate = availableEstimate - row.remainingInvigilations - row.remainingReserve;
-        const hasRealGap = row.remainingInvigilations > 0 || row.remainingReserve > 0;
         const status = hasRealGap && availableEstimate < row.remainingInvigilations + row.remainingReserve
           ? "CRITICAL"
           : hasRealGap && bufferEstimate <= 2
@@ -3377,6 +3467,19 @@ export default function TaskDistributionRun() {
     setRuntimeError(null);
     setManualSuggestionHistory([]);
     setIsReadinessCleared(true);
+  }
+
+  function requestDeleteAllDistributionData() {
+    setDeleteConfirmOpen(true);
+  }
+
+  function confirmDeleteAllDistributionData() {
+    setDeleteConfirmOpen(false);
+    deleteAllDistributionData();
+  }
+
+  function cancelDeleteAllDistributionData() {
+    setDeleteConfirmOpen(false);
   }
 
   async function handleAddSuggestedTeacherToMasterTable(row: any, suggestion: any) {
@@ -4385,6 +4488,86 @@ const GOLD_SUB = "rgba(0,0,0,0.82)";
           background: linear-gradient(180deg,#ffffff,#fff7d6) !important;
         }
 
+
+        /* ✅ نافذة إضافة المعلم من جدول المعالجة:
+           تظهر فوق كل الطبقات أعلى الصفحة بدون تعتيم/تشويش الخلفية وبدون تغيير منطق الإضافة أو شروط التوزيع */
+        .task-run-black-text-scope [role="dialog"][aria-modal="true"],
+        body [role="dialog"][aria-modal="true"],
+        .task-run-black-text-scope [style*="position: fixed"][style*="inset: 0"]:not([aria-label*="إلغاء"]):not([aria-label*="cancel"]):not([aria-label*="Cancel"]):not([aria-label*="distribution cancellation"]),
+        body [style*="position: fixed"][style*="inset: 0"]:not([aria-label*="إلغاء"]):not([aria-label*="cancel"]):not([aria-label*="Cancel"]):not([aria-label*="distribution cancellation"]) {
+          position: fixed !important;
+          inset: 0 !important;
+          z-index: 2147483647 !important;
+          isolation: isolate !important;
+          display: flex !important;
+          align-items: flex-start !important;
+          justify-content: center !important;
+          place-items: start center !important;
+          padding-top: clamp(12px, 2vh, 24px) !important;
+          padding-inline: 18px !important;
+          background:
+            radial-gradient(circle at 50% 0%, rgba(212,175,55,.12), rgba(255,255,255,.08) 42%, transparent 78%),
+            rgba(255,255,255,.08) !important;
+          backdrop-filter: none !important;
+          -webkit-backdrop-filter: none !important;
+          filter: none !important;
+        }
+
+        .task-run-black-text-scope [role="dialog"][aria-modal="true"] > div,
+        body [role="dialog"][aria-modal="true"] > div,
+        .task-run-black-text-scope [style*="position: fixed"][style*="inset: 0"]:not([aria-label*="إلغاء"]):not([aria-label*="cancel"]):not([aria-label*="Cancel"]):not([aria-label*="distribution cancellation"]) > div,
+        body [style*="position: fixed"][style*="inset: 0"]:not([aria-label*="إلغاء"]):not([aria-label*="cancel"]):not([aria-label*="Cancel"]):not([aria-label*="distribution cancellation"]) > div {
+          position: relative !important;
+          z-index: 2147483647 !important;
+          margin-top: 0 !important;
+          transform: none !important;
+          width: min(960px, calc(100vw - 34px)) !important;
+          max-width: min(960px, calc(100vw - 34px)) !important;
+          max-height: calc(100vh - 28px) !important;
+          overflow: auto !important;
+          border-radius: 30px !important;
+          border: 3px solid rgba(212,175,55,.96) !important;
+          outline: 2px solid rgba(255,255,255,.88) !important;
+          background:
+            linear-gradient(135deg, rgba(255,251,235,.99), rgba(255,255,255,.99) 46%, rgba(254,243,199,.99)),
+            radial-gradient(circle at 92% 10%, rgba(212,175,55,.20), transparent 38%) !important;
+          box-shadow:
+            0 26px 70px rgba(0,0,0,.26),
+            0 0 0 8px rgba(212,175,55,.12),
+            inset 0 1px 0 rgba(255,255,255,.94) !important;
+        }
+
+        .task-run-black-text-scope [role="dialog"][aria-modal="true"] > div::before,
+        body [role="dialog"][aria-modal="true"] > div::before,
+        .task-run-black-text-scope [style*="position: fixed"][style*="inset: 0"]:not([aria-label*="إلغاء"]):not([aria-label*="cancel"]):not([aria-label*="Cancel"]):not([aria-label*="distribution cancellation"]) > div::before,
+        body [style*="position: fixed"][style*="inset: 0"]:not([aria-label*="إلغاء"]):not([aria-label*="cancel"]):not([aria-label*="Cancel"]):not([aria-label*="distribution cancellation"]) > div::before {
+          content: "";
+          position: absolute;
+          inset: 0 0 auto 0;
+          height: 10px;
+          background: linear-gradient(90deg,#111827,#d4af37,#111827) !important;
+          pointer-events: none;
+        }
+
+        .task-run-black-text-scope [role="dialog"][aria-modal="true"] button,
+        body [role="dialog"][aria-modal="true"] button,
+        .task-run-black-text-scope [style*="position: fixed"][style*="inset: 0"]:not([aria-label*="إلغاء"]):not([aria-label*="cancel"]):not([aria-label*="Cancel"]):not([aria-label*="distribution cancellation"]) button,
+        body [style*="position: fixed"][style*="inset: 0"]:not([aria-label*="إلغاء"]):not([aria-label*="cancel"]):not([aria-label*="Cancel"]):not([aria-label*="distribution cancellation"]) button {
+          border-radius: 18px !important;
+          min-height: 52px !important;
+          box-shadow: 0 14px 28px rgba(15,23,42,.16) !important;
+        }
+
+        @media (max-width: 760px) {
+          .task-run-black-text-scope [role="dialog"][aria-modal="true"],
+          body [role="dialog"][aria-modal="true"],
+          .task-run-black-text-scope [style*="position: fixed"][style*="inset: 0"]:not([aria-label*="إلغاء"]):not([aria-label*="cancel"]):not([aria-label*="Cancel"]):not([aria-label*="distribution cancellation"]),
+          body [style*="position: fixed"][style*="inset: 0"]:not([aria-label*="إلغاء"]):not([aria-label*="cancel"]):not([aria-label*="Cancel"]):not([aria-label*="distribution cancellation"]) {
+            padding-top: 10px !important;
+            padding-inline: 10px !important;
+          }
+        }
+
         @media (max-width: 980px) {
           .task-run-black-text-scope > div:first-of-type {
             gap: 12px !important;
@@ -4644,7 +4827,7 @@ const GOLD_SUB = "rgba(0,0,0,0.82)";
         onGoHome={() => nav("/")}
         onGoResults={() => nav("/task-distribution/results")}
         onGoSuggestions={() => nav("/task-distribution/suggestions")}
-        onDeleteAllDistributionData={deleteAllDistributionData}
+        onDeleteAllDistributionData={requestDeleteAllDistributionData}
         onReloadConstraints={() => {
           setIsReadinessCleared(false);
           setConstraints(loadDistributionConstraints({ ...DEFAULT_CONSTRAINTS }));
@@ -4743,7 +4926,7 @@ const GOLD_SUB = "rgba(0,0,0,0.82)";
         sortMode={sortMode}
         setSortMode={setSortMode}
         navToResults={() => nav("/task-distribution/results")}
-        onDeleteAllDistributionData={deleteAllDistributionData}
+        onDeleteAllDistributionData={requestDeleteAllDistributionData}
         styles={{
           fairnessWrap,
           fairnessHeader,
@@ -4769,6 +4952,159 @@ const GOLD_SUB = "rgba(0,0,0,0.82)";
         pillStyle={pill}
         cardStyle={card}
       />
+
+      {deleteConfirmOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={tr("تأكيد إلغاء التوزيع", "Confirm distribution cancellation")}
+          onClick={cancelDeleteAllDistributionData}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 99999,
+            display: "grid",
+            placeItems: "center",
+            padding: 18,
+            background: "radial-gradient(circle at center, rgba(15,23,42,.36), rgba(15,23,42,.68))",
+            backdropFilter: "blur(8px)",
+          }}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              width: "min(560px, 100%)",
+              direction: isRTL ? "rtl" : "ltr",
+              textAlign: isRTL ? "right" : "left",
+              border: `3px solid ${GOLD_2}`,
+              borderRadius: 32,
+              padding: 0,
+              overflow: "hidden",
+              background: "linear-gradient(180deg,#fffdf4,#fff7d6 54%,#fff1b8)",
+              boxShadow: "0 32px 80px rgba(0,0,0,.34), 0 0 0 8px rgba(212,175,55,.14), inset 0 1px 0 rgba(255,255,255,.92)",
+              color: "#111827",
+            }}
+          >
+            <div
+              style={{
+                position: "relative",
+                padding: "28px 28px 20px",
+                borderBottom: "2px solid rgba(212,175,55,.45)",
+                background: "linear-gradient(135deg,#fff8cf,#ffffff 42%,#fef3c7)",
+              }}
+            >
+              <div
+                style={{
+                  position: "absolute",
+                  insetInlineEnd: -55,
+                  top: -55,
+                  width: 170,
+                  height: 170,
+                  borderRadius: "50%",
+                  background: "radial-gradient(circle, rgba(245,158,11,.28), transparent 68%)",
+                  pointerEvents: "none",
+                }}
+              />
+              <div style={{ display: "flex", gap: 14, alignItems: "center", position: "relative", zIndex: 1 }}>
+                <div
+                  style={{
+                    width: 58,
+                    height: 58,
+                    borderRadius: 20,
+                    display: "grid",
+                    placeItems: "center",
+                    flex: "0 0 auto",
+                    background: "linear-gradient(135deg,#fef3c7,#facc15)",
+                    border: "2px solid rgba(146,64,14,.35)",
+                    boxShadow: "0 12px 24px rgba(146,64,14,.18)",
+                    fontSize: 30,
+                  }}
+                >
+                  ⚠️
+                </div>
+                <div style={{ display: "grid", gap: 6 }}>
+                  <div style={{ fontSize: 22, fontWeight: 950, color: "#111827", lineHeight: 1.35 }}>
+                    {tr("هل تريد إلغاء التوزيع؟", "Do you want to cancel the distribution?")}
+                  </div>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: "#000000", lineHeight: 1.8 }}>
+                    {tr(
+                      "سيتم حذف بيانات التوزيع الحالي من الجدول الشامل والملخصات المرتبطة به فقط بعد الضغط على نعم.",
+                      "The current distribution data, master table, and linked summaries will be cleared only after pressing Yes."
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ padding: 24, display: "grid", gap: 16 }}>
+              <div
+                style={{
+                  border: "2px solid rgba(212,175,55,.45)",
+                  borderRadius: 22,
+                  padding: "14px 16px",
+                  background: "rgba(255,255,255,.74)",
+                  color: "#000000",
+                  fontSize: 13,
+                  fontWeight: 800,
+                  lineHeight: 1.85,
+                }}
+              >
+                {tr(
+                  "اختر نعم للمتابعة، أو إلغاء للرجوع بدون أي تغيير.",
+                  "Choose Yes to continue, or Cancel to return without any change."
+                )}
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  gap: 12,
+                  flexWrap: "wrap",
+                  justifyContent: isRTL ? "flex-start" : "flex-end",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={confirmDeleteAllDistributionData}
+                  style={{
+                    minWidth: 150,
+                    border: "2px solid rgba(127,29,29,.58)",
+                    borderRadius: 18,
+                    padding: "13px 18px",
+                    cursor: "pointer",
+                    background: "linear-gradient(135deg,#fee2e2,#fecaca)",
+                    color: "#7f1d1d",
+                    fontWeight: 950,
+                    fontSize: 15,
+                    boxShadow: "0 12px 24px rgba(127,29,29,.14)",
+                  }}
+                >
+                  {tr("نعم، إلغاء التوزيع", "Yes, cancel distribution")}
+                </button>
+                <button
+                  type="button"
+                  onClick={cancelDeleteAllDistributionData}
+                  autoFocus
+                  style={{
+                    minWidth: 130,
+                    border: `2px solid ${GOLD_2}`,
+                    borderRadius: 18,
+                    padding: "13px 18px",
+                    cursor: "pointer",
+                    background: "linear-gradient(135deg,#ffffff,#fff3bf)",
+                    color: "#111827",
+                    fontWeight: 950,
+                    fontSize: 15,
+                    boxShadow: "0 12px 24px rgba(146,101,0,.13)",
+                  }}
+                >
+                  {tr("إلغاء", "Cancel")}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
