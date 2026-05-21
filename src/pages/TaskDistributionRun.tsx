@@ -1,4 +1,6 @@
 // ✅ src/pages/TaskDistributionRun.tsx
+// ✅ تعديل مكمل: إذا كان المعلم موزعًا في الفترة الثانية: فاضي للمراجعة، يمكن استخدامه في الفترة الأولى مراقبة عند العجز
+// ✅ تعديل جديد: إذا كان المعلم فاضي للتصحيح في يوم معيّن، يُمنع أي تكليف له في الفترة الأولى أو الثانية لنفس اليوم
 // ✅ كود كامل بدون أخطاء JSX/TS
 // ✅ إصلاح خطأ: Duplicate function implementation ts(2393) (تم حذف الدالة المكررة)
 // ✅ تعديل مهم حسب طلبك: الحد الأقصى للنصاب لكل معلم = (مراقبة + احتياط + مراجعة) فقط
@@ -426,6 +428,33 @@ function normalizeStoredTaskTypeGlobal(rawTaskType: any): string {
 // ✅ مهام تدخل في نصاب maxTasksPerTeacher
 function isQuotaTaskType(t: any) {
   return t === "INVIGILATION" || t === "RESERVE" || t === "REVIEW_FREE";
+}
+
+// ✅ فاضي للتصحيح حجز يوم كامل: لا يسمح بأي مراقبة/احتياط/مراجعة في نفس اليوم لأي فترة
+function isCorrectionFreeAssignmentGlobal(assignment: any) {
+  const taskType = normalizeStoredTaskTypeGlobal(
+    (assignment as any)?.taskType ||
+      (assignment as any)?.role ||
+      (assignment as any)?.type ||
+      (assignment as any)?.taskTypeLabelAr ||
+      (assignment as any)?.subject ||
+      ""
+  );
+  return taskType === "CORRECTION_FREE";
+}
+
+function hasCorrectionFreeAssignmentForTeacherOnDate(assignmentsList: any[], teacherId: string, dateISO: string) {
+  const tid = String(teacherId || "").trim();
+  const day = workDateISO(String(dateISO || "").trim());
+  if (!tid || !day || !Array.isArray(assignmentsList)) return false;
+
+  return assignmentsList.some((assignment: any) => {
+    const assTeacherId = String((assignment as any)?.teacherId || "").trim();
+    if (assTeacherId !== tid) return false;
+    const assDate = workDateISO(String((assignment as any)?.dateISO || (assignment as any)?.date || "").trim());
+    if (assDate !== day) return false;
+    return isCorrectionFreeAssignmentGlobal(assignment);
+  });
 }
 
 function normalizeSearch(s: string) {
@@ -1053,6 +1082,17 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
     }
   }
 
+  function isTeacherBlockedByCorrectionFreeFullDay(teacherId: string, dateISO: string) {
+    if (!teacherId || !dateISO) return false;
+
+    if (enableCorrectionFree) {
+      const corDays = teacherCorrectionDays.get(teacherId);
+      if (corDays && corDays.has(dateISO)) return true;
+    }
+
+    return hasCorrectionFreeAssignmentForTeacherOnDate(assignments, teacherId, dateISO);
+  }
+
   function canAssign(
     teacherId: string,
     dateISO: string,
@@ -1095,16 +1135,19 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
     const tQuota = quotaTotals.get(teacherId) || 0;
     if (tQuota >= maxTasks) return { ok: false, reason: "MAX_TASKS_REACHED" as const };
 
+    // ✅ استثناء عند العجز فقط:
+    // إذا كان المعلم مفرغًا للمراجعة في إحدى الفترتين، يمكن استخدامه مراقبة في الفترة الأخرى عند العجز.
+    const allowReviewFreeSecondPeriodInvigilation =
+      !!meta?.allowReviewFreeSecondPeriodInvigilation &&
+      canUseReviewFreeTeacherForSecondPeriodInvigilation(teacherId, dateISO, period, taskType);
+
     const sk = slotKey(dateISO, period);
     const slots = occupiedSlots.get(teacherId) || new Set<string>();
-    if (slots.has(sk)) return { ok: false, reason: "PERIOD_CONFLICT" as const };
+    if (slots.has(sk) && !allowReviewFreeSecondPeriodInvigilation) return { ok: false, reason: "PERIOD_CONFLICT" as const };
 
-    // ✅ منع أي مهام في يوم التصحيح (اليوم التالي فقط)
-    if (enableCorrectionFree) {
-      const corDays = teacherCorrectionDays.get(teacherId);
-      if (corDays && corDays.has(dateISO)) {
-        return { ok: false, reason: "CORRECTION_FREE_BLOCK" as const };
-      }
+    // ✅ منع أي تكليف في يوم التصحيح: الفترة الأولى + الفترة الثانية محجوزة بالكامل للتصحيح
+    if (taskType !== "CORRECTION_FREE" && isTeacherBlockedByCorrectionFreeFullDay(teacherId, dateISO)) {
+      return { ok: false, reason: "CORRECTION_FREE_BLOCK" as const };
     }
 
     // ✅ NEW: شرط 13 / 14 على آخر يوم/آخر يومين (نمنع التوزيع للمراقبة/الاحتياط فقط)
@@ -1131,7 +1174,7 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
       const hasSameDay = datesSet.has(dateISO);
       if (hasSameDay) {
         const allowedGlobal = isTwoPeriodsAllowedOnDate(dateISO, constraints);
-        if (!allowedGlobal) {
+        if (!allowedGlobal && !allowReviewFreeSecondPeriodInvigilation) {
           return { ok: false, reason: "BACK_TO_BACK_BLOCK" as const };
         }
       }
@@ -1143,6 +1186,39 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
     }
 
     return { ok: true as const };
+  }
+
+  function canUseReviewFreeTeacherForSecondPeriodInvigilation(
+    teacherId: string,
+    dateISO: string,
+    period: "AM" | "PM",
+    taskType: string
+  ) {
+    // ✅ عند العجز فقط: يسمح باستخدام معلم "فاضي للمراجعة" كمراقبة في الفترة الأخرى.
+    // يشمل الحالتين:
+    // - فاضي للمراجعة في الفترة الأولى -> مراقبة في الفترة الثانية.
+    // - فاضي للمراجعة في الفترة الثانية -> مراقبة في الفترة الأولى.
+    if (taskType !== "INVIGILATION" || (period !== "AM" && period !== "PM")) return false;
+
+    let hasReviewFreeOnSameDay = false;
+    for (const assignment of assignments) {
+      const assTeacherId = String((assignment as any)?.teacherId || "").trim();
+      if (assTeacherId !== teacherId) continue;
+
+      const assDate = getAssignmentDateISOForState(assignment);
+      if (assDate !== dateISO) continue;
+
+      const assTaskType = normalizeAssignmentTaskTypeLocal(assignment);
+      if (assTaskType === "REVIEW_FREE") {
+        hasReviewFreeOnSameDay = true;
+        continue;
+      }
+
+      // نحافظ على باقي الشروط: الاستثناء مسموح فقط إذا كان الموجود في نفس اليوم هو تفريغ مراجعة فقط.
+      return false;
+    }
+
+    return hasReviewFreeOnSameDay;
   }
 
   function normalizeAssignmentTaskTypeLocal(assignment: any): string {
@@ -1410,6 +1486,62 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
     return tryRehomeExistingAssignmentForGrade12Teacher({ teacherId, dateISO, period, subject, meta });
   }
 
+  function buildReviewFreeSecondPeriodFallbackCandidates(
+    dateISO: string,
+    period: "AM" | "PM",
+    subject: string,
+    meta?: any,
+    options?: { requireBen?: boolean; excludeIds?: Set<string>; existingBen?: boolean }
+  ) {
+    // ✅ يعمل للفترة الأولى أو الثانية عند العجز، بشرط أن يكون الموجود في نفس اليوم هو تفريغ مراجعة فقط.
+    const excludeIds = options?.excludeIds || new Set<string>();
+    const requireBen = !!options?.requireBen;
+    const existingBen = !!options?.existingBen;
+    const subj12 = subjectHas12(subject);
+
+    const candidates = teacherIds
+      .filter((id) => !excludeIds.has(id))
+      .map((id, idx) => {
+        const name = teacherNameMap.get(id) || "";
+        return {
+          id,
+          idx,
+          inv: invCounts.get(id) || 0,
+          quota: quotaTotals.get(id) || 0,
+          ben: hasBenInName(name),
+          is12: teacherHas12(name),
+          reviewFreeFallback: true,
+        };
+      })
+      .filter((candidate) => (!requireBen || candidate.ben) && (existingBen || candidate.ben || !options?.existingBen))
+      .sort(
+        (a, b) =>
+          (subj12 ? Number(b.is12) - Number(a.is12) : 0) ||
+          a.inv - b.inv ||
+          a.quota - b.quota ||
+          a.idx - b.idx
+      );
+
+    const fallbackMeta = {
+      ...(meta || {}),
+      allowReviewFreeSecondPeriodInvigilation: true,
+      reviewFreeSecondPeriodFallback: true,
+    };
+
+    return candidates.filter((candidate) => canAssign(candidate.id, dateISO, period, "INVIGILATION", subject, fallbackMeta).ok);
+  }
+
+  function pickReviewFreeSecondPeriodFallbackCandidate(
+    dateISO: string,
+    period: "AM" | "PM",
+    subject: string,
+    meta?: any,
+    options?: { requireBen?: boolean; excludeIds?: Set<string>; existingBen?: boolean }
+  ) {
+    const candidates = buildReviewFreeSecondPeriodFallbackCandidates(dateISO, period, subject, meta, options);
+    return candidates.length ? candidates[0] : null;
+  }
+
   // ✅ تحسين الأداء: لا نأخذ Snapshot كامل من الجدول إلا في حالة واحدة فقط
   // وهي حالة معلم 12 وصل للنصاب ويحتاج إعادة تسكين أحد تكليفاته.
   // هذا يحافظ على نفس الشروط، لكنه يمنع نسخ آلاف السجلات مع كل محاولة عادية.
@@ -1523,6 +1655,19 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
 
         commitAssign(c.id, dateISO, period, taskType, subject, meta);
         rr = (c.idx + 1) % n;
+        return { assigned: true as const };
+      }
+
+      // ✅ عند العجز فقط: استخدم مفرغ المراجعة كمراقب في الفترة الأخرى عند العجز.
+      const fallbackPicked = pickReviewFreeSecondPeriodFallbackCandidate(dateISO, period, subject, meta);
+      if (fallbackPicked) {
+        const fallbackMeta = {
+          ...(meta || {}),
+          allowReviewFreeSecondPeriodInvigilation: true,
+          reviewFreeSecondPeriodFallback: true,
+        };
+        commitAssign(fallbackPicked.id, dateISO, period, taskType, subject, fallbackMeta);
+        rr = (fallbackPicked.idx + 1) % n;
         return { assigned: true as const };
       }
 
@@ -1645,6 +1790,36 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
         }
 
         if (!ok) {
+          // ✅ عند العجز فقط: إذا كان معلم مفرغًا للمراجعة في إحدى الفترتين، يمكن استخدامه مراقبة في الفترة الأخرى عند العجز.
+          const fallbackPicked = pickReviewFreeSecondPeriodFallbackCandidate(
+            dateISO,
+            period,
+            subject,
+            { durationMinutes: Number(exam.durationMinutes ?? 0) || 0 },
+            { requireBen: true }
+          );
+
+          if (fallbackPicked) {
+            commitAssign(fallbackPicked.id, dateISO, period, "INVIGILATION", subject, {
+              examId: exam.id,
+              examSubject: subject,
+              committeeNo,
+              committeeNumber: committeeNo,
+              roomNo: committeeNo,
+              roomNumber: committeeNo,
+              invigilatorIndex: 1,
+              durationMinutes: Number(exam.durationMinutes ?? 0) || 0,
+              allowReviewFreeSecondPeriodInvigilation: true,
+              reviewFreeSecondPeriodFallback: true,
+            });
+            rr = (fallbackPicked.idx + 1) % n;
+            ok = true;
+            assignedInvHere += 1;
+            invAssigned += 1;
+          }
+        }
+
+        if (!ok) {
           daysWithInvShortage.add(dateISO);
           unfilled.push({
             kind: "INVIGILATION",
@@ -1739,6 +1914,51 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
           }
           if (firstPicked && secondPicked) break;
           if (snapBeforeFirstCandidate) restoreAssignmentsFromGrade12Snapshot(snapBeforeFirstCandidate);
+        }
+
+        if (!firstPicked || !secondPicked) {
+          // ✅ عند العجز فقط: جرب مفرغ المراجعة كمراقب في الفترة الأخرى عند العجز.
+          const fallbackMeta = {
+            durationMinutes: Number(exam.durationMinutes ?? 0) || 0,
+            allowReviewFreeSecondPeriodInvigilation: true,
+            reviewFreeSecondPeriodFallback: true,
+          };
+          const fallbackCandidates = buildReviewFreeSecondPeriodFallbackCandidates(dateISO, period, subject, fallbackMeta);
+
+          for (const c1 of fallbackCandidates) {
+            const cand2raw = buildCandidates().filter((c2) => c2.id !== c1.id);
+            const cand2 = subj12
+              ? [...cand2raw.filter((c) => c.is12), ...cand2raw.filter((c) => !c.is12)]
+              : cand2raw;
+
+            for (const c2 of cand2) {
+              if (!c1.ben && !c2.ben) continue;
+              if (!canAssign(c2.id, dateISO, period, "INVIGILATION", subject, fallbackMeta).ok) continue;
+              firstPicked = c1;
+              secondPicked = c2;
+              break;
+            }
+            if (firstPicked && secondPicked) break;
+          }
+
+          if (!firstPicked || !secondPicked) {
+            const normalCandidates = buildCandidates();
+            for (const c1 of normalCandidates) {
+              if (!canAssign(c1.id, dateISO, period, "INVIGILATION", subject, fallbackMeta).ok) continue;
+              const fallbackCandidates2 = buildReviewFreeSecondPeriodFallbackCandidates(
+                dateISO,
+                period,
+                subject,
+                fallbackMeta,
+                { excludeIds: new Set<string>([c1.id]), existingBen: c1.ben }
+              );
+              const c2 = fallbackCandidates2.find((candidate) => c1.ben || candidate.ben);
+              if (!c2) continue;
+              firstPicked = c1;
+              secondPicked = c2;
+              break;
+            }
+          }
         }
 
         if (!firstPicked || !secondPicked) {
@@ -1858,6 +2078,7 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
   // ✅ APPLY CORRECTION_FREE (AFTER distribution)
   // ✅ (اليوم التالي فقط) ✅ بدون أي ترحيل/shift
   // ✅ التصحيح لا يدخل في النصاب
+  // ✅ أي معلم له يوم تصحيح محجوز لا يأخذ أي تكليف في AM أو PM لنفس اليوم
   // ============================================================
   const correctionApplied = new Set<string>(); // key teacherId__dateISO
   const appliedCorrectionDaysByTeacher = new Map<string, Set<string>>();
@@ -2418,7 +2639,15 @@ export default function TaskDistributionRun() {
         dayHasAnyPeriod.set(teacherId, new Set<string>());
         teacherHad3HoursInv.set(teacherId, false);
       }
-      return { quotaTotals, invCounts, occupiedSlots, dayHasAnyPeriod, teacherDayFirstInvDuration, teacherHad3HoursInv, teacherGrade12InvigilationSubject };
+      const reviewFreeDatesByTeacher = new Map<string, Set<string>>();
+      const nonReviewDatesByTeacher = new Map<string, Set<string>>();
+      const correctionFreeDatesByTeacher = new Map<string, Set<string>>();
+      for (const teacherId of teacherIds) {
+        reviewFreeDatesByTeacher.set(teacherId, new Set<string>());
+        nonReviewDatesByTeacher.set(teacherId, new Set<string>());
+        correctionFreeDatesByTeacher.set(teacherId, new Set<string>());
+      }
+      return { quotaTotals, invCounts, occupiedSlots, dayHasAnyPeriod, teacherDayFirstInvDuration, teacherHad3HoursInv, teacherGrade12InvigilationSubject, reviewFreeDatesByTeacher, nonReviewDatesByTeacher, correctionFreeDatesByTeacher };
     }
 
     function buildSimulationArtifactsFromAssignments(sourceAssignments: any[]) {
@@ -2441,6 +2670,19 @@ export default function TaskDistributionRun() {
         slotCounts.set(key, current);
 
         if (!teacherId || !state.occupiedSlots.has(teacherId)) continue;
+
+        if (taskType === "REVIEW_FREE") {
+          if (!state.reviewFreeDatesByTeacher.has(teacherId)) state.reviewFreeDatesByTeacher.set(teacherId, new Set<string>());
+          state.reviewFreeDatesByTeacher.get(teacherId)!.add(dateISO);
+        } else {
+          if (!state.nonReviewDatesByTeacher.has(teacherId)) state.nonReviewDatesByTeacher.set(teacherId, new Set<string>());
+          state.nonReviewDatesByTeacher.get(teacherId)!.add(dateISO);
+        }
+
+        if (taskType === "CORRECTION_FREE") {
+          if (!state.correctionFreeDatesByTeacher.has(teacherId)) state.correctionFreeDatesByTeacher.set(teacherId, new Set<string>());
+          state.correctionFreeDatesByTeacher.get(teacherId)!.add(dateISO);
+        }
 
         for (const coveredPeriod of getAssignmentPeriods(ass, taskType)) {
           state.occupiedSlots.get(teacherId)!.add(slotKey(dateISO, coveredPeriod));
@@ -2505,6 +2747,9 @@ export default function TaskDistributionRun() {
         teacherDayFirstInvDuration: new Map(state.teacherDayFirstInvDuration),
         teacherHad3HoursInv: new Map(state.teacherHad3HoursInv),
         teacherGrade12InvigilationSubject: new Map(state.teacherGrade12InvigilationSubject || []),
+        reviewFreeDatesByTeacher: new Map(Array.from((state.reviewFreeDatesByTeacher || new Map()).entries()).map(([teacherId, dates]: any) => [teacherId, new Set(Array.from(dates))])),
+        nonReviewDatesByTeacher: new Map(Array.from((state.nonReviewDatesByTeacher || new Map()).entries()).map(([teacherId, dates]: any) => [teacherId, new Set(Array.from(dates))])),
+        correctionFreeDatesByTeacher: new Map(Array.from((state.correctionFreeDatesByTeacher || new Map()).entries()).map(([teacherId, dates]: any) => [teacherId, new Set(Array.from(dates))])),
       };
     }
 
@@ -2534,13 +2779,21 @@ export default function TaskDistributionRun() {
 
       if ((state.quotaTotals.get(teacherId) || 0) >= maxTasks && isQuotaTaskType(taskType)) return false;
 
+      const allowReviewFreeSecondPeriodInvigilation =
+        !!meta?.allowReviewFreeSecondPeriodInvigilation &&
+        taskType === "INVIGILATION" &&
+        (period === "AM" || period === "PM") &&
+        !!(state.reviewFreeDatesByTeacher?.get(teacherId) || new Set<string>()).has(dateISO) &&
+        !(state.nonReviewDatesByTeacher?.get(teacherId) || new Set<string>()).has(dateISO);
+
       const sk = slotKey(dateISO, period);
       const slots = state.occupiedSlots.get(teacherId) || new Set<string>();
-      if (slots.has(sk)) return false;
+      if (slots.has(sk) && !allowReviewFreeSecondPeriodInvigilation) return false;
 
-      if (enableCorrectionFree) {
-        const correctionDays = teacherCorrectionDays.get(teacherId);
-        if (correctionDays && correctionDays.has(dateISO)) {
+      if (taskType !== "CORRECTION_FREE") {
+        const plannedCorrectionDays = enableCorrectionFree ? teacherCorrectionDays.get(teacherId) : null;
+        const appliedCorrectionDays = state.correctionFreeDatesByTeacher?.get(teacherId) || new Set<string>();
+        if ((plannedCorrectionDays && plannedCorrectionDays.has(dateISO)) || appliedCorrectionDays.has(dateISO)) {
           return false;
         }
       }
@@ -2555,7 +2808,7 @@ export default function TaskDistributionRun() {
         if (durationMinutes === 180 && (state.teacherHad3HoursInv.get(teacherId) || false)) return false;
       }
 
-      if ((state.dayHasAnyPeriod.get(teacherId) || new Set<string>()).has(dateISO) && !isTwoPeriodsAllowedOnDate(dateISO, constraints)) {
+      if ((state.dayHasAnyPeriod.get(teacherId) || new Set<string>()).has(dateISO) && !isTwoPeriodsAllowedOnDate(dateISO, constraints) && !allowReviewFreeSecondPeriodInvigilation) {
         return false;
       }
 
@@ -2571,6 +2824,22 @@ export default function TaskDistributionRun() {
       const sk = slotKey(dateISO, period);
       state.occupiedSlots.get(teacherId)!.add(sk);
       state.dayHasAnyPeriod.get(teacherId)!.add(dateISO);
+
+      if (taskType === "REVIEW_FREE") {
+        if (!state.reviewFreeDatesByTeacher) state.reviewFreeDatesByTeacher = new Map<string, Set<string>>();
+        if (!state.reviewFreeDatesByTeacher.has(teacherId)) state.reviewFreeDatesByTeacher.set(teacherId, new Set<string>());
+        state.reviewFreeDatesByTeacher.get(teacherId)!.add(dateISO);
+      } else {
+        if (!state.nonReviewDatesByTeacher) state.nonReviewDatesByTeacher = new Map<string, Set<string>>();
+        if (!state.nonReviewDatesByTeacher.has(teacherId)) state.nonReviewDatesByTeacher.set(teacherId, new Set<string>());
+        state.nonReviewDatesByTeacher.get(teacherId)!.add(dateISO);
+      }
+
+      if (taskType === "CORRECTION_FREE") {
+        if (!state.correctionFreeDatesByTeacher) state.correctionFreeDatesByTeacher = new Map<string, Set<string>>();
+        if (!state.correctionFreeDatesByTeacher.has(teacherId)) state.correctionFreeDatesByTeacher.set(teacherId, new Set<string>());
+        state.correctionFreeDatesByTeacher.get(teacherId)!.add(dateISO);
+      }
 
       if (isQuotaTaskType(taskType)) {
         state.quotaTotals.set(teacherId, (state.quotaTotals.get(teacherId) || 0) + 1);
@@ -2672,10 +2941,9 @@ export default function TaskDistributionRun() {
         hasTeacherAlreadyDifferentGrade12Subject(state.teacherGrade12InvigilationSubject || new Map<string, string>(), teacherId, subject)
       ) return false;
 
-      if (enableCorrectionFree) {
-        const correctionDays = teacherCorrectionDays.get(teacherId);
-        if (correctionDays && correctionDays.has(dateISO)) return false;
-      }
+      const plannedCorrectionDays = enableCorrectionFree ? teacherCorrectionDays.get(teacherId) : null;
+      const appliedCorrectionDays = state.correctionFreeDatesByTeacher?.get(teacherId) || new Set<string>();
+      if ((plannedCorrectionDays && plannedCorrectionDays.has(dateISO)) || appliedCorrectionDays.has(dateISO)) return false;
 
       if (lastExamDate && teacherHas13(teacherName) && dateISO === lastExamDate) return false;
       if (lastTwoExamDates.size && teacherHas14(teacherName) && lastTwoExamDates.has(dateISO)) return false;
@@ -2716,6 +2984,20 @@ export default function TaskDistributionRun() {
         if (!canAssignUsingState(state, candidate.id, dateISO, period, "INVIGILATION", subject, { durationMinutes })) continue;
         return candidate;
       }
+
+      // ✅ عند العجز: أظهر مفرغ المراجعة كاقتراح للمراقبة في الفترة الأخرى.
+      for (const candidate of candidates) {
+        if (invPerRoom === 2 && existingAssignments.length >= 1) {
+          const existingBen = existingAssignments.some((assignment: any) => !!assignment?.ben);
+          if (!existingBen && !candidate.ben) continue;
+        }
+        if (!canAssignUsingState(state, candidate.id, dateISO, period, "INVIGILATION", subject, {
+          durationMinutes,
+          allowReviewFreeSecondPeriodInvigilation: true,
+          reviewFreeSecondPeriodFallback: true,
+        })) continue;
+        return { ...candidate, reviewFreeSecondPeriodFallback: true };
+      }
       return null;
     }
 
@@ -2747,10 +3029,10 @@ export default function TaskDistributionRun() {
       const blockers: string[] = [];
       if ((state.quotaTotals.get(teacherId) || 0) >= maxTasks) blockers.push("MAX_TASKS");
 
-      if (enableCorrectionFree) {
-        const correctionDays = teacherCorrectionDays.get(teacherId);
-        if (correctionDays && correctionDays.has(dateISO)) blockers.push("CORRECTION_FREE");
-      }
+      // ✅ التصحيح حجز يوم كامل ولا يظهر كاقتراح قابل للتجاوز أو الرفع
+      const plannedCorrectionDays = enableCorrectionFree ? teacherCorrectionDays.get(teacherId) : null;
+      const appliedCorrectionDays = state.correctionFreeDatesByTeacher?.get(teacherId) || new Set<string>();
+      if ((plannedCorrectionDays && plannedCorrectionDays.has(dateISO)) || appliedCorrectionDays.has(dateISO)) return null;
 
       if ((state.dayHasAnyPeriod.get(teacherId) || new Set<string>()).has(dateISO) && !isTwoPeriodsAllowedOnDate(dateISO, constraints)) {
         blockers.push("SAME_DAY");
@@ -2857,9 +3139,13 @@ export default function TaskDistributionRun() {
               continue;
             }
 
-            const picked = pickFreeCandidateForCommittee(state, row.dateISO, row.period, examSubject, examDurationMinutes, existingAssignments, existingTeacherIds, invPerRoom);
+            const picked: any = pickFreeCandidateForCommittee(state, row.dateISO, row.period, examSubject, examDurationMinutes, existingAssignments, existingTeacherIds, invPerRoom);
             if (picked) {
-              commitAssignUsingState(state, picked.id, row.dateISO, row.period, "INVIGILATION", examSubject, { durationMinutes: examDurationMinutes });
+              commitAssignUsingState(state, picked.id, row.dateISO, row.period, "INVIGILATION", examSubject, {
+                durationMinutes: examDurationMinutes,
+                allowReviewFreeSecondPeriodInvigilation: !!picked.reviewFreeSecondPeriodFallback,
+                reviewFreeSecondPeriodFallback: !!picked.reviewFreeSecondPeriodFallback,
+              });
               existingTeacherIds.add(picked.id);
               existingAssignments.push({
                 teacherId: picked.id,
@@ -2873,7 +3159,9 @@ export default function TaskDistributionRun() {
                   teacherName: teacherNameMapLocal.get(picked.id) || picked.id,
                   subject: examSubject,
                   source: "FREE",
-                  note: tr(`معلم متاح لنفس الفترة • ${examSubject}`, `Teacher available in the same slot • ${translateSubject(examSubject)}`),
+                  note: picked.reviewFreeSecondPeriodFallback
+                    ? tr(`مفرغ للمراجعة ويمكن استخدامه مراقبة في الفترة الأخرى عند العجز • ${examSubject}`, `Review-free and can be used for invigilation in the other period when there is a shortage • ${translateSubject(examSubject)}`)
+                    : tr(`معلم متاح لنفس الفترة • ${examSubject}`, `Teacher available in the same slot • ${translateSubject(examSubject)}`),
                 });
               }
               continue;
@@ -2957,7 +3245,12 @@ export default function TaskDistributionRun() {
             const existingBen = existingAssignments.some((assignment: any) => !!assignment?.ben);
             if (!existingBen && !teacherBen) continue;
           }
-          if (!canAssignUsingState(artifacts.state, teacherId, row.dateISO, row.period, "INVIGILATION", examDetail.subject, { durationMinutes: examDetail.durationMinutes })) continue;
+          const directMeta = {
+            durationMinutes: examDetail.durationMinutes,
+            allowReviewFreeSecondPeriodInvigilation: true,
+            reviewFreeSecondPeriodFallback: true,
+          };
+          if (!canAssignUsingState(artifacts.state, teacherId, row.dateISO, row.period, "INVIGILATION", examDetail.subject, directMeta)) continue;
           return {
             taskType: "INVIGILATION",
             subject: String(examDetail.subject || "").trim(),
@@ -3061,7 +3354,7 @@ export default function TaskDistributionRun() {
           if (invPerRoom === 1) {
             if (existingCount >= 1) continue;
             const candidates = buildOrderedCandidates(state, row.dateISO, examDetail.subject, examDetail.durationMinutes, existingTeacherIds).filter((candidate) => candidate.ben);
-            const picked = candidates.find((candidate) => canAssignUsingState(state, candidate.id, row.dateISO, row.period, "INVIGILATION", examDetail.subject, { durationMinutes: examDetail.durationMinutes }));
+            const picked = candidates.find((candidate) => canAssignUsingState(state, candidate.id, row.dateISO, row.period, "INVIGILATION", examDetail.subject, { durationMinutes: examDetail.durationMinutes, allowReviewFreeSecondPeriodInvigilation: true, reviewFreeSecondPeriodFallback: true }));
             if (!picked) continue;
             commitAssignUsingState(state, picked.id, row.dateISO, row.period, "INVIGILATION", examDetail.subject, { durationMinutes: examDetail.durationMinutes });
             additionalInvigilations += 1;
@@ -3074,7 +3367,7 @@ export default function TaskDistributionRun() {
 
             if (existingCount === 1) {
               const existingBen = existingAssignments.some((assignment: any) => !!assignment?.ben);
-              const picked = candidates.find((candidate) => (existingBen || candidate.ben) && canAssignUsingState(state, candidate.id, row.dateISO, row.period, "INVIGILATION", examDetail.subject, { durationMinutes: examDetail.durationMinutes }));
+              const picked = candidates.find((candidate) => (existingBen || candidate.ben) && canAssignUsingState(state, candidate.id, row.dateISO, row.period, "INVIGILATION", examDetail.subject, { durationMinutes: examDetail.durationMinutes, allowReviewFreeSecondPeriodInvigilation: true, reviewFreeSecondPeriodFallback: true }));
               if (!picked) continue;
               commitAssignUsingState(state, picked.id, row.dateISO, row.period, "INVIGILATION", examSubject, { durationMinutes: examDurationMinutes });
               additionalInvigilations += 1;
@@ -3084,11 +3377,11 @@ export default function TaskDistributionRun() {
             let firstPicked: any = null;
             let secondPicked: any = null;
             for (const firstCandidate of candidates) {
-              if (!canAssignUsingState(state, firstCandidate.id, row.dateISO, row.period, "INVIGILATION", examDetail.subject, { durationMinutes: examDetail.durationMinutes })) continue;
+              if (!canAssignUsingState(state, firstCandidate.id, row.dateISO, row.period, "INVIGILATION", examDetail.subject, { durationMinutes: examDetail.durationMinutes, allowReviewFreeSecondPeriodInvigilation: true, reviewFreeSecondPeriodFallback: true })) continue;
               for (const secondCandidate of candidates) {
                 if (secondCandidate.id === firstCandidate.id) continue;
                 if (!firstCandidate.ben && !secondCandidate.ben) continue;
-                if (!canAssignUsingState(state, secondCandidate.id, row.dateISO, row.period, "INVIGILATION", examDetail.subject, { durationMinutes: examDetail.durationMinutes })) continue;
+                if (!canAssignUsingState(state, secondCandidate.id, row.dateISO, row.period, "INVIGILATION", examDetail.subject, { durationMinutes: examDetail.durationMinutes, allowReviewFreeSecondPeriodInvigilation: true, reviewFreeSecondPeriodFallback: true })) continue;
                 firstPicked = firstCandidate;
                 secondPicked = secondCandidate;
                 break;
@@ -3106,7 +3399,7 @@ export default function TaskDistributionRun() {
           const missingSpots = Math.max(0, invPerRoom - existingCount);
           for (let i = 0; i < missingSpots; i++) {
             const candidates = buildOrderedCandidates(state, row.dateISO, examDetail.subject, examDetail.durationMinutes, existingTeacherIds);
-            const picked = candidates.find((candidate) => canAssignUsingState(state, candidate.id, row.dateISO, row.period, "INVIGILATION", examDetail.subject, { durationMinutes: examDetail.durationMinutes }));
+            const picked = candidates.find((candidate) => canAssignUsingState(state, candidate.id, row.dateISO, row.period, "INVIGILATION", examDetail.subject, { durationMinutes: examDetail.durationMinutes, allowReviewFreeSecondPeriodInvigilation: true, reviewFreeSecondPeriodFallback: true }));
             if (!picked) break;
             commitAssignUsingState(state, picked.id, row.dateISO, row.period, "INVIGILATION", examDetail.subject, { durationMinutes: examDetail.durationMinutes });
             existingTeacherIds.add(picked.id);
@@ -3503,6 +3796,18 @@ export default function TaskDistributionRun() {
     const remainingReserve = Math.max(0, Number(row?.remainingReserve || 0));
     const preferredTaskType: "INVIGILATION" | "RESERVE" = remainingInv > 0 ? "INVIGILATION" : (remainingReserve > 0 ? "RESERVE" : "INVIGILATION");
     const normalizedSuggestionSource = normalizeSuggestionSource(suggestion?.source);
+
+    // ✅ حماية نهائية: فاضي للتصحيح لا يقبل أي إضافة/تحويل/نقل في نفس اليوم، لا في الفترة الأولى ولا الثانية
+    const sameTeacherCorrectionFreeDay = hasCorrectionFreeAssignmentForTeacherOnDate(currentAssignments, teacherId, dateISO);
+    if (sameTeacherCorrectionFreeDay || normalizedSuggestionSource === "CORRECTION_RELAX") {
+      return {
+        ok: false,
+        message: tr(
+          `المعلم ${teacherName} مفرّغ للتصحيح في هذا اليوم، لذلك لا يمكن إعطاؤه أي تكليف في الفترة الأولى أو الثانية.`,
+          `Teacher ${teacherName} is freed for correction on this day, so no assignment can be added in either period.`
+        ),
+      };
+    }
 
     const sameTeacherSameSlot = currentAssignments.find((ass: any) => {
       const assTeacherId = String((ass as any)?.teacherId || "").trim();
