@@ -1,6 +1,8 @@
 // ✅ src/pages/TaskDistributionRun.tsx
 // ✅ تعديل مكمل: إذا كان المعلم موزعًا في الفترة الثانية: فاضي للمراجعة، يمكن استخدامه في الفترة الأولى مراقبة عند العجز
 // ✅ تعديل جديد: إذا كان المعلم فاضي للتصحيح في يوم معيّن، يُمنع أي تكليف له في الفترة الأولى أو الثانية لنفس اليوم
+// ✅ حماية نهائية صارمة: أي معلم لديه فاضي للتصحيح يتم حذف أي مهمة أخرى له في نفس اليوم من كل الحفظ/التشغيل/الإضافة اليدوية
+// ✅ تعديل جديد: ربط أعذار Unavailability بالفترة الأولى/الثانية/كامل اليوم ومنع التوزيع اليدوي والآلي حسب العذر
 // ✅ كود كامل بدون أخطاء JSX/TS
 // ✅ إصلاح خطأ: Duplicate function implementation ts(2393) (تم حذف الدالة المكررة)
 // ✅ تعديل مهم حسب طلبك: الحد الأقصى للنصاب لكل معلم = (مراقبة + احتياط + مراجعة) فقط
@@ -212,7 +214,8 @@ function readJsonSafe<T = any>(key: string): T | null {
 
 
 function persistDistributionState(tenantId: string, out: any) {
-  const safeRun = ensureExplicitTaskTypes(out || {});
+  // ✅ حماية حفظ نهائية: لا يتم حفظ أي مهمة أخرى لمعلم مفرّغ للتصحيح في نفس اليوم
+  const safeRun = applyCorrectionFreeProtectionToRun(ensureExplicitTaskTypes(out || {}));
   const assignments = Array.isArray(safeRun?.assignments) ? safeRun.assignments : [];
   const payload = {
     rows: assignments,
@@ -416,12 +419,20 @@ function normalizeSuggestionSource(value: any): SuggestionSource {
 
 function normalizeStoredTaskTypeGlobal(rawTaskType: any): string {
   const raw = String(rawTaskType || "").trim().toUpperCase();
-  if (raw === "INVIGILATION" || raw === "RESERVE" || raw === "REVIEW_FREE" || raw === "CORRECTION_FREE") return raw;
+  if (raw === "INVIGILATION" || raw === "RESERVE" || raw === "REVIEW_FREE" || raw === "CORRECTION_FREE" || raw === "LEAVE" || raw === "UNAVAILABILITY_LEAVE") return raw === "UNAVAILABILITY_LEAVE" ? "LEAVE" : raw;
   if (raw.includes("مراقبة")) return "INVIGILATION";
   if (raw.includes("احتياط")) return "RESERVE";
   if (raw.includes("مراجعة")) return "REVIEW_FREE";
   if (raw.includes("تصحيح")) return "CORRECTION_FREE";
+  if (raw.includes("إجازة") || raw.includes("اجازة") || raw.includes("اجازه") || raw.includes("غياب") || raw.includes("leave")) return "LEAVE";
   return raw;
+}
+
+function isLeaveAssignment(assignment: any) {
+  const taskType = normalizeStoredTaskTypeGlobal(
+    assignment?.taskType || assignment?.role || assignment?.type || assignment?.taskTypeLabelAr || assignment?.subject || ""
+  );
+  return taskType === "LEAVE" || assignment?.lockedByUnavailability === true || assignment?.source === "UNAVAILABILITY";
 }
 
 
@@ -455,6 +466,104 @@ function hasCorrectionFreeAssignmentForTeacherOnDate(assignmentsList: any[], tea
     if (assDate !== day) return false;
     return isCorrectionFreeAssignmentGlobal(assignment);
   });
+}
+
+function getTeacherCorrectionIdentityKeys(assignment: any) {
+  const keys: string[] = [];
+  const teacherId = String((assignment as any)?.teacherId || "").trim();
+  const teacherName = normalizeTeacherNameForUnavailability((assignment as any)?.teacherName || (assignment as any)?.name || "");
+  if (teacherId) keys.push(`id:${teacherId}`);
+  if (teacherName) keys.push(`name:${teacherName}`);
+  return Array.from(new Set(keys));
+}
+
+function assignmentMatchesTeacherCorrectionKey(assignment: any, correctionTeacherKeys: Set<string>) {
+  if (!assignment || !correctionTeacherKeys?.size) return false;
+  return getTeacherCorrectionIdentityKeys(assignment).some((key) => correctionTeacherKeys.has(key));
+}
+
+function normalizeCorrectionFreeAssignment(assignment: any) {
+  const dateISO = workDateISO(String((assignment as any)?.dateISO || (assignment as any)?.date || "").trim());
+  return {
+    ...(assignment || {}),
+    taskType: "CORRECTION_FREE",
+    role: (assignment as any)?.role || "CORRECTION_FREE",
+    type: (assignment as any)?.type || "CORRECTION_FREE",
+    taskTypeLabelAr: TASK_TYPE_LABEL_AR["CORRECTION_FREE"],
+    dateISO: dateISO || (assignment as any)?.dateISO,
+    date: dateISO || (assignment as any)?.date,
+    period: "AM",
+    subject: (assignment as any)?.subject || "تصحيح",
+    fullDay: true,
+    coversPeriods: ["AM", "PM"],
+    correctionFullDayLocked: true,
+    correctionBlocksAllTasksSameDay: true,
+  };
+}
+
+function applyCorrectionFreeProtectionToRun(out: any) {
+  const safeOut = ensureExplicitTaskTypes(out || {});
+  const assignments = Array.isArray(safeOut?.assignments) ? safeOut.assignments : [];
+  if (!assignments.length) return safeOut;
+
+  const correctionKeysByDate = new Map<string, Set<string>>();
+  for (const assignment of assignments) {
+    if (!isCorrectionFreeAssignmentGlobal(assignment)) continue;
+    const dateISO = workDateISO(String((assignment as any)?.dateISO || (assignment as any)?.date || "").trim());
+    if (!dateISO) continue;
+    const teacherKeys = getTeacherCorrectionIdentityKeys(assignment);
+    if (!teacherKeys.length) continue;
+    if (!correctionKeysByDate.has(dateISO)) correctionKeysByDate.set(dateISO, new Set<string>());
+    const set = correctionKeysByDate.get(dateISO)!;
+    teacherKeys.forEach((key) => set.add(key));
+  }
+
+  if (!correctionKeysByDate.size) return safeOut;
+
+  let removedBecauseCorrection = 0;
+  const filtered = assignments.filter((assignment: any) => {
+    const taskType = normalizeStoredTaskTypeGlobal(
+      (assignment as any)?.taskType ||
+        (assignment as any)?.role ||
+        (assignment as any)?.type ||
+        (assignment as any)?.taskTypeLabelAr ||
+        (assignment as any)?.subject ||
+        ""
+    );
+    if (taskType === "CORRECTION_FREE") return true;
+    if (isLeaveAssignment(assignment)) return true;
+
+    const dateISO = workDateISO(String((assignment as any)?.dateISO || (assignment as any)?.date || "").trim());
+    if (!dateISO) return true;
+    const correctionTeacherKeys = correctionKeysByDate.get(dateISO);
+    if (!correctionTeacherKeys?.size) return true;
+
+    if (assignmentMatchesTeacherCorrectionKey(assignment, correctionTeacherKeys)) {
+      removedBecauseCorrection += 1;
+      return false;
+    }
+    return true;
+  });
+
+  safeOut.assignments = filtered.map((assignment: any) =>
+    isCorrectionFreeAssignmentGlobal(assignment) ? normalizeCorrectionFreeAssignment(assignment) : assignment
+  );
+
+  if (removedBecauseCorrection > 0) {
+    safeOut.debug = {
+      ...(safeOut.debug || {}),
+      correctionFreeStrictProtectionRemoved: (Number(safeOut.debug?.correctionFreeStrictProtectionRemoved || 0) || 0) + removedBecauseCorrection,
+    };
+    safeOut.warnings = [
+      ...(Array.isArray(safeOut.warnings) ? safeOut.warnings : []),
+      trGlobal(
+        `تم حذف ${removedBecauseCorrection} تكليف متعارض لأن المعلم مفرّغ للتصحيح في نفس اليوم.`,
+        `${removedBecauseCorrection} conflicting assignment(s) were removed because the teacher is freed for correction on the same day.`
+      ),
+    ];
+  }
+
+  return safeOut;
 }
 
 function normalizeSearch(s: string) {
@@ -507,12 +616,18 @@ const TASK_TYPE_LABEL_AR: Record<string, string> = {
   RESERVE: "احتياط",
   REVIEW_FREE: "مراجعة",
   CORRECTION_FREE: "تصحيح",
+  LEAVE: "إجازة",
+  UNAVAILABILITY_LEAVE: "إجازة",
 };
+
+const UNAVAILABILITY_LEAVE_BG = "#ede9fe";
+const UNAVAILABILITY_LEAVE_BORDER = "#a78bfa";
+const UNAVAILABILITY_LEAVE_TEXT = "#3b0764";
 
 function ensureExplicitTaskTypes(out: any) {
   const assigns: any[] = Array.isArray(out?.assignments) ? out.assignments : [];
   for (const a of assigns) {
-    const t = String(a?.taskType || "").trim();
+    const t = normalizeStoredTaskTypeGlobal(a?.taskType || a?.role || a?.type || a?.taskTypeLabelAr || "");
     const safeType = t || "RESERVE";
     a.taskType = safeType;
     a.taskTypeLabelAr = TASK_TYPE_LABEL_AR[safeType] || "غير محدد";
@@ -652,6 +767,513 @@ function workDateISO(dateISO: string) {
   const d = String(dateISO || "").trim();
   if (!d) return d;
   return isFriOrSat(d) ? shiftWeekendToSunday(d) : d;
+}
+
+
+/* ============================================================
+   ✅ ربط صفحة غياب الكادر التعليمي مع محرك التوزيع
+   ✅ أي اسم موجود في Unavailability يمنع من أي تكليف في نفس التاريخ + الفترة
+   ✅ يدعم: الفترة الأولى / الفترة الثانية / كامل اليوم
+   ✅ يدعم السجلات القديمة التي تحتوي dateFromISO/dateToISO
+============================================================ */
+function normalizeUnavailabilityDateISO(value: any) {
+  const text = String(value ?? "").trim();
+  const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+
+  const slash = text.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
+  if (slash) {
+    const day = Number(slash[1]);
+    const month = Number(slash[2]);
+    const year = Number(slash[3]);
+    if (year > 1900 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+  }
+
+  return "";
+}
+
+function unavailabilityRuleMatchesDate(rule: any, targetDateISO: string) {
+  const target = workDateISO(normalizeUnavailabilityDateISO(targetDateISO));
+  if (!target) return false;
+
+  const directDates = [rule?.dateISO, rule?.date]
+    .map((value) => workDateISO(normalizeUnavailabilityDateISO(value)))
+    .filter(Boolean);
+  if (directDates.includes(target)) return true;
+
+  const from = workDateISO(normalizeUnavailabilityDateISO(rule?.dateFromISO || rule?.fromDateISO || rule?.dateFrom));
+  const to = workDateISO(normalizeUnavailabilityDateISO(rule?.dateToISO || rule?.toDateISO || rule?.dateTo));
+  if (from && to && target >= from && target <= to) return true;
+
+  return false;
+}
+
+function unavailabilityRuleMatchesPeriod(rule: any, targetPeriod: "AM" | "PM") {
+  const raw = String(rule?.period ?? rule?.periodCode ?? rule?.shift ?? rule?.periodLabel ?? rule?.periodName ?? "").trim();
+  const lower = raw.toLowerCase();
+  if (
+    rule?.fullDay ||
+    rule?.isFullDay ||
+    raw === "FULL_DAY" ||
+    !raw ||
+    lower.includes("full") ||
+    lower.includes("all") ||
+    raw.includes("كامل") ||
+    raw.includes("كل")
+  ) return true;
+  return periodToAMPM(raw) === targetPeriod;
+}
+
+function normalizeTeacherNameForUnavailability(value: any) {
+  return String(value ?? "")
+    .normalize("NFKC")
+    .replace(/[ً-ٰٟ]/g, "")
+    .replace(/[إأآٱ]/g, "ا")
+    .replace(/ى/g, "ي")
+    .replace(/ؤ/g, "و")
+    .replace(/ئ/g, "ي")
+    .replace(/ة/g, "ه")
+    .replace(/ـ/g, "")
+    .replace(/[^؀-ۿA-Za-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function getTeacherNameFromUnavailabilityRule(rule: any) {
+  const nestedTeacher = typeof rule?.teacher === "object" && rule?.teacher ? rule.teacher : null;
+  return String(
+    rule?.teacherName ??
+      rule?.teacherFullName ??
+      rule?.fullName ??
+      rule?.staffName ??
+      rule?.name ??
+      nestedTeacher?.fullName ??
+      nestedTeacher?.name ??
+      ""
+  ).trim();
+}
+
+function unavailabilityRuleMatchesTeacher(rule: any, teacherId: string, teacherName?: string) {
+  const tid = String(teacherId || "").trim();
+  const ruleTeacherId = String(
+    rule?.teacherId ??
+      rule?.idTeacher ??
+      rule?.staffId ??
+      rule?.employeeId ??
+      rule?.teacher?.id ??
+      ""
+  ).trim();
+
+  if (tid && ruleTeacherId && ruleTeacherId === tid) return true;
+
+  const targetName = normalizeTeacherNameForUnavailability(teacherName);
+  const ruleName = normalizeTeacherNameForUnavailability(getTeacherNameFromUnavailabilityRule(rule));
+  return !!targetName && !!ruleName && targetName === ruleName;
+}
+
+function isLikelyUnavailabilityRule(rule: any) {
+  if (!rule || typeof rule !== "object") return false;
+  const hasTeacher = !!(
+    rule.teacherId ||
+    rule.idTeacher ||
+    rule.staffId ||
+    rule.teacherName ||
+    rule.teacherFullName ||
+    rule.fullName ||
+    rule.staffName ||
+    rule.name ||
+    rule.teacher?.id ||
+    rule.teacher?.name ||
+    rule.teacher?.fullName
+  );
+  const hasDate = !!(rule.dateISO || rule.date || rule.dateFromISO || rule.fromDateISO || rule.dateFrom);
+  return hasTeacher && hasDate;
+}
+
+function extractUnavailabilityRulesDeep(value: any, depth = 0): any[] {
+  if (!value || depth > 5) return [];
+  if (Array.isArray(value)) {
+    const direct = value.filter(isLikelyUnavailabilityRule);
+    if (direct.length) return direct;
+    return value.flatMap((item) => extractUnavailabilityRulesDeep(item, depth + 1));
+  }
+  if (typeof value === "object") {
+    if (isLikelyUnavailabilityRule(value)) return [value];
+    const out: any[] = [];
+    [
+      "rules",
+      "rows",
+      "data",
+      "items",
+      "records",
+      "list",
+      "unavailability",
+      "unavailabilityRules",
+      "teacherUnavailability",
+    ].forEach((key) => {
+      if (key in value) out.push(...extractUnavailabilityRulesDeep(value[key], depth + 1));
+    });
+    return out;
+  }
+  return [];
+}
+
+function dedupeUnavailabilityRulesForDistribution(rules: any[]) {
+  const out: any[] = [];
+  const seen = new Set<string>();
+  for (const rule of Array.isArray(rules) ? rules : []) {
+    if (!isLikelyUnavailabilityRule(rule)) continue;
+    const key = [
+      String(rule?.id || "").trim(),
+      String(rule?.teacherId ?? rule?.idTeacher ?? rule?.staffId ?? rule?.teacher?.id ?? "").trim(),
+      normalizeTeacherNameForUnavailability(getTeacherNameFromUnavailabilityRule(rule)),
+      normalizeUnavailabilityDateISO(rule?.dateISO || rule?.date || rule?.dateFromISO || rule?.dateFrom),
+      String(rule?.period ?? rule?.periodCode ?? rule?.shift ?? rule?.periodLabel ?? rule?.periodName ?? "").trim(),
+    ].join("__");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(rule);
+  }
+  return out;
+}
+
+function loadUnavailabilityForDistribution(tenantId?: string) {
+  const rows: any[] = [];
+
+  try {
+    rows.push(...extractUnavailabilityRulesDeep(loadUnavailability(String(tenantId || "").trim() || undefined)));
+  } catch {}
+
+  try {
+    rows.push(...extractUnavailabilityRulesDeep(loadUnavailability(undefined)));
+  } catch {}
+
+  try {
+    if (typeof window !== "undefined" && window.localStorage) {
+      for (let i = 0; i < window.localStorage.length; i++) {
+        const key = String(window.localStorage.key(i) || "");
+        if (!/(unavail|availability|غياب|عدم)/i.test(key)) continue;
+        const raw = window.localStorage.getItem(key);
+        if (!raw) continue;
+        try {
+          rows.push(...extractUnavailabilityRulesDeep(JSON.parse(raw)));
+        } catch {}
+      }
+    }
+  } catch {}
+
+  return dedupeUnavailabilityRulesForDistribution(rows);
+}
+
+/* ============================================================
+   ✅ فهرسة سريعة لأعذار الغياب
+   الهدف: منع بطء زر تشغيل الخوارزمية بسبب فحص كل الأعذار مع كل محاولة توزيع.
+============================================================ */
+const UNAVAILABILITY_RULES_PERIOD_CACHE = new WeakMap<any[], Map<string, Set<string>>>();
+
+function getUnavailabilityTeacherKeys(rule: any) {
+  const keys: string[] = [];
+  const ids = [rule?.teacherId, rule?.idTeacher, rule?.staffId, rule?.employeeId, rule?.teacher?.id]
+    .map((value) => String(value ?? "").trim())
+    .filter(Boolean);
+  ids.forEach((id) => keys.push(`id:${id}`));
+
+  const name = normalizeTeacherNameForUnavailability(getTeacherNameFromUnavailabilityRule(rule));
+  if (name) keys.push(`name:${name}`);
+
+  return Array.from(new Set(keys));
+}
+
+function getUnavailabilityRuleDates(rule: any) {
+  const directDates = [rule?.dateISO, rule?.date]
+    .map((value) => workDateISO(normalizeUnavailabilityDateISO(value)))
+    .filter(Boolean);
+  if (directDates.length) return Array.from(new Set(directDates));
+
+  const from = workDateISO(normalizeUnavailabilityDateISO(rule?.dateFromISO || rule?.fromDateISO || rule?.dateFrom));
+  const to = workDateISO(normalizeUnavailabilityDateISO(rule?.dateToISO || rule?.toDateISO || rule?.dateTo));
+  if (!from || !to || to < from) return [];
+
+  const out: string[] = [];
+  let cursor = from;
+  while (cursor && cursor <= to && out.length < 140) {
+    const day = workDateISO(cursor);
+    if (day && !out.includes(day)) out.push(day);
+    cursor = addDaysISO(cursor, 1);
+  }
+  return out;
+}
+
+function getUnavailabilityRulePeriods(rule: any): ("AM" | "PM")[] {
+  const raw = String(rule?.period ?? rule?.periodCode ?? rule?.shift ?? rule?.periodLabel ?? rule?.periodName ?? "").trim();
+  const lower = raw.toLowerCase();
+  if (
+    rule?.fullDay ||
+    rule?.isFullDay ||
+    raw === "FULL_DAY" ||
+    !raw ||
+    lower.includes("full") ||
+    lower.includes("all") ||
+    raw.includes("كامل") ||
+    raw.includes("كل")
+  ) return ["AM", "PM"];
+  return [periodToAMPM(raw)];
+}
+
+function buildUnavailabilityPeriodCache(rules: any[]) {
+  const cached = UNAVAILABILITY_RULES_PERIOD_CACHE.get(rules);
+  if (cached) return cached;
+
+  const map = new Map<string, Set<string>>();
+  for (const rule of Array.isArray(rules) ? rules : []) {
+    if (!isLikelyUnavailabilityRule(rule)) continue;
+    const teacherKeys = getUnavailabilityTeacherKeys(rule);
+    const dates = getUnavailabilityRuleDates(rule);
+    const periods = getUnavailabilityRulePeriods(rule);
+    if (!teacherKeys.length || !dates.length || !periods.length) continue;
+
+    for (const teacherKey of teacherKeys) {
+      if (!map.has(teacherKey)) map.set(teacherKey, new Set<string>());
+      const set = map.get(teacherKey)!;
+      for (const dateISO of dates) {
+        for (const period of periods) {
+          set.add(`${dateISO}__${period}`);
+        }
+      }
+    }
+  }
+
+  UNAVAILABILITY_RULES_PERIOD_CACHE.set(rules, map);
+  return map;
+}
+
+function isTeacherBlockedByUnavailabilityPeriodFast(
+  rules: any[],
+  teacherId: string,
+  dateISO: string,
+  period: "AM" | "PM",
+  teacherName?: string
+) {
+  if ((!String(teacherId || "").trim() && !String(teacherName || "").trim()) || !Array.isArray(rules) || !rules.length) return false;
+  const targetDate = workDateISO(normalizeUnavailabilityDateISO(dateISO));
+  if (!targetDate) return false;
+  const target = `${targetDate}__${periodToAMPM(String(period || "AM"))}`;
+  const map = buildUnavailabilityPeriodCache(rules);
+
+  const keys = [
+    String(teacherId || "").trim() ? `id:${String(teacherId || "").trim()}` : "",
+    normalizeTeacherNameForUnavailability(teacherName) ? `name:${normalizeTeacherNameForUnavailability(teacherName)}` : "",
+  ].filter(Boolean);
+
+  return keys.some((key) => map.get(key)?.has(target));
+}
+
+function isTeacherBlockedByUnavailabilityPeriod(
+  rules: any[],
+  teacherId: string,
+  dateISO: string,
+  period: "AM" | "PM",
+  teacherName?: string
+) {
+  return isTeacherBlockedByUnavailabilityPeriodFast(rules, teacherId, dateISO, period, teacherName);
+}
+
+function isTeacherBlockedByUnavailabilityFullDay(rules: any[], teacherId: string, dateISO: string, teacherName?: string) {
+  return (
+    isTeacherBlockedByUnavailabilityPeriod(rules, teacherId, dateISO, "AM", teacherName) ||
+    isTeacherBlockedByUnavailabilityPeriod(rules, teacherId, dateISO, "PM", teacherName)
+  );
+}
+
+function getAssignmentPeriodsForUnavailability(assignment: any, taskType: string): ("AM" | "PM")[] {
+  const covers = Array.isArray(assignment?.coversPeriods)
+    ? assignment.coversPeriods.map((p: any) => periodToAMPM(String(p || "")))
+    : [];
+  if (covers.length) return Array.from(new Set(covers));
+  if (assignment?.fullDay || taskType === "REVIEW_FREE" || taskType === "CORRECTION_FREE") return ["AM", "PM"];
+  return [periodToAMPM(String(assignment?.period || "AM"))];
+}
+
+function removeUnavailableAssignmentsFromRun(out: any, tenantId: string, teachers: any[], rulesOverride?: any[]) {
+  const safeOut = ensureExplicitTaskTypes(out || {});
+  const assignments = Array.isArray(safeOut?.assignments) ? safeOut.assignments : [];
+  if (!assignments.length) return safeOut;
+
+  const rules = Array.isArray(rulesOverride) ? rulesOverride : loadUnavailabilityForDistribution(tenantId);
+  if (!rules.length) return safeOut;
+
+  const teacherNameMap = new Map<string, string>();
+  for (const teacher of Array.isArray(teachers) ? teachers : []) {
+    const id = String(teacher?.id || "").trim();
+    if (!id) continue;
+    teacherNameMap.set(id, String(teacher?.fullName || teacher?.name || teacher?.employeeNo || id).trim());
+  }
+
+  const filtered = assignments.filter((assignment: any) => {
+    if (isLeaveAssignment(assignment)) return true;
+    const teacherId = String(assignment?.teacherId || "").trim();
+    const teacherName = String(assignment?.teacherName || teacherNameMap.get(teacherId) || "").trim();
+    const dateISO = workDateISO(String(assignment?.dateISO || assignment?.date || "").trim());
+    const taskType = normalizeStoredTaskTypeGlobal(assignment?.taskType || assignment?.role || assignment?.type || "");
+    if (!dateISO || (!teacherId && !teacherName)) return true;
+
+    return !getAssignmentPeriodsForUnavailability(assignment, taskType).some((coveredPeriod) =>
+      isTeacherBlockedByUnavailabilityPeriod(rules, teacherId, dateISO, coveredPeriod, teacherName)
+    );
+  });
+
+  if (filtered.length !== assignments.length) {
+    const removed = assignments.length - filtered.length;
+    safeOut.assignments = filtered;
+    safeOut.debug = {
+      ...(safeOut.debug || {}),
+      unavailabilityEnforced: true,
+      unavailableAssignmentsRemoved: removed,
+    };
+  }
+
+  return safeOut;
+}
+
+function buildTeacherLookupForUnavailabilityLeave(teachers: any[]) {
+  const byId = new Map<string, any>();
+  const byName = new Map<string, any>();
+  for (const teacher of Array.isArray(teachers) ? teachers : []) {
+    const id = String(teacher?.id || "").trim();
+    const name = String(teacher?.fullName || teacher?.name || teacher?.employeeNo || id || "").trim();
+    if (id) byId.set(id, teacher);
+    const normalizedName = normalizeTeacherNameForUnavailability(name);
+    if (normalizedName) byName.set(normalizedName, teacher);
+  }
+  return { byId, byName };
+}
+
+function buildUnavailabilityLeaveAssignments(rules: any[], teachers: any[]) {
+  const out: any[] = [];
+  const seen = new Set<string>();
+  const lookup = buildTeacherLookupForUnavailabilityLeave(teachers);
+
+  for (const rule of Array.isArray(rules) ? rules : []) {
+    if (!isLikelyUnavailabilityRule(rule)) continue;
+    const rawTeacherId = String(rule?.teacherId ?? rule?.idTeacher ?? rule?.staffId ?? rule?.employeeId ?? rule?.teacher?.id ?? "").trim();
+    const normalizedRuleName = normalizeTeacherNameForUnavailability(getTeacherNameFromUnavailabilityRule(rule));
+    const teacher = (rawTeacherId && lookup.byId.get(rawTeacherId)) || (normalizedRuleName && lookup.byName.get(normalizedRuleName)) || null;
+    const teacherId = String(teacher?.id || rawTeacherId || "").trim();
+    const teacherName = String(
+      teacher?.fullName || teacher?.name || teacher?.employeeNo || getTeacherNameFromUnavailabilityRule(rule) || teacherId || ""
+    ).trim();
+    if (!teacherId && !teacherName) continue;
+
+    const dates = getUnavailabilityRuleDates(rule);
+    const periods = getUnavailabilityRulePeriods(rule);
+    for (const dateISO of dates) {
+      for (const period of periods) {
+        const key = `${teacherId || normalizeTeacherNameForUnavailability(teacherName)}__${dateISO}__${period}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push({
+          id: `leave-${key}`,
+          __uid: `leave-${key}`,
+          teacherId,
+          teacherName,
+          taskType: "LEAVE",
+          role: "LEAVE",
+          type: "LEAVE",
+          taskTypeLabelAr: "إجازة",
+          taskTypeLabelEn: "Leave",
+          subject: "إجازة",
+          examSubject: "إجازة",
+          dateISO,
+          date: dateISO,
+          period,
+          periodLabelAr: periodLabelAr(period),
+          source: "UNAVAILABILITY",
+          reason: String(rule?.reason || "إجازة").trim() || "إجازة",
+          locked: true,
+          readOnly: true,
+          nonEditable: true,
+          lockedByUnavailability: true,
+          preventEdit: true,
+          preventMove: true,
+          preventDelete: true,
+          cellText: "إجازة",
+          displayText: "إجازة",
+          cellBackground: UNAVAILABILITY_LEAVE_BG,
+          backgroundColor: UNAVAILABILITY_LEAVE_BG,
+          color: UNAVAILABILITY_LEAVE_TEXT,
+          borderColor: UNAVAILABILITY_LEAVE_BORDER,
+          rowClassName: "task-distribution-leave-row",
+          cellClassName: "task-distribution-leave-cell",
+          style: {
+            background: UNAVAILABILITY_LEAVE_BG,
+            backgroundColor: UNAVAILABILITY_LEAVE_BG,
+            color: UNAVAILABILITY_LEAVE_TEXT,
+            borderColor: UNAVAILABILITY_LEAVE_BORDER,
+            fontWeight: 950,
+          },
+          meta: {
+            source: "Unavailability.tsx",
+            lockedByUnavailability: true,
+            originalRuleId: String(rule?.id || "").trim() || undefined,
+          },
+        });
+      }
+    }
+  }
+
+  return out;
+}
+
+function addUnavailabilityLeaveAssignmentsToRun(out: any, tenantId: string, teachers: any[], rulesOverride?: any[]) {
+  const safeOut = ensureExplicitTaskTypes(out || {});
+  const assignments = Array.isArray(safeOut?.assignments) ? safeOut.assignments : [];
+  const rules = Array.isArray(rulesOverride) ? rulesOverride : loadUnavailabilityForDistribution(tenantId);
+  if (!rules.length) return safeOut;
+
+  const leaveAssignments = buildUnavailabilityLeaveAssignments(rules, teachers);
+  if (!leaveAssignments.length) return safeOut;
+
+  const existingLeaveKeys = new Set(
+    assignments
+      .filter((assignment: any) => isLeaveAssignment(assignment))
+      .map((assignment: any) => {
+        const teacherId = String(assignment?.teacherId || "").trim() || normalizeTeacherNameForUnavailability(assignment?.teacherName);
+        const dateISO = workDateISO(String(assignment?.dateISO || assignment?.date || "").trim());
+        const period = periodToAMPM(String(assignment?.period || "AM"));
+        return `${teacherId}__${dateISO}__${period}`;
+      })
+  );
+
+  const newLeaveAssignments = leaveAssignments.filter((assignment: any) => {
+    const teacherId = String(assignment?.teacherId || "").trim() || normalizeTeacherNameForUnavailability(assignment?.teacherName);
+    const key = `${teacherId}__${assignment.dateISO}__${assignment.period}`;
+    if (existingLeaveKeys.has(key)) return false;
+    existingLeaveKeys.add(key);
+    return true;
+  });
+
+  if (!newLeaveAssignments.length) return safeOut;
+
+  safeOut.assignments = [...assignments, ...newLeaveAssignments];
+  safeOut.debug = {
+    ...(safeOut.debug || {}),
+    unavailabilityLeaveCells: (Number(safeOut.debug?.unavailabilityLeaveCells || 0) || 0) + newLeaveAssignments.length,
+  };
+  return safeOut;
+}
+
+function applyUnavailabilityProtectionToRun(out: any, tenantId: string, teachers: any[], rulesOverride?: any[]) {
+  // ✅ ترتيب الحماية مهم:
+  // 1) نحذف أي تكليف يتعارض مع فاضي للتصحيح
+  // 2) نحذف أي تكليف يتعارض مع الغياب
+  // 3) نضيف خلايا الإجازة
+  // 4) نعيد حماية فاضي للتصحيح مرة أخيرة بعد الإضافة
+  const correctionCleaned = applyCorrectionFreeProtectionToRun(out);
+  const cleaned = removeUnavailableAssignmentsFromRun(correctionCleaned, tenantId, teachers, rulesOverride);
+  return applyCorrectionFreeProtectionToRun(addUnavailabilityLeaveAssignmentsToRun(cleaned, tenantId, teachers, rulesOverride));
 }
 
 /* ============================================================
@@ -877,7 +1499,10 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
   const { teachers, exams, constraints, runSeed } = params;
 
   // ✅ تحميل عدم التوفر وبناء Index سريع للبحث
-  const unavailIndex = buildUnavailabilityIndex(loadUnavailability(String(constraints?.__tenantId || "").trim() || undefined));
+  const unavailabilityRulesForRun = Array.isArray(constraints?.__unavailabilityRules)
+    ? constraints.__unavailabilityRules
+    : loadUnavailabilityForDistribution(String(constraints?.__tenantId || "").trim() || undefined);
+  const unavailIndex = buildUnavailabilityIndex(unavailabilityRulesForRun);
 
   // ✅ حتى لا تكون خيارات الواجهة شكلية:
   const enableCorrectionFree = !!constraints?.freeAllSubjectTeachersForCorrection;
@@ -961,6 +1586,9 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
 
       const key = `${teacherId}__${dateISO}`;
       if (reviewFreeApplied.has(key)) continue;
+
+      // ✅ إذا كان المعلم له عذر في أي فترة من نفس اليوم، لا نعطيه فاضي للمراجعة لأنه تكليف يوم كامل.
+      if (isTeacherBlockedByUnavailabilityFullDay(unavailabilityRulesForRun, teacherId, dateISO, teacherNameMap.get(teacherId) || "")) continue;
 
       if ((quotaTotals.get(teacherId) || 0) >= maxTasks) continue;
 
@@ -1075,6 +1703,8 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
               (teacherGroups_5_12.get(teacherId) || new Set<string>()).has(getCorrectionGroupKey_5_12(subject));
 
         if (!ok) continue;
+        // ✅ إذا كان لديه عذر في يوم التصحيح، لا نعطيه فاضي للتصحيح ولا نحسبه كمتاح.
+        if (isTeacherBlockedByUnavailabilityFullDay(unavailabilityRulesForRun, teacherId, correctionDateISO, teacherNameMap.get(teacherId) || "")) continue;
 
         if (!teacherCorrectionDays.has(teacherId)) teacherCorrectionDays.set(teacherId, new Set<string>());
         teacherCorrectionDays.get(teacherId)!.add(correctionDateISO);
@@ -1103,19 +1733,21 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
   ) {
     if (!teacherId) return { ok: false, reason: "NO_TEACHERS" as const };
 
-    // ✅ عدم التوفر (يمنع حسب اليوم+الفترة+نوع المهمة)
+    // ✅ عدم التوفر من صفحة غياب الكادر التعليمي
+    // أي عذر مسجل لنفس التاريخ + الفترة يمنع أي تكليف للمعلم في تلك الفترة.
     if (
-      (taskType === "INVIGILATION" ||
+      isTeacherBlockedByUnavailabilityPeriod(unavailabilityRulesForRun, teacherId, dateISO, period, teacherNameMap.get(teacherId) || "") ||
+      ((taskType === "INVIGILATION" ||
         taskType === "RESERVE" ||
         taskType === "REVIEW_FREE" ||
         taskType === "CORRECTION_FREE") &&
-      isTeacherUnavailable({
-        teacherId,
-        dateISO,
-        period,
-        taskType: taskType as any,
-        index: unavailIndex,
-      })
+        isTeacherUnavailable({
+          teacherId,
+          dateISO,
+          period,
+          taskType: taskType as any,
+          index: unavailIndex,
+        }))
     ) {
       return { ok: false, reason: "UNAVAILABLE" as const };
     }
@@ -2086,6 +2718,8 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
   function isTeacherFreeFullDay(teacherId: string, dateISO: string) {
     const key = `${teacherId}__${dateISO}`;
     if (reviewFreeApplied.has(key)) return false;
+    // ✅ لا يتم إعطاء فاضي للتصحيح إذا كان للمعلم عذر في الفترة الأولى أو الثانية من نفس اليوم.
+    if (isTeacherBlockedByUnavailabilityFullDay(unavailabilityRulesForRun, teacherId, dateISO, teacherNameMap.get(teacherId) || "")) return false;
     const set = occupiedSlots.get(teacherId) || new Set<string>();
     return !set.has(slotKey(dateISO, "AM")) && !set.has(slotKey(dateISO, "PM"));
   }
@@ -2416,10 +3050,12 @@ export default function TaskDistributionRun() {
   const latestRunSummary = useMemo(() => {
     if (!runOut) return null;
     const assignments = Array.isArray(runOut?.assignments) ? runOut.assignments : [];
-    const countBy = (type: string) => assignments.filter((a: any) => String(a?.taskType || "") === type).length;
+    const activeAssignments = assignments.filter((a: any) => !isLeaveAssignment(a));
+    const countBy = (type: string) => activeAssignments.filter((a: any) => String(a?.taskType || "") === type).length;
     return {
       createdAtISO: String(runOut?.createdAtISO || ""),
-      totalAssignments: assignments.length,
+      totalAssignments: activeAssignments.length,
+      leave: assignments.length - activeAssignments.length,
       inv: countBy("INVIGILATION"),
       res: countBy("RESERVE"),
       rev: countBy("REVIEW_FREE"),
@@ -2431,7 +3067,7 @@ export default function TaskDistributionRun() {
   const readinessSnapshot = useMemo(() => {
     const latestTeachers = Array.isArray(teachers) ? teachers : [];
     const latestExams = Array.isArray(exams) ? exams : [];
-    const unavailabilityRules = loadUnavailability(tenantId);
+    const unavailabilityRules = loadUnavailabilityForDistribution(tenantId);
     const unavailabilityIndex = buildUnavailabilityIndex(unavailabilityRules);
     const masterAssignments = loadMasterTableAssignments();
 
@@ -2452,7 +3088,9 @@ export default function TaskDistributionRun() {
         const teacherId = String(teacher?.id || "").trim();
         if (!teacherId) continue;
         const s1 = String(teacherSubject1Map.get(teacherId) || "").trim();
-        if (s1 && subjectsSet.has(s1)) teachersWithReviewFree.add(`${teacherId}__${dateISO}`);
+        if (s1 && subjectsSet.has(s1) && !isTeacherBlockedByUnavailabilityFullDay(unavailabilityRules, teacherId, dateISO, String(teacher?.fullName || teacher?.name || teacher?.employeeNo || ""))) {
+          teachersWithReviewFree.add(`${teacherId}__${dateISO}`);
+        }
       }
     }
 
@@ -2507,6 +3145,7 @@ export default function TaskDistributionRun() {
               : (teacherGroups_5_12.get(teacherId) || new Set<string>()).has(getCorrectionGroupKey_5_12(subject));
 
           if (!ok) continue;
+          if (isTeacherBlockedByUnavailabilityFullDay(unavailabilityRules, teacherId, correctionDateISO, String(teacher?.fullName || teacher?.name || teacher?.employeeNo || ""))) continue;
           if (!teacherCorrectionDays.has(teacherId)) teacherCorrectionDays.set(teacherId, new Set<string>());
           teacherCorrectionDays.get(teacherId)!.add(correctionDateISO);
         }
@@ -2589,11 +3228,12 @@ export default function TaskDistributionRun() {
 
     function normalizeStoredTaskType(rawTaskType: any) {
       const raw = String(rawTaskType || "").trim().toUpperCase();
-      if (raw === "INVIGILATION" || raw === "RESERVE" || raw === "REVIEW_FREE" || raw === "CORRECTION_FREE") return raw;
+      if (raw === "INVIGILATION" || raw === "RESERVE" || raw === "REVIEW_FREE" || raw === "CORRECTION_FREE" || raw === "LEAVE" || raw === "UNAVAILABILITY_LEAVE") return raw === "UNAVAILABILITY_LEAVE" ? "LEAVE" : raw;
       if (raw.includes("مراقبة")) return "INVIGILATION";
       if (raw.includes("احتياط")) return "RESERVE";
       if (raw.includes("مراجعة")) return "REVIEW_FREE";
       if (raw.includes("تصحيح")) return "CORRECTION_FREE";
+      if (raw.includes("إجازة") || raw.includes("اجازة") || raw.includes("اجازه") || raw.includes("غياب") || raw.includes("leave")) return "LEAVE";
       return raw;
     }
 
@@ -2757,14 +3397,15 @@ export default function TaskDistributionRun() {
       if (!teacherId || !state.occupiedSlots.has(teacherId)) return false;
 
       if (
-        (taskType === "INVIGILATION" || taskType === "RESERVE" || taskType === "REVIEW_FREE" || taskType === "CORRECTION_FREE") &&
-        isTeacherUnavailable({
-          teacherId,
-          dateISO,
-          period,
-          taskType: taskType as any,
-          index: unavailabilityIndex,
-        })
+        isTeacherBlockedByUnavailabilityPeriod(unavailabilityRules, teacherId, dateISO, period, teacherNameMapLocal.get(teacherId) || "") ||
+        ((taskType === "INVIGILATION" || taskType === "RESERVE" || taskType === "REVIEW_FREE" || taskType === "CORRECTION_FREE") &&
+          isTeacherUnavailable({
+            teacherId,
+            dateISO,
+            period,
+            taskType: taskType as any,
+            index: unavailabilityIndex,
+          }))
       ) {
         return false;
       }
@@ -2923,6 +3564,7 @@ export default function TaskDistributionRun() {
     function reserveCanConvertToInvigilation(state: any, teacherId: string, dateISO: string, period: "AM" | "PM", subject: string, durationMinutes: number, existingAssignments: any[], invPerRoom: number) {
       if (!teacherId || !state.occupiedSlots.has(teacherId)) return false;
       if (
+        isTeacherBlockedByUnavailabilityPeriod(unavailabilityRules, teacherId, dateISO, period, teacherNameMapLocal.get(teacherId) || "") ||
         isTeacherUnavailable({
           teacherId,
           dateISO,
@@ -3005,6 +3647,7 @@ export default function TaskDistributionRun() {
       if (!teacherId || !state.occupiedSlots.has(teacherId)) return null;
 
       if (
+        isTeacherBlockedByUnavailabilityPeriod(unavailabilityRules, teacherId, dateISO, period, teacherNameMapLocal.get(teacherId) || "") ||
         isTeacherUnavailable({
           teacherId,
           dateISO,
@@ -3443,13 +4086,16 @@ export default function TaskDistributionRun() {
 
     const forecastRowsBase = slotBaseRows
       .map((row: any) => {
-        const unavailableCount = latestTeachers.filter((t: any) => isTeacherUnavailable({
-          teacherId: String(t?.id || "").trim(),
-          dateISO: row.dateISO,
-          period: row.period,
-          taskType: "INVIGILATION",
-          index: unavailabilityIndex,
-        })).length;
+        const unavailableCount = latestTeachers.filter((t: any) => {
+          const teacherId = String(t?.id || "").trim();
+          return isTeacherBlockedByUnavailabilityPeriod(unavailabilityRules, teacherId, row.dateISO, row.period, String(t?.fullName || t?.name || t?.employeeNo || "")) || isTeacherUnavailable({
+            teacherId,
+            dateISO: row.dateISO,
+            period: row.period,
+            taskType: "INVIGILATION",
+            index: unavailabilityIndex,
+          });
+        }).length;
 
         const reviewFreeEstimate = latestTeachers.filter((t: any) => teachersWithReviewFree.has(`${String(t?.id || "").trim()}__${row.dateISO}`)).length;
         const correctionFreeEstimate = latestTeachers.filter((t: any) => (teacherCorrectionDays.get(String(t?.id || "").trim()) || new Set<string>()).has(row.dateISO)).length;
@@ -3704,17 +4350,41 @@ export default function TaskDistributionRun() {
 
   async function run(customConstraints?: any) {
     setIsReadinessCleared(false);
+
+    // ✅ تسريع التشغيل: لا ننتظر المزامنة السحابية إذا كانت سجلات الغياب موجودة محليًا بالفعل.
+    // صفحة Unavailability.tsx تحفظ السجلات محليًا وفوريًا، لذلك نقرأها مباشرة ونشغّل الخوارزمية بسرعة.
+    let currentUnavailabilityRules = loadUnavailabilityForDistribution(tenantId);
+    if (!currentUnavailabilityRules.length) {
+      try {
+        await syncUnavailabilityFromTenant(tenantId);
+        currentUnavailabilityRules = loadUnavailabilityForDistribution(tenantId);
+        setUnavailabilityVersion((prev) => prev + 1);
+      } catch {}
+    } else {
+      void syncUnavailabilityFromTenant(tenantId)
+        .then(() => setUnavailabilityVersion((prev) => prev + 1))
+        .catch(() => {});
+    }
+
+    const effectiveConstraints = {
+      ...(customConstraints ? { ...constraints, ...customConstraints } : constraints),
+      __tenantId: tenantId,
+      __unavailabilityRules: currentUnavailabilityRules,
+    };
+
     const out = await executeDistribution({
       teachers: teachers as any[],
       exams: exams as any[],
-      constraints: {
-        ...(customConstraints ? { ...constraints, ...customConstraints } : constraints),
-        __tenantId: tenantId,
-      },
+      constraints: effectiveConstraints,
       validate,
       onValidationErrors: setErrors,
       engine: runTaskDistributionLocal,
-      normalize: ensureExplicitTaskTypes,
+      normalize: (candidate) => applyUnavailabilityProtectionToRun(
+        applyCorrectionFreeProtectionToRun(ensureExplicitTaskTypes(candidate)),
+        tenantId,
+        teachers as any[],
+        currentUnavailabilityRules
+      ),
       rebalanceReserve: (candidate, teachersArg, constraintsArg) =>
         rebalanceReserveToCoverInvigilations(candidate, teachersArg, constraintsArg),
       rebalanceInvigilations: (candidate, teachersArg, constraintsArg) =>
@@ -3725,8 +4395,12 @@ export default function TaskDistributionRun() {
 
     if (!out) return;
 
-    persistDistributionState(tenantId, out);
-    setRunOut(out);
+    const safeOut = applyCorrectionFreeProtectionToRun(
+      applyUnavailabilityProtectionToRun(out, tenantId, teachers as any[], currentUnavailabilityRules)
+    );
+
+    persistDistributionState(tenantId, safeOut);
+    setRunOut(safeOut);
     setMasterTableVersion((prev) => prev + 1);
   }
 
@@ -3841,6 +4515,18 @@ export default function TaskDistributionRun() {
     let subject = preferredSubject || String((selectedExam as any)?.subject || row?.subjects?.[0] || "").trim();
     let durationMinutes = Number((selectedExam as any)?.durationMinutes ?? 0) || 0;
 
+    // ✅ منع الإضافة اليدوية أو النقل من جدول المعالجة إذا كان الاسم موجودًا في صفحة غياب الكادر التعليمي لنفس التاريخ + الفترة.
+    const latestUnavailabilityRulesForManual = loadUnavailabilityForDistribution(tenantId);
+    if (isTeacherBlockedByUnavailabilityPeriod(latestUnavailabilityRulesForManual, teacherId, dateISO, period, teacherName)) {
+      return {
+        ok: false,
+        message: tr(
+          `المعلم ${teacherName} مسجل له عذر في صفحة غياب الكادر التعليمي بتاريخ ${dateISO} ${periodLabelAr(period)}، لذلك لا يمكن إعطاؤه أي تكليف في هذه الفترة.`,
+          `Teacher ${teacherName} has an unavailability record on ${dateISO} ${periodLabelEn(period)}, so no task can be assigned in this period.`
+        ),
+      };
+    }
+
     if (preferredTaskType === "INVIGILATION") {
       const roomsCount = Math.max(1, Number((selectedExam as any)?.roomsCount || 1) || 1);
       const invPerRoom = Math.max(1, Number(guessInvigilatorsPerRoom(selectedExam || { subject, roomsCount }, constraints) || 1));
@@ -3912,8 +4598,9 @@ export default function TaskDistributionRun() {
         assignments: nextAssignments,
         warnings: [...(Array.isArray(currentRun?.warnings) ? currentRun.warnings : []), note],
       });
-      persistDistributionState(tenantId, nextRun as any);
-      setRunOut(nextRun);
+      const protectedNextRun = applyCorrectionFreeProtectionToRun(nextRun);
+      persistDistributionState(tenantId, protectedNextRun as any);
+      setRunOut(protectedNextRun);
       setMasterTableVersion((prev) => prev + 1);
       setIsReadinessCleared(false);
       setManualSuggestionHistory((prev) => {
@@ -3974,8 +4661,9 @@ export default function TaskDistributionRun() {
         assignments: nextAssignments,
         warnings: [...(Array.isArray(currentRun?.warnings) ? currentRun.warnings : []), note],
       });
-      persistDistributionState(tenantId, nextRun as any);
-      setRunOut(nextRun);
+      const protectedNextRun = applyCorrectionFreeProtectionToRun(nextRun);
+      persistDistributionState(tenantId, protectedNextRun as any);
+      setRunOut(protectedNextRun);
       setMasterTableVersion((prev) => prev + 1);
       setIsReadinessCleared(false);
       setManualSuggestionHistory((prev) => {
@@ -4039,8 +4727,9 @@ export default function TaskDistributionRun() {
       assignments: [...currentAssignments, newAssignment],
       warnings: [...(Array.isArray(currentRun?.warnings) ? currentRun.warnings : []), note],
     });
-    persistDistributionState(tenantId, nextRun as any);
-    setRunOut(nextRun);
+    const protectedNextRun = applyCorrectionFreeProtectionToRun(nextRun);
+    persistDistributionState(tenantId, protectedNextRun as any);
+    setRunOut(protectedNextRun);
     setMasterTableVersion((prev) => prev + 1);
     setIsReadinessCleared(false);
     setManualSuggestionHistory((prev) => {
@@ -4110,8 +4799,9 @@ export default function TaskDistributionRun() {
       assignments: nextAssignments,
       warnings: [...(Array.isArray(currentRun?.warnings) ? currentRun.warnings : []), note],
     });
-    persistDistributionState(tenantId, nextRun as any);
-    setRunOut(nextRun);
+    const protectedNextRun = applyCorrectionFreeProtectionToRun(nextRun);
+    persistDistributionState(tenantId, protectedNextRun as any);
+    setRunOut(protectedNextRun);
     setMasterTableVersion((prev) => prev + 1);
     setIsReadinessCleared(false);
     setManualSuggestionHistory((prev) => prev.filter((item) => String(item?.id || "") !== String(historyId || "")));
@@ -4791,6 +5481,17 @@ const GOLD_SUB = "rgba(0,0,0,0.82)";
 
         .task-run-black-text-scope [style*="background: rgba(255,255,255,.06)"] {
           background: linear-gradient(180deg,#ffffff,#fff7d6) !important;
+        }
+
+        /* ✅ خلية الإجازة القادمة من صفحة غياب الكادر التعليمي */
+        .task-run-black-text-scope .task-distribution-leave-cell,
+        .task-run-black-text-scope .task-distribution-leave-row,
+        .task-run-black-text-scope [data-task-type="LEAVE"],
+        .task-run-black-text-scope [data-source="UNAVAILABILITY"] {
+          background: linear-gradient(180deg,#f5f3ff,#ede9fe) !important;
+          border-color: #a78bfa !important;
+          color: #3b0764 !important;
+          font-weight: 950 !important;
         }
 
 

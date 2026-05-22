@@ -8,13 +8,16 @@
 // ✅ تحديث تلقائي لصفحة التقرير عند تغيّر: Run + master/all/results + الشعار + بيانات المدرسة + الامتحانات + الكادر التعليمي
 // ✅ NEW: طباعة الكل تتكيّف تلقائيًا مع A4 بحيث لا ينقسم تقرير المعلم الواحد إلى صفحتين
 // ✅ FIX: الكشوف اليومية الطويلة لا تنكسر بين صفحتين؛ كل كشف يومي يتم ضغطه داخل صفحة A4 واحدة
-// عبر: RUN_UPDATED_EVENT + focus + storage + interval (لنفس التبويب)
+// ✅ PERFORMANCE: إزالة التحديث السحابي المتكرر كل 2.5 ثانية حتى لا تتجمد صفحة التقارير
+// ✅ FIX: الفارغ للمراجعة يظهر في كشف مادته فقط، وليس في كل كشوف نفس اليوم
+// عبر: RUN_UPDATED_EVENT + focus + storage + تحديث دوري خفيف جدًا بدون ضغط على Firestore
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { loadTenantArray, writeTenantAudit } from "../services/tenantData";
 import { loadRun, RUN_UPDATED_EVENT, taskDistributionKey } from "../utils/taskDistributionStorage";
+import { loadUnavailability, syncUnavailabilityFromTenant, UNAVAIL_UPDATED_EVENT } from "../utils/taskDistributionUnavailability";
 import type { TaskType } from "../contracts/taskDistributionContract";
 
 /** -------------------------------------------
@@ -25,6 +28,17 @@ const LOGO_KEY = "exam-manager:app-logo";
 const DEFAULT_LOGO_URL = "https://i.imgur.com/vdDhSMh.png";
 const EXAMS_SUB = "exams";
 const TEACHERS_SUB = "teachers";
+
+/** ✅ نوع بيانات الامتحان المستخدم خارج وداخل component حتى لا يظهر خطأ ExamMeta */
+type ExamMeta = {
+  id: string;
+  subject: string;
+  dateISO: string;
+  period: string;
+  periodKey: string;
+  dayLabel: string;
+  time: string;
+};
 
 /** -------------------------------------------
  * Helpers: safe localStorage JSON read
@@ -149,6 +163,38 @@ function datePeriodKey(dateISO: string, period: string) {
   return `${normalizeISODate(dateISO || "") || "no-date"}|${normalizePeriodKey(period || "") || "no-period"}`;
 }
 
+/** ✅ مفتاح موحد للتاريخ + المادة حتى يظهر الفارغ للمراجعة في تقرير مادته فقط */
+function normalizeSubjectKeyForPrint(subject: any) {
+  return String(subject || "")
+    .trim()
+    .replace(/[إأآ]/g, "ا")
+    .replace(/ى/g, "ي")
+    .replace(/ة/g, "ه")
+    .replace(/[\u064B-\u065F]/g, "")
+    .replace(/[\.\s_\-:،/]+/g, " ")
+    .toLowerCase()
+    .trim();
+}
+
+function dateSubjectKey(dateISO: string, subject: any) {
+  return `${normalizeISODate(dateISO || "") || "no-date"}|${normalizeSubjectKeyForPrint(subject) || "no-subject"}`;
+}
+
+/** ✅ استخراج مادة الفارغ للمراجعة من صف المهمة بدون الاعتماد على الفترة */
+function getReviewFreeSubjectForPrint(row: AnyAssignment, meta?: ExamMeta | null) {
+  return (
+    meta?.subject ||
+    row?.reviewSubject ||
+    row?.reviewFreeSubject ||
+    row?.subject1 ||
+    row?.teacherSubject ||
+    row?.teacherSubject1 ||
+    row?.mainSubject ||
+    getExamSubject(row) ||
+    ""
+  );
+}
+
 /** ✅ منع تكرار اسم الاحتياط إذا تكرر داخليًا في أكثر من مادة لنفس الفترة */
 function uniqueAssignmentsByTeacherName(rows: AnyAssignment[]) {
   const map = new Map<string, AnyAssignment>();
@@ -162,7 +208,8 @@ function uniqueAssignmentsByTeacherName(rows: AnyAssignment[]) {
 }
 
 function taskLabel(t: TaskType | string) {
-  switch (t) {
+  const task = normalizePrintTaskType(t);
+  switch (task) {
     case "INVIGILATION":
       return "مراقبة";
     case "RESERVE":
@@ -171,9 +218,65 @@ function taskLabel(t: TaskType | string) {
       return "فاضي للمراجعة";
     case "CORRECTION_FREE":
       return "فاضي للتصحيح";
+    case "LEAVE":
+      return "غياب";
     default:
-      return typeof t === "string" && t.trim() ? t : "فارغ";
+      return typeof t === "string" && String(t).trim() ? String(t) : "فارغ";
   }
+}
+
+/** ✅ توحيد نوع المهمة داخل صفحة الطباعة، حتى تظهر مهام الغياب القادمة من Unavailability.tsx */
+function normalizePrintTaskType(value: any): string {
+  const rawOriginal = String(value ?? "").trim();
+  const raw = rawOriginal.toUpperCase();
+  if (!raw) return "";
+
+  if (raw === "INVIGILATION" || raw === "RESERVE" || raw === "REVIEW_FREE" || raw === "CORRECTION_FREE") return raw;
+  if (raw === "LEAVE" || raw === "ABSENCE" || raw === "UNAVAILABILITY_LEAVE" || raw === "UNAVAILABILITY_ABSENCE" || raw === "UNAVAILABLE") return "LEAVE";
+
+  const ar = rawOriginal.replace(/[إأآ]/g, "ا").replace(/ة/g, "ه").toLowerCase();
+  if (ar.includes("اجازه") || ar.includes("غياب") || ar.includes("عدم توفر") || ar.includes("leave")) return "LEAVE";
+  if (ar.includes("مراقبه")) return "INVIGILATION";
+  if (ar.includes("احتياط")) return "RESERVE";
+  if (ar.includes("مراجعه")) return "REVIEW_FREE";
+  if (ar.includes("تصحيح")) return "CORRECTION_FREE";
+
+  return rawOriginal;
+}
+
+function isLeaveAssignmentForPrint(row: AnyAssignment): boolean {
+  if (!row) return false;
+  // ✅ مهم: بعض خلايا الغياب تأتي من الجدول الشامل بقيمة subject/cellText فقط،
+  // أو taskType فارغ. لذلك نستخدم || وليس ?? حتى لا يمنع الفراغ قراءة الحقول التالية.
+  const task = normalizePrintTaskType(
+    row?.taskType ||
+      row?.type ||
+      row?.role ||
+      row?.assignmentType ||
+      row?.dutyType ||
+      row?.taskTypeLabelAr ||
+      row?.displayText ||
+      row?.cellText ||
+      row?.subject ||
+      row?.examSubject ||
+      ""
+  );
+  return (
+    task === "LEAVE" ||
+    row?.source === "UNAVAILABILITY" ||
+    row?.lockedByUnavailability === true ||
+    row?.nonEditable === true && task === "LEAVE"
+  );
+}
+
+function arabicDayLabelFromISO(value: any): string {
+  const d = normalizeISODate(String(value || ""));
+  if (!d) return "";
+  const parts = d.split("-").map(Number);
+  if (parts.length !== 3 || parts.some((x) => !Number.isFinite(x))) return "";
+  const date = new Date(parts[0], parts[1] - 1, parts[2]);
+  const days = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
+  return days[date.getDay()] || "";
 }
 
 /** -------------------------------------------
@@ -207,11 +310,49 @@ type Teacher = {
 type AnyAssignment = any;
 
 function getTeacherName(a: AnyAssignment): string {
-  return a?.teacherName || a?.teacher?.name || a?.teacher || a?.name || a?.teacherLabel || "";
+  return (
+    a?.__printResolvedTeacherName ||
+    a?.teacherFullName ||
+    a?.fullTeacherName ||
+    a?.teacherNameFull ||
+    a?.teacherName ||
+    a?.teacher?.fullName ||
+    a?.teacher?.name ||
+    a?.teacher ||
+    a?.name ||
+    a?.teacherLabel ||
+    ""
+  );
+}
+
+function getAssignmentTeacherId(a: AnyAssignment): string {
+  return String(
+    a?.teacherId ??
+      a?.teacherID ??
+      a?.teacher_id ??
+      a?.teacher?.id ??
+      a?.teacher?.teacherId ??
+      a?.assignment?.teacherId ??
+      a?.assignment?.teacher?.id ??
+      ""
+  ).trim();
 }
 
 function getTaskType(a: AnyAssignment): TaskType | string {
-  return (a?.taskType || a?.type || a?.assignmentType || a?.dutyType || "INVIGILATION") as any;
+  if (isLeaveAssignmentForPrint(a)) return "LEAVE" as any;
+  return normalizePrintTaskType(
+    a?.taskType ||
+      a?.type ||
+      a?.role ||
+      a?.assignmentType ||
+      a?.dutyType ||
+      a?.taskTypeLabelAr ||
+      a?.displayText ||
+      a?.cellText ||
+      a?.subject ||
+      a?.examSubject ||
+      "INVIGILATION"
+  ) as any;
 }
 
 /** ✅ FIX: Strong committee/room number extraction */
@@ -315,6 +456,281 @@ function getExamTime(a: AnyAssignment): string {
 }
 function getAssignmentExamId(a: AnyAssignment): string {
   return String(a?.examId ?? a?.examID ?? a?.exam?.id ?? a?.slot?.examId ?? "").trim();
+}
+
+
+/** -------------------------------------------
+ * ✅ Unavailability / Absence helpers for Print
+ * حتى لو لم تُحفظ خلايا الغياب داخل Run، صفحة الطباعة تقرأ سجل Unavailability.tsx مباشرة
+ * وتبني كشف غياب مستقل بدون الاعتماد على جدول النتائج فقط.
+ * ------------------------------------------ */
+function printPad2(value: number) {
+  return String(value).padStart(2, "0");
+}
+
+function normalizePrintUnavailabilityDateISO(value: any) {
+  const text = String(value ?? "").trim();
+  const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+
+  const slash = text.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (slash) {
+    const day = Number(slash[1]);
+    const month = Number(slash[2]);
+    const year = Number(slash[3]);
+    if (year > 1900 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return `${year}-${printPad2(month)}-${printPad2(day)}`;
+    }
+  }
+
+  return normalizeISODate(text);
+}
+
+function addPrintDaysISO(isoDate: string, days: number) {
+  const normalized = normalizePrintUnavailabilityDateISO(isoDate);
+  if (!normalized) return "";
+  const [year, month, day] = normalized.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  date.setDate(date.getDate() + days);
+  return `${date.getFullYear()}-${printPad2(date.getMonth() + 1)}-${printPad2(date.getDate())}`;
+}
+
+function periodToPrintAMPM(value: any): "AM" | "PM" {
+  return isSecondPeriodValue(value) ? "PM" : "AM";
+}
+
+function printPeriodLabelAr(period: any) {
+  return periodToPrintAMPM(period) === "PM" ? "الفترة الثانية" : "الفترة الأولى";
+}
+
+function getTeacherNameFromPrintUnavailabilityRule(rule: any): string {
+  return String(
+    rule?.teacherName ??
+      rule?.fullName ??
+      rule?.teacherFullName ??
+      rule?.name ??
+      rule?.staffName ??
+      rule?.teacher?.fullName ??
+      rule?.teacher?.name ??
+      ""
+  ).trim();
+}
+
+function getTeacherIdFromPrintUnavailabilityRule(rule: any): string {
+  return String(
+    rule?.teacherId ?? rule?.teacherID ?? rule?.idTeacher ?? rule?.staffId ?? rule?.employeeId ?? rule?.teacher?.id ?? ""
+  ).trim();
+}
+
+function getPrintUnavailabilityRuleDates(rule: any): string[] {
+  const direct = [rule?.dateISO, rule?.date]
+    .map((value) => normalizePrintUnavailabilityDateISO(value))
+    .filter(Boolean);
+  if (direct.length) return Array.from(new Set(direct));
+
+  const from = normalizePrintUnavailabilityDateISO(rule?.dateFromISO || rule?.fromDateISO || rule?.dateFrom || rule?.from);
+  const to = normalizePrintUnavailabilityDateISO(rule?.dateToISO || rule?.toDateISO || rule?.dateTo || rule?.to || from);
+  if (!from || !to || to < from) return [];
+
+  const out: string[] = [];
+  let cursor = from;
+  while (cursor && cursor <= to && out.length < 140) {
+    out.push(cursor);
+    cursor = addPrintDaysISO(cursor, 1);
+  }
+  return out;
+}
+
+function getPrintUnavailabilityRulePeriods(rule: any): ("AM" | "PM")[] {
+  const raw = String(rule?.period ?? rule?.periodCode ?? rule?.shift ?? rule?.periodLabel ?? rule?.periodName ?? "").trim();
+  const lower = raw.toLowerCase();
+  if (
+    rule?.fullDay ||
+    rule?.isFullDay ||
+    raw === "FULL_DAY" ||
+    !raw ||
+    lower.includes("full") ||
+    lower.includes("all") ||
+    raw.includes("كامل") ||
+    raw.includes("كل")
+  ) {
+    return ["AM", "PM"];
+  }
+  return [periodToPrintAMPM(raw)];
+}
+
+function isLikelyPrintUnavailabilityRule(rule: any) {
+  if (!rule || typeof rule !== "object") return false;
+  const hasTeacher = !!(getTeacherIdFromPrintUnavailabilityRule(rule) || getTeacherNameFromPrintUnavailabilityRule(rule));
+  const hasDate = getPrintUnavailabilityRuleDates(rule).length > 0;
+  return hasTeacher && hasDate;
+}
+
+function extractPrintUnavailabilityRulesDeep(input: any, depth = 0): any[] {
+  if (!input || depth > 4) return [];
+  if (Array.isArray(input)) return input.flatMap((item) => extractPrintUnavailabilityRulesDeep(item, depth + 1));
+  if (typeof input !== "object") return [];
+  if (isLikelyPrintUnavailabilityRule(input)) return [input];
+
+  const candidates = [input.rules, input.rows, input.data, input.items, input.records, input.unavailability, input.unavailabilityRules];
+  return candidates.flatMap((part) => extractPrintUnavailabilityRulesDeep(part, depth + 1));
+}
+
+function dedupePrintUnavailabilityRules(rules: any[]) {
+  const out: any[] = [];
+  const seen = new Set<string>();
+  for (const rule of Array.isArray(rules) ? rules : []) {
+    if (!isLikelyPrintUnavailabilityRule(rule)) continue;
+    const teacherKey = getTeacherIdFromPrintUnavailabilityRule(rule) || normalizeTeacherNameForMatch(getTeacherNameFromPrintUnavailabilityRule(rule));
+    const dates = getPrintUnavailabilityRuleDates(rule).join(",");
+    const periods = getPrintUnavailabilityRulePeriods(rule).join(",");
+    const reason = String(rule?.reason || "").trim();
+    const key = `${teacherKey}__${dates}__${periods}__${reason}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(rule);
+  }
+  return out;
+}
+
+function loadUnavailabilityForPrint(tenantId?: string) {
+  const rows: any[] = [];
+
+  try {
+    rows.push(...extractPrintUnavailabilityRulesDeep(loadUnavailability(String(tenantId || "").trim() || undefined)));
+  } catch {}
+
+  try {
+    rows.push(...extractPrintUnavailabilityRulesDeep(loadUnavailability(undefined)));
+  } catch {}
+
+  try {
+    if (typeof window !== "undefined" && window.localStorage) {
+      for (let i = 0; i < window.localStorage.length; i++) {
+        const key = String(window.localStorage.key(i) || "");
+        if (!/(unavail|availability|غياب|عدم)/i.test(key)) continue;
+        const raw = window.localStorage.getItem(key);
+        if (!raw) continue;
+        try {
+          rows.push(...extractPrintUnavailabilityRulesDeep(JSON.parse(raw)));
+        } catch {}
+      }
+    }
+  } catch {}
+
+  return dedupePrintUnavailabilityRules(rows);
+}
+
+function isPrintTeacherBlockedByUnavailability(rules: any[], teacherId: string, teacherName: string, dateISO: string, period: any) {
+  const wantedDate = normalizePrintUnavailabilityDateISO(dateISO);
+  const wantedPeriod = periodToPrintAMPM(period);
+  const wantedId = String(teacherId || "").trim();
+  const wantedName = normalizeTeacherNameForMatch(teacherName || "");
+  if (!wantedDate || (!wantedId && !wantedName)) return false;
+
+  return (Array.isArray(rules) ? rules : []).some((rule) => {
+    if (!isLikelyPrintUnavailabilityRule(rule)) return false;
+
+    const ruleId = getTeacherIdFromPrintUnavailabilityRule(rule);
+    const ruleName = normalizeTeacherNameForMatch(getTeacherNameFromPrintUnavailabilityRule(rule));
+    const sameTeacher = (!!wantedId && !!ruleId && wantedId === ruleId) || (!!wantedName && !!ruleName && wantedName === ruleName);
+    if (!sameTeacher) return false;
+
+    const dates = getPrintUnavailabilityRuleDates(rule);
+    if (!dates.includes(wantedDate)) return false;
+
+    const periods = getPrintUnavailabilityRulePeriods(rule);
+    return periods.includes(wantedPeriod);
+  });
+}
+
+function assignmentPeriodsForPrintUnavailability(row: AnyAssignment, taskType: string): ("AM" | "PM")[] {
+  const covers = Array.isArray(row?.coversPeriods)
+    ? row.coversPeriods.map((p: any) => periodToPrintAMPM(p)).filter(Boolean)
+    : [];
+  if (covers.length) return Array.from(new Set(covers));
+  if (row?.fullDay || taskType === "REVIEW_FREE" || taskType === "CORRECTION_FREE") return ["AM", "PM"];
+  return [periodToPrintAMPM(getExamPeriod(row) || row?.period || "AM")];
+}
+
+function buildPrintUnavailabilityAbsenceAssignments(rules: any[], teachers: Teacher[]) {
+  const byId = new Map<string, Teacher>();
+  const byName = new Map<string, Teacher>();
+
+  for (const t of Array.isArray(teachers) ? teachers : []) {
+    const id = String(t.id || "").trim();
+    const name = String(t.fullName || "").trim();
+    if (id) byId.set(id, t);
+    const nameKey = normalizeTeacherNameForMatch(name);
+    if (nameKey) byName.set(nameKey, t);
+  }
+
+  const out: AnyAssignment[] = [];
+  const seen = new Set<string>();
+
+  for (const rule of Array.isArray(rules) ? rules : []) {
+    if (!isLikelyPrintUnavailabilityRule(rule)) continue;
+
+    const rawTeacherId = getTeacherIdFromPrintUnavailabilityRule(rule);
+    const rawTeacherName = getTeacherNameFromPrintUnavailabilityRule(rule);
+    const teacher = (rawTeacherId && byId.get(rawTeacherId)) || byName.get(normalizeTeacherNameForMatch(rawTeacherName)) || null;
+
+    const teacherId = String(teacher?.id || rawTeacherId || "").trim();
+    const teacherName = String(teacher?.fullName || rawTeacherName || teacherId || "").trim();
+    if (!teacherId && !teacherName) continue;
+
+    const dates = getPrintUnavailabilityRuleDates(rule);
+    const periods = getPrintUnavailabilityRulePeriods(rule);
+    const reason = String(rule?.reason || "غياب").trim() || "غياب";
+
+    for (const dateISO of dates) {
+      for (const period of periods) {
+        const key = `${teacherId || normalizeTeacherNameForMatch(teacherName)}__${dateISO}__${period}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        out.push({
+          id: `absence-${key}`,
+          __uid: `absence-${key}`,
+          teacherId,
+          teacherName,
+          taskType: "LEAVE",
+          role: "LEAVE",
+          type: "LEAVE",
+          taskTypeLabelAr: "غياب",
+          taskTypeLabelEn: "Absence",
+          subject: "غياب",
+          examSubject: "غياب",
+          dateISO,
+          date: dateISO,
+          period,
+          periodLabelAr: printPeriodLabelAr(period),
+          source: "UNAVAILABILITY",
+          reason,
+          locked: true,
+          readOnly: true,
+          nonEditable: true,
+          lockedByUnavailability: true,
+          preventEdit: true,
+          preventMove: true,
+          preventDelete: true,
+          cellText: "غياب",
+          displayText: "غياب",
+          cellBackground: "#ede9fe",
+          backgroundColor: "#ede9fe",
+          color: "#3b0764",
+          borderColor: "#a78bfa",
+          meta: {
+            source: "Unavailability.tsx",
+            lockedByUnavailability: true,
+            originalRuleId: String(rule?.id || "").trim() || undefined,
+          },
+        });
+      }
+    }
+  }
+
+  return out;
 }
 
 /** -------------------------------------------
@@ -432,12 +848,16 @@ html, body {
 }
 `;
 
-/** ✅ حذف الأرقام من أسماء المعلمين داخل نافذة الطباعة فقط */
+/** ✅ حذف الرقم النهائي فقط من اسم المعلم داخل نافذة الطباعة، بدون قطع الاسم الكامل */
 function stripDigitsFromPrintedTeacherName(value: any): string {
   return String(value || "")
-    .replace(/[0-9٠-٩۰-۹]+/g, "")
+    .replace(/\s*[0-9٠-٩۰-۹]+\s*$/g, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function normalizeTeacherNameForMatch(value: any): string {
+  return normalizeText(stripDigitsFromPrintedTeacherName(value));
 }
 
 /** ✅ يطبّق حذف الأرقام على العناصر المعلّمة كأسماء معلمين داخل نسخة الطباعة فقط */
@@ -745,23 +1165,73 @@ export default function TaskDistributionPrint() {
   });
   const [examsList, setExamsList] = useState<Exam[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [unavailabilityRules, setUnavailabilityRules] = useState<any[]>(() => loadUnavailabilityForPrint(tenantId));
 
-  async function refreshRosterFromFirestore() {
-    const [exRows, tRows] = await Promise.all([
-      loadTenantArray<any>(tenantId, EXAMS_SUB).catch(() => []),
-      loadTenantArray<any>(tenantId, TEACHERS_SUB).catch(() => []),
-    ]);
-    setExamsList(Array.isArray(exRows) ? (exRows as Exam[]) : []);
-    setTeachers(
-      (Array.isArray(tRows) ? tRows : [])
-        .map((t: any) => ({
-          id: String(t.id ?? "").trim(),
-          employeeNo: String(t.employeeNo ?? t.employeeNumber ?? t.jobNo ?? t.jobNumber ?? "").trim(),
-          fullName: String(t.fullName ?? t.name ?? t.teacherName ?? "").trim(),
-          phone: String(t.phone ?? t.mobile ?? "").trim(),
-        }))
-        .filter((t: Teacher) => t.fullName || t.employeeNo || t.phone)
-    );
+  // ✅ منع تجميد صفحة التقارير:
+  // كانت الصفحة تستدعي Firestore + غياب الكادر كل 2.5 ثانية، وهذا يسبب بطء شديد عند الفتح.
+  // هذه الحواجز تمنع تكرار نفس الطلبات الثقيلة أثناء فتح الصفحة أو الضغط على الأزرار.
+  const rosterLoadingRef = useRef(false);
+  const unavailabilityLoadingRef = useRef(false);
+  const lastRosterLoadAtRef = useRef(0);
+  const lastUnavailabilityCloudLoadAtRef = useRef(0);
+
+  async function refreshUnavailabilityRulesFromTenant(
+    targetTenantId = tenantId,
+    options: { forceCloud?: boolean } = {}
+  ) {
+    const tid = String(targetTenantId || "").trim();
+
+    // ✅ قراءة محلية فورية وخفيفة حتى يظهر كشف الغياب بدون انتظار السحابة.
+    const localRows = loadUnavailabilityForPrint(tid);
+    setUnavailabilityRules((prev) => dedupePrintUnavailabilityRules([...(Array.isArray(prev) ? prev : []), ...localRows]));
+
+    const now = Date.now();
+    const recentlyLoaded = now - lastUnavailabilityCloudLoadAtRef.current < 60_000;
+    if (unavailabilityLoadingRef.current) return;
+    if (!options.forceCloud && recentlyLoaded) return;
+
+    unavailabilityLoadingRef.current = true;
+    lastUnavailabilityCloudLoadAtRef.current = now;
+
+    try {
+      const cloudRows = await syncUnavailabilityFromTenant(tid)
+        .then((rows: any) => extractPrintUnavailabilityRulesDeep(rows))
+        .catch(() => []);
+
+      setUnavailabilityRules(dedupePrintUnavailabilityRules([...cloudRows, ...localRows]));
+    } finally {
+      unavailabilityLoadingRef.current = false;
+    }
+  }
+
+  async function refreshRosterFromFirestore(options: { force?: boolean } = {}) {
+    const now = Date.now();
+    const recentlyLoaded = now - lastRosterLoadAtRef.current < 60_000;
+    if (rosterLoadingRef.current) return;
+    if (!options.force && recentlyLoaded) return;
+
+    rosterLoadingRef.current = true;
+    lastRosterLoadAtRef.current = now;
+
+    try {
+      const [exRows, tRows] = await Promise.all([
+        loadTenantArray<any>(tenantId, EXAMS_SUB).catch(() => []),
+        loadTenantArray<any>(tenantId, TEACHERS_SUB).catch(() => []),
+      ]);
+      setExamsList(Array.isArray(exRows) ? (exRows as Exam[]) : []);
+      setTeachers(
+        (Array.isArray(tRows) ? tRows : [])
+          .map((t: any) => ({
+            id: String(t.id ?? "").trim(),
+            employeeNo: String(t.employeeNo ?? t.employeeNumber ?? t.jobNo ?? t.jobNumber ?? "").trim(),
+            fullName: String(t.fullName ?? t.name ?? t.teacherName ?? "").trim(),
+            phone: String(t.phone ?? t.mobile ?? "").trim(),
+          }))
+          .filter((t: Teacher) => t.fullName || t.employeeNo || t.phone)
+      );
+    } finally {
+      rosterLoadingRef.current = false;
+    }
   }
 
   const [storageTick, setStorageTick] = useState(0);
@@ -817,7 +1287,8 @@ export default function TaskDistributionPrint() {
 
   useEffect(() => {
     refreshFromStorage();
-    refreshRosterFromFirestore();
+    refreshRosterFromFirestore({ force: true });
+    refreshUnavailabilityRulesFromTenant(tenantId, { forceCloud: true });
 
     const onRunUpdated = (e: any) => {
       const tid = String(e?.detail?.tenantId || "").trim();
@@ -836,20 +1307,31 @@ export default function TaskDistributionPrint() {
       ) {
         refreshFromStorage();
       }
+
+      if (/(unavail|availability|غياب|عدم)/i.test(String(e.key || ""))) {
+        refreshUnavailabilityRulesFromTenant(tenantId);
+      }
+    };
+
+    const onUnavailabilityUpdated = (e: any) => {
+      const tid = String(e?.detail?.tenantId || "").trim();
+      if (!tid || tid === String(tenantId)) refreshUnavailabilityRulesFromTenant(tenantId, { forceCloud: true });
     };
 
     window.addEventListener(RUN_UPDATED_EVENT, onRunUpdated as any);
+    window.addEventListener(UNAVAIL_UPDATED_EVENT, onUnavailabilityUpdated as any);
     window.addEventListener("storage", onStorage);
     window.addEventListener("focus", refreshFromStorage);
 
     const iv = window.setInterval(() => {
+      // ✅ تحديث دوري خفيف فقط من localStorage.
+      // لا نستدعي Firestore هنا حتى لا تتجمد صفحة التقارير كل ثوانٍ.
       refreshFromStorage();
-      // تحديث دوري خفيف لضمان تزامن الطباعة
-      refreshRosterFromFirestore();
-    }, 2500);
+    }, 30000);
 
     return () => {
       window.removeEventListener(RUN_UPDATED_EVENT, onRunUpdated as any);
+      window.removeEventListener(UNAVAIL_UPDATED_EVENT, onUnavailabilityUpdated as any);
       window.removeEventListener("storage", onStorage);
       window.removeEventListener("focus", refreshFromStorage);
       window.clearInterval(iv);
@@ -996,6 +1478,78 @@ export default function TaskDistributionPrint() {
     return map;
   }, [teachers]);
 
+  /**
+   * ✅ ربط الطباعة ببيانات الكادر التعليمي مثل صفحة النتائج:
+   * نعتمد على teacherId أولًا، ثم الاسم المطابق، ثم مطابقة الاسم بعد حذف رقم النهاية فقط.
+   */
+  const teacherFullNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const t of teachers || []) {
+      const fullName = String(t.fullName || "").trim();
+      if (!fullName) continue;
+      const ids = [t.id, (t as any).teacherId, (t as any).uid, (t as any).docId]
+        .map((v) => String(v ?? "").trim())
+        .filter(Boolean);
+      for (const id of ids) {
+        if (!map.has(id)) map.set(id, fullName);
+      }
+    }
+    return map;
+  }, [teachers]);
+
+  const teacherFullNameByNameKey = useMemo(() => {
+    const exact = new Map<string, string>();
+    const clean = new Map<string, string>();
+
+    for (const t of teachers || []) {
+      const fullName = String(t.fullName || "").trim();
+      if (!fullName) continue;
+
+      const exactKey = normalizeText(fullName);
+      if (exactKey && !exact.has(exactKey)) exact.set(exactKey, fullName);
+
+      const cleanKey = normalizeTeacherNameForMatch(fullName);
+      if (cleanKey && !clean.has(cleanKey)) clean.set(cleanKey, fullName);
+    }
+
+    return { exact, clean };
+  }, [teachers]);
+
+  function resolveTeacherNameForPrint(row: AnyAssignment): string {
+    const rawName = String(getTeacherName(row) || "").trim();
+    const teacherId = getAssignmentTeacherId(row);
+
+    if (teacherId) {
+      const byId = teacherFullNameById.get(teacherId);
+      if (byId) return byId;
+    }
+
+    const exactKey = normalizeText(rawName);
+    if (exactKey) {
+      const exact = teacherFullNameByNameKey.exact.get(exactKey);
+      if (exact) return exact;
+    }
+
+    const cleanKey = normalizeTeacherNameForMatch(rawName);
+    if (cleanKey) {
+      const clean = teacherFullNameByNameKey.clean.get(cleanKey);
+      if (clean) return clean;
+
+      const candidates = (teachers || [])
+        .map((t) => String(t.fullName || "").trim())
+        .filter(Boolean)
+        .filter((fullName) => {
+          const fullKey = normalizeTeacherNameForMatch(fullName);
+          return fullKey === cleanKey || fullKey.startsWith(`${cleanKey} `) || cleanKey.startsWith(`${fullKey} `);
+        });
+
+      const unique = Array.from(new Set<string>(candidates));
+      if (unique.length === 1) return unique[0];
+    }
+
+    return rawName;
+  }
+
   function getTeacherWhatsAppPhoneByName(name: string) {
     const key = normalizeText(name || "");
     if (!key) return "";
@@ -1027,36 +1581,93 @@ export default function TaskDistributionPrint() {
     return Array.isArray(run?.assignments) ? (run!.assignments as any[]) : [];
   }, [run, storageTick]);
 
+  const printTableRows = useMemo<AnyAssignment[]>(() => {
+    const resolvedBase = (masterTableRows || []).map((row) => {
+      const resolvedName = resolveTeacherNameForPrint(row);
+      const originalName = String(getTeacherName(row) || "").trim();
+
+      if (!resolvedName || resolvedName === originalName) {
+        return row;
+      }
+
+      return {
+        ...row,
+        __printResolvedTeacherName: resolvedName,
+        teacherName: resolvedName,
+        name: resolvedName,
+        teacherLabel: resolvedName,
+      };
+    });
+
+    // ✅ حماية الطباعة: إذا كان المعلم مسجلًا في غياب الكادر التعليمي، لا يظهر له تكليف عادي في نفس الفترة.
+    const cleanedBase = resolvedBase.filter((row) => {
+      if (isLeaveAssignmentForPrint(row)) return true;
+
+      const task = String(getTaskType(row) || "");
+      const teacherId = getAssignmentTeacherId(row);
+      const teacherName = getTeacherName(row);
+      const date = normalizePrintUnavailabilityDateISO(getExamDateISO(row));
+      if (!date || (!teacherId && !teacherName)) return true;
+
+      return !assignmentPeriodsForPrintUnavailability(row, task).some((period) =>
+        isPrintTeacherBlockedByUnavailability(unavailabilityRules, teacherId, teacherName, date, period)
+      );
+    });
+
+    // ✅ لا نعتمد فقط على Run؛ نبني صفوف الغياب من Unavailability.tsx مباشرة.
+    const absenceRows = buildPrintUnavailabilityAbsenceAssignments(unavailabilityRules, teachers);
+    const existingAbsenceKeys = new Set(
+      cleanedBase
+        .filter((row) => isLeaveAssignmentForPrint(row))
+        .map((row) => {
+          const teacherKey = getAssignmentTeacherId(row) || normalizeTeacherNameForMatch(getTeacherName(row));
+          const date = normalizePrintUnavailabilityDateISO(getExamDateISO(row));
+          const period = periodToPrintAMPM(getExamPeriod(row) || "AM");
+          return `${teacherKey}__${date}__${period}`;
+        })
+    );
+
+    const extraAbsenceRows = absenceRows.filter((row) => {
+      const teacherKey = getAssignmentTeacherId(row) || normalizeTeacherNameForMatch(getTeacherName(row));
+      const key = `${teacherKey}__${normalizePrintUnavailabilityDateISO(getExamDateISO(row))}__${periodToPrintAMPM(getExamPeriod(row) || "AM")}`;
+      if (existingAbsenceKeys.has(key)) return false;
+      existingAbsenceKeys.add(key);
+      return true;
+    });
+
+    return [...cleanedBase, ...extraAbsenceRows];
+  }, [masterTableRows, teacherFullNameById, teacherFullNameByNameKey, teachers, unavailabilityRules]);
+
   /** -------------------------------------------
    * Options
    * ------------------------------------------ */
   const teacherOptions = useMemo(() => {
     const set = new Map<string, string>();
-    for (const r of masterTableRows || []) {
+    for (const r of printTableRows || []) {
       const n = (getTeacherName(r) || "").trim();
       if (!n) continue;
       const k = normalizeText(n);
       if (!set.has(k)) set.set(k, n);
     }
     return Array.from(set.values()).sort((a, b) => a.localeCompare(b, "ar"));
-  }, [masterTableRows]);
+  }, [printTableRows]);
 
   const subjectOptions = useMemo(() => {
     const set = new Map<string, string>();
-    for (const r of masterTableRows || []) {
+    for (const r of printTableRows || []) {
       const s = (getExamSubject(r) || "").trim();
       if (!s) continue;
       const n = normalizeText(s);
       if (!set.has(n)) set.set(n, s);
     }
     return Array.from(set.values()).sort((a, b) => a.localeCompare(b, "ar"));
-  }, [masterTableRows]);
+  }, [printTableRows]);
 
   /** -------------------------------------------
    * Apply filters
    * ------------------------------------------ */
   const filteredRows = useMemo(() => {
-    let rows = [...(masterTableRows || [])];
+    let rows = [...(printTableRows || [])];
 
     if (reportType === "daily" && dateISO) {
       rows = rows.filter((r) => normalizeISODate(getExamDateISO(r)) === dateISO);
@@ -1072,13 +1683,13 @@ export default function TaskDistributionPrint() {
     }
 
     return rows;
-  }, [masterTableRows, reportType, dateISO, teacherNameFilter, subjectFilter]);
+  }, [printTableRows, reportType, dateISO, teacherNameFilter, subjectFilter]);
 
   /** -------------------------------------------
    * Header exam info
    * ------------------------------------------ */
   const headerExamInfo = useMemo(() => {
-    const r = filteredRows[0] || masterTableRows[0] || null;
+    const r = filteredRows[0] || printTableRows[0] || null;
 
     const subject = subjectFilter || (r ? getExamSubject(r) : "");
     const dISO = r ? normalizeISODate(getExamDateISO(r)) : dateISO;
@@ -1094,7 +1705,7 @@ export default function TaskDistributionPrint() {
     }
 
     return { subject, dISO, dayLabel, period, time };
-  }, [filteredRows, masterTableRows, dateISO, subjectFilter, examsIndex]);
+  }, [filteredRows, printTableRows, dateISO, subjectFilter, examsIndex]);
 
   /** -------------------------------------------
    * Query helper
@@ -1201,18 +1812,22 @@ export default function TaskDistributionPrint() {
      * الكشوف اليومية مفصولة حسب المادة، لكن الاحتياط يكون حسب اليوم + الفترة فقط.
      * لذلك يتم استخراج احتياط الفترة من الجدول الكامل، ثم إظهاره في كل كشوف نفس التاريخ والفترة.
      */
-    const dailyBaseRows = (masterTableRows || []).filter((row) => {
+    const dailyBaseRows = (printTableRows || []).filter((row) => {
       if (!dateISO) return true;
       return normalizeISODate(getExamDateISO(row) || "") === dateISO;
     });
 
     const reserveByDatePeriod = new Map<string, AnyAssignment[]>();
-    const reviewFreeByDate = new Map<string, AnyAssignment[]>();
+    const reviewFreeByDateSubject = new Map<string, AnyAssignment[]>();
 
     for (const row of dailyBaseRows) {
       const task = getTaskType(row);
       const meta = lookupExamMetaForRow(row);
       const rowDate = meta?.dateISO || normalizeISODate(getExamDateISO(row) || "");
+
+      // ✅ لا يتم إنشاء كشف تقرير الغياب داخل صفحة الطباعة.
+      // ✅ يظل الغياب مستخدمًا كحماية لمنع توزيع المعلم، لكنه لا يظهر ككشف مستقل.
+      if (task === "LEAVE") continue;
 
       if (task === "RESERVE") {
         const reservePeriod = meta?.period || getExamPeriod(row) || "";
@@ -1223,12 +1838,17 @@ export default function TaskDistributionPrint() {
         continue;
       }
 
-      // ✅ فاضي للمراجعة يظهر داخل كشوف نفس اليوم فقط، ولا ينشئ كشفًا مستقلًا فارغًا.
+      // ✅ فاضي للمراجعة يظهر داخل كشف مادته فقط، ولا ينتشر في كل كشوف نفس اليوم.
+      // ✅ لا نستخدم الفترة هنا؛ إذا كانت نفس المادة موجودة في فترتين بنفس اليوم يظهر في كشفي نفس المادة فقط.
       if (task === "REVIEW_FREE") {
         if (!rowDate) continue;
-        const list = reviewFreeByDate.get(rowDate) || [];
+        const reviewSubject = getReviewFreeSubjectForPrint(row, meta);
+        const reviewSubjectKey = normalizeSubjectKeyForPrint(reviewSubject);
+        if (!reviewSubjectKey) continue;
+        const key = dateSubjectKey(rowDate, reviewSubject);
+        const list = reviewFreeByDateSubject.get(key) || [];
         list.push(row);
-        reviewFreeByDate.set(rowDate, list);
+        reviewFreeByDateSubject.set(key, list);
       }
     }
 
@@ -1244,6 +1864,8 @@ export default function TaskDistributionPrint() {
         invigilators: AnyAssignment[];
         reserves: AnyAssignment[];
         reviewFree: AnyAssignment[];
+        leaves: AnyAssignment[];
+        isLeaveReport?: boolean;
       }
     >();
 
@@ -1252,7 +1874,7 @@ export default function TaskDistributionPrint() {
 
       // ✅ لا ننشئ كشفًا مستقلًا للاحتياط أو المراجعة أو التصحيح.
       // ✅ التصحيح لا يمثل امتحان مراقبة، لذلك لا يظهر ككشف يومي فارغ في الطباعة.
-      if (task === "RESERVE" || task === "REVIEW_FREE" || task === "CORRECTION_FREE") continue;
+      if (task === "RESERVE" || task === "REVIEW_FREE" || task === "CORRECTION_FREE" || task === "LEAVE") continue;
 
       const meta = lookupExamMetaForRow(row);
       const date = meta?.dateISO || normalizeISODate(getExamDateISO(row) || "");
@@ -1274,6 +1896,7 @@ export default function TaskDistributionPrint() {
           invigilators: [],
           reserves: [],
           reviewFree: [],
+          leaves: [],
         };
         map.set(key, group);
       } else if (meta) {
@@ -1286,29 +1909,30 @@ export default function TaskDistributionPrint() {
       else if (task === "REVIEW_FREE") group.reviewFree.push(row);
     }
 
-    return Array.from(map.values())
-      .map((group) => {
-        const sharedReserveRows = reserveByDatePeriod.get(datePeriodKey(group.dateISO, group.period)) || [];
-        const sharedReviewRows = reviewFreeByDate.get(group.dateISO) || [];
+    const normalGroups = Array.from(map.values()).map((group) => {
+      const sharedReserveRows = reserveByDatePeriod.get(datePeriodKey(group.dateISO, group.period)) || [];
+      const sharedReviewRows = reviewFreeByDateSubject.get(dateSubjectKey(group.dateISO, group.subject)) || [];
 
-        return {
-          ...group,
-          invigilators: sortInvigilatorsByCommittee(group.invigilators),
-          reserves: uniqueAssignmentsByTeacherName(sharedReserveRows),
-          reviewFree: uniqueAssignmentsByTeacherName(sharedReviewRows),
-        };
-      })
-      .sort((a, b) => {
-        const da = a.dateISO || "9999-99-99";
-        const db = b.dateISO || "9999-99-99";
-        if (da !== db) return da.localeCompare(db);
+      return {
+        ...group,
+        invigilators: sortInvigilatorsByCommittee(group.invigilators),
+        reserves: uniqueAssignmentsByTeacherName(sharedReserveRows),
+        reviewFree: uniqueAssignmentsByTeacherName(sharedReviewRows),
+        leaves: [],
+      };
+    });
 
-        const po = periodOrderValue(a.period) - periodOrderValue(b.period);
-        if (po !== 0) return po;
+    return normalGroups.sort((a, b) => {
+      const da = a.dateISO || "9999-99-99";
+      const db = b.dateISO || "9999-99-99";
+      if (da !== db) return da.localeCompare(db);
 
-        return (a.subject || "").localeCompare(b.subject || "", "ar");
-      });
-  }, [filteredRows, masterTableRows, reportType, dateISO, examsIndex]);
+      const po = periodOrderValue(a.period) - periodOrderValue(b.period);
+      if (po !== 0) return po;
+
+      return (a.subject || "").localeCompare(b.subject || "", "ar");
+    });
+  }, [filteredRows, printTableRows, reportType, dateISO, examsIndex]);
 
   /** -------------------------------------------
    * WhatsApp text
@@ -1329,7 +1953,7 @@ export default function TaskDistributionPrint() {
   const allTeachersPages = useMemo(() => {
     if (reportType !== "teacher" || teacherNameFilter) return [];
     const pages = teacherOptions.map((tName) => {
-      let rows = masterTableRows.filter((r) => getTeacherName(r).trim() === tName);
+      let rows = printTableRows.filter((r) => getTeacherName(r).trim() === tName);
 
       if (subjectFilter) {
         const nSub = normalizeText(subjectFilter);
@@ -1351,7 +1975,7 @@ export default function TaskDistributionPrint() {
     });
 
     return pages.filter((p) => p.rows.length > 0);
-  }, [reportType, teacherNameFilter, teacherOptions, masterTableRows, subjectFilter]);
+  }, [reportType, teacherNameFilter, teacherOptions, printTableRows, subjectFilter]);
 
   /** -------------------------------------------
    * Daily sheet
@@ -1366,6 +1990,8 @@ export default function TaskDistributionPrint() {
       invigilators: AnyAssignment[];
       reserves: AnyAssignment[];
       reviewFree: AnyAssignment[];
+      leaves: AnyAssignment[];
+      isLeaveReport?: boolean;
     };
     pageBreak?: boolean;
     createdAtISO: string;
@@ -1387,7 +2013,7 @@ export default function TaskDistributionPrint() {
           </div>
 
           <div style={styles.headerLeft}>
-            <div style={styles.headerLeftTitle}>كشف مراقبة امتحان</div>
+            <div style={styles.headerLeftTitle}>{group.isLeaveReport ? "كشف تقرير الغياب" : "كشف مراقبة امتحان"}</div>
             <div style={styles.headerLeftSub}>{schoolHeader.semesterLabel}</div>
             <div style={styles.headerLeftSub}>العام الدراسي {schoolHeader.yearLabel}</div>
           </div>
@@ -1422,107 +2048,154 @@ export default function TaskDistributionPrint() {
         </div>
 
         <div style={styles.chipRow}>
-          <div style={styles.chip}>كشف بأسماء المراقبين</div>
+          <div style={group.isLeaveReport ? styles.leaveChip : styles.chip}>
+            {group.isLeaveReport ? "كشف تقرير الغياب" : "كشف بأسماء المراقبين"}
+          </div>
         </div>
 
-        <table style={styles.table}>
-          <thead>
-            <tr>
-              <th style={{ ...styles.th, width: 56, textAlign: "center" }}>م</th>
-              <th style={{ ...styles.th }}>اسم المراقب</th>
-              <th style={{ ...styles.th, width: 140 }}>رقم اللجنة</th>
-              <th style={{ ...styles.th, width: 140 }}>التوقيع</th>
-            </tr>
-          </thead>
-          <tbody>
-            {group.invigilators.length ? (
-              group.invigilators.map((r, idx) => (
-                <tr key={idx}>
-                  <td style={styles.tdNum}>{idx + 1}</td>
-                  <td style={styles.td}><span data-print-teacher-name="true">{getTeacherName(r) || "—"}</span></td>
-                  <td style={styles.td}>{getRoomNumber(r) || "—"}</td>
-                  <td style={styles.td}></td>
-                </tr>
-              ))
-            ) : (
-              Array.from({ length: 12 }).map((_, i) => (
-                <tr key={i}>
-                  <td style={styles.tdNum}>{i + 1}</td>
-                  <td style={styles.td}></td>
-                  <td style={styles.td}></td>
-                  <td style={styles.td}></td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-
-        <div style={styles.reserveBlock}>
-          <div style={styles.reserveTitle}>المراقبون الاحتياط</div>
-          <table style={styles.reserveTable}>
-            <thead>
-              <tr>
-                <th style={{ ...styles.th, width: 56, textAlign: "center" }}>م</th>
-                <th style={{ ...styles.th }}>اسم المراقب الاحتياط</th>
-                <th style={{ ...styles.th, width: 200 }}>التوقيع</th>
-              </tr>
-            </thead>
-            <tbody>
-              {group.reserves.length ? (
-                group.reserves.map((r, idx) => (
-                  <tr key={idx}>
-                    <td style={styles.tdNum}>{idx + 1}</td>
-                    <td style={{ ...styles.td, fontWeight: 900 }}><span data-print-teacher-name="true">{getTeacherName(r) || "—"}</span></td>
-                    <td style={styles.td}></td>
-                  </tr>
-                ))
-              ) : (
-                Array.from({ length: 2 }).map((_, i) => (
-                  <tr key={i}>
-                    <td style={styles.tdNum}>{i + 1}</td>
-                    <td style={styles.td}></td>
-                    <td style={styles.td}></td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-
-          <div style={{ marginTop: 14 }}>
-            <div style={styles.reserveTitle}>المعلمون الفارغون للمراجعة</div>
-            <table style={styles.reserveTable}>
+        {group.isLeaveReport ? (
+          <>
+            <table style={styles.table}>
               <thead>
                 <tr>
                   <th style={{ ...styles.th, width: 56, textAlign: "center" }}>م</th>
                   <th style={{ ...styles.th }}>اسم المعلم</th>
-                  <th style={{ ...styles.th, width: 200 }}>التوقيع</th>
-                  <th style={{ ...styles.th, width: 220 }}>ملاحظات</th>
+                  <th style={{ ...styles.th, width: 150 }}>الفترة</th>
+                  <th style={{ ...styles.th, width: 220 }}>سبب الغياب / العذر</th>
+                  <th style={{ ...styles.th, width: 140 }}>التوقيع</th>
                 </tr>
               </thead>
               <tbody>
-                {group.reviewFree.length ? (
-                  group.reviewFree.map((r, idx) => (
+                {group.leaves.length ? (
+                  group.leaves.map((r, idx) => (
                     <tr key={idx}>
                       <td style={styles.tdNum}>{idx + 1}</td>
-                      <td style={{ ...styles.td, fontWeight: 900 }}><span data-print-teacher-name="true">{getTeacherName(r) || "—"}</span></td>
+                      <td style={{ ...styles.td, ...styles.leaveTd }}><span data-print-teacher-name="true">{getTeacherName(r) || "—"}</span></td>
+                      <td style={{ ...styles.td, ...styles.leaveTd }}>{formatPeriod(getExamPeriod(r) || group.period)}</td>
+                      <td style={{ ...styles.td, ...styles.leaveTd }}>{String(r?.reason || "غياب").trim() || "غياب"}</td>
                       <td style={styles.td}></td>
-                      <td style={styles.td}>فارغ للمراجعة</td>
                     </tr>
                   ))
                 ) : (
-                  Array.from({ length: 1 }).map((_, i) => (
+                  Array.from({ length: 6 }).map((_, i) => (
                     <tr key={i}>
                       <td style={styles.tdNum}>{i + 1}</td>
                       <td style={styles.td}></td>
                       <td style={styles.td}></td>
-                      <td style={styles.td}>فارغ للمراجعة</td>
+                      <td style={styles.td}>غياب</td>
+                      <td style={styles.td}></td>
                     </tr>
                   ))
                 )}
               </tbody>
             </table>
-          </div>
-        </div>
+
+            <div style={styles.leaveNotice}>
+              هذه الأسماء مرتبطة بسجل غياب الكادر التعليمي، ولا يتم توزيعها في هذه الفترة أو تعديلها من كشوف التوزيع.
+            </div>
+          </>
+        ) : (
+          <>
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <th style={{ ...styles.th, width: 56, textAlign: "center" }}>م</th>
+                  <th style={{ ...styles.th }}>اسم المراقب</th>
+                  <th style={{ ...styles.th, width: 140 }}>رقم اللجنة</th>
+                  <th style={{ ...styles.th, width: 140 }}>التوقيع</th>
+                </tr>
+              </thead>
+              <tbody>
+                {group.invigilators.length ? (
+                  group.invigilators.map((r, idx) => (
+                    <tr key={idx}>
+                      <td style={styles.tdNum}>{idx + 1}</td>
+                      <td style={styles.td}><span data-print-teacher-name="true">{getTeacherName(r) || "—"}</span></td>
+                      <td style={styles.td}>{getRoomNumber(r) || "—"}</td>
+                      <td style={styles.td}></td>
+                    </tr>
+                  ))
+                ) : (
+                  Array.from({ length: 12 }).map((_, i) => (
+                    <tr key={i}>
+                      <td style={styles.tdNum}>{i + 1}</td>
+                      <td style={styles.td}></td>
+                      <td style={styles.td}></td>
+                      <td style={styles.td}></td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+
+            <div style={styles.reserveBlock}>
+              <div style={styles.reserveTitle}>المراقبون الاحتياط</div>
+              <table style={styles.reserveTable}>
+                <thead>
+                  <tr>
+                    <th style={{ ...styles.th, width: 56, textAlign: "center" }}>م</th>
+                    <th style={{ ...styles.th }}>اسم المراقب الاحتياط</th>
+                    <th style={{ ...styles.th, width: 200 }}>التوقيع</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {group.reserves.length ? (
+                    group.reserves.map((r, idx) => (
+                      <tr key={idx}>
+                        <td style={styles.tdNum}>{idx + 1}</td>
+                        <td style={{ ...styles.td, fontWeight: 900 }}><span data-print-teacher-name="true">{getTeacherName(r) || "—"}</span></td>
+                        <td style={styles.td}></td>
+                      </tr>
+                    ))
+                  ) : (
+                    Array.from({ length: 2 }).map((_, i) => (
+                      <tr key={i}>
+                        <td style={styles.tdNum}>{i + 1}</td>
+                        <td style={styles.td}></td>
+                        <td style={styles.td}></td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+
+              <div style={{ marginTop: 14 }}>
+                <div style={styles.reserveTitle}>المعلمون الفارغون للمراجعة</div>
+                <table style={styles.reserveTable}>
+                  <thead>
+                    <tr>
+                      <th style={{ ...styles.th, width: 56, textAlign: "center" }}>م</th>
+                      <th style={{ ...styles.th }}>اسم المعلم</th>
+                      <th style={{ ...styles.th, width: 200 }}>التوقيع</th>
+                      <th style={{ ...styles.th, width: 220 }}>ملاحظات</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {group.reviewFree.length ? (
+                      group.reviewFree.map((r, idx) => (
+                        <tr key={idx}>
+                          <td style={styles.tdNum}>{idx + 1}</td>
+                          <td style={{ ...styles.td, fontWeight: 900 }}><span data-print-teacher-name="true">{getTeacherName(r) || "—"}</span></td>
+                          <td style={styles.td}></td>
+                          <td style={styles.td}>فارغ للمراجعة</td>
+                        </tr>
+                      ))
+                    ) : (
+                      Array.from({ length: 1 }).map((_, i) => (
+                        <tr key={i}>
+                          <td style={styles.tdNum}>{i + 1}</td>
+                          <td style={styles.td}></td>
+                          <td style={styles.td}></td>
+                          <td style={styles.td}>فارغ للمراجعة</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        )}
 
         <div style={styles.bottomSigRow}>
           <div style={styles.bottomSigCell}>رئيس الكنترول</div>
@@ -1992,6 +2665,17 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 900,
     fontSize: 18,
   },
+  leaveChip: {
+    border: "2px solid #6d28d9",
+    borderBottom: "0",
+    padding: "8px 14px",
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
+    background: "#ede9fe",
+    color: "#3b0764",
+    fontWeight: 900,
+    fontSize: 18,
+  },
 
   teacherInfoBox: { border: "2px solid #111", borderRadius: 10, padding: "10px 12px", marginBottom: 12 },
   teacherInfoRow: { display: "flex", gap: 10, justifyContent: "flex-start", alignItems: "center", padding: "4px 0" },
@@ -2021,6 +2705,21 @@ const styles: Record<string, React.CSSProperties> = {
     height: 38,
     color: "#475569",
     fontWeight: 900,
+  },
+  leaveTd: {
+    background: "#f5f3ff",
+    color: "#3b0764",
+    fontWeight: 900,
+  },
+  leaveNotice: {
+    marginTop: 14,
+    border: "2px solid #a78bfa",
+    background: "#f5f3ff",
+    color: "#3b0764",
+    borderRadius: 12,
+    padding: "10px 12px",
+    fontWeight: 900,
+    textAlign: "center",
   },
 
   reserveBlock: { marginTop: 18 },
