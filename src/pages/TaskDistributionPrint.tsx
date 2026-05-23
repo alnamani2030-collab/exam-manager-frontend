@@ -681,7 +681,7 @@ function buildPrintUnavailabilityAbsenceAssignments(rules: any[], teachers: Teac
 
     const dates = getPrintUnavailabilityRuleDates(rule);
     const periods = getPrintUnavailabilityRulePeriods(rule);
-    const reason = String(rule?.reason || "غياب").trim() || "غياب";
+    const reason = normalizeLeaveReasonForPrint(rule?.reason || rule?.absenceReason || rule?.excuseReason || rule?.excuse || "إجازة");
 
     for (const dateISO of dates) {
       for (const period of periods) {
@@ -699,8 +699,8 @@ function buildPrintUnavailabilityAbsenceAssignments(rules: any[], teachers: Teac
           type: "LEAVE",
           taskTypeLabelAr: "غياب",
           taskTypeLabelEn: "Absence",
-          subject: "غياب",
-          examSubject: "غياب",
+          subject: reason,
+          examSubject: reason,
           dateISO,
           date: dateISO,
           period,
@@ -714,8 +714,8 @@ function buildPrintUnavailabilityAbsenceAssignments(rules: any[], teachers: Teac
           preventEdit: true,
           preventMove: true,
           preventDelete: true,
-          cellText: "غياب",
-          displayText: "غياب",
+          cellText: reason,
+          displayText: reason,
           cellBackground: "#ede9fe",
           backgroundColor: "#ede9fe",
           color: "#3b0764",
@@ -732,6 +732,216 @@ function buildPrintUnavailabilityAbsenceAssignments(rules: any[], teachers: Teac
 
   return out;
 }
+
+
+/** ✅ توحيد سبب الغياب في الطباعة:
+ * المطلوب ظهور الصف مرة واحدة فقط بشكل: طبيعة العمل = غياب، والسبب = إجازة.
+ * أي قيمة عامة مثل "غياب" أو "leave" يتم تحويلها إلى "إجازة" حتى لا يظهر "غياب - غياب".
+ */
+function normalizeLeaveReasonForPrint(value: any): string {
+  const raw = String(value ?? "").trim().replace(/\s+/g, " ");
+  if (!raw) return "إجازة";
+
+  const ar = raw
+    .replace(/[إأآ]/g, "ا")
+    .replace(/ى/g, "ي")
+    .replace(/ة/g, "ه")
+    .toLowerCase();
+
+  if (ar.includes("اجازه")) return "إجازة";
+  if (ar === "غياب" || ar.includes("غياب") || ar.includes("عدم توفر") || ar.includes("leave") || ar.includes("absence")) {
+    return "إجازة";
+  }
+
+  return raw;
+}
+
+function shouldAlwaysShowLeaveAsVacationForPrint(): boolean {
+  // ✅ دالة منفصلة حتى لا يعتبر TypeScript بقية الكود داخل getLeaveReasonForPrint كودًا غير قابل للوصول.
+  // ✅ آخر تعديل: لا نثبت السبب على "إجازة"؛ نعرض سبب الغياب الحقيقي المسجل في Unavailability.tsx.
+  return false;
+}
+
+function getLeaveReasonForPrint(row: AnyAssignment): string {
+  // ✅ في كشف المعلم: طبيعة العمل = غياب، والمادة/السبب = سبب الغياب الحقيقي من Unavailability.tsx.
+  // ✅ إذا لم يوجد سبب واضح، نستخدم "إجازة" كقيمة احتياطية فقط.
+  if (shouldAlwaysShowLeaveAsVacationForPrint()) return "إجازة";
+
+  const candidates = [
+    row?.reason,
+    row?.absenceReason,
+    row?.unavailabilityReason,
+    row?.excuseReason,
+    row?.excuse,
+    row?.leaveReason,
+    row?.meta?.reason,
+    row?.meta?.absenceReason,
+    row?.subject,
+    row?.examSubject,
+    row?.displayText,
+    row?.cellText,
+  ];
+
+  // إذا وُجد سبب واضح غير عام نعرضه كما هو.
+  for (const value of candidates) {
+    const raw = String(value ?? "").trim();
+    if (!raw) continue;
+
+    const normalized = normalizeLeaveReasonForPrint(raw);
+    const ar = raw
+      .replace(/[إأآ]/g, "ا")
+      .replace(/ى/g, "ي")
+      .replace(/ة/g, "ه")
+      .toLowerCase();
+
+    if (normalized !== "إجازة" && !ar.includes("غياب") && !ar.includes("leave") && !ar.includes("absence")) {
+      return normalized;
+    }
+  }
+
+  // إذا كانت إحدى القيم تذكر إجازة صراحة نثبتها.
+  for (const value of candidates) {
+    const raw = String(value ?? "").trim();
+    const ar = raw.replace(/[إأآ]/g, "ا").replace(/ة/g, "ه").toLowerCase();
+    if (ar.includes("اجازه")) return "إجازة";
+  }
+
+  return "إجازة";
+}
+
+// ✅ ملاحظة: هذا التعديل مبني على آخر نسخة تعمل، ولم يتم حذف منطق التقارير أو الطباعة.
+// ✅ الغياب في كشف المعلم يظهر الآن: طبيعة العمل = غياب، والسبب = النص المسجل في صفحة غياب الكادر التعليمي.
+
+function normalizeLeaveAssignmentForPrint(row: AnyAssignment): AnyAssignment {
+  if (!isLeaveAssignmentForPrint(row)) return row;
+
+  const reason = getLeaveReasonForPrint(row);
+
+  return {
+    ...row,
+    taskType: "LEAVE",
+    role: "LEAVE",
+    type: "LEAVE",
+    taskTypeLabelAr: "غياب",
+    taskTypeLabelEn: "Absence",
+    subject: reason,
+    examSubject: reason,
+    reason,
+    cellText: reason,
+    displayText: reason,
+    locked: true,
+    readOnly: true,
+    nonEditable: true,
+    lockedByUnavailability: true,
+    preventEdit: true,
+    preventMove: true,
+    preventDelete: true,
+    cellBackground: row?.cellBackground || "#ede9fe",
+    backgroundColor: row?.backgroundColor || "#ede9fe",
+    color: row?.color || "#3b0764",
+    borderColor: row?.borderColor || "#a78bfa",
+  };
+}
+
+function leaveAssignmentDedupeKeyForPrint(row: AnyAssignment): string {
+  // ✅ مفتاح الدمج يجب أن يعتمد على اسم المعلم أولًا.
+  // السبب: أحيانًا نفس المعلم يأتي من Run و Unavailability بمعرّفين مختلفين،
+  // فيظهر مكررًا في نفس التاريخ والفترة إذا اعتمدنا على teacherId فقط.
+  const teacherNameKey = normalizeTeacherNameForMatch(getTeacherName(row));
+  const teacherIdKey = getAssignmentTeacherId(row);
+  const teacherKey = teacherNameKey || teacherIdKey || "unknown-teacher";
+
+  const date =
+    normalizePrintUnavailabilityDateISO(getExamDateISO(row)) ||
+    normalizePrintUnavailabilityDateISO(row?.examDate) ||
+    normalizePrintUnavailabilityDateISO(row?.assignmentDate) ||
+    normalizePrintUnavailabilityDateISO(row?.meta?.dateISO) ||
+    normalizePrintUnavailabilityDateISO(row?.meta?.date) ||
+    "unknown-date";
+
+  const period = periodToPrintAMPM(
+    getExamPeriod(row) ||
+      row?.period ||
+      row?.periodLabel ||
+      row?.taskPeriod ||
+      row?.meta?.period ||
+      "AM"
+  );
+
+  return `${teacherKey}__${date}__${period}`;
+}
+
+function leaveAssignmentPriorityForPrint(row: AnyAssignment): number {
+  const reason = getLeaveReasonForPrint(row);
+  const rawText = [
+    row?.reason,
+    row?.absenceReason,
+    row?.unavailabilityReason,
+    row?.excuseReason,
+    row?.excuse,
+    row?.leaveReason,
+    row?.subject,
+    row?.examSubject,
+    row?.displayText,
+    row?.cellText,
+  ]
+    .map((v) => String(v ?? "").trim())
+    .filter(Boolean)
+    .join(" ");
+
+  const ar = rawText.replace(/[إأآ]/g, "ا").replace(/ة/g, "ه").toLowerCase();
+
+  let score = 0;
+  if (ar.includes("اجازه")) score += 100;
+  if (String(row?.source || "").toUpperCase().includes("UNAVAIL")) score += 40;
+  if (row?.lockedByUnavailability === true) score += 20;
+  if (reason && reason !== "إجازة") score += 10;
+  return score;
+}
+
+function mergePrintLeaveDuplicates(rows: AnyAssignment[]): AnyAssignment[] {
+  const input = Array.isArray(rows) ? rows : [];
+  const bestByKey = new Map<string, AnyAssignment>();
+
+  for (const row of input) {
+    if (!isLeaveAssignmentForPrint(row)) continue;
+
+    const normalized = normalizeLeaveAssignmentForPrint(row);
+    const key = leaveAssignmentDedupeKeyForPrint(normalized);
+    if (!key || key.includes("____")) continue;
+
+    const current = bestByKey.get(key);
+    if (!current || leaveAssignmentPriorityForPrint(normalized) >= leaveAssignmentPriorityForPrint(current)) {
+      bestByKey.set(key, normalized);
+    }
+  }
+
+  const emitted = new Set<string>();
+  const out: AnyAssignment[] = [];
+
+  for (const row of input) {
+    if (!isLeaveAssignmentForPrint(row)) {
+      out.push(row);
+      continue;
+    }
+
+    const normalized = normalizeLeaveAssignmentForPrint(row);
+    const key = leaveAssignmentDedupeKeyForPrint(normalized);
+    if (emitted.has(key)) continue;
+
+    emitted.add(key);
+    out.push(bestByKey.get(key) || normalized);
+  }
+
+  return out;
+}
+
+function dedupeTeacherRowsForPrint(rows: AnyAssignment[]): AnyAssignment[] {
+  // ✅ حماية إضافية لتقرير المعلم الفردي: لا نسمح بتكرار نفس الغياب لنفس المعلم
+  // في نفس التاريخ ونفس الفترة، حتى لو وصل الصف مرتين من مصدرين مختلفين.
+  return mergePrintLeaveDuplicates(Array.isArray(rows) ? rows : []);
+}
+
 
 /** -------------------------------------------
  * ✅ Print helpers (تقرير فقط + صفحة واحدة للمعلم الفردي)
@@ -1635,7 +1845,9 @@ export default function TaskDistributionPrint() {
       return true;
     });
 
-    return [...cleanedBase, ...extraAbsenceRows];
+    // ✅ دمج صفوف الغياب المتكررة لنفس المعلم/التاريخ/الفترة.
+    // مثال: إذا ظهر "غياب - إجازة" و "غياب - غياب" لنفس الفترة، نُبقي فقط "غياب - إجازة".
+    return mergePrintLeaveDuplicates([...cleanedBase, ...extraAbsenceRows]);
   }, [masterTableRows, teacherFullNameById, teacherFullNameByNameKey, teachers, unavailabilityRules]);
 
   /** -------------------------------------------
@@ -2209,6 +2421,7 @@ export default function TaskDistributionPrint() {
 
   function TeacherSheet(props: { teacherName: string; rows: AnyAssignment[]; pageBreak?: boolean; createdAtISO: string }) {
     const employeeNo = getTeacherEmployeeNoByName(props.teacherName);
+    const teacherRowsForPrint = dedupeTeacherRowsForPrint(props.rows || []);
 
     return (
       <div className="print-sheet" style={{ ...styles.sheet, ...(props.pageBreak ? styles.pageBreak : {}) }}>
@@ -2266,10 +2479,12 @@ export default function TaskDistributionPrint() {
             </tr>
           </thead>
           <tbody>
-            {props.rows.length ? (
-              props.rows.map((r, idx) => {
+            {teacherRowsForPrint.length ? (
+              teacherRowsForPrint.map((r, idx) => {
                 const meta = lookupExamMetaForRow(r);
-                const sub = meta?.subject || getExamSubject(r) || "";
+                const isLeaveRow = getTaskType(r) === "LEAVE";
+                // ✅ للغياب: لا نعرض "إجازة" دائمًا؛ نعرض السبب المسجل فعليًا في Unavailability.tsx.
+                const sub = isLeaveRow ? getLeaveReasonForPrint(r) : meta?.subject || getExamSubject(r) || "";
                 const dISO = meta?.dateISO || normalizeISODate(getExamDateISO(r)) || "";
                 const per = meta?.period || getExamPeriod(r) || "";
                 const day = meta?.dayLabel || getExamDayLabel(r) || "—";

@@ -84,6 +84,11 @@ const MASTER_TABLE_KEY = "exam-manager:task-distribution:master-table:v1";
 const RESULTS_TABLE_KEY = "exam-manager:task-distribution:results-table:v1";
 const ALL_TABLE_KEY = "exam-manager:task-distribution:all-table:v1";
 const MANUAL_SUGGESTION_HISTORY_KEY_PREFIX = "exam-manager:task-distribution:manual-suggestion-history:";
+// ✅ سجل تدوير المراقبين: يقلل تكرار نفس المعلم في نفس رقم اللجنة،
+// ✅ ويقلل اجتماع نفس المراقبين معًا أكثر من مرتين قدر الإمكان.
+const INVIGILATOR_ROTATION_HISTORY_KEY_PREFIX = "exam-manager:task-distribution:invigilator-rotation-history:";
+const MAX_INVIGILATOR_ROTATION_HISTORY_RECORDS = 5000;
+const MAX_PREFERRED_PAIR_REPEAT = 2;
 
 const LOGO_URL = "https://i.imgur.com/vdDhSMh.png";
 const APP_NAME_AR = "برنامج ادارة الامتحانات الذكي";
@@ -232,6 +237,9 @@ function persistDistributionState(tenantId: string, out: any) {
   };
 
   saveRun(tenantId, safeRun);
+  try {
+    appendInvigilatorRotationHistoryFromRun(tenantId, safeRun);
+  } catch {}
   try {
     localStorage.setItem(MASTER_TABLE_KEY, JSON.stringify(payload));
     localStorage.setItem(RESULTS_TABLE_KEY, JSON.stringify(payload));
@@ -433,6 +441,195 @@ function isLeaveAssignment(assignment: any) {
     assignment?.taskType || assignment?.role || assignment?.type || assignment?.taskTypeLabelAr || assignment?.subject || ""
   );
   return taskType === "LEAVE" || assignment?.lockedByUnavailability === true || assignment?.source === "UNAVAILABILITY";
+}
+
+type InvigilatorRotationRecord = {
+  teacherId: string;
+  teacherName?: string;
+  dateISO: string;
+  period: "AM" | "PM";
+  examKey: string;
+  committeeNo: string;
+  runId?: string;
+  savedAtISO?: string;
+};
+
+function invigilatorRotationHistoryKey(tenantId?: string) {
+  const tid = String(tenantId || "default").trim() || "default";
+  return `${INVIGILATOR_ROTATION_HISTORY_KEY_PREFIX}${tid}:v1`;
+}
+
+function normalizePairKey(a: any, b: any) {
+  const x = String(a || "").trim();
+  const y = String(b || "").trim();
+  if (!x || !y || x === y) return "";
+  return [x, y].sort().join("__PAIR__");
+}
+
+function rotationCommitteeKey(teacherId: any, committeeNo: any) {
+  const tid = String(teacherId || "").trim();
+  const committee = String(committeeNo || "").trim();
+  if (!tid || !committee) return "";
+  return `${tid}__COMMITTEE__${committee}`;
+}
+
+function readInvigilatorRotationHistory(tenantId?: string): InvigilatorRotationRecord[] {
+  try {
+    const payload = readJsonSafe<any[]>(invigilatorRotationHistoryKey(tenantId));
+    return Array.isArray(payload) ? (payload.filter(Boolean) as InvigilatorRotationRecord[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveInvigilatorRotationHistory(tenantId: string, records: InvigilatorRotationRecord[]) {
+  try {
+    const clean = (Array.isArray(records) ? records : [])
+      .filter((r: any) => String(r?.teacherId || "").trim() && String(r?.committeeNo || "").trim())
+      .slice(-MAX_INVIGILATOR_ROTATION_HISTORY_RECORDS);
+    localStorage.setItem(invigilatorRotationHistoryKey(tenantId), JSON.stringify(clean));
+  } catch {}
+}
+
+function getRotationCommitteeNumber(assignment: any): string {
+  const value =
+    assignment?.committeeNumber ??
+    assignment?.committeeNo ??
+    assignment?.committee ??
+    assignment?.roomNumber ??
+    assignment?.roomNo ??
+    assignment?.room ??
+    "";
+  return String(value ?? "").trim();
+}
+
+function getRotationExamKey(assignment: any) {
+  const examId = String(assignment?.examId || "").trim();
+  if (examId) return `EXAM:${examId}`;
+  const subject = String(assignment?.examSubject || assignment?.subject || "").trim();
+  return `SUBJECT:${normalizeSearch(subject)}`;
+}
+
+function extractInvigilatorRotationRecords(assignments: any[], runId?: string): InvigilatorRotationRecord[] {
+  const out: InvigilatorRotationRecord[] = [];
+  const savedAtISO = new Date().toISOString();
+  for (const assignment of Array.isArray(assignments) ? assignments : []) {
+    const taskType = normalizeStoredTaskTypeGlobal(
+      assignment?.taskType || assignment?.role || assignment?.type || assignment?.taskTypeLabelAr || ""
+    );
+    if (taskType !== "INVIGILATION") continue;
+
+    const teacherId = String(assignment?.teacherId || "").trim();
+    if (!teacherId) continue;
+
+    const committeeNo = getRotationCommitteeNumber(assignment);
+    if (!committeeNo) continue;
+
+    const dateISO = workDateISO(String(assignment?.dateISO || assignment?.date || "").trim());
+    const period = periodToAMPM(String(assignment?.period || "AM"));
+    const examKey = getRotationExamKey(assignment);
+    if (!dateISO || !examKey) continue;
+
+    out.push({
+      teacherId,
+      teacherName: String(assignment?.teacherName || "").trim(),
+      dateISO,
+      period,
+      examKey,
+      committeeNo,
+      runId: String(runId || assignment?.runId || "").trim(),
+      savedAtISO,
+    });
+  }
+  return out;
+}
+
+function buildInvigilatorRotationIndexes(tenantId?: string) {
+  const records = readInvigilatorRotationHistory(tenantId);
+
+  // ✅ أول تشغيل بعد التحديث: اقرأ آخر تشغيل محفوظ حتى يبدأ التدوير مباشرة.
+  try {
+    const previousRun = loadRun(String(tenantId || "").trim() || "default") as any;
+    const previousAssignments = Array.isArray(previousRun?.assignments) ? previousRun.assignments : [];
+    if (previousAssignments.length) {
+      records.push(...extractInvigilatorRotationRecords(previousAssignments, previousRun?.runId || previousRun?.createdAtISO || "previous-run"));
+    }
+  } catch {}
+
+  const seenRecords = new Set<string>();
+  const uniqueRecords: InvigilatorRotationRecord[] = [];
+  for (const record of records) {
+    const key = [
+      String(record?.runId || "").trim(),
+      String(record?.teacherId || "").trim(),
+      workDateISO(String(record?.dateISO || "").trim()),
+      periodToAMPM(String(record?.period || "AM")),
+      String(record?.examKey || "").trim(),
+      String(record?.committeeNo || "").trim(),
+    ].join("__");
+    if (seenRecords.has(key)) continue;
+    seenRecords.add(key);
+    uniqueRecords.push(record);
+  }
+
+  const teacherCommitteeCounts = new Map<string, number>();
+  const pairCounts = new Map<string, number>();
+  const grouped = new Map<string, string[]>();
+
+  for (const record of uniqueRecords) {
+    const teacherId = String(record?.teacherId || "").trim();
+    const committeeNo = String(record?.committeeNo || "").trim();
+    const dateISO = workDateISO(String(record?.dateISO || "").trim());
+    const period = periodToAMPM(String(record?.period || "AM"));
+    const examKey = String(record?.examKey || "").trim();
+    if (!teacherId || !committeeNo || !dateISO || !examKey) continue;
+
+    const ck = rotationCommitteeKey(teacherId, committeeNo);
+    if (ck) teacherCommitteeCounts.set(ck, (teacherCommitteeCounts.get(ck) || 0) + 1);
+
+    const groupKey = `${dateISO}__${period}__${examKey}__${committeeNo}`;
+    const list = grouped.get(groupKey) || [];
+    if (!list.includes(teacherId)) list.push(teacherId);
+    grouped.set(groupKey, list);
+  }
+
+  for (const ids of grouped.values()) {
+    for (let i = 0; i < ids.length; i++) {
+      for (let j = i + 1; j < ids.length; j++) {
+        const pk = normalizePairKey(ids[i], ids[j]);
+        if (pk) pairCounts.set(pk, (pairCounts.get(pk) || 0) + 1);
+      }
+    }
+  }
+
+  return { teacherCommitteeCounts, pairCounts };
+}
+
+function appendInvigilatorRotationHistoryFromRun(tenantId: string, out: any) {
+  const tid = String(tenantId || "default").trim() || "default";
+  const assignments = Array.isArray(out?.assignments) ? out.assignments : [];
+  const newRecords = extractInvigilatorRotationRecords(assignments, String(out?.runId || out?.createdAtISO || "").trim());
+  if (!newRecords.length) return;
+
+  const previous = readInvigilatorRotationHistory(tid);
+  const seen = new Set<string>();
+  const merged: InvigilatorRotationRecord[] = [];
+
+  for (const record of [...previous, ...newRecords]) {
+    const key = [
+      String(record?.runId || "").trim(),
+      String(record?.teacherId || "").trim(),
+      workDateISO(String(record?.dateISO || "").trim()),
+      periodToAMPM(String(record?.period || "AM")),
+      String(record?.examKey || "").trim(),
+      String(record?.committeeNo || "").trim(),
+    ].join("__");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(record);
+  }
+
+  saveInvigilatorRotationHistory(tid, merged.slice(-MAX_INVIGILATOR_ROTATION_HISTORY_RECORDS));
 }
 
 
@@ -1504,6 +1701,13 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
     : loadUnavailabilityForDistribution(String(constraints?.__tenantId || "").trim() || undefined);
   const unavailIndex = buildUnavailabilityIndex(unavailabilityRulesForRun);
 
+  // ✅ فهارس تدوير المراقبين: تقلل تكرار نفس اللجنة ونفس الزملاء قدر الإمكان.
+  const tenantIdForRotation = String(constraints?.__tenantId || "").trim() || "default";
+  const rotationIndexes = buildInvigilatorRotationIndexes(tenantIdForRotation);
+  const currentRunTeacherCommitteeCounts = new Map<string, number>();
+  const currentRunPairCounts = new Map<string, number>();
+  const currentRunCommitteeGroups = new Map<string, string[]>();
+
   // ✅ حتى لا تكون خيارات الواجهة شكلية:
   const enableCorrectionFree = !!constraints?.freeAllSubjectTeachersForCorrection;
 
@@ -1878,6 +2082,74 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
     return [getAssignmentPeriodForState(assignment)];
   }
 
+  function getRotationExamKeyForState(assignment: any) {
+    return getRotationExamKey(assignment);
+  }
+
+  function rotationGroupKeyForAssignment(assignment: any) {
+    const date = getAssignmentDateISOForState(assignment);
+    const period = getAssignmentPeriodForState(assignment);
+    const examKey = getRotationExamKeyForState(assignment);
+    const committeeNo = getAssignmentCommitteeNumber(assignment);
+    if (!date || !examKey || !committeeNo) return "";
+    return `${date}__${period}__${examKey}__${committeeNo}`;
+  }
+
+  function getPairRepeatCount(idA: string, idB: string) {
+    const pk = normalizePairKey(idA, idB);
+    if (!pk) return 999999;
+    return (rotationIndexes.pairCounts.get(pk) || 0) + (currentRunPairCounts.get(pk) || 0);
+  }
+
+  function getTeacherCommitteeRepeatCount(teacherId: string, committeeNo: any) {
+    const ck = rotationCommitteeKey(teacherId, committeeNo);
+    if (!ck) return 0;
+    return (rotationIndexes.teacherCommitteeCounts.get(ck) || 0) + (currentRunTeacherCommitteeCounts.get(ck) || 0);
+  }
+
+  function getProspectivePairPenalty(teacherId: string, dateISO: string, period: "AM" | "PM", subject: string, meta?: any) {
+    const committeeNo = String(meta?.committeeNo ?? meta?.committeeNumber ?? meta?.roomNo ?? meta?.roomNumber ?? "").trim();
+    if (!committeeNo) return 0;
+    const examKey = String(meta?.examId || "").trim() ? `EXAM:${String(meta?.examId || "").trim()}` : `SUBJECT:${normalizeSearch(subject)}`;
+    const groupKey = `${dateISO}__${period}__${examKey}__${committeeNo}`;
+    const existingIds = currentRunCommitteeGroups.get(groupKey) || [];
+    return existingIds.reduce((sum, otherId) => sum + getPairRepeatCount(teacherId, otherId), 0);
+  }
+
+  function getPairSoftLimitPenalty(idA: string, idB: string) {
+    const count = getPairRepeatCount(idA, idB);
+    return count >= MAX_PREFERRED_PAIR_REPEAT ? 1000 + count : count;
+  }
+
+  function registerRotationForCommittedInvigilation(assignment: any) {
+    if (normalizeAssignmentTaskTypeLocal(assignment) !== "INVIGILATION") return;
+    const teacherId = String((assignment as any)?.teacherId || "").trim();
+    const committeeNo = getAssignmentCommitteeNumber(assignment);
+    if (!teacherId || !committeeNo) return;
+
+    const ck = rotationCommitteeKey(teacherId, committeeNo);
+    if (ck) currentRunTeacherCommitteeCounts.set(ck, (currentRunTeacherCommitteeCounts.get(ck) || 0) + 1);
+
+    const groupKey = rotationGroupKeyForAssignment(assignment);
+    if (!groupKey) return;
+    const group = currentRunCommitteeGroups.get(groupKey) || [];
+    for (const otherId of group) {
+      const pk = normalizePairKey(teacherId, otherId);
+      if (pk) currentRunPairCounts.set(pk, (currentRunPairCounts.get(pk) || 0) + 1);
+    }
+    if (!group.includes(teacherId)) group.push(teacherId);
+    currentRunCommitteeGroups.set(groupKey, group);
+  }
+
+  function rebuildRotationStateFromAssignments() {
+    currentRunTeacherCommitteeCounts.clear();
+    currentRunPairCounts.clear();
+    currentRunCommitteeGroups.clear();
+    for (const assignment of assignments) {
+      registerRotationForCommittedInvigilation(assignment);
+    }
+  }
+
   function rebuildAssignmentStateFromAssignments() {
     for (const id of teacherIds) {
       quotaTotals.set(id, 0);
@@ -1888,6 +2160,9 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
     }
     teacherDayFirstInvDuration.clear();
     teacherGrade12InvigilationSubject.clear();
+    currentRunTeacherCommitteeCounts.clear();
+    currentRunPairCounts.clear();
+    currentRunCommitteeGroups.clear();
 
     for (const assignment of assignments) {
       const teacherId = String((assignment as any)?.teacherId || "").trim();
@@ -1924,6 +2199,8 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
             teacherGrade12InvigilationSubject.set(teacherId, grade12Key);
           }
         }
+
+        registerRotationForCommittedInvigilation(assignment);
       }
     }
   }
@@ -2224,7 +2501,7 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
       }
     }
 
-    assignments.push({
+    const assignmentToCommit = {
       teacherId,
       teacherName: teacherNameMap.get(teacherId) || teacherId,
       taskType,
@@ -2234,7 +2511,10 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
       period,
       subject,
       ...meta,
-    });
+    };
+
+    assignments.push(assignmentToCommit);
+    registerRotationForCommittedInvigilation(assignmentToCommit);
   }
 
   // ✅ توزيع: INVIGILATION بالحد الأدنى من المراقبات، والباقي RR
@@ -2264,12 +2544,16 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
             hasSameDay,
             firstDur,
             is12,
+            committeeRepeat: getTeacherCommitteeRepeatCount(id, meta?.committeeNo ?? meta?.committeeNumber ?? meta?.roomNo ?? meta?.roomNumber),
+            pairPenalty: getProspectivePairPenalty(id, dateISO, period, subject, meta),
           };
         })
         .sort(
           (a, b) =>
             // ✅ NEW: لو مادة 12، فضّل معلم 12
             (subj12 ? Number(b.is12) - Number(a.is12) : 0) ||
+            a.committeeRepeat - b.committeeRepeat ||
+            a.pairPenalty - b.pairPenalty ||
             a.inv - b.inv ||
             a.quota - b.quota ||
             Number(a.hasSameDay) - Number(b.hasSameDay) ||
@@ -2379,12 +2663,16 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
               name,
               ben: hasBenInName(name),
               is12: teacherHas12(name),
+              committeeRepeat: getTeacherCommitteeRepeatCount(id, committeeNo),
+              pairPenalty: getProspectivePairPenalty(id, dateISO, period, subject, { examId: exam.id, committeeNo }),
             };
           })
           .filter((c) => c.ben) // ✅ شرط: لازم "بن"
           .sort(
             (a, b) =>
               (subj12 ? Number(b.is12) - Number(a.is12) : 0) ||
+              a.committeeRepeat - b.committeeRepeat ||
+              a.pairPenalty - b.pairPenalty ||
               a.inv - b.inv ||
               a.quota - b.quota ||
               Number(a.hasSameDay) - Number(b.hasSameDay) ||
@@ -2491,11 +2779,15 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
                 name,
                 ben: hasBenInName(name),
                 is12: teacherHas12(name),
+                committeeRepeat: getTeacherCommitteeRepeatCount(id, committeeNo),
+                pairPenalty: getProspectivePairPenalty(id, dateISO, period, subject, { examId: exam.id, committeeNo }),
               };
             })
             .sort(
               (a, b) =>
                 (subj12 ? Number(b.is12) - Number(a.is12) : 0) ||
+                a.committeeRepeat - b.committeeRepeat ||
+                a.pairPenalty - b.pairPenalty ||
                 a.inv - b.inv ||
                 a.quota - b.quota ||
                 Number(a.hasSameDay) - Number(b.hasSameDay) ||
@@ -2523,9 +2815,19 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
           }
 
           const cand2raw = buildCandidates().filter((c2) => c2.id !== c1.id);
-          const cand2 = subj12
+          const cand2 = (subj12
             ? [...cand2raw.filter((c) => c.is12), ...cand2raw.filter((c) => !c.is12)]
-            : cand2raw;
+            : cand2raw
+          ).sort(
+            (a, b) =>
+              getPairSoftLimitPenalty(c1.id, a.id) - getPairSoftLimitPenalty(c1.id, b.id) ||
+              getPairRepeatCount(c1.id, a.id) - getPairRepeatCount(c1.id, b.id) ||
+              a.committeeRepeat - b.committeeRepeat ||
+              a.pairPenalty - b.pairPenalty ||
+              a.inv - b.inv ||
+              a.quota - b.quota ||
+              a.rrDist - b.rrDist
+          );
 
           for (const c2 of cand2) {
             // ✅ ممنوع: بدون بن + بدون بن
@@ -2559,9 +2861,19 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
 
           for (const c1 of fallbackCandidates) {
             const cand2raw = buildCandidates().filter((c2) => c2.id !== c1.id);
-            const cand2 = subj12
+            const cand2 = (subj12
               ? [...cand2raw.filter((c) => c.is12), ...cand2raw.filter((c) => !c.is12)]
-              : cand2raw;
+              : cand2raw
+            ).sort(
+              (a, b) =>
+                getPairSoftLimitPenalty(c1.id, a.id) - getPairSoftLimitPenalty(c1.id, b.id) ||
+                getPairRepeatCount(c1.id, a.id) - getPairRepeatCount(c1.id, b.id) ||
+                a.committeeRepeat - b.committeeRepeat ||
+                a.pairPenalty - b.pairPenalty ||
+                a.inv - b.inv ||
+                a.quota - b.quota ||
+                a.rrDist - b.rrDist
+            );
 
             for (const c2 of cand2) {
               if (!c1.ben && !c2.ben) continue;

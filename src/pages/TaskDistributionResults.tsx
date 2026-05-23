@@ -302,6 +302,175 @@ function getSubjectBackground(subject?: string) {
   return subjectColors[normalized] || "rgba(212,175,55,0.18)";
 }
 
+
+function normalizeCommercialTeacherIdentity(value: any) {
+  return String(value || "")
+    .replace(/[\u064B-\u065F\u0670]/g, "")
+    .replace(/ـ/g, "")
+    .replace(/[أإآٱ]/g, "ا")
+    .replace(/ى/g, "ي")
+    .replace(/ة/g, "ه")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/(?:\s|[-_#])*[0-9\u0660-\u0669]{1,3}\s*$/u, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function getCommercialAssignmentIdentity(item: any) {
+  if (!item || typeof item !== "object") return String(item || "");
+  return String(
+    item.uid ||
+      item.id ||
+      [
+        item.teacherId,
+        item.teacherName || item.teacher,
+        item.dateISO || item.date,
+        item.period,
+        item.subject,
+        item.taskType || item.type,
+        item.committeeNo || item.committee || item.roomNo || item.room,
+      ]
+        .map((part) => String(part ?? "").trim())
+        .join("|"),
+  );
+}
+
+function mergeCommercialAssignmentArrays(target: any[], source: any[]) {
+  const merged: any[] = [];
+  const seen = new Set<string>();
+
+  [...target, ...source].forEach((item) => {
+    const key = getCommercialAssignmentIdentity(item);
+    if (key && seen.has(key)) return;
+    if (key) seen.add(key);
+    merged.push(item);
+  });
+
+  return merged;
+}
+
+function mergeCommercialMatrixCell(targetCell: any, sourceCell: any) {
+  if (sourceCell === undefined || sourceCell === null) return targetCell;
+  if (targetCell === undefined || targetCell === null) return sourceCell;
+
+  if (Array.isArray(targetCell) || Array.isArray(sourceCell)) {
+    return mergeCommercialAssignmentArrays(
+      Array.isArray(targetCell) ? targetCell : [targetCell],
+      Array.isArray(sourceCell) ? sourceCell : [sourceCell],
+    );
+  }
+
+  if (typeof targetCell === "object" && typeof sourceCell === "object") {
+    const output: any = { ...targetCell };
+
+    ["assignments", "items", "tasks"].forEach((field) => {
+      if (Array.isArray(targetCell?.[field]) || Array.isArray(sourceCell?.[field])) {
+        output[field] = mergeCommercialAssignmentArrays(
+          Array.isArray(targetCell?.[field]) ? targetCell[field] : [],
+          Array.isArray(sourceCell?.[field]) ? sourceCell[field] : [],
+        );
+      }
+    });
+
+    return output;
+  }
+
+  return targetCell;
+}
+
+function mergeCommercialTeacherTotals(targetTotal: any, sourceTotal: any) {
+  if (sourceTotal === undefined || sourceTotal === null) return targetTotal;
+  if (targetTotal === undefined || targetTotal === null) return sourceTotal;
+
+  if (typeof targetTotal === "number" && typeof sourceTotal === "number") {
+    return targetTotal + sourceTotal;
+  }
+
+  if (typeof targetTotal === "object" && typeof sourceTotal === "object") {
+    const output: any = { ...targetTotal };
+    Object.entries(sourceTotal).forEach(([key, value]) => {
+      const current = output[key];
+      if (typeof current === "number" && typeof value === "number") {
+        output[key] = current + value;
+      } else if (current === undefined) {
+        output[key] = value;
+      }
+    });
+    return output;
+  }
+
+  return targetTotal;
+}
+
+function buildCommercialTeacherDedupe(allTeachers: any[]) {
+  const uniqueTeachers: string[] = [];
+  const canonicalByKey = new Map<string, string>();
+  const aliasToCanonical = new Map<string, string>();
+
+  (Array.isArray(allTeachers) ? allTeachers : []).forEach((teacher) => {
+    const displayName = String(teacher || "").replace(/\s+/g, " ").trim();
+    if (!displayName) return;
+
+    const key = normalizeCommercialTeacherIdentity(displayName) || displayName;
+    const canonical = canonicalByKey.get(key);
+
+    if (canonical) {
+      aliasToCanonical.set(displayName, canonical);
+      return;
+    }
+
+    canonicalByKey.set(key, displayName);
+    aliasToCanonical.set(displayName, displayName);
+    uniqueTeachers.push(displayName);
+  });
+
+  return { uniqueTeachers, aliasToCanonical };
+}
+
+function mergeCommercialDuplicateTeacherMatrix(matrix2: any, allTeachers: any[], aliasToCanonical: Map<string, string>) {
+  if (!matrix2 || typeof matrix2 !== "object") return matrix2;
+
+  const output: any = { ...matrix2 };
+
+  (Array.isArray(allTeachers) ? allTeachers : []).forEach((teacher) => {
+    const sourceName = String(teacher || "").replace(/\s+/g, " ").trim();
+    const canonicalName = aliasToCanonical.get(sourceName) || sourceName;
+    if (!sourceName || !canonicalName || sourceName === canonicalName) return;
+
+    const sourceRow = matrix2[sourceName];
+    if (!sourceRow || typeof sourceRow !== "object") return;
+
+    const targetRow: any = output[canonicalName] && typeof output[canonicalName] === "object" ? { ...output[canonicalName] } : {};
+
+    Object.entries(sourceRow).forEach(([subColKey, sourceCell]) => {
+      targetRow[subColKey] = mergeCommercialMatrixCell(targetRow[subColKey], sourceCell);
+    });
+
+    output[canonicalName] = targetRow;
+    delete output[sourceName];
+  });
+
+  return output;
+}
+
+function mergeCommercialDuplicateTeacherTotals(teacherTotals: any, allTeachers: any[], aliasToCanonical: Map<string, string>) {
+  if (!teacherTotals || typeof teacherTotals !== "object") return teacherTotals;
+
+  const output: any = { ...teacherTotals };
+
+  (Array.isArray(allTeachers) ? allTeachers : []).forEach((teacher) => {
+    const sourceName = String(teacher || "").replace(/\s+/g, " ").trim();
+    const canonicalName = aliasToCanonical.get(sourceName) || sourceName;
+    if (!sourceName || !canonicalName || sourceName === canonicalName) return;
+
+    output[canonicalName] = mergeCommercialTeacherTotals(output[canonicalName], teacherTotals[sourceName]);
+    delete output[sourceName];
+  });
+
+  return output;
+}
+
 function getTenantIdFromAuth(auth: any) {
   return (
     String(
@@ -372,6 +541,33 @@ export default function TaskDistributionResults() {
   const interaction = useResultsInteractionState(tenantId);
   const dataModel = useResultsDataModel({ tenantId, run, normalizeSubject });
 
+  const teacherDedupeModel = React.useMemo(
+    () => buildCommercialTeacherDedupe(dataModel.allTeachers),
+    [dataModel.allTeachers],
+  );
+
+  const displayAllTeachers = teacherDedupeModel.uniqueTeachers;
+
+  const displayMatrix2 = React.useMemo(
+    () =>
+      mergeCommercialDuplicateTeacherMatrix(
+        dataModel.matrix2,
+        dataModel.allTeachers,
+        teacherDedupeModel.aliasToCanonical,
+      ),
+    [dataModel.matrix2, dataModel.allTeachers, teacherDedupeModel.aliasToCanonical],
+  );
+
+  const displayTeacherTotals = React.useMemo(
+    () =>
+      mergeCommercialDuplicateTeacherTotals(
+        dataModel.teacherTotals,
+        dataModel.allTeachers,
+        teacherDedupeModel.aliasToCanonical,
+      ),
+    [dataModel.teacherTotals, dataModel.allTeachers, teacherDedupeModel.aliasToCanonical],
+  );
+
   const pageActions = useResultsPageActions({
     tenantId,
     run,
@@ -404,11 +600,11 @@ export default function TaskDistributionResults() {
     displayDates: dataModel.displayDates,
     dateToSubCols: dataModel.dateToSubCols,
     allSubCols: dataModel.allSubCols,
-    allTeachers: dataModel.allTeachers,
-    matrix2: dataModel.matrix2,
+    allTeachers: displayAllTeachers,
+    matrix2: displayMatrix2,
     committeesCountBySubCol: dataModel.committeesCountBySubCol,
     totalsDetailBySubCol: dataModel.totalsDetailBySubCol,
-    teacherTotals: dataModel.teacherTotals,
+    teacherTotals: displayTeacherTotals,
   });
 
   const getAssignmentsInCell = React.useCallback(
@@ -481,7 +677,7 @@ export default function TaskDistributionResults() {
       window.cancelAnimationFrame(frame);
       observer.disconnect();
     };
-  }, [hasRun, run, dataModel.allSubCols.length, dataModel.allTeachers.length, showTeacherSidebar, interaction.tableFullScreen]);
+  }, [hasRun, run, dataModel.allSubCols.length, displayAllTeachers.length, showTeacherSidebar, interaction.tableFullScreen]);
 
   const content = !hasRun ? (
     <ResultsEmptyRunState
@@ -520,11 +716,11 @@ export default function TaskDistributionResults() {
           displayDates={dataModel.displayDates}
           dateToSubCols={dataModel.dateToSubCols}
           allSubCols={dataModel.allSubCols}
-          allTeachers={dataModel.allTeachers}
-          matrix2={dataModel.matrix2}
+          allTeachers={displayAllTeachers}
+          matrix2={displayMatrix2}
           committeesCountBySubCol={dataModel.committeesCountBySubCol}
           totalsDetailBySubCol={dataModel.totalsDetailBySubCol}
-          teacherTotals={dataModel.teacherTotals}
+          teacherTotals={displayTeacherTotals}
           columnColor={columnColor}
           teacherRowColor={teacherRowColor}
           getSubjectBackground={getSubjectBackground}
@@ -560,7 +756,7 @@ export default function TaskDistributionResults() {
             assignmentsCount={dataModel.assignments.length}
             daysCount={dataModel.displayDates.length}
             columnsCount={dataModel.allSubCols.length}
-            teachersCount={dataModel.allTeachers.length}
+            teachersCount={displayAllTeachers.length}
           />
         </div>
       </div>
