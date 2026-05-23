@@ -192,6 +192,11 @@ const firstText = (...values: unknown[]) => {
   return "";
 };
 
+const sortControlMembersByName = (list: ControlMember[]) =>
+  [...list].sort((a, b) =>
+    String(a.name || "").localeCompare(String(b.name || ""), "ar", { sensitivity: "base" }),
+  );
+
 const getAcademicYearFromSystemDate = (now = new Date()) => {
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
@@ -553,23 +558,33 @@ export default function SchoolControl() {
 
     setBusy(true);
     try {
-      const payload = {
+      const localMemberData = {
         name: memberForm.name.trim(),
         employeeNo: memberForm.employeeNo.trim(),
         specialization: memberForm.specialization.trim(),
         assignment: memberForm.assignment.trim(),
         phone: memberForm.phone.trim(),
         signature: memberForm.signature.trim(),
+      };
+
+      const payload = {
+        ...localMemberData,
         updatedAt: serverTimestamp(),
       };
 
       if (memberForm.id) {
         await setDoc(doc(db, "tenants", tenantId, "schoolControlMembers", memberForm.id), payload, { merge: true });
+        setMembers((prev) =>
+          sortControlMembersByName(
+            prev.map((item) => (item.id === memberForm.id ? { ...item, ...localMemberData } : item)),
+          ),
+        );
       } else {
-        await addDoc(collection(db, "tenants", tenantId, "schoolControlMembers"), {
+        const memberRef = await addDoc(collection(db, "tenants", tenantId, "schoolControlMembers"), {
           ...payload,
           createdAt: serverTimestamp(),
         });
+        setMembers((prev) => sortControlMembersByName([...prev, { id: memberRef.id, ...localMemberData }]));
       }
 
       resetMemberForm();
@@ -588,6 +603,7 @@ export default function SchoolControl() {
     setBusy(true);
     try {
       await deleteDoc(doc(db, "tenants", tenantId, "schoolControlMembers", memberId));
+      setMembers((prev) => prev.filter((item) => item.id !== memberId));
       if (memberForm.id === memberId) resetMemberForm();
     } finally {
       setBusy(false);
@@ -627,24 +643,33 @@ export default function SchoolControl() {
         signature: String(item!.signature || ""),
       }));
 
+    const localReportData = {
+      type: reportForm.type,
+      reportDate: reportForm.reportDate,
+      dayName: reportForm.dayName || toDayName(reportForm.reportDate, lang === "ar" ? "ar" : "en"),
+      reportTime: reportForm.reportTime,
+      subject: reportForm.subject.trim(),
+      envelopesCount: reportForm.envelopesCount.trim(),
+      papersCount: reportForm.papersCount.trim(),
+      studentName: reportForm.studentName.trim(),
+      studentSeatNo: reportForm.studentSeatNo.trim(),
+      studentGrade: reportForm.studentGrade.trim(),
+      teacherName: reportForm.teacherName.trim(),
+      notes: reportForm.notes.trim(),
+      members: membersPayload,
+    };
+
     setBusy(true);
     try {
-      await addDoc(collection(db, "tenants", tenantId, "schoolControlReports"), {
-        type: reportForm.type,
-        reportDate: reportForm.reportDate,
-        dayName: reportForm.dayName || toDayName(reportForm.reportDate, lang === "ar" ? "ar" : "en"),
-        reportTime: reportForm.reportTime,
-        subject: reportForm.subject.trim(),
-        envelopesCount: reportForm.envelopesCount.trim(),
-        papersCount: reportForm.papersCount.trim(),
-        studentName: reportForm.studentName.trim(),
-        studentSeatNo: reportForm.studentSeatNo.trim(),
-        studentGrade: reportForm.studentGrade.trim(),
-        teacherName: reportForm.teacherName.trim(),
-        notes: reportForm.notes.trim(),
-        members: membersPayload,
+      const reportRef = await addDoc(collection(db, "tenants", tenantId, "schoolControlReports"), {
+        ...localReportData,
         createdAt: serverTimestamp(),
       });
+      setReports((prev) =>
+        [{ id: reportRef.id, ...localReportData }, ...prev].sort((a, b) =>
+          String(b.reportDate || "").localeCompare(String(a.reportDate || "")),
+        ),
+      );
       resetReportForm();
     } catch (error) {
       console.error(error);
@@ -661,6 +686,7 @@ export default function SchoolControl() {
     setBusy(true);
     try {
       await deleteDoc(doc(db, "tenants", tenantId, "schoolControlReports", reportId));
+      setReports((prev) => prev.filter((item) => item.id !== reportId));
     } finally {
       setBusy(false);
     }
@@ -712,22 +738,34 @@ export default function SchoolControl() {
       const signatureIndex = findIndex("التوقيع", "signature");
       const startAt = nameIndex >= 0 || employeeNoIndex >= 0 ? 1 : 0;
 
+      const importedMembers: ControlMember[] = [];
+
       for (let i = startAt; i < rows.length; i += 1) {
         const row = rows[i];
         const name = String(row[nameIndex >= 0 ? nameIndex : 0] || "").trim();
         const employeeNo = String(row[employeeNoIndex >= 0 ? employeeNoIndex : 1] || "").trim();
         if (!name || !employeeNo) continue;
 
-        await addDoc(collection(db, "tenants", tenantId, "schoolControlMembers"), {
+        const localMemberData = {
           name,
           employeeNo,
           specialization: String(row[specializationIndex >= 0 ? specializationIndex : 2] || "").trim(),
           assignment: String(row[assignmentIndex >= 0 ? assignmentIndex : 3] || "").trim(),
           phone: String(row[phoneIndex >= 0 ? phoneIndex : 4] || "").trim(),
           signature: String(row[signatureIndex >= 0 ? signatureIndex : 5] || "").trim(),
+        };
+
+        const memberRef = await addDoc(collection(db, "tenants", tenantId, "schoolControlMembers"), {
+          ...localMemberData,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
+
+        importedMembers.push({ id: memberRef.id, ...localMemberData });
+      }
+
+      if (importedMembers.length) {
+        setMembers((prev) => sortControlMembersByName([...prev, ...importedMembers]));
       }
 
       alert(tr("تم الاستيراد بنجاح.", "Imported successfully."));
