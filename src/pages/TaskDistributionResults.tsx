@@ -200,6 +200,73 @@ const OFFICIAL_RESULTS_TABLE_CSS = `
     50% { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.70), 0 0 14px rgba(220, 38, 38, 0.25); }
   }
 
+
+
+  /* تثبيت جدول النتائج الشامل: عمود المعلم + صفوف التاريخ والمادة */
+  .resultsOfficialCommercialScope .resultsOfficialStickyHost {
+    position: relative !important;
+    isolation: isolate !important;
+  }
+
+  .resultsOfficialCommercialScope .resultsOfficialStickyHost table {
+    overflow: visible !important;
+    position: relative !important;
+    isolation: isolate !important;
+  }
+
+  .resultsOfficialCommercialScope .resultsOfficialStickyHost thead th,
+  .resultsOfficialCommercialScope .resultsOfficialStickyHost thead td {
+    position: sticky !important;
+    top: var(--results-sticky-top, 0px) !important;
+    z-index: var(--results-sticky-z, 80) !important;
+    background: linear-gradient(180deg, #f4e2ad 0%, #d5b45a 100%) !important;
+    box-shadow: 0 8px 16px rgba(78, 59, 16, 0.22) !important;
+    background-clip: padding-box !important;
+  }
+
+  .resultsOfficialCommercialScope .resultsOfficialStickyHost thead tr:nth-child(1) th,
+  .resultsOfficialCommercialScope .resultsOfficialStickyHost thead tr:nth-child(1) td {
+    --results-sticky-top: 0px;
+    --results-sticky-z: 88;
+  }
+
+  .resultsOfficialCommercialScope .resultsOfficialStickyHost thead tr:nth-child(2) th,
+  .resultsOfficialCommercialScope .resultsOfficialStickyHost thead tr:nth-child(2) td {
+    --results-sticky-top: var(--results-second-header-top, 68px);
+    --results-sticky-z: 86;
+  }
+
+  .resultsOfficialCommercialScope .resultsOfficialStickyHost thead tr > th:first-child,
+  .resultsOfficialCommercialScope .resultsOfficialStickyHost thead tr > td:first-child,
+  .resultsOfficialCommercialScope .resultsOfficialStickyHost tbody tr > th:first-child,
+  .resultsOfficialCommercialScope .resultsOfficialStickyHost tbody tr > td.resultsOfficialTeacherStickyCell,
+  .resultsOfficialCommercialScope .resultsOfficialTeacherStickyCell {
+    position: sticky !important;
+    inset-inline-start: 0 !important;
+    right: 0 !important;
+    left: auto !important;
+    z-index: 92 !important;
+    background: linear-gradient(135deg, rgba(255,248,220,.99), rgba(230,198,103,.98)) !important;
+    box-shadow: -12px 0 20px rgba(78, 59, 16, 0.18), inset 1px 0 0 rgba(151,116,28,.45) !important;
+    background-clip: padding-box !important;
+  }
+
+  .resultsOfficialCommercialScope .resultsOfficialStickyHost thead tr > th:first-child,
+  .resultsOfficialCommercialScope .resultsOfficialStickyHost thead tr > td:first-child {
+    z-index: 120 !important;
+    top: 0 !important;
+  }
+
+  html[dir="ltr"] .resultsOfficialCommercialScope .resultsOfficialStickyHost thead tr > th:first-child,
+  html[dir="ltr"] .resultsOfficialCommercialScope .resultsOfficialStickyHost thead tr > td:first-child,
+  html[dir="ltr"] .resultsOfficialCommercialScope .resultsOfficialStickyHost tbody tr > th:first-child,
+  html[dir="ltr"] .resultsOfficialCommercialScope .resultsOfficialStickyHost tbody tr > td.resultsOfficialTeacherStickyCell,
+  html[dir="ltr"] .resultsOfficialCommercialScope .resultsOfficialTeacherStickyCell {
+    left: 0 !important;
+    right: auto !important;
+    box-shadow: 12px 0 20px rgba(78, 59, 16, 0.18), inset -1px 0 0 rgba(151,116,28,.45) !important;
+  }
+
   @media print {
     .resultsOfficialCommercialScope,
     .resultsOfficialCommercialScope * {
@@ -287,6 +354,94 @@ function applyCommercialResultsCellClasses(root: HTMLElement | null) {
   });
 }
 
+
+function setOfficialStickyImportant(el: HTMLElement, name: string, value: string) {
+  el.style.setProperty(name, value, "important");
+}
+
+function clearOfficialStickyResultsTable(root: HTMLElement | null) {
+  if (!root) return;
+
+  root.querySelectorAll<HTMLElement>(".resultsOfficialTeacherStickyCell").forEach((cell) => {
+    cell.classList.remove("resultsOfficialTeacherStickyCell");
+  });
+}
+
+function applyOfficialStickyResultsTable(root: HTMLElement | null, lang: string) {
+  if (!root) return;
+
+  const table = root.querySelector<HTMLElement>("table");
+  if (!table) return;
+
+  clearOfficialStickyResultsTable(root);
+
+  setOfficialStickyImportant(table, "overflow", "visible");
+  setOfficialStickyImportant(table, "position", "relative");
+  setOfficialStickyImportant(table, "isolation", "isolate");
+
+  const headerRows = Array.from(table.querySelectorAll<HTMLTableRowElement>("thead tr"));
+  let topOffset = 0;
+
+  headerRows.forEach((row, rowIndex) => {
+    const rowHeight = Math.ceil(row.getBoundingClientRect().height || (rowIndex === 0 ? 68 : 96));
+    const zIndex = String(120 - rowIndex * 2);
+
+    Array.from(row.children).forEach((rawCell, cellIndex) => {
+      const cell = rawCell as HTMLElement;
+      setOfficialStickyImportant(cell, "position", "sticky");
+      setOfficialStickyImportant(cell, "top", `${Math.max(0, topOffset)}px`);
+      setOfficialStickyImportant(cell, "z-index", zIndex);
+      setOfficialStickyImportant(cell, "background-clip", "padding-box");
+      setOfficialStickyImportant(cell, "box-shadow", "0 8px 16px rgba(78, 59, 16, 0.22)");
+
+      const cellText = cleanCommercialCellText(cell.textContent || "");
+      const isTeacherHeader =
+        cellIndex === 0 &&
+        (/^(المعلم|اسم المعلم|teacher|teacher name)$/i.test(cellText) || Number((cell as HTMLTableCellElement).rowSpan || 1) > 1);
+
+      if (isTeacherHeader) {
+        cell.classList.add("resultsOfficialTeacherStickyCell");
+        setOfficialStickyImportant(cell, "top", "0px");
+        setOfficialStickyImportant(cell, "z-index", "160");
+        setOfficialStickyImportant(cell, "inset-inline-start", "0px");
+        if (lang === "ar") {
+          setOfficialStickyImportant(cell, "right", "0px");
+          setOfficialStickyImportant(cell, "left", "auto");
+        } else {
+          setOfficialStickyImportant(cell, "left", "0px");
+          setOfficialStickyImportant(cell, "right", "auto");
+        }
+      }
+    });
+
+    topOffset += rowHeight;
+  });
+
+  root.style.setProperty("--results-second-header-top", `${Math.max(0, Math.ceil(headerRows[0]?.getBoundingClientRect().height || 68))}px`);
+
+  const bodyRows = Array.from(table.querySelectorAll<HTMLTableRowElement>("tbody tr"));
+  bodyRows.forEach((row) => {
+    const teacherCell = row.querySelector<HTMLElement>('th[scope="row"], th:first-child');
+    if (!teacherCell) return;
+
+    teacherCell.classList.add("resultsOfficialTeacherStickyCell");
+    setOfficialStickyImportant(teacherCell, "position", "sticky");
+    setOfficialStickyImportant(teacherCell, "inset-inline-start", "0px");
+    setOfficialStickyImportant(teacherCell, "z-index", "96");
+    setOfficialStickyImportant(teacherCell, "background", "linear-gradient(135deg, rgba(255,248,220,.99), rgba(230,198,103,.98))");
+    setOfficialStickyImportant(teacherCell, "background-clip", "padding-box");
+    if (lang === "ar") {
+      setOfficialStickyImportant(teacherCell, "right", "0px");
+      setOfficialStickyImportant(teacherCell, "left", "auto");
+      setOfficialStickyImportant(teacherCell, "box-shadow", "-12px 0 20px rgba(78, 59, 16, 0.18), inset 1px 0 0 rgba(151,116,28,.45)");
+    } else {
+      setOfficialStickyImportant(teacherCell, "left", "0px");
+      setOfficialStickyImportant(teacherCell, "right", "auto");
+      setOfficialStickyImportant(teacherCell, "box-shadow", "12px 0 20px rgba(78, 59, 16, 0.18), inset -1px 0 0 rgba(151,116,28,.45)");
+    }
+  });
+}
+
 function normalizeSubject(subject: string) {
   return String(subject || "").replace(/\s+/g, " ").trim();
 }
@@ -300,175 +455,6 @@ function getCommitteeNo(a: any) {
 function getSubjectBackground(subject?: string) {
   const normalized = normalizeSubject(String(subject || ""));
   return subjectColors[normalized] || "rgba(212,175,55,0.18)";
-}
-
-
-function normalizeCommercialTeacherIdentity(value: any) {
-  return String(value || "")
-    .replace(/[\u064B-\u065F\u0670]/g, "")
-    .replace(/ـ/g, "")
-    .replace(/[أإآٱ]/g, "ا")
-    .replace(/ى/g, "ي")
-    .replace(/ة/g, "ه")
-    .replace(/[^\p{L}\p{N}\s]/gu, " ")
-    .replace(/(?:\s|[-_#])*[0-9\u0660-\u0669]{1,3}\s*$/u, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
-}
-
-function getCommercialAssignmentIdentity(item: any) {
-  if (!item || typeof item !== "object") return String(item || "");
-  return String(
-    item.uid ||
-      item.id ||
-      [
-        item.teacherId,
-        item.teacherName || item.teacher,
-        item.dateISO || item.date,
-        item.period,
-        item.subject,
-        item.taskType || item.type,
-        item.committeeNo || item.committee || item.roomNo || item.room,
-      ]
-        .map((part) => String(part ?? "").trim())
-        .join("|"),
-  );
-}
-
-function mergeCommercialAssignmentArrays(target: any[], source: any[]) {
-  const merged: any[] = [];
-  const seen = new Set<string>();
-
-  [...target, ...source].forEach((item) => {
-    const key = getCommercialAssignmentIdentity(item);
-    if (key && seen.has(key)) return;
-    if (key) seen.add(key);
-    merged.push(item);
-  });
-
-  return merged;
-}
-
-function mergeCommercialMatrixCell(targetCell: any, sourceCell: any) {
-  if (sourceCell === undefined || sourceCell === null) return targetCell;
-  if (targetCell === undefined || targetCell === null) return sourceCell;
-
-  if (Array.isArray(targetCell) || Array.isArray(sourceCell)) {
-    return mergeCommercialAssignmentArrays(
-      Array.isArray(targetCell) ? targetCell : [targetCell],
-      Array.isArray(sourceCell) ? sourceCell : [sourceCell],
-    );
-  }
-
-  if (typeof targetCell === "object" && typeof sourceCell === "object") {
-    const output: any = { ...targetCell };
-
-    ["assignments", "items", "tasks"].forEach((field) => {
-      if (Array.isArray(targetCell?.[field]) || Array.isArray(sourceCell?.[field])) {
-        output[field] = mergeCommercialAssignmentArrays(
-          Array.isArray(targetCell?.[field]) ? targetCell[field] : [],
-          Array.isArray(sourceCell?.[field]) ? sourceCell[field] : [],
-        );
-      }
-    });
-
-    return output;
-  }
-
-  return targetCell;
-}
-
-function mergeCommercialTeacherTotals(targetTotal: any, sourceTotal: any) {
-  if (sourceTotal === undefined || sourceTotal === null) return targetTotal;
-  if (targetTotal === undefined || targetTotal === null) return sourceTotal;
-
-  if (typeof targetTotal === "number" && typeof sourceTotal === "number") {
-    return targetTotal + sourceTotal;
-  }
-
-  if (typeof targetTotal === "object" && typeof sourceTotal === "object") {
-    const output: any = { ...targetTotal };
-    Object.entries(sourceTotal).forEach(([key, value]) => {
-      const current = output[key];
-      if (typeof current === "number" && typeof value === "number") {
-        output[key] = current + value;
-      } else if (current === undefined) {
-        output[key] = value;
-      }
-    });
-    return output;
-  }
-
-  return targetTotal;
-}
-
-function buildCommercialTeacherDedupe(allTeachers: any[]) {
-  const uniqueTeachers: string[] = [];
-  const canonicalByKey = new Map<string, string>();
-  const aliasToCanonical = new Map<string, string>();
-
-  (Array.isArray(allTeachers) ? allTeachers : []).forEach((teacher) => {
-    const displayName = String(teacher || "").replace(/\s+/g, " ").trim();
-    if (!displayName) return;
-
-    const key = normalizeCommercialTeacherIdentity(displayName) || displayName;
-    const canonical = canonicalByKey.get(key);
-
-    if (canonical) {
-      aliasToCanonical.set(displayName, canonical);
-      return;
-    }
-
-    canonicalByKey.set(key, displayName);
-    aliasToCanonical.set(displayName, displayName);
-    uniqueTeachers.push(displayName);
-  });
-
-  return { uniqueTeachers, aliasToCanonical };
-}
-
-function mergeCommercialDuplicateTeacherMatrix(matrix2: any, allTeachers: any[], aliasToCanonical: Map<string, string>) {
-  if (!matrix2 || typeof matrix2 !== "object") return matrix2;
-
-  const output: any = { ...matrix2 };
-
-  (Array.isArray(allTeachers) ? allTeachers : []).forEach((teacher) => {
-    const sourceName = String(teacher || "").replace(/\s+/g, " ").trim();
-    const canonicalName = aliasToCanonical.get(sourceName) || sourceName;
-    if (!sourceName || !canonicalName || sourceName === canonicalName) return;
-
-    const sourceRow = matrix2[sourceName];
-    if (!sourceRow || typeof sourceRow !== "object") return;
-
-    const targetRow: any = output[canonicalName] && typeof output[canonicalName] === "object" ? { ...output[canonicalName] } : {};
-
-    Object.entries(sourceRow).forEach(([subColKey, sourceCell]) => {
-      targetRow[subColKey] = mergeCommercialMatrixCell(targetRow[subColKey], sourceCell);
-    });
-
-    output[canonicalName] = targetRow;
-    delete output[sourceName];
-  });
-
-  return output;
-}
-
-function mergeCommercialDuplicateTeacherTotals(teacherTotals: any, allTeachers: any[], aliasToCanonical: Map<string, string>) {
-  if (!teacherTotals || typeof teacherTotals !== "object") return teacherTotals;
-
-  const output: any = { ...teacherTotals };
-
-  (Array.isArray(allTeachers) ? allTeachers : []).forEach((teacher) => {
-    const sourceName = String(teacher || "").replace(/\s+/g, " ").trim();
-    const canonicalName = aliasToCanonical.get(sourceName) || sourceName;
-    if (!sourceName || !canonicalName || sourceName === canonicalName) return;
-
-    output[canonicalName] = mergeCommercialTeacherTotals(output[canonicalName], teacherTotals[sourceName]);
-    delete output[sourceName];
-  });
-
-  return output;
 }
 
 function getTenantIdFromAuth(auth: any) {
@@ -541,33 +527,6 @@ export default function TaskDistributionResults() {
   const interaction = useResultsInteractionState(tenantId);
   const dataModel = useResultsDataModel({ tenantId, run, normalizeSubject });
 
-  const teacherDedupeModel = React.useMemo(
-    () => buildCommercialTeacherDedupe(dataModel.allTeachers),
-    [dataModel.allTeachers],
-  );
-
-  const displayAllTeachers = teacherDedupeModel.uniqueTeachers;
-
-  const displayMatrix2 = React.useMemo(
-    () =>
-      mergeCommercialDuplicateTeacherMatrix(
-        dataModel.matrix2,
-        dataModel.allTeachers,
-        teacherDedupeModel.aliasToCanonical,
-      ),
-    [dataModel.matrix2, dataModel.allTeachers, teacherDedupeModel.aliasToCanonical],
-  );
-
-  const displayTeacherTotals = React.useMemo(
-    () =>
-      mergeCommercialDuplicateTeacherTotals(
-        dataModel.teacherTotals,
-        dataModel.allTeachers,
-        teacherDedupeModel.aliasToCanonical,
-      ),
-    [dataModel.teacherTotals, dataModel.allTeachers, teacherDedupeModel.aliasToCanonical],
-  );
-
   const pageActions = useResultsPageActions({
     tenantId,
     run,
@@ -600,11 +559,11 @@ export default function TaskDistributionResults() {
     displayDates: dataModel.displayDates,
     dateToSubCols: dataModel.dateToSubCols,
     allSubCols: dataModel.allSubCols,
-    allTeachers: displayAllTeachers,
-    matrix2: displayMatrix2,
+    allTeachers: dataModel.allTeachers,
+    matrix2: dataModel.matrix2,
     committeesCountBySubCol: dataModel.committeesCountBySubCol,
     totalsDetailBySubCol: dataModel.totalsDetailBySubCol,
-    teacherTotals: displayTeacherTotals,
+    teacherTotals: dataModel.teacherTotals,
   });
 
   const getAssignmentsInCell = React.useCallback(
@@ -659,7 +618,10 @@ export default function TaskDistributionResults() {
   React.useEffect(() => {
     if (!hasRun) return;
 
-    const apply = () => applyCommercialResultsCellClasses(printAreaRef.current);
+    const apply = () => {
+      applyCommercialResultsCellClasses(printAreaRef.current);
+      applyOfficialStickyResultsTable(printAreaRef.current, lang);
+    };
     const frame = window.requestAnimationFrame(apply);
 
     if (typeof MutationObserver === "undefined" || !printAreaRef.current) {
@@ -676,8 +638,9 @@ export default function TaskDistributionResults() {
     return () => {
       window.cancelAnimationFrame(frame);
       observer.disconnect();
+      clearOfficialStickyResultsTable(printAreaRef.current);
     };
-  }, [hasRun, run, dataModel.allSubCols.length, displayAllTeachers.length, showTeacherSidebar, interaction.tableFullScreen]);
+  }, [hasRun, run, dataModel.allSubCols.length, dataModel.allTeachers.length, showTeacherSidebar, interaction.tableFullScreen, lang]);
 
   const content = !hasRun ? (
     <ResultsEmptyRunState
@@ -711,16 +674,16 @@ export default function TaskDistributionResults() {
         </div>
       ) : null}
 
-      <div ref={printAreaRef}>
+      <div ref={printAreaRef} className="resultsOfficialStickyHost">
         <ResultsTable
           displayDates={dataModel.displayDates}
           dateToSubCols={dataModel.dateToSubCols}
           allSubCols={dataModel.allSubCols}
-          allTeachers={displayAllTeachers}
-          matrix2={displayMatrix2}
+          allTeachers={dataModel.allTeachers}
+          matrix2={dataModel.matrix2}
           committeesCountBySubCol={dataModel.committeesCountBySubCol}
           totalsDetailBySubCol={dataModel.totalsDetailBySubCol}
-          teacherTotals={displayTeacherTotals}
+          teacherTotals={dataModel.teacherTotals}
           columnColor={columnColor}
           teacherRowColor={teacherRowColor}
           getSubjectBackground={getSubjectBackground}
@@ -756,7 +719,7 @@ export default function TaskDistributionResults() {
             assignmentsCount={dataModel.assignments.length}
             daysCount={dataModel.displayDates.length}
             columnsCount={dataModel.allSubCols.length}
-            teachersCount={displayAllTeachers.length}
+            teachersCount={dataModel.allTeachers.length}
           />
         </div>
       </div>
