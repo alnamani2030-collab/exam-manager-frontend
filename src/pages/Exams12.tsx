@@ -115,7 +115,7 @@ const SUBJECT_OPTIONS_RAW = [
   "اللغة الألمانية ",
   "اللغة الصينية ",
   "العلوم البيئية ",
-  
+  "امتحان لجنه خاصه  ",
 ];
 
 const SUBJECT_TRANSLATIONS: Record<string, string> = {
