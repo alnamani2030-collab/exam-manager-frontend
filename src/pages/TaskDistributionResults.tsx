@@ -47,52 +47,6 @@ const OFFICIAL_FULLSCREEN_LAYER_STYLE: React.CSSProperties = {
   overflow: "auto",
 };
 
-const OFFICIAL_TEACHER_SEARCH_BAR_STYLE: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 10,
-  flexWrap: "wrap",
-  margin: "12px 0",
-  padding: "10px 12px",
-  border: "1px solid rgba(151, 116, 28, 0.42)",
-  borderRadius: 16,
-  background: "linear-gradient(180deg, rgba(255, 251, 235, 0.98), rgba(239, 208, 118, 0.36))",
-  boxShadow: "0 10px 24px rgba(78, 59, 16, 0.10)",
-};
-
-const OFFICIAL_TEACHER_SEARCH_INPUT_STYLE: React.CSSProperties = {
-  minWidth: 260,
-  maxWidth: "min(520px, 100%)",
-  flex: "1 1 320px",
-  height: 44,
-  padding: "8px 14px",
-  borderRadius: 14,
-  border: "1px solid rgba(151, 116, 28, 0.62)",
-  background: "#fffdf7",
-  color: "#111827",
-  fontWeight: 800,
-  fontSize: 14,
-  outline: "none",
-};
-
-const OFFICIAL_TEACHER_SEARCH_BUTTON_STYLE: React.CSSProperties = {
-  height: 44,
-  padding: "8px 18px",
-  borderRadius: 14,
-  border: "1px solid rgba(151, 116, 28, 0.62)",
-  background: "linear-gradient(180deg, #f4e2ad 0%, #d5b45a 100%)",
-  color: "#111827",
-  fontWeight: 900,
-  cursor: "pointer",
-  boxShadow: "0 6px 14px rgba(78, 59, 16, 0.12)",
-};
-
-const OFFICIAL_TEACHER_SEARCH_CLEAR_BUTTON_STYLE: React.CSSProperties = {
-  ...OFFICIAL_TEACHER_SEARCH_BUTTON_STYLE,
-  background: "linear-gradient(180deg, #fff7ed 0%, #fed7aa 100%)",
-};
-
 const OFFICIAL_RESULTS_TABLE_CSS = `
   .resultsOfficialCommercialScope,
   .resultsOfficialCommercialScope * {
@@ -246,6 +200,73 @@ const OFFICIAL_RESULTS_TABLE_CSS = `
     50% { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.70), 0 0 14px rgba(220, 38, 38, 0.25); }
   }
 
+
+
+  /* تثبيت جدول النتائج الشامل: عمود المعلم + صفوف التاريخ والمادة */
+  .resultsOfficialCommercialScope .resultsOfficialStickyHost {
+    position: relative !important;
+    isolation: isolate !important;
+  }
+
+  .resultsOfficialCommercialScope .resultsOfficialStickyHost table {
+    overflow: visible !important;
+    position: relative !important;
+    isolation: isolate !important;
+  }
+
+  .resultsOfficialCommercialScope .resultsOfficialStickyHost thead th,
+  .resultsOfficialCommercialScope .resultsOfficialStickyHost thead td {
+    position: sticky !important;
+    top: var(--results-sticky-top, 0px) !important;
+    z-index: var(--results-sticky-z, 80) !important;
+    background: linear-gradient(180deg, #f4e2ad 0%, #d5b45a 100%) !important;
+    box-shadow: 0 8px 16px rgba(78, 59, 16, 0.22) !important;
+    background-clip: padding-box !important;
+  }
+
+  .resultsOfficialCommercialScope .resultsOfficialStickyHost thead tr:nth-child(1) th,
+  .resultsOfficialCommercialScope .resultsOfficialStickyHost thead tr:nth-child(1) td {
+    --results-sticky-top: 0px;
+    --results-sticky-z: 88;
+  }
+
+  .resultsOfficialCommercialScope .resultsOfficialStickyHost thead tr:nth-child(2) th,
+  .resultsOfficialCommercialScope .resultsOfficialStickyHost thead tr:nth-child(2) td {
+    --results-sticky-top: var(--results-second-header-top, 68px);
+    --results-sticky-z: 86;
+  }
+
+  .resultsOfficialCommercialScope .resultsOfficialStickyHost thead tr > th:first-child,
+  .resultsOfficialCommercialScope .resultsOfficialStickyHost thead tr > td:first-child,
+  .resultsOfficialCommercialScope .resultsOfficialStickyHost tbody tr > th:first-child,
+  .resultsOfficialCommercialScope .resultsOfficialStickyHost tbody tr > td.resultsOfficialTeacherStickyCell,
+  .resultsOfficialCommercialScope .resultsOfficialTeacherStickyCell {
+    position: sticky !important;
+    inset-inline-start: 0 !important;
+    right: 0 !important;
+    left: auto !important;
+    z-index: 92 !important;
+    background: linear-gradient(135deg, rgba(255,248,220,.99), rgba(230,198,103,.98)) !important;
+    box-shadow: -12px 0 20px rgba(78, 59, 16, 0.18), inset 1px 0 0 rgba(151,116,28,.45) !important;
+    background-clip: padding-box !important;
+  }
+
+  .resultsOfficialCommercialScope .resultsOfficialStickyHost thead tr > th:first-child,
+  .resultsOfficialCommercialScope .resultsOfficialStickyHost thead tr > td:first-child {
+    z-index: 120 !important;
+    top: 0 !important;
+  }
+
+  html[dir="ltr"] .resultsOfficialCommercialScope .resultsOfficialStickyHost thead tr > th:first-child,
+  html[dir="ltr"] .resultsOfficialCommercialScope .resultsOfficialStickyHost thead tr > td:first-child,
+  html[dir="ltr"] .resultsOfficialCommercialScope .resultsOfficialStickyHost tbody tr > th:first-child,
+  html[dir="ltr"] .resultsOfficialCommercialScope .resultsOfficialStickyHost tbody tr > td.resultsOfficialTeacherStickyCell,
+  html[dir="ltr"] .resultsOfficialCommercialScope .resultsOfficialTeacherStickyCell {
+    left: 0 !important;
+    right: auto !important;
+    box-shadow: 12px 0 20px rgba(78, 59, 16, 0.18), inset -1px 0 0 rgba(151,116,28,.45) !important;
+  }
+
   @media print {
     .resultsOfficialCommercialScope,
     .resultsOfficialCommercialScope * {
@@ -280,19 +301,6 @@ function cleanCommercialCellText(value: string) {
     .replace(/[\u064B-\u065F\u0670]/g, "")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-function normalizeCommercialTeacherSearch(value: string) {
-  return cleanCommercialCellText(String(value || ""))
-    .replace(/[أإآٱ]/g, "ا")
-    .replace(/ى/g, "ي")
-    .replace(/ة/g, "ه")
-    .replace(/ؤ/g, "و")
-    .replace(/ئ/g, "ي")
-    .replace(/[ـ_\-.،,;:()\[\]{}]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
 }
 
 function isCommercialEmptyActionText(value: string) {
@@ -346,9 +354,112 @@ function applyCommercialResultsCellClasses(root: HTMLElement | null) {
   });
 }
 
+
+function setOfficialStickyImportant(el: HTMLElement, name: string, value: string) {
+  el.style.setProperty(name, value, "important");
+}
+
+function clearOfficialStickyResultsTable(root: HTMLElement | null) {
+  if (!root) return;
+
+  root.querySelectorAll<HTMLElement>(".resultsOfficialTeacherStickyCell").forEach((cell) => {
+    cell.classList.remove("resultsOfficialTeacherStickyCell");
+  });
+}
+
+function applyOfficialStickyResultsTable(root: HTMLElement | null, lang: string) {
+  if (!root) return;
+
+  const table = root.querySelector<HTMLElement>("table");
+  if (!table) return;
+
+  clearOfficialStickyResultsTable(root);
+
+  setOfficialStickyImportant(table, "overflow", "visible");
+  setOfficialStickyImportant(table, "position", "relative");
+  setOfficialStickyImportant(table, "isolation", "isolate");
+
+  const headerRows = Array.from(table.querySelectorAll<HTMLTableRowElement>("thead tr"));
+  let topOffset = 0;
+
+  headerRows.forEach((row, rowIndex) => {
+    const rowHeight = Math.ceil(row.getBoundingClientRect().height || (rowIndex === 0 ? 68 : 96));
+    const zIndex = String(120 - rowIndex * 2);
+
+    Array.from(row.children).forEach((rawCell, cellIndex) => {
+      const cell = rawCell as HTMLElement;
+      setOfficialStickyImportant(cell, "position", "sticky");
+      setOfficialStickyImportant(cell, "top", `${Math.max(0, topOffset)}px`);
+      setOfficialStickyImportant(cell, "z-index", zIndex);
+      setOfficialStickyImportant(cell, "background-clip", "padding-box");
+      setOfficialStickyImportant(cell, "box-shadow", "0 8px 16px rgba(78, 59, 16, 0.22)");
+
+      const cellText = cleanCommercialCellText(cell.textContent || "");
+      const isTeacherHeader =
+        cellIndex === 0 &&
+        (/^(المعلم|اسم المعلم|teacher|teacher name)$/i.test(cellText) || Number((cell as HTMLTableCellElement).rowSpan || 1) > 1);
+
+      if (isTeacherHeader) {
+        cell.classList.add("resultsOfficialTeacherStickyCell");
+        setOfficialStickyImportant(cell, "top", "0px");
+        setOfficialStickyImportant(cell, "z-index", "160");
+        setOfficialStickyImportant(cell, "inset-inline-start", "0px");
+        if (lang === "ar") {
+          setOfficialStickyImportant(cell, "right", "0px");
+          setOfficialStickyImportant(cell, "left", "auto");
+        } else {
+          setOfficialStickyImportant(cell, "left", "0px");
+          setOfficialStickyImportant(cell, "right", "auto");
+        }
+      }
+    });
+
+    topOffset += rowHeight;
+  });
+
+  root.style.setProperty("--results-second-header-top", `${Math.max(0, Math.ceil(headerRows[0]?.getBoundingClientRect().height || 68))}px`);
+
+  const bodyRows = Array.from(table.querySelectorAll<HTMLTableRowElement>("tbody tr"));
+  bodyRows.forEach((row) => {
+    const teacherCell = row.querySelector<HTMLElement>('th[scope="row"], th:first-child');
+    if (!teacherCell) return;
+
+    teacherCell.classList.add("resultsOfficialTeacherStickyCell");
+    setOfficialStickyImportant(teacherCell, "position", "sticky");
+    setOfficialStickyImportant(teacherCell, "inset-inline-start", "0px");
+    setOfficialStickyImportant(teacherCell, "z-index", "96");
+    setOfficialStickyImportant(teacherCell, "background", "linear-gradient(135deg, rgba(255,248,220,.99), rgba(230,198,103,.98))");
+    setOfficialStickyImportant(teacherCell, "background-clip", "padding-box");
+    if (lang === "ar") {
+      setOfficialStickyImportant(teacherCell, "right", "0px");
+      setOfficialStickyImportant(teacherCell, "left", "auto");
+      setOfficialStickyImportant(teacherCell, "box-shadow", "-12px 0 20px rgba(78, 59, 16, 0.18), inset 1px 0 0 rgba(151,116,28,.45)");
+    } else {
+      setOfficialStickyImportant(teacherCell, "left", "0px");
+      setOfficialStickyImportant(teacherCell, "right", "auto");
+      setOfficialStickyImportant(teacherCell, "box-shadow", "12px 0 20px rgba(78, 59, 16, 0.18), inset -1px 0 0 rgba(151,116,28,.45)");
+    }
+  });
+}
+
 function normalizeSubject(subject: string) {
   return String(subject || "").replace(/\s+/g, " ").trim();
 }
+
+function normalizeTeacherSearchText(value: string) {
+  return String(value || "")
+    .replace(/[\u064B-\u065F\u0670]/g, "")
+    .replace(/[إأآٱ]/g, "ا")
+    .replace(/ى/g, "ي")
+    .replace(/ؤ/g, "و")
+    .replace(/ئ/g, "ي")
+    .replace(/ة/g, "ه")
+    .replace(/[ـ_\-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
 
 function getCommitteeNo(a: any) {
   const value = a?.committeeNo ?? a?.committee ?? a?.roomNo ?? a?.room;
@@ -378,7 +489,7 @@ export default function TaskDistributionResults() {
   const printAreaRef = React.useRef<HTMLDivElement>(null);
   const [showTeacherSidebar, setShowTeacherSidebar] = React.useState(true);
   const [teacherSearchInput, setTeacherSearchInput] = React.useState("");
-  const [teacherSearchTerm, setTeacherSearchTerm] = React.useState("");
+  const [activeTeacherSearch, setActiveTeacherSearch] = React.useState("");
 
   const formatPeriod = React.useCallback(
     (period?: string) => {
@@ -432,25 +543,6 @@ export default function TaskDistributionResults() {
   const { run, setRun } = useResultsRunSync(tenantId);
   const interaction = useResultsInteractionState(tenantId);
   const dataModel = useResultsDataModel({ tenantId, run, normalizeSubject });
-
-  const activeTeacherSearch = React.useMemo(() => normalizeCommercialTeacherSearch(teacherSearchTerm), [teacherSearchTerm]);
-
-  const visibleTeachers = React.useMemo(() => {
-    if (!activeTeacherSearch) return dataModel.allTeachers;
-
-    return dataModel.allTeachers.filter((teacher) =>
-      normalizeCommercialTeacherSearch(String(teacher || "")).includes(activeTeacherSearch),
-    );
-  }, [dataModel.allTeachers, activeTeacherSearch]);
-
-  const applyTeacherSearch = React.useCallback(() => {
-    setTeacherSearchTerm(teacherSearchInput);
-  }, [teacherSearchInput]);
-
-  const clearTeacherSearch = React.useCallback(() => {
-    setTeacherSearchInput("");
-    setTeacherSearchTerm("");
-  }, []);
 
   const pageActions = useResultsPageActions({
     tenantId,
@@ -540,41 +632,33 @@ export default function TaskDistributionResults() {
 
   const hasRun = Boolean(run && Array.isArray(run.assignments) && run.assignments.length);
 
-  const teacherSearchControls = hasRun ? (
-    <div style={OFFICIAL_TEACHER_SEARCH_BAR_STYLE}>
-      <strong style={{ color: "#111827", fontWeight: 900 }}>
-        {tr("بحث في أسماء المعلمين", "Search teacher names")}
-      </strong>
-      <input
-        type="search"
-        value={teacherSearchInput}
-        placeholder={tr("اكتب اسم المعلم هنا", "Type teacher name here")}
-        aria-label={tr("بحث باسم المعلم", "Search by teacher name")}
-        dir={lang === "ar" ? "rtl" : "ltr"}
-        style={OFFICIAL_TEACHER_SEARCH_INPUT_STYLE}
-        onChange={(event) => setTeacherSearchInput(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") applyTeacherSearch();
-        }}
-      />
-      <button type="button" style={OFFICIAL_TEACHER_SEARCH_BUTTON_STYLE} onClick={applyTeacherSearch}>
-        {tr("بحث", "Search")}
-      </button>
-      <button type="button" style={OFFICIAL_TEACHER_SEARCH_CLEAR_BUTTON_STYLE} onClick={clearTeacherSearch}>
-        {tr("إظهار الكل", "Show all")}
-      </button>
-      <span style={{ color: "#374151", fontWeight: 800 }}>
-        {activeTeacherSearch
-          ? tr(`المعروض: ${visibleTeachers.length} من ${dataModel.allTeachers.length}`, `Showing: ${visibleTeachers.length} of ${dataModel.allTeachers.length}`)
-          : tr(`عدد المعلمين: ${dataModel.allTeachers.length}`, `Teachers: ${dataModel.allTeachers.length}`)}
-      </span>
-    </div>
-  ) : null;
+  const visibleTeachers = React.useMemo(() => {
+    const query = normalizeTeacherSearchText(activeTeacherSearch);
+    if (!query) return dataModel.allTeachers;
+
+    return dataModel.allTeachers.filter((teacherName: string) =>
+      normalizeTeacherSearchText(teacherName).includes(query),
+    );
+  }, [activeTeacherSearch, dataModel.allTeachers]);
+
+  const hasActiveTeacherSearch = normalizeTeacherSearchText(activeTeacherSearch).length > 0;
+
+  const handleApplyTeacherSearch = React.useCallback(() => {
+    setActiveTeacherSearch(teacherSearchInput);
+  }, [teacherSearchInput]);
+
+  const handleClearTeacherSearch = React.useCallback(() => {
+    setTeacherSearchInput("");
+    setActiveTeacherSearch("");
+  }, []);
 
   React.useEffect(() => {
     if (!hasRun) return;
 
-    const apply = () => applyCommercialResultsCellClasses(printAreaRef.current);
+    const apply = () => {
+      applyCommercialResultsCellClasses(printAreaRef.current);
+      applyOfficialStickyResultsTable(printAreaRef.current, lang);
+    };
     const frame = window.requestAnimationFrame(apply);
 
     if (typeof MutationObserver === "undefined" || !printAreaRef.current) {
@@ -591,8 +675,9 @@ export default function TaskDistributionResults() {
     return () => {
       window.cancelAnimationFrame(frame);
       observer.disconnect();
+      clearOfficialStickyResultsTable(printAreaRef.current);
     };
-  }, [hasRun, run, dataModel.allSubCols.length, visibleTeachers.length, showTeacherSidebar, interaction.tableFullScreen]);
+  }, [hasRun, run, dataModel.allSubCols.length, visibleTeachers.length, showTeacherSidebar, interaction.tableFullScreen, lang]);
 
   const content = !hasRun ? (
     <ResultsEmptyRunState
@@ -626,9 +711,85 @@ export default function TaskDistributionResults() {
         </div>
       ) : null}
 
-      {teacherSearchControls}
+      <div ref={printAreaRef} className="resultsOfficialStickyHost">
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 8,
+            alignItems: "center",
+            justifyContent: "flex-end",
+            margin: "10px 0 12px",
+            padding: "10px 12px",
+            border: "1px solid rgba(151,116,28,.45)",
+            borderRadius: 14,
+            background: "linear-gradient(180deg, rgba(255,253,247,.98), rgba(246,238,218,.98))",
+            boxShadow: "0 8px 18px rgba(78,59,16,.10)",
+            direction: lang === "ar" ? "rtl" : "ltr",
+          }}
+        >
+          <label style={{ fontWeight: 900, color: "#111827" }}>
+            {tr("بحث باسم المعلم", "Search teacher name")}
+          </label>
+          <input
+            value={teacherSearchInput}
+            onChange={(event) => setTeacherSearchInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") handleApplyTeacherSearch();
+              if (event.key === "Escape") handleClearTeacherSearch();
+            }}
+            placeholder={tr("اكتب اسم المعلم", "Type teacher name")}
+            style={{
+              minWidth: 260,
+              maxWidth: "100%",
+              padding: "10px 12px",
+              borderRadius: 12,
+              border: "1px solid #b89435",
+              background: "#fffdf7",
+              color: "#111827",
+              fontWeight: 800,
+              outline: "none",
+            }}
+          />
+          <button
+            type="button"
+            onClick={handleApplyTeacherSearch}
+            style={{
+              padding: "10px 16px",
+              borderRadius: 12,
+              border: "1px solid rgba(151,116,28,.65)",
+              background: "linear-gradient(180deg, #f4e2ad 0%, #d5b45a 100%)",
+              color: "#111827",
+              fontWeight: 900,
+              cursor: "pointer",
+            }}
+          >
+            {tr("بحث", "Search")}
+          </button>
+          <button
+            type="button"
+            onClick={handleClearTeacherSearch}
+            disabled={!teacherSearchInput && !activeTeacherSearch}
+            style={{
+              padding: "10px 16px",
+              borderRadius: 12,
+              border: "1px solid rgba(151,116,28,.42)",
+              background: "#fffaf0",
+              color: "#111827",
+              fontWeight: 900,
+              cursor: teacherSearchInput || activeTeacherSearch ? "pointer" : "not-allowed",
+              opacity: teacherSearchInput || activeTeacherSearch ? 1 : 0.58,
+            }}
+          >
+            {tr("إظهار الكل", "Show all")}
+          </button>
+          {hasActiveTeacherSearch ? (
+            <span style={{ fontWeight: 800, color: "#374151" }}>
+              {tr("النتائج:", "Results:")} {visibleTeachers.length} / {dataModel.allTeachers.length}
+            </span>
+          ) : null}
+        </div>
 
-      <div ref={printAreaRef}>
         <ResultsTable
           displayDates={dataModel.displayDates}
           dateToSubCols={dataModel.dateToSubCols}
