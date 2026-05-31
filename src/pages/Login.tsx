@@ -1,10 +1,14 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   GoogleAuthProvider,
+  OAuthProvider,
+  getAdditionalUserInfo,
   onAuthStateChanged,
   signInWithPopup,
   signOut,
   type User,
+  type UserCredential,
 } from "firebase/auth";
 import { doc, getDoc, getDocFromCache } from "firebase/firestore";
 
@@ -44,6 +48,7 @@ const STR = {
     subtitle: "تسجيل دخول آمن للمستخدمين المصرح لهم فقط",
     ministry: "سلطنة عمان - وزارة  التعليم",
     signIn: "Google تسجيل الدخول بواسطة",
+    microsoftSignIn: "تسجيل الدخول بالبريد الوزاري Microsoft",
     signedInAs: "تم تسجيل الدخول:",
     status: "الحالة:",
     active: "مفعّل ✅",
@@ -60,6 +65,8 @@ const STR = {
     teacher: "الأستاذ: يوسف النعماني",
     errPopupClosed: "تم إغلاق نافذة تسجيل الدخول قبل إكمال العملية.",
     errNotAllowed: "تم تسجيل الدخول لكن حسابك غير مفعّل من مدير النظام.",
+    errMoeOnly: "يسمح بتسجيل الدخول بالبريد الوزاري الذي ينتهي بـ @moe.om فقط.",
+    errMicrosoftEmailMissing: "تم تسجيل الدخول عبر Microsoft لكن لم نستطع قراءة البريد الوزاري من الحساب.",
     errGeneric: "حدث خطأ. تأكد من إعدادات Firebase وجرّب مرة أخرى.",
   },
   en: {
@@ -67,6 +74,7 @@ const STR = {
     subtitle: "Secure login for authorized users only",
     ministry: "Sultanate of Oman - Ministry of Education",
     signIn: "Sign in with Google",
+    microsoftSignIn: "Sign in with MOE Microsoft email",
     signedInAs: "Signed in as:",
     status: "Status:",
     active: "Active ✅",
@@ -83,14 +91,229 @@ const STR = {
     teacher: "Teacher: Youssef Al-Numani",
     errPopupClosed: "Login popup closed before completing.",
     errNotAllowed: "Signed in, but your account is not enabled by the admin.",
+    errMoeOnly: "Only @moe.om ministry email accounts are allowed for Microsoft sign-in.",
+    errMicrosoftEmailMissing: "Microsoft sign-in succeeded, but the ministry email could not be read.",
     errGeneric: "Something went wrong. Check Firebase setup and try again.",
   },
 } as const;
 
-function normalizeAllowlistData(email: string, raw: Partial<AllowlistDoc> | null): AllowlistDoc | null {
-  if (!raw) return null;
 
+function normalizeLoginEmail(value: any): string {
+  return String(value || "").trim().toLowerCase();
+}
+
+// ✅ قائمة إيميلات مالك المنصة.
+// أضف الإيميل الثاني مكان SECOND_OWNER_EMAIL_HERE إذا أردت الاعتماد على الكود مباشرة،
+// أو أضفه في allowlist بدور super_admin و enabled=true بدون تعديل الكود مرة أخرى.
+const PLATFORM_OWNER_EMAILS = [
+  "3asal2030@gmail.com",
+  "yousef.namani@moe.om",
+]
+  .map(normalizeLoginEmail)
+  .filter((email) => email && email !== "yousef.namani@moe.om");
+
+function isPlatformOwnerLoginEmail(email: any): boolean {
+  const clean = normalizeLoginEmail(email);
+  return !!clean && PLATFORM_OWNER_EMAILS.includes(clean);
+}
+
+function isMoeEmail(email: string): boolean {
+  return normalizeLoginEmail(email).endsWith("@moe.om");
+}
+
+function decodeJwtPayload(token?: string | null): Record<string, any> {
+  if (!token || typeof token !== "string") return {};
+  const parts = token.split(".");
+  if (parts.length < 2) return {};
+
+  try {
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "=");
+    const json = decodeURIComponent(
+      Array.from(atob(padded))
+        .map((char) => `%${char.charCodeAt(0).toString(16).padStart(2, "0")}`)
+        .join("")
+    );
+    return JSON.parse(json);
+  } catch {
+    return {};
+  }
+}
+
+function getEmailFromObject(source: any): string {
+  if (!source) return "";
+  const candidates = [
+    source.email,
+    source.mail,
+    source.userPrincipalName,
+    source.user_principal_name,
+    source.preferred_username,
+    source.upn,
+    source.unique_name,
+    source.login_hint,
+    source.account,
+  ];
+
+  for (const candidate of candidates) {
+    const email = normalizeLoginEmail(candidate);
+    if (email.includes("@")) return email;
+  }
+
+  return "";
+}
+
+function safeJsonParse(value: any): any {
+  if (!value || typeof value !== "string") return null;
+  try { return JSON.parse(value); } catch { return null; }
+}
+
+function collectEmailCandidates(value: any, out: string[] = [], seen = new WeakSet<object>(), depth = 0): string[] {
+  if (depth > 5 || value == null) return out;
+
+  if (typeof value === "string") {
+    const matches = value.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || [];
+    for (const match of matches) {
+      const email = normalizeLoginEmail(match);
+      if (email && !out.includes(email)) out.push(email);
+    }
+    const parsed = safeJsonParse(value);
+    if (parsed) collectEmailCandidates(parsed, out, seen, depth + 1);
+    return out;
+  }
+
+  if (typeof value !== "object") return out;
+  if (seen.has(value)) return out;
+  seen.add(value);
+
+  const direct = getEmailFromObject(value);
+  if (direct && !out.includes(direct)) out.push(direct);
+
+  for (const key of Object.keys(value)) {
+    if (key.toLowerCase().includes("token") && typeof value[key] === "string") {
+      const claims = decodeJwtPayload(value[key]);
+      collectEmailCandidates(claims, out, seen, depth + 1);
+    } else if (key !== "app" && key !== "auth") {
+      collectEmailCandidates(value[key], out, seen, depth + 1);
+    }
+  }
+
+  return out;
+}
+
+function pickBestEmail(candidates: string[]): string {
+  const clean = candidates.map(normalizeLoginEmail).filter((x, i, arr) => x.includes("@") && arr.indexOf(x) === i);
+  return clean.find(isMoeEmail) || clean[0] || "";
+}
+
+function getFirebaseUserEmail(user: User | null): string {
+  if (!user) return "";
+
+  const direct = normalizeLoginEmail(user.email);
+  if (direct) return direct;
+
+  for (const provider of user.providerData || []) {
+    const email = normalizeLoginEmail(provider?.email);
+    if (email) return email;
+  }
+
+  if (typeof window !== "undefined" && user.uid) {
+    try {
+      const stored = normalizeLoginEmail(window.localStorage.getItem(`exam-manager:microsoft-email:${user.uid}`));
+      if (stored) return stored;
+    } catch {
+      // ignore
+    }
+  }
+
+  return "";
+}
+
+function writeStoredProviderEmail(uid: string | undefined, email: string) {
+  if (typeof window === "undefined" || !uid) return;
+  const clean = normalizeLoginEmail(email);
+  if (!clean) return;
+  try {
+    window.localStorage.setItem(`exam-manager:microsoft-email:${uid}`, clean);
+  } catch {
+    // ignore
+  }
+}
+
+async function getTokenClaimEmail(user: User | null): Promise<string> {
+  if (!user) return "";
+  try {
+    const token = await user.getIdTokenResult(true);
+    return getEmailFromObject(token.claims || {});
+  } catch {
+    return "";
+  }
+}
+
+async function fetchMicrosoftGraphEmail(accessToken?: string | null): Promise<string> {
+  if (!accessToken || typeof fetch === "undefined") return "";
+
+  try {
+    const response = await fetch("https://graph.microsoft.com/v1.0/me?$select=mail,userPrincipalName,otherMails", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!response.ok) return "";
+    const data = await response.json();
+    const direct = getEmailFromObject(data);
+    if (direct) return direct;
+    if (Array.isArray(data?.otherMails)) {
+      for (const item of data.otherMails) {
+        const email = normalizeLoginEmail(item);
+        if (email.includes("@")) return email;
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return "";
+}
+
+async function getMicrosoftLoginEmail(result: UserCredential): Promise<string> {
+  const credential = OAuthProvider.credentialFromResult(result) as any;
+  const profile = (getAdditionalUserInfo(result)?.profile || {}) as Record<string, any>;
+  const tokenResponse = (result as any)?._tokenResponse || {};
+  const rawUserInfo = safeJsonParse(tokenResponse.rawUserInfo) || {};
+  const idTokenClaims = decodeJwtPayload(credential?.idToken || credential?.oauthIdToken || tokenResponse.oauthIdToken || tokenResponse.idToken);
+  const accessTokenClaims = decodeJwtPayload(credential?.accessToken || credential?.oauthAccessToken || tokenResponse.oauthAccessToken || tokenResponse.accessToken);
+  const graphEmail = await fetchMicrosoftGraphEmail(credential?.accessToken || credential?.oauthAccessToken || tokenResponse.oauthAccessToken || tokenResponse.accessToken);
+  const firebaseClaimEmail = await getTokenClaimEmail(result.user);
+
+  const candidates = collectEmailCandidates({
+    firebaseUserEmail: getFirebaseUserEmail(result.user),
+    profile,
+    tokenResponse,
+    rawUserInfo,
+    idTokenClaims,
+    accessTokenClaims,
+    firebaseClaimEmail,
+    graphEmail,
+  });
+
+  return pickBestEmail(candidates);
+}
+
+function normalizeAllowlistData(email: string, raw: Partial<AllowlistDoc> | null): AllowlistDoc | null {
   const key = String(email || "").trim().toLowerCase();
+  const isHardcodedOwner = isPlatformOwnerLoginEmail(key);
+
+  // ✅ مالك المنصة المعرّف داخل القائمة يدخل حتى لو لم يكن له مستند في allowlist.
+  if (!raw) {
+    if (isHardcodedOwner) {
+      return {
+        email: key,
+        enabled: true,
+        role: "super_admin",
+        tenantId: "system",
+      };
+    }
+    return null;
+  }
+
   const data: Partial<AllowlistDoc> = { ...raw };
 
   if (!data.email) data.email = key;
@@ -98,30 +321,15 @@ function normalizeAllowlistData(email: string, raw: Partial<AllowlistDoc> | null
 
   const r = String((data as any).role ?? "user").trim().toLowerCase();
 
-  if (email.trim().toLowerCase() === "3asal2030@gmail.com") {
+  if (isHardcodedOwner) {
     (data as any).role = "super_admin";
     (data as any).enabled = true;
-  } else if (r === "super_admin" || r === "super admin" || r === "superadmin") {
+    (data as any).tenantId = "system";
+  } else if (r === "super_admin" || r === "super admin" || r === "superadmin" || r === "owner" || r === "platform_owner" || r === "platform owner") {
     (data as any).role = "super_admin";
   } else if (r === "ministry_super" || r === "ministry super" || r === "ministry-super") {
     (data as any).role = "ministry_super";
-  } else if (
-    r === "super" ||
-    r === "governorate_super" ||
-    r === "governorate-super" ||
-    r === "super_governorate" ||
-    r === "super-governorate" ||
-    r === "regional_super" ||
-    r === "regional-super" ||
-    r === "super_regional" ||
-    r === "super-regional" ||
-    r === "governorate super" ||
-    r === "regional super" ||
-    r === "سوبر المحافظة" ||
-    r === "سوبر المحافظات" ||
-    r === "مشرف المحافظة" ||
-    r === "مشرف المحافظات"
-  ) {
+  } else if (r === "super" || r === "governorate_super" || r === "governorate-super" || r === "سوبر المحافظة" || r === "مشرف المحافظة") {
     (data as any).role = "super";
   } else if (
     r === "exam_super" ||
@@ -144,15 +352,11 @@ function normalizeAllowlistData(email: string, raw: Partial<AllowlistDoc> | null
     (data as any).role = "user";
   }
 
-  const normalizedRole = String((data as any).role || "").trim().toLowerCase();
-  if (normalizedRole === "super_admin" || normalizedRole === "ministry_super" || normalizedRole === "super") {
-    data.tenantId = "system";
-  } else if (!data.tenantId) {
-    data.tenantId = "default";
-  }
+  if (!data.tenantId) data.tenantId = "default";
 
   return data as AllowlistDoc;
 }
+
 
 function cacheKeyForAllowlist(email: string) {
   return `${ALLOWLIST_CACHE_PREFIX}${String(email || "").trim().toLowerCase()}`;
@@ -163,7 +367,7 @@ function readCachedAllowlist(email: string): AllowlistDoc | null {
 
   try {
     const raw = window.localStorage.getItem(cacheKeyForAllowlist(email));
-    if (!raw) return null;
+    if (!raw) return normalizeAllowlistData(email, null);
     return normalizeAllowlistData(email, JSON.parse(raw) as Partial<AllowlistDoc>);
   } catch {
     return null;
@@ -243,8 +447,6 @@ function resolveAllowlistHomePath(user: User | null, allow: AllowlistDoc | null)
   const tenantId = cleanTenantValue(allow?.tenantId);
 
   if (!allow?.enabled) return "/login";
-
-  // ✅ توجيه صريح حتى لا نعتمد على resolveHomePath إذا كان لا يعرف مسارات المشروع الحالية.
   if (role === "super_admin") return "/super";
   if (role === "ministry_super") return "/super";
   if (role === "super" || role === "governorate_super") return "/super-system";
@@ -262,12 +464,13 @@ function resolveAllowlistHomePath(user: User | null, allow: AllowlistDoc | null)
   );
 }
 
-function persistLoginContext(allow: AllowlistDoc | null) {
+function persistLoginContext(allow: AllowlistDoc | null, loginEmail?: string) {
   if (typeof window === "undefined" || !allow) return;
 
   const role = cleanRoleValue(allow.role);
   const rawTenantId = cleanTenantValue(allow.tenantId);
   const tenantId = role === "super_admin" || role === "ministry_super" || role === "super" ? "system" : rawTenantId;
+  const email = normalizeLoginEmail(loginEmail || allow.email);
 
   const clearKeys = [
     "governorateSuperReadOnly",
@@ -283,11 +486,7 @@ function persistLoginContext(allow: AllowlistDoc | null) {
     try { window.localStorage.removeItem(key); } catch {}
   }
 
-  const pairs: Array<[string, string]> = [
-    ["loginRole", role],
-    ["loginEmail", String(allow.email || "").trim().toLowerCase()],
-  ];
-
+  const pairs: Array<[string, string]> = [["loginRole", role], ["loginEmail", email]];
   if (tenantId) {
     pairs.push(["tenantId", tenantId]);
     pairs.push(["effectiveTenantId", tenantId]);
@@ -301,14 +500,10 @@ function persistLoginContext(allow: AllowlistDoc | null) {
   }
 }
 
-function hardRedirectToAllowlistHome(user: User | null, allow: AllowlistDoc | null) {
+function hardRedirectToAllowlistHome(user: User | null, allow: AllowlistDoc | null, loginEmail?: string) {
   const path = resolveAllowlistHomePath(user, allow);
-  persistLoginContext(allow);
-
-  if (typeof window !== "undefined") {
-    window.location.replace(path);
-  }
-
+  persistLoginContext(allow, loginEmail);
+  if (typeof window !== "undefined") window.location.replace(path);
   return path;
 }
 
@@ -328,6 +523,7 @@ function translateRoleLabel(label: string, lang: Lang): string {
 }
 
 export default function Login() {
+  const navigate = useNavigate();
   const { lang, setLang } = useI18n();
   const t = STR[lang as Lang] || STR.ar;
 
@@ -335,6 +531,8 @@ export default function Login() {
   const [profile, setProfile] = useState<AllowlistDoc | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [loginEmail, setLoginEmail] = useState("");
+  const [debugLines, setDebugLines] = useState<string[]>([]);
 
   const enabled = !!profile?.enabled;
 
@@ -359,22 +557,10 @@ export default function Login() {
   const tenantId = profile?.tenantId ?? "";
 
   const isAllowed = useMemo(() => {
-    if (!fbUser?.email) return false;
+    const email = loginEmail || getFirebaseUserEmail(fbUser) || normalizeLoginEmail(profile?.email);
+    if (!email) return false;
     return !!profile?.enabled;
-  }, [fbUser, profile]);
-
-  const autoRedirectedRef = useRef(false);
-
-  useEffect(() => {
-    if (!fbUser || !profile?.enabled || busy || autoRedirectedRef.current) return;
-
-    autoRedirectedRef.current = true;
-    const timer = window.setTimeout(() => {
-      hardRedirectToAllowlistHome(fbUser, profile);
-    }, 350);
-
-    return () => window.clearTimeout(timer);
-  }, [fbUser, profile, busy]);
+  }, [fbUser, loginEmail, profile]);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
@@ -382,12 +568,17 @@ export default function Login() {
       setError("");
       setProfile(null);
 
-      if (u?.email) {
-        const cached = readCachedAllowlist(u.email);
+      let currentEmail = getFirebaseUserEmail(u);
+      if (!currentEmail) currentEmail = await getTokenClaimEmail(u);
+      if (currentEmail && u?.uid) writeStoredProviderEmail(u.uid, currentEmail);
+      setLoginEmail(currentEmail);
+
+      if (currentEmail) {
+        const cached = readCachedAllowlist(currentEmail);
         if (cached) setProfile(cached);
 
         try {
-          const allow = await fetchAllowlist(u.email);
+          const allow = await fetchAllowlist(currentEmail);
           setProfile(allow || cached);
           if (!allow && !cached) setError(t.errGeneric);
         } catch {
@@ -403,13 +594,15 @@ export default function Login() {
     setBusy(true);
     setError("");
     setProfile(null);
+    setDebugLines([]);
 
     try {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: "select_account" });
 
       const res = await signInWithPopup(auth, provider);
-      const email = res.user.email;
+      const email = normalizeLoginEmail(res.user.email);
+      setLoginEmail(email);
 
       if (!email) {
         setError(t.errGeneric);
@@ -439,7 +632,104 @@ export default function Login() {
       if (!effectiveAllow?.enabled) {
         setError(t.errNotAllowed);
       } else {
-        hardRedirectToAllowlistHome(res.user, effectiveAllow);
+        navigate(resolveAllowlistHomePath(res.user, effectiveAllow), { replace: true });
+      }
+    } catch (e: any) {
+      if (e?.code === "auth/popup-closed-by-user") {
+        setError(t.errPopupClosed);
+      } else {
+        setError(t.errGeneric);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+
+  const buildMicrosoftDebugLines = async (result: UserCredential): Promise<string[]> => {
+    const credential = OAuthProvider.credentialFromResult(result) as any;
+    const profile = (getAdditionalUserInfo(result)?.profile || {}) as Record<string, any>;
+    const tokenResponse = (result as any)?._tokenResponse || {};
+    const rawUserInfo = safeJsonParse(tokenResponse.rawUserInfo) || {};
+    const idTokenClaims = decodeJwtPayload(credential?.idToken || credential?.oauthIdToken || tokenResponse.oauthIdToken || tokenResponse.idToken);
+    const graphEmail = await fetchMicrosoftGraphEmail(credential?.accessToken || credential?.oauthAccessToken || tokenResponse.oauthAccessToken || tokenResponse.accessToken);
+    const candidates = collectEmailCandidates({ user: result.user, profile, tokenResponse, rawUserInfo, idTokenClaims, graphEmail });
+    return [
+      `firebase user.email: ${normalizeLoginEmail(result.user.email) || "—"}`,
+      `providerData.email: ${normalizeLoginEmail(result.user.providerData?.find((p) => p?.email)?.email) || "—"}`,
+      `profile email fields: ${getEmailFromObject(profile) || "—"}`,
+      `rawUserInfo email fields: ${getEmailFromObject(rawUserInfo) || "—"}`,
+      `idToken email fields: ${getEmailFromObject(idTokenClaims) || "—"}`,
+      `Graph /me email: ${graphEmail || "—"}`,
+      `all candidates: ${candidates.length ? candidates.join(" | ") : "—"}`,
+      `firebase uid: ${result.user.uid || "—"}`,
+    ];
+  };
+
+  const handleMicrosoft = async () => {
+    setBusy(true);
+    setError("");
+    setProfile(null);
+    setDebugLines([]);
+
+    try {
+      const provider = new OAuthProvider("microsoft.com");
+      provider.addScope("openid");
+      provider.addScope("email");
+      provider.addScope("profile");
+      // لا نطلب User.Read حتى لا تظهر شاشة موافقة المسؤول.
+      // البريد سيُقرأ من ID Token claims: email / preferred_username / upn.
+      provider.setCustomParameters({
+        // مهم جدًا: تطبيق Microsoft داخل الوزارة Single-tenant،
+        // لذلك يجب إجبار Firebase على استخدام tenant الوزارة بدل endpoint الافتراضي /common.
+        // بدون هذا يظهر خطأ AADSTS50194: not configured as a multi-tenant application.
+        tenant: "04b4cb5d-cc41-401f-bd9d-4ca8a31a5c2f",
+        prompt: "select_account",
+        domain_hint: "moe.om",
+      });
+
+      const res = await signInWithPopup(auth, provider);
+      setDebugLines(await buildMicrosoftDebugLines(res));
+      const email = await getMicrosoftLoginEmail(res);
+      setLoginEmail(email);
+      if (email) writeStoredProviderEmail(res.user.uid, email);
+
+      if (!email) {
+        setError(t.errMicrosoftEmailMissing);
+        await signOut(auth);
+        setBusy(false);
+        return;
+      }
+
+      if (!isMoeEmail(email)) {
+        setError(t.errMoeOnly);
+        await signOut(auth);
+        setBusy(false);
+        return;
+      }
+
+      const cached = readCachedAllowlist(email);
+      if (cached) setProfile(cached);
+
+      const allow = await fetchAllowlist(email);
+      setProfile(allow || cached);
+
+      if (!DISABLE_FUNCTIONS) {
+        try {
+          const sync = callFn<any, any>("syncMyClaims");
+          await sync({});
+          await res.user.getIdToken(true);
+        } catch {
+          // ignore
+        }
+      }
+
+      const effectiveAllow = allow || cached;
+
+      if (!effectiveAllow?.enabled) {
+        setError(t.errNotAllowed);
+      } else {
+        hardRedirectToAllowlistHome(res.user, effectiveAllow, email);
       }
     } catch (e: any) {
       if (e?.code === "auth/popup-closed-by-user") {
@@ -453,16 +743,19 @@ export default function Login() {
   };
 
   const refreshPermissions = async () => {
-    if (!fbUser?.email) return;
+    let currentEmail = loginEmail || getFirebaseUserEmail(fbUser);
+    if (!currentEmail) currentEmail = await getTokenClaimEmail(fbUser);
+    if (!fbUser || !currentEmail) return;
+    setLoginEmail(currentEmail);
 
     setBusy(true);
     setError("");
 
     try {
-      const cached = readCachedAllowlist(fbUser.email);
+      const cached = readCachedAllowlist(currentEmail);
       if (cached) setProfile(cached);
 
-      const allow = await fetchAllowlist(fbUser.email);
+      const allow = await fetchAllowlist(currentEmail);
       setProfile(allow || cached);
 
       if (!DISABLE_FUNCTIONS) {
@@ -485,7 +778,7 @@ export default function Login() {
       const effectiveAllow = allow || cached;
 
       if (effectiveAllow?.enabled) {
-        hardRedirectToAllowlistHome(fbUser, effectiveAllow);
+        navigate(resolveAllowlistHomePath(fbUser, effectiveAllow), { replace: true });
       }
     } catch {
       setError(t.errGeneric);
@@ -499,10 +792,11 @@ export default function Login() {
     setError("");
 
     try {
-      autoRedirectedRef.current = false;
       await signOut(auth);
       setFbUser(null);
       setProfile(null);
+      setLoginEmail("");
+      setDebugLines([]);
     } finally {
       setBusy(false);
     }
@@ -742,6 +1036,37 @@ export default function Login() {
       justifyContent: "center",
       border: "1px solid rgba(138, 106, 0, 0.25)",
     },
+    microsoftBtn: {
+      width: "100%",
+      marginTop: "14px",
+      border: "2px solid rgba(59, 130, 246, 0.48)",
+      borderRadius: "18px",
+      padding: "17px 24px",
+      cursor: busy ? "not-allowed" : "pointer",
+      fontWeight: 900,
+      fontSize: "18px",
+      color: "#111827",
+      background: "linear-gradient(180deg, #e0f2fe, #bfdbfe)",
+      boxShadow: "0 12px 26px rgba(59, 130, 246, 0.18)",
+      opacity: busy ? 0.72 : 1,
+      transition: "all 0.2s ease",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: "14px",
+    },
+    microsoftIcon: {
+      width: "34px",
+      height: "34px",
+      borderRadius: "9px",
+      background: "#ffffff",
+      display: "inline-grid",
+      gridTemplateColumns: "1fr 1fr",
+      gridTemplateRows: "1fr 1fr",
+      gap: "2px",
+      padding: "5px",
+      border: "1px solid rgba(37, 99, 235, 0.25)",
+    },
     infoBox: {
       marginTop: "24px",
       borderRadius: "20px",
@@ -942,13 +1267,29 @@ export default function Login() {
           )}
         </button>
 
+        <button style={styles.microsoftBtn} onClick={handleMicrosoft} disabled={busy}>
+          {busy ? (
+            <span style={styles.loading}></span>
+          ) : (
+            <>
+              <span style={styles.microsoftIcon} aria-hidden="true">
+                <span style={{ background: "#f25022" }}></span>
+                <span style={{ background: "#7fba00" }}></span>
+                <span style={{ background: "#00a4ef" }}></span>
+                <span style={{ background: "#ffb900" }}></span>
+              </span>
+              {t.microsoftSignIn}
+            </>
+          )}
+        </button>
+
         {(fbUser || error || profile) && (
           <div style={styles.infoBox}>
             <div style={styles.infoSection}>
-              {fbUser?.email && (
+              {(loginEmail || fbUser?.email) && (
                 <div style={styles.infoRow}>
                   <div style={styles.infoLabel}>{t.signedInAs}</div>
-                  <div style={styles.infoValue}>{fbUser.email}</div>
+                  <div style={styles.infoValue}>{loginEmail || fbUser?.email}</div>
                 </div>
               )}
 
@@ -981,6 +1322,18 @@ export default function Login() {
                   <div style={styles.infoValue}>{roleBadge.label}</div>
                 </div>
               )}
+              {debugLines.length > 0 && (
+                <div style={styles.infoRow}>
+                  <div style={styles.infoLabel}>Microsoft Debug</div>
+                  <div style={styles.infoValue}>
+                    {debugLines.map((line, index) => (
+                      <div key={index} style={{ fontSize: "12px", direction: "ltr", textAlign: "left", marginBottom: "4px" }}>
+                        {line}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div style={styles.actions}>
@@ -1005,7 +1358,11 @@ export default function Login() {
                   {isAllowed && (
                     <button
                       style={{ ...styles.actionBtn, ...styles.primaryBtn }}
-                      onClick={() => hardRedirectToAllowlistHome(fbUser, profile)}
+                      onClick={() =>
+                        navigate(resolveAllowlistHomePath(fbUser, profile), {
+                          replace: true,
+                        })
+                      }
                       disabled={busy}
                     >
                       {t.okGo}
