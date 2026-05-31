@@ -2,10 +2,61 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function ownerEmail() { return "3asal2030@gmail.com"; }
+    // ✅ قائمة إيميلات مالك المنصة.
+    // أضف الإيميل الثاني مكان SECOND_OWNER_EMAIL_HERE إذا أردت الاعتماد على القواعد مباشرة.
+    // يمكن أيضًا إضافة الإيميل الثاني في allowlist بدور super_admin و enabled=true.
+    function ownerEmails() {
+      return ["moe123@gmail.com", "yousef.namani@moe.om"];
+    }
+
     function signedIn() { return request.auth != null; }
     function authEmail() { return signedIn() ? request.auth.token.email : ""; }
-    function isOwner() { return signedIn() && authEmail() == ownerEmail(); }
+
+    function ownerAllowRef() {
+      return /databases/$(database)/documents/allowlist/$(authEmail());
+    }
+
+    function isAllowlistOwner() {
+      return signedIn()
+        && exists(ownerAllowRef())
+        && get(ownerAllowRef()).data.enabled == true
+        && (
+          get(ownerAllowRef()).data.role == "super_admin" ||
+          get(ownerAllowRef()).data.role == "owner" ||
+          get(ownerAllowRef()).data.role == "platform_owner"
+        );
+    }
+
+    function isOwner() {
+      return signedIn() && (authEmail() in ownerEmails() || isAllowlistOwner());
+    }
+
+    // ✅ يمنع المستخدم العادي من تعديل حقول الصلاحيات داخل ملفه الشخصي.
+    // مصدر الصلاحيات الحقيقي يبقى allowlist فقط.
+    function hasNoSensitiveUserProfileFields(data) {
+      return !data.keys().hasAny([
+        "role",
+        "roles",
+        "tenantId",
+        "effectiveTenantId",
+        "allowedTenants",
+        "governorate",
+        "tenantGovernorate",
+        "regionAr",
+        "readOnly",
+        "permissions",
+        "isOwner",
+        "owner",
+        "enabled",
+        "disabled"
+      ]);
+    }
+
+    function isSameUserSafeProfileWrite(userId) {
+      return signedIn()
+        && request.auth.uid == userId
+        && hasNoSensitiveUserProfileFields(request.resource.data);
+    }
 
     function allowRef() {
       return /databases/$(database)/documents/allowlist/$(authEmail());
@@ -200,7 +251,115 @@ service cloud.firestore {
       return isOwner() || isTenantAdmin(tenantId) || isExamCenterUser(tenantId);
     }
 
+
+    // ✅ Phase 5 — Backup / Restore hardening helpers
+    // النسخة السحابية يجب أن تكون مرتبطة بنفس الـ tenant ولا يسمح بتزوير tenantId داخلها.
+    function backupTenantField(data) {
+      return data.get("tenantId", data.get("meta", {}).get("tenantId", ""));
+    }
+
+    function backupIdField(data) {
+      return data.get("backupId", "");
+    }
+
+    function backupTenantMatchesRequest(tenantId) {
+      return backupTenantField(request.resource.data) == tenantId;
+    }
+
+    function backupTenantMatchesExisting(tenantId) {
+      return backupTenantField(resource.data) == tenantId;
+    }
+
+    function backupIdIsSafe(backupId) {
+      return backupIdField(request.resource.data) == "" || backupIdField(request.resource.data) == backupId;
+    }
+
+    function backupSchemaIsAllowed() {
+      return request.resource.data.get("backupType", "") == ""
+        || request.resource.data.backupType == "full-program";
+    }
+
+    function backupCreatedAtIsPresent() {
+      return request.resource.data.get("createdAtISO", request.resource.data.get("meta", {}).get("createdAtISO", "")) is string
+        && request.resource.data.get("createdAtISO", request.resource.data.get("meta", {}).get("createdAtISO", "")) != "";
+    }
+
+    function isAllowedBackupCollectionName(name) {
+      return name == "__meta__"
+        || name == "teachers"
+        || name == "exams"
+        || name == "rooms"
+        || name == "roomBlocks"
+        || name == "examRoomAssignments"
+        || name == "studentSeatRegister12"
+        || name == "schoolControlMembers"
+        || name == "schoolControlReports"
+        || name == "candidateViolationReports12"
+        || name == "candidateWrittenWarnings12"
+        || name == "unavailability"
+        || name == "archive"
+        || name == "cloudLocalStorage"
+        || name == "settings";
+    }
+
+    function isValidBackupDocCreate(tenantId, backupId) {
+      return canManageTenantInternal(tenantId)
+        && backupTenantMatchesRequest(tenantId)
+        && backupIdIsSafe(backupId)
+        && backupSchemaIsAllowed()
+        && backupCreatedAtIsPresent();
+    }
+
+    // يسمح فقط بتحديث حقول سياسة الاحتفاظ، ولا يسمح بتعديل محتوى النسخة بعد إنشائها.
+    function isRetentionOnlyBackupUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        "retentionPolicyVersion",
+        "retentionRole",
+        "retentionAnchorISO",
+        "retentionDemotedAtISO",
+        "retentionExpiresAtISO",
+        "retentionUpdatedAtISO",
+        "retentionLabelAr",
+        "retentionLabelEn"
+      ]);
+    }
+
+    function isValidBackupRetentionUpdate(tenantId) {
+      return canManageTenantInternal(tenantId)
+        && backupTenantMatchesExisting(tenantId)
+        && backupTenantMatchesRequest(tenantId)
+        && isRetentionOnlyBackupUpdate()
+        && (
+          request.resource.data.retentionRole == "latest"
+          || request.resource.data.retentionRole == "standard"
+        )
+        && request.resource.data.retentionExpiresAtISO is string
+        && request.resource.data.retentionExpiresAtISO != "";
+    }
+
+    function isValidBackupChunkCreate(tenantId, backupId) {
+      return canManageTenantInternal(tenantId)
+        && request.resource.data.tenantId == tenantId
+        && request.resource.data.backupId == backupId
+        && request.resource.data.collectionName is string
+        && isAllowedBackupCollectionName(request.resource.data.collectionName)
+        && request.resource.data.index is int
+        && request.resource.data.index > 0
+        && request.resource.data.storageKind is string
+        && (
+          request.resource.data.storageKind == "rows"
+          || request.resource.data.storageKind == "rowPart"
+        )
+        && request.resource.data.payloadBytes is int
+        && request.resource.data.payloadBytes >= 0
+        && request.resource.data.payloadBytes <= 900000;
+    }
+
     match /allowlist/{email} {
+      // كل مستخدم مصرح له يجب أن يستطيع قراءة مستند صلاحياته فقط بعد تسجيل الدخول.
+      // بدون هذا الشرط قد يظهر الحساب مفعلاً في صفحة الدخول من الكاش، ثم تفشل ProtectedRoute في فتح /super-system.
+      allow get: if signedIn() && email == authEmail();
+
       allow get, list, create, update, delete: if isOwner();
 
       allow get, list: if isMinistrySuperRole();
@@ -222,6 +381,7 @@ service cloud.firestore {
         && tenantGovernorate(request.resource.data.tenantId) == allowGovernorate();
 
       allow update: if isRegionalSuperRole()
+        && allowGovernorate() != ""
         && (
           isSchoolAdminRoleValue(request.resource.data.role)
           || isExamCenterRoleValue(request.resource.data.role)
@@ -230,6 +390,10 @@ service cloud.firestore {
           isSchoolAdminRoleValue(resource.data.role)
           || isExamCenterRoleValue(resource.data.role)
         )
+        && recordGovernorate(resource.data) == allowGovernorate()
+        && resource.data.tenantId is string
+        && resource.data.tenantId != ""
+        && tenantGovernorate(resource.data.tenantId) == allowGovernorate()
         && recordGovernorate(request.resource.data) == allowGovernorate()
         && request.resource.data.tenantId is string
         && request.resource.data.tenantId != ""
@@ -247,8 +411,14 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow get, create, update, delete: if isOwner() || (signedIn() && request.auth.uid == userId);
+      allow get: if isOwner() || (signedIn() && request.auth.uid == userId);
       allow list: if isOwner();
+
+      // ✅ المستخدم يستطيع إنشاء/تحديث بياناته العامة فقط، وليس حقول الصلاحيات.
+      allow create, update: if isOwner() || isSameUserSafeProfileWrite(userId);
+
+      // ✅ حذف حسابات المستخدمين من قاعدة البيانات فقط للمالك.
+      allow delete: if isOwner();
     }
 
     match /systemSuggestions/{docId} {
@@ -276,7 +446,13 @@ service cloud.firestore {
 
     match /tenantAdminLinks/{tenantId} {
       allow get: if isOwner() || isMinistrySuperRole() || sameGovernorateTenant(tenantId);
-      allow list: if isOwner() || isMinistrySuperRole() || isRegionalSuperRole();
+      allow list: if isOwner()
+        || isMinistrySuperRole()
+        || (
+          isRegionalSuperRole()
+          && allowGovernorate() != ""
+          && recordGovernorate(resource.data) == allowGovernorate()
+        );
 
       allow create, update: if (
           isOwner()
@@ -344,15 +520,21 @@ service cloud.firestore {
 
     match /tenants/{tenantId} {
       allow get: if canReadTenantRoot(tenantId);
-      allow list: if isOwner() || isMinistrySuperRole() || isRegionalSuperRole();
+      allow list: if isOwner()
+        || isMinistrySuperRole()
+        || (
+          isRegionalSuperRole()
+          && allowGovernorate() != ""
+          && recordGovernorate(resource.data) == allowGovernorate()
+        );
       allow create: if isOwner() || sameGovernorateInRequest();
       allow update: if isOwner() || sameGovernorateInUpdatedTenant(tenantId);
       allow delete: if canManageTenantRoot(tenantId);
 
       match /meta/config {
-        // بيانات الطابع الرسمي وإعدادات رأس الصفحة يجب أن تكون قابلة للقراءة لكل مستخدم مسجل؛
-        // الكتابة ما زالت محصورة داخل نفس الـ tenant أو مالك/مشرف المحافظة.
-        allow get: if signedIn();
+        // ✅ بيانات الطابع الرسمي لا تُقرأ إلا لمن له صلاحية على نفس الـ tenant.
+        // هذا يمنع أي مستخدم مسجل من قراءة إعدادات مدرسة/مركز آخر.
+        allow get: if canReadTenantInternal(tenantId);
         allow list: if false;
 
         allow create: if isOwner()
@@ -431,6 +613,16 @@ service cloud.firestore {
         allow create, update, delete: if canManageTenantInternal(tenantId);
       }
 
+      match /candidateViolationReports12/{docId} {
+        allow get, list: if canReadTenantInternal(tenantId);
+        allow create, update, delete: if canManageTenantInternal(tenantId);
+      }
+
+      match /candidateWrittenWarnings12/{docId} {
+        allow get, list: if canReadTenantInternal(tenantId);
+        allow create, update, delete: if canManageTenantInternal(tenantId);
+      }
+
       match /unavailability/{docId} {
         allow get, list: if canReadTenantInternal(tenantId);
         allow create, update, delete: if canManageTenantInternal(tenantId);
@@ -455,7 +647,22 @@ service cloud.firestore {
 
       match /backups/{backupId} {
         allow get, list: if canReadTenantInternal(tenantId);
-        allow create, delete: if canManageTenantInternal(tenantId);
+
+        // ✅ إنشاء النسخة مسموح فقط إذا كان tenantId داخل الوثيقة يطابق مسار الـ tenant.
+        allow create: if isValidBackupDocCreate(tenantId, backupId);
+
+        // ✅ تحديث محدود جدًا: حقول سياسة الاحتفاظ فقط، ولا يسمح بتعديل محتوى النسخة.
+        allow update: if isValidBackupRetentionUpdate(tenantId);
+
+        allow delete: if canManageTenantInternal(tenantId) && backupTenantMatchesExisting(tenantId);
+      }
+
+      // ✅ أجزاء النسخ السحابية: لا نسمح بالتعديل الجزئي بعد الإنشاء.
+      // ويمكن إنشاءها فقط للمجموعات المصرح استعادتها.
+      match /backups/{backupId}/chunks/{chunkId} {
+        allow get, list: if canReadTenantInternal(tenantId);
+        allow create: if isValidBackupChunkCreate(tenantId, backupId);
+        allow delete: if canManageTenantInternal(tenantId);
         allow update: if false;
       }
 
@@ -476,7 +683,11 @@ service cloud.firestore {
         && request.resource.data.at is string
         && request.resource.data.level is string
         && request.resource.data.action is string
-        && request.resource.data.label is string;
+        && request.resource.data.label is string
+        && (
+          !request.resource.data.keys().hasAny(["userEmail"])
+          || request.resource.data.userEmail == authEmail()
+        );
 
       allow get, list: if isOwner()
         || isMinistrySuperRole()
@@ -502,7 +713,11 @@ service cloud.firestore {
       allow create: if allowEnabled()
         && request.resource.data.at is string
         && request.resource.data.level is string
-        && request.resource.data.message is string;
+        && request.resource.data.message is string
+        && (
+          !request.resource.data.keys().hasAny(["userEmail"])
+          || request.resource.data.userEmail == authEmail()
+        );
 
       allow get, list: if isOwner()
         || isMinistrySuperRole()
