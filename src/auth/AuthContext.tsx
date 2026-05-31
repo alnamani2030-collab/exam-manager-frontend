@@ -41,6 +41,21 @@ function getTenantIdFromTenantPath(pathname: string) {
 const DISABLE_FUNCTIONS = String(import.meta.env.VITE_DISABLE_FUNCTIONS ?? "true") === "true";
 const IS_DEV = Boolean(import.meta.env.DEV);
 
+// ✅ قائمة إيميلات مالك المنصة.
+// أضف الإيميل الثاني مكان SECOND_OWNER_EMAIL_HERE إذا أردت الاعتماد على الكود مباشرة،
+// أو أضفه في allowlist بدور super_admin و enabled=true بدون تعديل الكود مرة أخرى.
+const PLATFORM_OWNER_EMAILS = [
+  "3asal2030@gmail.com",
+  "yousef.namani@moe.om",
+]
+  .map((email) => String(email || "").trim().toLowerCase())
+  .filter((email) => email && email !== "yousef.namani@moe.om");
+
+function isPlatformOwnerAuthEmail(email: any): boolean {
+  const clean = String(email || "").trim().toLowerCase();
+  return !!clean && PLATFORM_OWNER_EMAILS.includes(clean);
+}
+
 const Ctx = createContext<AuthCtx | null>(null);
 
 export function useAuth() {
@@ -57,12 +72,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { user, allow, userProfile, claims, loading, refreshAllow, setAllow, setUserProfile, setClaims } = session;
 
   const isSuperAdmin = useMemo(() => {
+    const ownerEmail = user?.email || (allow as any)?.email || (claims as any)?.email;
+    const emailSuper = isPlatformOwnerAuthEmail(ownerEmail);
     const claimRole = String(claims?.role ?? "").toLowerCase();
-    const claimSuper = claims?.enabled === true && (claimRole === "super_admin" || claims?.isOwner === true);
+    const claimSuper = claims?.enabled === true && (claimRole === "super_admin" || claimRole === "owner" || claimRole === "platform_owner" || claims?.isOwner === true);
     const allowRole = String(allow?.role ?? "").toLowerCase();
-    const allowSuper = allow?.enabled === true && allowRole === "super_admin";
-    return claimSuper || allowSuper;
-  }, [claims?.enabled, claims?.role, claims?.isOwner, allow?.enabled, allow?.role]);
+    const allowSuper = allow?.enabled === true && (allowRole === "super_admin" || allowRole === "owner" || allowRole === "platform_owner");
+    return emailSuper || claimSuper || allowSuper;
+  }, [user?.email, (allow as any)?.email, (claims as any)?.email, claims?.enabled, claims?.role, claims?.isOwner, allow?.enabled, allow?.role]);
 
   const isSuper = useMemo(() => {
     const email = String(user?.email ?? "").toLowerCase().trim();
