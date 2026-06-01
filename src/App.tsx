@@ -69,7 +69,9 @@ import { LEGACY_TENANT_PATHS } from "./config/tenantRoutes";
 import SuperSuggestions from "./pages/SuperSuggestions";
 import GovernorateTenantsManager from "./pages/GovernorateTenantsManager";
 import CloudStorageHealth from "./pages/CloudStorageHealth";
+import CloudStorageHealth12 from "./pages/CloudStorageHealth12";
 import CloudBackup from "./pages/CloudBackup";
+import CloudBackup12 from "./pages/CloudBackup12";
 import PermissionsAudit from "./pages/PermissionsAudit";
 import CommercialReadiness from "./pages/CommercialReadiness";
 import SystemAuditLog from "./pages/SystemAuditLog";
@@ -645,8 +647,8 @@ export default function App() {
         <Route path="candidate-written-warning12" element={<CandidateWrittenWarning12 />} />
         <Route path="student-seat-register12" element={<StudentSeatRegister12Page />} />
         {/* مسارات خاصة بمركز الدبلوم حتى لا تفتح أدوات السحابة داخل Layout المدرسة */}
-        <Route path="cloud-health12" element={<CloudStorageHealth />} />
-        <Route path="cloud-backup12" element={<CloudBackup />} />
+        <Route path="cloud-health12" element={<CloudStorageHealth12 />} />
+        <Route path="cloud-backup12" element={<CloudBackup12 />} />
         <Route path="sync12" element={<Sync />} />
         <Route path="suggestions12page" element={<Suggestions12Page />} />
         <Route path="about12" element={<About12 />} />

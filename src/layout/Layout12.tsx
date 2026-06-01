@@ -319,7 +319,30 @@ export default function Layout() {
           </button>
         </div>
 
-        <CloudStorageStatusPill collapsed={sidebarCollapsed} lang={lang} />
+        <div
+          onClickCapture={(event) => {
+            if (!isDiploma12Area) return;
+
+            const target = event.target as HTMLElement | null;
+            const clickable = target?.closest?.("a,button,[role='button']") as HTMLElement | null;
+            if (!clickable) return;
+
+            const text = `${clickable.textContent || ""} ${clickable.getAttribute("aria-label") || ""} ${clickable.getAttribute("title") || ""}`.toLowerCase();
+            const looksLikeHealthAction =
+              text.includes("فحص") ||
+              text.includes("cloud") ||
+              text.includes("health") ||
+              text.includes("السحابي");
+
+            if (!looksLikeHealthAction) return;
+
+            event.preventDefault();
+            event.stopPropagation();
+            navigate(`${tenantBase}/cloud-health12`);
+          }}
+        >
+          <CloudStorageStatusPill collapsed={sidebarCollapsed} lang={lang} />
+        </div>
 
         <nav style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
           {sidebarItems.map((item: any) => {
