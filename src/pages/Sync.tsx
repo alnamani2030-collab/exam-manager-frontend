@@ -36,6 +36,44 @@ import SyncArchiveSection from "../features/sync/components/SyncArchiveSection";
 import SyncCloudBackupsSection from "../features/sync/components/SyncCloudBackupsSection";
 import SyncStatusBanner from "../features/sync/components/SyncStatusBanner";
 
+function safeStorageValue(key: string): string {
+  if (typeof window === "undefined") return "";
+  try {
+    return String(window.sessionStorage?.getItem(key) || window.localStorage?.getItem(key) || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+function firstNonEmptySync(...values: unknown[]): string {
+  for (const value of values) {
+    const normalized = String(value || "").trim();
+    if (normalized) return normalized;
+  }
+  return "";
+}
+
+function tenantIdFromSyncPathname(pathname: string): string {
+  try {
+    const parts = String(pathname || "")
+      .split("/")
+      .map((part) => decodeURIComponent(part || "").trim())
+      .filter(Boolean);
+
+    const tIndex = parts.findIndex((part) => part === "t");
+    if (tIndex >= 0 && parts[tIndex + 1]) return parts[tIndex + 1];
+
+    const tenantKeys = ["tenant", "tenantId", "school", "schoolId", "center", "centerId"];
+    for (const key of tenantKeys) {
+      const index = parts.findIndex((part) => part === key);
+      if (index >= 0 && parts[index + 1]) return parts[index + 1];
+    }
+  } catch {
+    return "";
+  }
+  return "";
+}
+
 type SyncBusy = null | "export" | "import" | "reset" | "sync" | "cloud" | "cloud-import";
 
 type BackupV1 = {
@@ -297,12 +335,37 @@ export default function Sync() {
   const routeParams = useParams() as any;
   const { reloadAll } = useAppData() as any;
 
-  const routeTenantId = String(
-    routeParams?.tenantId || routeParams?.tenant || routeParams?.id || routeParams?.schoolId || routeParams?.centerId || ""
-  ).trim();
-  const tenantId = String(routeTenantId || tenantFromContext || user?.tenantId || "").trim();
+  const routeTenantId = firstNonEmptySync(
+    routeParams?.tenantId,
+    routeParams?.tenant,
+    routeParams?.id,
+    routeParams?.schoolId,
+    routeParams?.centerId,
+    routeParams?.diplomaCenterId,
+    routeParams?.examCenterId,
+    tenantIdFromSyncPathname(location?.pathname || "")
+  );
+  const tenantId = firstNonEmptySync(
+    routeTenantId,
+    tenantFromContext,
+    user?.tenantId,
+    user?.effectiveTenantId,
+    user?.selectedTenantId,
+    user?.lastTenantId,
+    user?.centerId,
+    user?.schoolId,
+    safeStorageValue("effectiveTenantId"),
+    safeStorageValue("selectedTenantId"),
+    safeStorageValue("lastTenantId"),
+    safeStorageValue("tenantId"),
+    safeStorageValue("centerId"),
+    safeStorageValue("schoolId")
+  );
   const isDiploma12Sync = React.useMemo(
-    () => String(location?.pathname || "").includes("/sync12"),
+    () => {
+      const path = String(location?.pathname || "");
+      return path.includes("/sync12") || path.includes("/dashboard12") || path.includes("/cloud-backup12") || path.includes("/cloud-health12");
+    },
     [location?.pathname],
   );
   const cloudHealthRoute = isDiploma12Sync ? "cloud-health12" : "cloud-health";
@@ -333,6 +396,11 @@ export default function Sync() {
   }, [tenantId]);
 
   const refreshCloudBackups = async () => {
+    if (!tenantId) {
+      setCloudBackups([]);
+      return;
+    }
+
     try {
       const items = await listCloudBackups(tenantId, 50);
       setCloudBackups(items);
@@ -346,6 +414,14 @@ export default function Sync() {
   }, [tenantId]);
 
   const checkCloud = async () => {
+    if (!tenantId) {
+      setCloudStatus({
+        ok: false,
+        note: tr("تعذر تحديد نطاق المركز/المدرسة من الرابط أو الحساب.", "Could not resolve tenant scope from the route or account."),
+      });
+      return;
+    }
+
     try {
       const list = callFn<any, any>("tenantListDocs");
       await list({ tenantId, sub: "archive", limit: 1, orderBy: "createdAt", orderDir: "desc" });

@@ -254,9 +254,11 @@ function exams12NormalizeExam(value: any): Exam {
 }
 
 function exams12NormalizeExams(rows: any[]): Exam[] {
-  return (Array.isArray(rows) ? rows : [])
+  const normalized = (Array.isArray(rows) ? rows : [])
     .map(exams12NormalizeExam)
     .filter((exam) => exam.subject || exam.dateISO);
+
+  return exams12DedupeExams(normalized);
 }
 
 function exams12NormalizeRoom(value: any): Room {
@@ -324,10 +326,142 @@ function exams12NormalizeExamRoomAssignment(value: any): PersistedExamRoomAssign
 }
 
 function exams12NormalizeExamRoomAssignments(rows: any[]): PersistedExamRoomAssignment[] {
-  return (Array.isArray(rows) ? rows : [])
+  const normalized = (Array.isArray(rows) ? rows : [])
     .map(exams12NormalizeExamRoomAssignment)
     .filter((row) => row.examId && row.roomId);
+
+  return exams12DedupeExamRoomAssignments(normalized);
 }
+
+function exams12NormalizeTextForKey(value: unknown) {
+  return exams12Clean(value)
+    .toLowerCase()
+    .replace(/[أإآ]/g, "ا")
+    .replace(/ى/g, "ي")
+    .replace(/ة/g, "ه")
+    .replace(/ـ/g, "")
+    .replace(/[\u064B-\u065F\u0670]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function exams12ExamDedupeKey(exam: Exam) {
+  const subject = exams12NormalizeTextForKey(exam.subject);
+  const dateISO = exams12Clean(exam.dateISO);
+  const period = normalizeExamPeriod(exams12Clean(exam.period));
+  const time = exams12Clean(exam.time) || "08:00";
+
+  return [subject, dateISO, period, time].join("|");
+}
+
+function exams12DedupeExams(rows: Exam[]) {
+  const map = new Map<string, Exam>();
+
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const exam = exams12NormalizeExam(row);
+    if (!exam.subject && !exam.dateISO) continue;
+
+    const key = exams12ExamDedupeKey(exam);
+    const existing = map.get(key);
+
+    if (!existing) {
+      map.set(key, exam);
+      continue;
+    }
+
+    map.set(key, {
+      ...existing,
+      subject: existing.subject || exam.subject,
+      dateISO: existing.dateISO || exam.dateISO,
+      dayLabel: existing.dayLabel || exam.dayLabel,
+      time: existing.time || exam.time,
+      period: existing.period || exam.period,
+      durationMinutes: Number(existing.durationMinutes) || Number(exam.durationMinutes) || 120,
+      roomsCount: Math.max(Number(existing.roomsCount) || 1, Number(exam.roomsCount) || 1),
+    });
+  }
+
+  return Array.from(map.values());
+}
+
+function exams12ExamRoomAssignmentDedupeKey(row: PersistedExamRoomAssignment) {
+  return [
+    exams12Clean(row.examId),
+    exams12Clean(row.roomId),
+    exams12Clean(row.dateISO),
+    normalizeExamPeriod(exams12Clean(row.period)),
+  ].join("|");
+}
+
+function exams12DedupeExamRoomAssignments(rows: PersistedExamRoomAssignment[]) {
+  const map = new Map<string, PersistedExamRoomAssignment>();
+
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const assignment = exams12NormalizeExamRoomAssignment(row);
+    if (!assignment.examId || !assignment.roomId) continue;
+
+    const key = exams12ExamRoomAssignmentDedupeKey(assignment);
+    const existing = map.get(key);
+
+    if (!existing) {
+      map.set(key, assignment);
+      continue;
+    }
+
+    map.set(key, {
+      ...existing,
+      roomName: existing.roomName || assignment.roomName,
+      dateISO: existing.dateISO || assignment.dateISO,
+      time: existing.time || assignment.time,
+      period: existing.period || assignment.period,
+      createdBy: existing.createdBy || assignment.createdBy,
+    });
+  }
+
+  return Array.from(map.values());
+}
+
+function exams12ClearLegacyExamCaches() {
+  if (typeof window === "undefined") return;
+
+  const keys = [
+    EXAMS12_LEGACY_EXAMS_CACHE_KEY,
+    "exams",
+    "exams12",
+    "exam-manager:exams",
+    "exam-manager:exams12",
+  ];
+
+  for (const key of keys) {
+    try {
+      window.localStorage.removeItem(key);
+    } catch {
+      // local cleanup must not break delete all
+    }
+  }
+}
+
+function exams12ClearLegacyAssignmentCaches(storageKey?: string) {
+  if (typeof window === "undefined") return;
+
+  const keys = [
+    storageKey || "",
+    `${ASSIGNMENTS_STORAGE_PREFIX}_default`,
+    "examRoomAssignments",
+    "examRoomAssignments12",
+    "exam-manager:examRoomAssignments",
+    "exam-manager:examRoomAssignments12",
+  ].filter(Boolean);
+
+  for (const key of keys) {
+    try {
+      window.localStorage.removeItem(key);
+    } catch {
+      // local cleanup must not break delete all
+    }
+  }
+}
+
 
 function exams12ReadLegacyExams(): Exam[] {
   if (typeof window === "undefined") return [];
@@ -347,18 +481,7 @@ function exams12ReadLegacyExams(): Exam[] {
     if (parsed.length > best.length) best = parsed;
   }
 
-  try {
-    for (let i = 0; i < window.localStorage.length; i++) {
-      const key = window.localStorage.key(i) || "";
-      if (!/exam|exams|امتحان|امتحانات/i.test(key)) continue;
-      const parsed = exams12NormalizeExams(safeParseExams(window.localStorage.getItem(key)));
-      if (parsed.length > best.length) best = parsed;
-    }
-  } catch {
-    // ignore localStorage scan errors
-  }
-
-  return best;
+  return exams12DedupeExams(best);
 }
 
 function exams12ReadLegacyRooms(): Room[] {
@@ -428,7 +551,7 @@ function exams12ReadLegacyAssignments(storageKey?: string): PersistedExamRoomAss
 function exams12CacheExams(rows: Exam[]) {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(EXAMS12_LEGACY_EXAMS_CACHE_KEY, JSON.stringify(rows));
+    window.localStorage.setItem(EXAMS12_LEGACY_EXAMS_CACHE_KEY, JSON.stringify(exams12DedupeExams(rows)));
   } catch {
     // cache should not break the page
   }
@@ -455,8 +578,9 @@ function exams12CacheRoomBlocks(rows: RoomBlock[]) {
 function exams12CacheAssignments(rows: PersistedExamRoomAssignment[], storageKey?: string) {
   if (typeof window === "undefined") return;
   try {
-    if (storageKey) window.localStorage.setItem(storageKey, JSON.stringify(rows));
-    window.localStorage.setItem("exam-manager:examRoomAssignments12", JSON.stringify(rows));
+    const normalized = exams12DedupeExamRoomAssignments(rows);
+    if (storageKey) window.localStorage.setItem(storageKey, JSON.stringify(normalized));
+    window.localStorage.setItem("exam-manager:examRoomAssignments12", JSON.stringify(normalized));
   } catch {
     // cache should not break the page
   }
@@ -943,9 +1067,22 @@ export default function Exams() {
       setSyncMessage(tr("جاري تحميل جدول الامتحانات من السحابة...", "Loading exams schedule from cloud..."));
 
       try {
-        const cloudExams = exams12NormalizeExams(
-          await loadTenantArray<Exam>(tenantId, SUBCOLLECTION, { cacheFallback: true })
-        ).sort(sortExams);
+        const rawCloudExams = await loadTenantArray<Exam>(tenantId, SUBCOLLECTION, { cacheFallback: true });
+        const cloudExams = exams12NormalizeExams(rawCloudExams).sort(sortExams);
+
+        if (rawCloudExams.length !== cloudExams.length) {
+          await replaceTenantArray(tenantId, SUBCOLLECTION, cloudExams as any[], {
+            by: currentUserId || undefined,
+            audit: {
+              entity: SUBCOLLECTION,
+              meta: {
+                summary: "cleaned duplicated exams collection",
+                before: rawCloudExams.length,
+                after: cloudExams.length,
+              },
+            },
+          });
+        }
 
         const cloudRooms = exams12NormalizeRooms(
           await loadTenantArray<Room>(tenantId, ROOMS12_SUBCOLLECTION, { cacheFallback: true })
@@ -955,9 +1092,26 @@ export default function Exams() {
           await loadTenantArray<RoomBlock>(tenantId, ROOM_BLOCKS12_SUBCOLLECTION, { cacheFallback: true })
         );
 
-        const cloudAssignments = exams12NormalizeExamRoomAssignments(
-          await loadTenantArray<PersistedExamRoomAssignment>(tenantId, EXAM_ROOM_ASSIGNMENTS12_SUBCOLLECTION, { cacheFallback: true })
+        const rawCloudAssignments = await loadTenantArray<PersistedExamRoomAssignment>(
+          tenantId,
+          EXAM_ROOM_ASSIGNMENTS12_SUBCOLLECTION,
+          { cacheFallback: true }
         );
+        const cloudAssignments = exams12NormalizeExamRoomAssignments(rawCloudAssignments);
+
+        if (rawCloudAssignments.length !== cloudAssignments.length) {
+          await replaceTenantArray(tenantId, EXAM_ROOM_ASSIGNMENTS12_SUBCOLLECTION, cloudAssignments as any[], {
+            by: currentUserId || undefined,
+            audit: {
+              entity: EXAM_ROOM_ASSIGNMENTS12_SUBCOLLECTION,
+              meta: {
+                summary: "cleaned duplicated exam room assignments",
+                before: rawCloudAssignments.length,
+                after: cloudAssignments.length,
+              },
+            },
+          });
+        }
 
         if (!mounted) return;
 
@@ -1350,12 +1504,52 @@ export default function Exams() {
     setExamRoomAssignments((prev) => prev.filter((row) => row.examId !== id));
   }
 
-  function deleteAll() {
-    if (!exams.length) return;
-    const ok = confirm(tr("⚠️ هل أنت متأكد من حذف جدول الامتحانات كاملًا؟ لا يمكن التراجع.", "⚠️ Are you sure you want to delete the entire exams table? This cannot be undone."));
+  async function deleteAll() {
+    if (!exams.length && !examRoomAssignments.length) return;
+
+    const ok = confirm(
+      tr(
+        "⚠️ هل أنت متأكد من حذف جدول الامتحانات كاملًا؟ سيتم حذف الامتحانات وربط القاعات ولا يمكن التراجع.",
+        "⚠️ Are you sure you want to delete the entire exams table? Exams and room assignments will be deleted and this cannot be undone."
+      )
+    );
     if (!ok) return;
-    setExams([]);
-    setExamRoomAssignments([]);
+
+    setCloudError("");
+    setSyncMessage(tr("جاري حذف جدول الامتحانات كاملًا...", "Deleting the entire exams table..."));
+
+    try {
+      await persistExams([], "deleted entire exams collection");
+      await persistExamRoomAssignmentsNow([]);
+
+      exams12ClearLegacyExamCaches();
+      exams12ClearLegacyAssignmentCaches(assignmentsStorageKey);
+
+      examsRef.current = [];
+      examRoomAssignmentsRef.current = [];
+      setExamsLocal([]);
+      setExamRoomAssignmentsLocal([]);
+
+      setAdding(false);
+      setEditingId(null);
+      setRow({ ...emptyExam, id: genId() });
+      setEdit({ ...emptyExam, id: "" });
+      setSyncMessage(tr("تم حذف جدول الامتحانات كاملًا.", "The entire exams table has been deleted."));
+    } catch (error) {
+      console.error("deleteAll exams12 error:", error);
+      setCloudError(
+        tr(
+          "تعذر حذف جدول الامتحانات من السحابة. تحقق من الاتصال والصلاحيات ثم حاول مرة أخرى.",
+          "Could not delete the exams table from cloud. Check connection and permissions, then try again."
+        )
+      );
+      alert(
+        tr(
+          "تعذر حذف جدول الامتحانات من السحابة. تحقق من الاتصال والصلاحيات ثم حاول مرة أخرى.",
+          "Could not delete the exams table from cloud. Check connection and permissions, then try again."
+        )
+      );
+    }
   }
 
   function toCSV(rows: Exam[]) {
