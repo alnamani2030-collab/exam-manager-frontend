@@ -1772,6 +1772,14 @@ export default function TaskDistributionPrint() {
     return teacherEmployeeIndex.get(key) || "";
   }
 
+  function maskEmployeeNoForPrint(value: string) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    const chars = Array.from(raw.replace(/\s+/g, ""));
+    if (chars.length <= 4) return chars.join("");
+    return chars.map((ch, index) => (index < 2 || index >= chars.length - 2 ? ch : "x")).join("");
+  }
+
   /** -------------------------------------------
    * Load master table
    * ------------------------------------------ */
@@ -2153,7 +2161,7 @@ export default function TaskDistributionPrint() {
     const base = `تقرير توزيع المهام - ${schoolHeader.schoolName}\n`;
     const typeLine = `نوع التقرير: ${title}\n`;
     const teacherLine = teacherNameFilter ? `المعلم: ${teacherNameFilter}\n` : "";
-    const empLine = teacherNameFilter ? `الرقم الوظيفي: ${getTeacherEmployeeNoByName(teacherNameFilter) || "—"}\n` : "";
+    const empLine = teacherNameFilter ? `الرقم الوظيفي: ${maskEmployeeNoForPrint(getTeacherEmployeeNoByName(teacherNameFilter)) || "—"}\n` : "";
     const subjectLine = subjectFilter ? `المادة: ${subjectFilter}\n` : "";
     const dateLine = dateISO ? `التاريخ: ${dateISO}\n` : "";
     return `${base}${typeLine}${teacherLine}${empLine}${subjectLine}${dateLine}تم الإنشاء من النظام.`;
@@ -2420,7 +2428,7 @@ export default function TaskDistributionPrint() {
   }
 
   function TeacherSheet(props: { teacherName: string; rows: AnyAssignment[]; pageBreak?: boolean; createdAtISO: string }) {
-    const employeeNo = getTeacherEmployeeNoByName(props.teacherName);
+    const employeeNo = maskEmployeeNoForPrint(getTeacherEmployeeNoByName(props.teacherName));
     const teacherRowsForPrint = dedupeTeacherRowsForPrint(props.rows || []);
 
     return (

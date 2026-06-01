@@ -362,6 +362,13 @@ function employeeNoInputDigitsOnly(value: any) {
   return normalizeEmployeeNoDigits(value).replace(/\D+/g, "");
 }
 
+function maskEmployeeNoForDisplay(value: any) {
+  const v = normalizeEmployeeNoDigits(value);
+  if (!v) return "";
+  if (v.length <= 4) return v;
+  return `${v.slice(0, 2)}${"x".repeat(v.length - 4)}${v.slice(-2)}`;
+}
+
 function getCell(row: any, keys: string[]) {
   for (const k of keys) {
     if (row[k] != null && String(row[k]).trim() !== "") return String(row[k]).trim();
@@ -1577,7 +1584,7 @@ Do you want to replace it with the new name: (${t.fullName})?`
                 filtered.map((t) => (
                   <tr key={t.id}>
                     <td style={{ ...tdStyle, color: "#000000", fontWeight: 1000 }} className="col-name"><span style={{ color: "#000000", fontWeight: 900, WebkitTextFillColor: "#000000", textShadow: "none" }}>{t.fullName}</span></td>
-                    <td style={tdStyle} className="col-emp">{t.employeeNo}</td>
+                    <td style={tdStyle} className="col-emp" title={maskEmployeeNoForDisplay(t.employeeNo)}>{maskEmployeeNoForDisplay(t.employeeNo)}</td>
                     <td style={tdStyle}>{translateSubject(t.subject1)}</td>
                     <td style={tdStyle}>{translateSubject(t.subject2)}</td>
                     <td style={tdStyle}>{translateSubject(t.subject3)}</td>
@@ -1806,8 +1813,8 @@ Do you want to replace it with the new name: (${t.fullName})?`
             </div>
             <div style={{ opacity: 0.95, marginBottom: 12, lineHeight: 1.8 }}>
               {tr(
-                `الرقم الوظيفي ${dupModal.employeeNo} مستخدم بالفعل.\nإمّا تغيّر الرقم، أو تختار اسم من الموجودين بنفس الرقم لاستبدال بياناته بالبيانات الحالية.`,
-                `Employee number ${dupModal.employeeNo} is already in use.\nEither change the number, or choose an existing name with the same number to replace its data with the current data.`
+                `الرقم الوظيفي ${maskEmployeeNoForDisplay(dupModal.employeeNo)} مستخدم بالفعل.\nإمّا تغيّر الرقم، أو تختار اسم من الموجودين بنفس الرقم لاستبدال بياناته بالبيانات الحالية.`,
+                `Employee number ${maskEmployeeNoForDisplay(dupModal.employeeNo)} is already in use.\nEither change the number, or choose an existing name with the same number to replace its data with the current data.`
               )}
             </div>
 
@@ -1824,7 +1831,7 @@ Do you want to replace it with the new name: (${t.fullName})?`
                   {dupModal.candidates.map((c) => (
                     <tr key={c.id}>
                       <td style={tdStyle}>{c.fullName}</td>
-                      <td style={tdStyle}>{c.employeeNo}</td>
+                      <td style={tdStyle} title={maskEmployeeNoForDisplay(c.employeeNo)}>{maskEmployeeNoForDisplay(c.employeeNo)}</td>
                       <td style={tdStyle}>
                         <button
                           style={btn("#f59e0b", "#000000")}

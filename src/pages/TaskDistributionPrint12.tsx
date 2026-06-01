@@ -1219,6 +1219,14 @@ export default function TaskDistributionPrint() {
     return teacherEmployeeIndex.get(key) || "";
   }
 
+  function maskEmployeeNoForPrint(value: string) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    const chars = Array.from(raw.replace(/\s+/g, ""));
+    if (chars.length <= 4) return chars.join("");
+    return chars.map((ch, index) => (index < 2 || index >= chars.length - 2 ? ch : "x")).join("");
+  }
+
   const masterTableRows = useMemo<AnyAssignment[]>(() => {
     const m1 = readJson<any>("exam-manager:task-distribution:master-table:v1");
     const m2 = readJson<any>("exam-manager:task-distribution:all-table:v1");
@@ -1431,7 +1439,7 @@ export default function TaskDistributionPrint() {
 `;
     const teacherLine = teacherNameFilter ? `${tr("المعلم", "Teacher")}: ${teacherNameFilter}
 ` : "";
-    const empLine = teacherNameFilter ? `${tr("الرقم الوظيفي", "Employee No")}: ${getTeacherEmployeeNoByName(teacherNameFilter) || "—"}
+    const empLine = teacherNameFilter ? `${tr("الرقم الوظيفي", "Employee No")}: ${maskEmployeeNoForPrint(getTeacherEmployeeNoByName(teacherNameFilter)) || "—"}
 ` : "";
     const subjectLine = subjectFilter ? `${tr("المادة", "Subject")}: ${translateSubject(subjectFilter, lang)}
 ` : "";
@@ -1667,7 +1675,7 @@ export default function TaskDistributionPrint() {
   }
 
   function TeacherSheet(props: { teacherName: string; rows: AnyAssignment[]; pageBreak?: boolean; createdAtISO: string }) {
-    const employeeNo = getTeacherEmployeeNoByName(props.teacherName);
+    const employeeNo = maskEmployeeNoForPrint(getTeacherEmployeeNoByName(props.teacherName));
 
     return (
       <div className="print-sheet" style={{ ...styles.sheet, ...(props.pageBreak ? styles.pageBreak : {}), direction: lang === "ar" ? "rtl" : "ltr" }}>
