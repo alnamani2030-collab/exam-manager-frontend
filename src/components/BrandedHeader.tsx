@@ -4,6 +4,23 @@ import { useAuth } from "../auth/AuthContext";
 
 const LOGO_URL = "https://i.imgur.com/vdDhSMh.png";
 
+function maskEmailForDisplay(email: string) {
+  const value = String(email || "").trim();
+  if (!value || !value.includes("@")) return value;
+
+  const [rawLocal, rawDomain] = value.split("@");
+  const local = String(rawLocal || "").trim();
+  const domain = String(rawDomain || "").trim();
+
+  if (!local || !domain) return value;
+
+  if (local.length <= 1) return `${local}***@${domain}`;
+  if (local.length === 2) return `${local[0]}***${local[1]}@${domain}`;
+
+  return `${local[0]}${"*".repeat(Math.max(3, local.length - 2))}${local[local.length - 1]}@${domain}`;
+}
+
+
 export default function BrandedHeader({
   pageTitle,
   hint,
@@ -42,6 +59,10 @@ export default function BrandedHeader({
       "لا يوجد بريد إلكتروني"
     );
   }, [auth?.user?.email, auth?.effectiveAllow?.email, auth?.profile?.email]);
+
+  const maskedSessionEmail = useMemo(() => {
+    return maskEmailForDisplay(sessionEmail);
+  }, [sessionEmail]);
 
   const sessionGovernorate = useMemo(() => {
     return (
@@ -216,7 +237,7 @@ export default function BrandedHeader({
                 wordBreak: "break-word",
               }}
             >
-              {sessionEmail}
+              {maskedSessionEmail}
             </div>
 
             <div
