@@ -91,6 +91,18 @@ function readOfficialLogo() {
   }
 }
 
+function normalizePhoneForTeacherAccess(value: unknown) {
+  return String(value || "").replace(/\D/g, "").trim();
+}
+
+function maskPhoneForTeacherAccess(value: unknown) {
+  const normalized = normalizePhoneForTeacherAccess(value);
+  if (!normalized) return "";
+  if (normalized.length <= 2) return normalized;
+  return `${normalized.slice(0, 1)}${"x".repeat(Math.max(normalized.length - 2, 1))}${normalized.slice(-1)}`;
+}
+
+
 function TeachersOfficialHeader({
   lang,
   isRTL,
@@ -200,6 +212,9 @@ function TeachersOfficialHeader({
 // ✅ قائمة المواد
 const SUBJECT_OPTIONS_RAW = [
   "", 
+  "المجال الاول (التربية الاسلامية و اللغة العربية )  ",
+  "المجال الثاني ( الرياضيات و  العلوم ) ",
+  "التخصصات الإدارية ",
   "التربية الإسلامية 1",
   "التربية الإسلامية 2",
   "التربية الإسلامية 3",
@@ -1052,6 +1067,63 @@ export default function Teachers() {
 
   const [officialCenterData, setOfficialCenterData] = useState<ExamCenterOfficialData>(() => readOfficialExamCenterData());
   const [officialLogo, setOfficialLogo] = useState<string>(() => readOfficialLogo());
+  const [teacherAccessPhoneInput, setTeacherAccessPhoneInput] = useState("");
+  const [teacherAccessError, setTeacherAccessError] = useState("");
+  const [teacherAccessVerified, setTeacherAccessVerified] = useState(false);
+  const teacherAccessSessionKey = useMemo(() => `exam-manager:teachers12-phone-access:${tenantId}`, [tenantId]);
+  const registeredTeacherAccessPhone = useMemo(
+    () => normalizePhoneForTeacherAccess(officialCenterData.phone),
+    [officialCenterData.phone]
+  );
+  const maskedRegisteredTeacherAccessPhone = useMemo(
+    () => maskPhoneForTeacherAccess(officialCenterData.phone),
+    [officialCenterData.phone]
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const storedValue = window.sessionStorage.getItem(teacherAccessSessionKey);
+    setTeacherAccessVerified(Boolean(registeredTeacherAccessPhone && storedValue === registeredTeacherAccessPhone));
+    setTeacherAccessPhoneInput("");
+    setTeacherAccessError("");
+  }, [teacherAccessSessionKey, registeredTeacherAccessPhone]);
+
+  const verifyTeacherAccessPhone = useCallback(() => {
+    const typedPhone = normalizePhoneForTeacherAccess(teacherAccessPhoneInput);
+
+    if (!registeredTeacherAccessPhone) {
+      setTeacherAccessError(
+        tr(
+          "لا يوجد رقم هاتف مسجل في بيانات المركز. الرجاء تسجيل رقم الهاتف في صفحة إعدادات المركز أولاً.",
+          "No phone number is registered in the center settings. Please register the phone number in settings first."
+        )
+      );
+      return;
+    }
+
+    if (!typedPhone) {
+      setTeacherAccessError(tr("يرجى إدخال رقم الهاتف المسجل.", "Please enter the registered phone number."));
+      return;
+    }
+
+    if (typedPhone !== registeredTeacherAccessPhone) {
+      setTeacherAccessVerified(false);
+      setTeacherAccessError(
+        tr(
+          "رقم الهاتف غير مطابق للرقم المسجل في بيانات المركز.",
+          "The phone number does not match the phone registered in the center settings."
+        )
+      );
+      return;
+    }
+
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem(teacherAccessSessionKey, registeredTeacherAccessPhone);
+    }
+    setTeacherAccessVerified(true);
+    setTeacherAccessPhoneInput("");
+    setTeacherAccessError("");
+  }, [teacherAccessPhoneInput, registeredTeacherAccessPhone, teacherAccessSessionKey, tr]);
 
   useEffect(() => {
     const refreshOfficialData = () => {
@@ -1439,17 +1511,15 @@ export default function Teachers() {
   }, [teachers, query]);
 
   function validateBasics(t: Teacher) {
-    const employeeNo = normalizeEmployeeNoDigits(t.employeeNo);
-    if (!employeeNo) return { ok: false, msg: tr("الرقم الوظيفي مطلوب.", "Employee number is required.") };
-    if (!isEmployeeNoDigitsOnly(employeeNo)) return { ok: false, msg: tr("الرقم الوظيفي يجب أن يكون أرقام فقط.", "Employee number must contain digits only.") };
+    if (!t.employeeNo.trim()) return { ok: false, msg: tr("الرقم الوظيفي مطلوب.", "Employee number is required.") };
     if (!t.fullName.trim()) return { ok: false, msg: tr("الاسم الكامل مطلوب.", "Full name is required.") };
     return { ok: true, msg: "" };
   }
 
   function findDuplicates(employeeNo: string, ignoreId?: string | null) {
-    const key = normalizeEmployeeNoDigits(employeeNo);
+    const key = employeeNo.trim();
     if (!key) return [];
-    return teachers.filter((t) => normalizeEmployeeNoDigits(t.employeeNo) === key && t.id !== ignoreId);
+    return teachers.filter((t) => t.employeeNo.trim() === key && t.id !== ignoreId);
   }
 
   function openDupModal(employeeNo: string, ignoreId: string | null, pending: Teacher, context: "add" | "edit") {
@@ -1458,7 +1528,7 @@ export default function Teachers() {
       open: true,
       employeeNo: normalizeEmployeeNoDigits(employeeNo),
       candidates,
-      pending: { ...pending, employeeNo: normalizeEmployeeNoDigits(pending.employeeNo) },
+      pending,
       context,
     });
   }
@@ -1627,10 +1697,10 @@ export default function Teachers() {
         );
         if (ok) {
           const idx = next.findIndex((x) => x.id === old.id);
-          if (idx >= 0) next[idx] = { ...t, id: old.id, employeeNo: key };
+          if (idx >= 0) next[idx] = { ...t, id: old.id };
         }
       } else {
-        next.unshift({ ...t, id: t.id || genId(), employeeNo: key });
+        next.unshift({ ...t, id: t.id || genId() });
       }
     }
 
@@ -1921,6 +1991,97 @@ export default function Teachers() {
         </div>
     );
   };
+
+  if (!teacherAccessVerified) {
+    return (
+      <div style={pageStyle} ref={topRef} className="teachers12PageRoot teachers12PreviousChangesScope">
+        <style>{`
+          html,
+          body,
+          #root {
+            margin: 0 !important;
+            min-height: 100% !important;
+            background:
+              radial-gradient(1200px 520px at 50% -10%, rgba(212, 175, 55, 0.18), transparent 62%),
+              linear-gradient(180deg, #fffdf7 0%, #f7f3e7 48%, #fffaf0 100%) !important;
+          }
+        `}</style>
+        <div className="teachers12FixedLightBg" aria-hidden="true" />
+        <div style={modalOverlay}>
+          <div
+            style={{
+              ...modalCard,
+              maxWidth: 620,
+              textAlign: isRTL ? "right" : "left",
+              direction: isRTL ? "rtl" : "ltr",
+            }}
+          >
+            <div style={{ fontSize: 23, fontWeight: 1000, marginBottom: 8, color: "#000000" }}>
+              {tr("تحقق مطلوب لفتح مركز إدارة بيانات الكادر التعليمي", "Verification required to open teaching staff data management")}
+            </div>
+            <div style={{ fontSize: 15, fontWeight: 900, lineHeight: 1.9, color: "#111827", marginBottom: 12 }}>
+              {registeredTeacherAccessPhone
+                ? tr(
+                    `أدخل رقم الهاتف المسجل في بيانات المركز. الرقم المسجل يظهر بهذا الشكل: ${maskedRegisteredTeacherAccessPhone || "—"}.`,
+                    `Enter the phone number registered in the center settings. The registered number appears as: ${maskedRegisteredTeacherAccessPhone || "—"}.`
+                  )
+                : tr(
+                    "لا يوجد رقم هاتف مسجل في بيانات المركز. الرجاء تسجيل رقم الهاتف وحفظه في صفحة إعدادات المركز أولاً.",
+                    "No phone number is registered in the center settings. Please register and save the phone number in the center settings first."
+                  )}
+            </div>
+
+            <input
+              value={teacherAccessPhoneInput}
+              onChange={(event) => {
+                setTeacherAccessPhoneInput(event.target.value.replace(/\D/g, ""));
+                setTeacherAccessError("");
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") verifyTeacherAccessPhone();
+              }}
+              inputMode="numeric"
+              autoComplete="off"
+              placeholder={tr("أدخل رقم الهاتف المسجل", "Enter the registered phone number")}
+              style={{ ...inputStyle, width: "100%", marginTop: 8 }}
+              disabled={!registeredTeacherAccessPhone}
+            />
+
+            {teacherAccessError ? (
+              <div
+                style={{
+                  marginTop: 12,
+                  border: "2px solid #dc2626",
+                  background: "#fef2f2",
+                  color: "#7f1d1d",
+                  borderRadius: 14,
+                  padding: "10px 12px",
+                  fontWeight: 1000,
+                  lineHeight: 1.7,
+                }}
+              >
+                {teacherAccessError}
+              </div>
+            ) : null}
+
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end", marginTop: 16 }}>
+              <button type="button" style={btn("#fffdf7", "#000000")} onClick={() => history.back()}>
+                {tr("رجوع", "Back")}
+              </button>
+              <button
+                type="button"
+                style={btn(registeredTeacherAccessPhone ? "#10b981" : "#94a3b8", "#000000")}
+                onClick={verifyTeacherAccessPhone}
+                disabled={!registeredTeacherAccessPhone}
+              >
+                {tr("دخول", "Enter")}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={pageStyle} ref={topRef} className="teachers12PageRoot teachers12PreviousChangesScope">

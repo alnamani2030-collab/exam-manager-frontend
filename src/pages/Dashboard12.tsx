@@ -102,6 +102,25 @@ function getStoredExamSuperEmail() {
   }
 }
 
+function maskEmailAddress(value: string) {
+  const email = String(value || "").trim();
+  if (!email || !email.includes("@")) return email;
+
+  const [rawLocal, ...domainParts] = email.split("@");
+  const domain = domainParts.join("@");
+  if (!rawLocal || !domain) return email;
+
+  if (rawLocal.length <= 1) return `${rawLocal}***@${domain}`;
+  if (rawLocal.length === 2) return `${rawLocal[0]}***${rawLocal[1]}@${domain}`;
+
+  return `${rawLocal[0]}${"*".repeat(Math.max(3, rawLocal.length - 2))}${rawLocal[rawLocal.length - 1]}@${domain}`;
+}
+
+function maskIfEmail(value: string) {
+  const text = String(value || "").trim();
+  return text.includes("@") ? maskEmailAddress(text) : text;
+}
+
 function getStoredRole() {
   try {
     return String(
@@ -336,10 +355,13 @@ export default function Dashboard12() {
     navigate(tenantPath(tenantId, p));
   };
 
-  const displayName =
+  const rawDisplayName =
     (userProfile?.displayName || "").trim() ||
-    (userProfile?.email ? String(userProfile.email).split("@")[0] : "") ||
+    currentEmail ||
+    (userProfile?.email ? String(userProfile.email) : "") ||
     tr("مستخدم", "User");
+
+  const displayName = maskIfEmail(rawDisplayName);
 
   const isMinistrySupervisor = ["ministry_super", "ministry_admin", "ministry_supervisor"].includes(accessState.role);
   const privilegedReturnPath = accessState.isOwner

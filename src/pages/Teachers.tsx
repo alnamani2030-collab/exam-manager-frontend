@@ -6,6 +6,7 @@ import { useI18n } from "../i18n/I18nProvider";
 import "../styles/schoolTeachersOfficial.css";
 
 const SUBCOLLECTION = "teachers";
+const SCHOOL_DATA_KEY = "exam-manager:school-data:v1";
 
 // ✅ قائمة المواد
 const SUBJECT_OPTIONS_RAW = [
@@ -369,6 +370,30 @@ function maskEmployeeNoForDisplay(value: any) {
   return `${v.slice(0, 2)}${"x".repeat(v.length - 4)}${v.slice(-2)}`;
 }
 
+
+function normalizePhoneForTeacherAccess(value: unknown) {
+  return String(value || "").replace(/\D/g, "").trim();
+}
+
+function maskPhoneForTeacherAccess(value: unknown) {
+  const normalized = normalizePhoneForTeacherAccess(value);
+  if (!normalized) return "";
+  if (normalized.length <= 2) return normalized;
+  return `${normalized.slice(0, 1)}${"x".repeat(Math.max(normalized.length - 2, 1))}${normalized.slice(-1)}`;
+}
+
+function readRegisteredSchoolPhoneForTeacherAccess() {
+  if (typeof window === "undefined") return "";
+  try {
+    const raw = window.localStorage.getItem(SCHOOL_DATA_KEY);
+    if (!raw) return "";
+    const parsed = JSON.parse(raw);
+    return normalizePhoneForTeacherAccess(parsed?.phone);
+  } catch {
+    return "";
+  }
+}
+
 function getCell(row: any, keys: string[]) {
   for (const k of keys) {
     if (row[k] != null && String(row[k]).trim() !== "") return String(row[k]).trim();
@@ -723,6 +748,78 @@ export default function Teachers() {
 
   const topRef = useRef<HTMLDivElement>(null);
   const [tableFullScreen, setTableFullScreen] = useState(false);
+
+
+  const [registeredTeacherAccessPhone, setRegisteredTeacherAccessPhone] = useState<string>(() =>
+    readRegisteredSchoolPhoneForTeacherAccess()
+  );
+  const [teacherAccessPhoneInput, setTeacherAccessPhoneInput] = useState("");
+  const [teacherAccessError, setTeacherAccessError] = useState("");
+  const [teacherAccessVerified, setTeacherAccessVerified] = useState(false);
+  const teacherAccessSessionKey = useMemo(() => `exam-manager:teachers-phone-access:${tenantId}`, [tenantId]);
+  const maskedRegisteredTeacherAccessPhone = useMemo(
+    () => maskPhoneForTeacherAccess(registeredTeacherAccessPhone),
+    [registeredTeacherAccessPhone]
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const refreshRegisteredPhone = () => {
+      const latestPhone = readRegisteredSchoolPhoneForTeacherAccess();
+      setRegisteredTeacherAccessPhone(latestPhone);
+
+      const storedValue = window.sessionStorage.getItem(teacherAccessSessionKey);
+      setTeacherAccessVerified(Boolean(latestPhone && storedValue === latestPhone));
+      setTeacherAccessPhoneInput("");
+      setTeacherAccessError("");
+    };
+
+    refreshRegisteredPhone();
+    window.addEventListener("storage", refreshRegisteredPhone);
+    window.addEventListener("exam-manager:settings-changed", refreshRegisteredPhone);
+    return () => {
+      window.removeEventListener("storage", refreshRegisteredPhone);
+      window.removeEventListener("exam-manager:settings-changed", refreshRegisteredPhone);
+    };
+  }, [teacherAccessSessionKey]);
+
+  function verifyTeacherAccessPhone() {
+    const typedPhone = normalizePhoneForTeacherAccess(teacherAccessPhoneInput);
+
+    if (!registeredTeacherAccessPhone) {
+      setTeacherAccessError(
+        tr(
+          "لا يوجد رقم هاتف مسجل في بيانات المدرسة. الرجاء تسجيل رقم الهاتف في صفحة إعدادات المدرسة أولاً.",
+          "No phone number is registered in the school settings. Please register the phone number in school settings first."
+        )
+      );
+      return;
+    }
+
+    if (!typedPhone) {
+      setTeacherAccessError(tr("يرجى إدخال رقم الهاتف المسجل.", "Please enter the registered phone number."));
+      return;
+    }
+
+    if (typedPhone !== registeredTeacherAccessPhone) {
+      setTeacherAccessVerified(false);
+      setTeacherAccessError(
+        tr(
+          "رقم الهاتف غير مطابق للرقم المسجل في بيانات المدرسة.",
+          "The phone number does not match the phone registered in the school settings."
+        )
+      );
+      return;
+    }
+
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem(teacherAccessSessionKey, registeredTeacherAccessPhone);
+    }
+    setTeacherAccessVerified(true);
+    setTeacherAccessPhoneInput("");
+    setTeacherAccessError("");
+  }
 
   useEffect(() => {
     const style = document.createElement("style");
@@ -1610,6 +1707,97 @@ Do you want to replace it with the new name: (${t.fullName})?`
         </div>
       </div>
   );
+
+
+  if (!teacherAccessVerified) {
+    return (
+      <div style={pageStyle} ref={topRef}>
+        <style>{`
+          html,
+          body,
+          #root {
+            margin: 0 !important;
+            min-height: 100% !important;
+            background:
+              radial-gradient(1200px 520px at 50% -10%, rgba(212, 175, 55, 0.18), transparent 62%),
+              linear-gradient(180deg, #fffdf7 0%, #f7f3e7 48%, #fffaf0 100%) !important;
+          }
+        `}</style>
+        <div style={modalOverlay}>
+          <div
+            style={{
+              ...modalCard,
+              maxWidth: 620,
+              textAlign: isRTL ? "right" : "left",
+              direction: isRTL ? "rtl" : "ltr",
+            }}
+          >
+            <div style={{ fontSize: 23, fontWeight: 1000, marginBottom: 8, color: "#000000" }}>
+              {tr("تحقق مطلوب لفتح مركز إدارة بيانات الكادر التعليمي", "Verification required to open teaching staff data management")}
+            </div>
+            <div style={{ fontSize: 15, fontWeight: 900, lineHeight: 1.9, color: "#111827", marginBottom: 12 }}>
+              {registeredTeacherAccessPhone
+                ? tr(
+                    `أدخل رقم الهاتف المسجل في بيانات المدرسة. الرقم المسجل يظهر بهذا الشكل: ${maskedRegisteredTeacherAccessPhone || "—"}.`,
+                    `Enter the phone number registered in the school settings. The registered number appears as: ${maskedRegisteredTeacherAccessPhone || "—"}.`
+                  )
+                : tr(
+                    "لا يوجد رقم هاتف مسجل في بيانات المدرسة. الرجاء تسجيل رقم الهاتف وحفظه في صفحة إعدادات المدرسة أولاً.",
+                    "No phone number is registered in the school settings. Please register and save the phone number in school settings first."
+                  )}
+            </div>
+
+            <input
+              value={teacherAccessPhoneInput}
+              onChange={(event) => {
+                setTeacherAccessPhoneInput(event.target.value.replace(/\D/g, ""));
+                setTeacherAccessError("");
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") verifyTeacherAccessPhone();
+              }}
+              inputMode="numeric"
+              autoComplete="off"
+              placeholder={tr("أدخل رقم الهاتف المسجل", "Enter the registered phone number")}
+              style={{ ...inputStyle, width: "100%", marginTop: 8 }}
+              disabled={!registeredTeacherAccessPhone}
+            />
+
+            {teacherAccessError ? (
+              <div
+                style={{
+                  marginTop: 12,
+                  border: "2px solid #dc2626",
+                  background: "#fef2f2",
+                  color: "#7f1d1d",
+                  borderRadius: 14,
+                  padding: "10px 12px",
+                  fontWeight: 1000,
+                  lineHeight: 1.7,
+                }}
+              >
+                {teacherAccessError}
+              </div>
+            ) : null}
+
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end", marginTop: 16 }}>
+              <button type="button" style={btn("#fffdf7", "#000000")} onClick={() => history.back()}>
+                {tr("رجوع", "Back")}
+              </button>
+              <button
+                type="button"
+                style={btn(registeredTeacherAccessPhone ? "#10b981" : "#94a3b8", "#000000")}
+                onClick={verifyTeacherAccessPhone}
+                disabled={!registeredTeacherAccessPhone}
+              >
+                {tr("دخول", "Enter")}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={pageStyle} ref={topRef} className="teachers12PageRoot teachers12PreviousChangesScope">

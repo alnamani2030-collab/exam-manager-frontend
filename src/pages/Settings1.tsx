@@ -1,6 +1,6 @@
 // src/pages/Settings1.tsx
 import React, { useEffect, useMemo, useState } from "react";
-import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
+import { addDoc, collection, doc, getDoc, getDocs, query, serverTimestamp, where } from "firebase/firestore";
 import { useI18n } from "../i18n/I18nProvider";
 import { useAuth } from "../auth/AuthContext";
 import { db } from "../firebase/firebase";
@@ -8,6 +8,7 @@ import "./schoolSettingsOfficial.css";
 
 const SCHOOL_DATA_KEY = "exam-manager:school-data:v1";
 const LOGO_KEY = "exam-manager:app-logo";
+const PHONE_CHANGE_REQUEST_KEY = "exam-manager:school-phone-change-request:v1";
 const DEFAULT_LOGO_URL = "https://i.imgur.com/vdDhSMh.png";
 
 const GOVERNORATES = {
@@ -69,6 +70,13 @@ function getAcademicYearFromSystemDate(now = new Date()) {
 
 function cleanText(value: unknown) {
   return String(value ?? "").trim();
+}
+
+function maskPhoneFirstAndLast(value: unknown) {
+  const phone = cleanText(value);
+  if (!phone) return "";
+  if (phone.length <= 2) return phone;
+  return `${phone.slice(0, 1)}${"x".repeat(Math.max(0, phone.length - 2))}${phone.slice(-1)}`;
 }
 
 function normalizeGovernorateText(value: unknown) {
@@ -159,6 +167,27 @@ async function resolveGovernorateFromAllowlist(email: string) {
 }
 
 
+function getTenantIdFromAuth(auth: any) {
+  return cleanText(
+    auth?.effectiveTenantId ||
+      auth?.selectedTenantId ||
+      auth?.tenantId ||
+      auth?.profile?.tenantId ||
+      auth?.userProfile?.tenantId ||
+      auth?.tenant?.id ||
+      auth?.user?.tenantId ||
+      ""
+  );
+}
+
+function maskEmail(value: unknown) {
+  const email = cleanText(value).toLowerCase();
+  const [name, domain] = email.split("@");
+  if (!name || !domain) return email || "—";
+  if (name.length <= 2) return `${name.slice(0, 1)}***@${domain}`;
+  return `${name.slice(0, 1)}${"*".repeat(Math.min(Math.max(name.length - 2, 3), 12))}${name.slice(-1)}@${domain}`;
+}
+
 export default function Settings1() {
   const { lang, isRTL } = useI18n();
   const auth = useAuth() as any;
@@ -172,6 +201,7 @@ export default function Settings1() {
       auth?.currentUser?.email ||
       ""
   ).toLowerCase();
+  const tenantId = useMemo(() => getTenantIdFromAuth(auth), [auth]);
 
   const governorateFromAuth = cleanText(
     auth?.allow?.governorate ||
@@ -209,13 +239,25 @@ export default function Settings1() {
   const [saveNotice, setSaveNotice] = useState<SaveNotice | null>(null);
   const [autoGovernorate, setAutoGovernorate] = useState("");
   const [autoGovernorateSource, setAutoGovernorateSource] = useState("");
+  const [phoneLocked, setPhoneLocked] = useState(false);
+  const [phoneChangeRequested, setPhoneChangeRequested] = useState(false);
+  const [isPhoneChangeDialogOpen, setIsPhoneChangeDialogOpen] = useState(false);
+  const [phoneChangeEmailInput, setPhoneChangeEmailInput] = useState("");
+  const [isSubmittingPhoneChangeRequest, setIsSubmittingPhoneChangeRequest] = useState(false);
 
   useEffect(() => {
     const savedData = localStorage.getItem(SCHOOL_DATA_KEY);
-    if (savedData) setData(JSON.parse(savedData) as SchoolData);
+    if (savedData) {
+      const parsedData = JSON.parse(savedData) as SchoolData;
+      setData(parsedData);
+      setPhoneLocked(cleanText(parsedData.phone) !== "");
+    }
 
     const savedLogo = localStorage.getItem(LOGO_KEY);
     if (savedLogo) setLogo(savedLogo);
+
+    const savedPhoneChangeRequest = localStorage.getItem(PHONE_CHANGE_REQUEST_KEY);
+    if (savedPhoneChangeRequest) setPhoneChangeRequested(true);
   }, []);
 
 
@@ -289,6 +331,7 @@ export default function Settings1() {
 
   const saveData = () => {
     localStorage.setItem(SCHOOL_DATA_KEY, JSON.stringify(data));
+    if (cleanText(data.phone)) setPhoneLocked(true);
     window.dispatchEvent(new Event("exam-manager:changed"));
     setSaveNotice({
       kind: "success",
@@ -301,6 +344,83 @@ export default function Settings1() {
     window.setTimeout(() => setSaveNotice(null), 5200);
   };
 
+  const requestPhoneChange = () => {
+    setPhoneChangeEmailInput("");
+    setIsPhoneChangeDialogOpen(true);
+  };
+
+  const submitPhoneChangeRequest = async () => {
+    const typedEmail = cleanText(phoneChangeEmailInput).toLowerCase();
+    const expectedEmail = cleanText(currentEmail).toLowerCase();
+
+    if (!tenantId) {
+      setSaveNotice({
+        kind: "error",
+        title: tr("تعذر تحديد المدرسة", "School could not be resolved"),
+        message: tr("لم يتم تحديد معرف المدرسة الحالي، لذلك لم يتم إرسال طلب تغيير رقم الهاتف.", "The current school identifier could not be resolved, so the phone change request was not submitted."),
+      });
+      window.setTimeout(() => setSaveNotice(null), 5200);
+      return;
+    }
+
+    if (!expectedEmail) {
+      setSaveNotice({
+        kind: "error",
+        title: tr("تعذر تحديد البريد", "Email could not be resolved"),
+        message: tr("لم يتم العثور على بريد الحساب الحالي. سجل الخروج ثم ادخل مرة أخرى وحاول مجددًا.", "The current account email could not be found. Sign out, sign in again, and try again."),
+      });
+      window.setTimeout(() => setSaveNotice(null), 5200);
+      return;
+    }
+
+    if (typedEmail !== expectedEmail) {
+      setSaveNotice({
+        kind: "error",
+        title: tr("البريد غير مطابق", "Email does not match"),
+        message: tr("البريد الإلكتروني المدخل غير مطابق لبريد الحساب الحالي، لذلك لم يتم إرسال طلب تغيير رقم الهاتف.", "The entered email does not match the current account email, so the phone change request was not submitted."),
+      });
+      window.setTimeout(() => setSaveNotice(null), 5200);
+      return;
+    }
+
+    const requestedAtISO = new Date().toISOString();
+    const requestPayload = {
+      tenantId,
+      page: "Settings1",
+      requestType: "phone_change",
+      status: "pending",
+      requesterEmail: expectedEmail,
+      maskedPhone: maskPhoneFirstAndLast(data.phone),
+      schoolName: cleanText(data.name),
+      governorate: cleanText(data.governorate),
+      createdAtISO: requestedAtISO,
+    };
+
+    setIsSubmittingPhoneChangeRequest(true);
+    try {
+      await addDoc(collection(db, "tenants", tenantId, "phoneChangeRequests"), { ...requestPayload, createdAt: serverTimestamp() });
+      try { localStorage.setItem(PHONE_CHANGE_REQUEST_KEY, JSON.stringify(requestPayload)); } catch { /* ignore local cache errors */ }
+      setPhoneChangeRequested(true);
+      setIsPhoneChangeDialogOpen(false);
+      setPhoneChangeEmailInput("");
+      setSaveNotice({
+        kind: "success",
+        title: tr("تم إرسال طلب تغيير رقم الهاتف", "Phone change request submitted"),
+        message: tr("تم إرسال طلب تغيير رقم الهاتف إلى السحابة بنجاح. ستتم إضافة إرسال البريد الحقيقي في المرحلة التالية.", "The phone change request was submitted to the cloud successfully. Real email sending will be added in the next phase."),
+      });
+      window.setTimeout(() => setSaveNotice(null), 5200);
+    } catch {
+      setSaveNotice({
+        kind: "error",
+        title: tr("تعذر إرسال الطلب", "Request could not be submitted"),
+        message: tr("تعذر تسجيل طلب تغيير رقم الهاتف في السحابة. تحقق من الاتصال والصلاحيات ثم حاول مرة أخرى.", "The phone change request could not be saved to the cloud. Check connection and permissions, then try again."),
+      });
+      window.setTimeout(() => setSaveNotice(null), 5200);
+    } finally {
+      setIsSubmittingPhoneChangeRequest(false);
+    }
+  };
+
   const academicYear = useMemo(() => getAcademicYearFromSystemDate(new Date()), []);
 
   const previewGov = data.governorate?.trim() || tr("المحافظة / المديرية ...", "Governorate / Directorate ...");
@@ -309,6 +429,20 @@ export default function Settings1() {
 
   return (
     <div style={{ ...pageWrap, direction: isRTL ? "rtl" : "ltr" }} className="schoolSettingsOfficialPage">
+      {isPhoneChangeDialogOpen && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 99999, display: "grid", placeItems: "center", padding: 20, background: "rgba(15,23,42,0.34)", backdropFilter: "blur(4px)" }}>
+          <div role="dialog" aria-modal="true" style={{ width: "min(560px, 96vw)", borderRadius: 24, border: "2px solid rgba(212,175,55,0.55)", background: "linear-gradient(180deg,#fffdf7,#fff7e5)", boxShadow: "0 30px 90px rgba(15,23,42,0.28)", padding: 24, color: "#000", direction: isRTL ? "rtl" : "ltr" }}>
+            <h3 style={{ margin: 0, fontSize: 20, fontWeight: 1000 }}>{tr("تأكيد طلب تغيير رقم الهاتف", "Confirm phone change request")}</h3>
+            <p style={{ margin: "12px 0 0", lineHeight: 1.9, fontWeight: 800, color: "#334155" }}>{tr("لإرسال طلب تغيير رقم الهاتف، أدخل البريد الإلكتروني المرتبط بالحساب الحالي. لن يتم إرسال الطلب إذا كان البريد غير مطابق.", "To submit a phone change request, enter the email address linked to the current account. The request will not be submitted if the email does not match.")}</p>
+            <div style={{ marginTop: 14, padding: "10px 12px", borderRadius: 14, background: "#f8fafc", border: "1px solid #e2e8f0", fontWeight: 900 }}>{tr("البريد المسجل:", "Registered email:")} {maskEmail(currentEmail)}</div>
+            <input value={phoneChangeEmailInput} onChange={(event) => setPhoneChangeEmailInput(event.target.value)} placeholder={tr("اكتب البريد الإلكتروني للتأكيد", "Enter email for confirmation")} style={{ marginTop: 14, width: "100%", boxSizing: "border-box", border: "2px solid #d4af37", borderRadius: 14, padding: "12px 14px", fontWeight: 900, color: "#000", background: "#fff" }} autoFocus />
+            <div style={{ marginTop: 18, display: "flex", gap: 10, justifyContent: isRTL ? "flex-start" : "flex-end", flexWrap: "wrap" }}>
+              <button type="button" onClick={() => { if (isSubmittingPhoneChangeRequest) return; setIsPhoneChangeDialogOpen(false); setPhoneChangeEmailInput(""); }} style={{ border: "1px solid #cbd5e1", background: "#fff", borderRadius: 12, padding: "10px 16px", fontWeight: 900, cursor: "pointer" }}>{tr("إلغاء", "Cancel")}</button>
+              <button type="button" onClick={submitPhoneChangeRequest} disabled={isSubmittingPhoneChangeRequest} style={{ border: "1px solid #a98322", background: isSubmittingPhoneChangeRequest ? "#e2e8f0" : "linear-gradient(135deg,#b88718,#f7d56b)", color: "#111827", borderRadius: 12, padding: "10px 16px", fontWeight: 1000, cursor: isSubmittingPhoneChangeRequest ? "wait" : "pointer" }}>{isSubmittingPhoneChangeRequest ? tr("جاري الإرسال...", "Submitting...") : tr("إرسال الطلب", "Submit request")}</button>
+            </div>
+          </div>
+        </div>
+      )}
       {saveNotice && (
         <div
           role="status"
@@ -615,10 +749,49 @@ export default function Settings1() {
                 <label style={labelStyle}>{tr("رقم الهاتف", "Phone Number")}</label>
                 <input
                   type="tel"
-                  value={data.phone}
+                  value={phoneLocked ? maskPhoneFirstAndLast(data.phone) : data.phone}
                   onChange={(e) => handleChange("phone", e.target.value)}
-                  style={{ ...inputStyle, color: "#000000", caretColor: "#000000", WebkitTextFillColor: "#000000", fontWeight: 900 }}
+                  readOnly={phoneLocked}
+                  style={{
+                    ...inputStyle,
+                    color: "#000000",
+                    caretColor: "#000000",
+                    WebkitTextFillColor: "#000000",
+                    fontWeight: 900,
+                    background: phoneLocked ? "#f8f3e3" : inputStyle.background,
+                    cursor: phoneLocked ? "not-allowed" : "text",
+                  }}
                 />
+                {phoneLocked && (
+                  <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 8 }}>
+                    <div style={{ color: "#000000", fontSize: 12, fontWeight: 900, lineHeight: 1.7 }}>
+                      {tr(
+                        "تم إخفاء رقم الهاتف بعد الحفظ. يظهر أول رقم وآخر رقم فقط، ولا يمكن تعديله مباشرة.",
+                        "The phone number is masked after saving. Only the first and last digits are shown, and it cannot be edited directly."
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={requestPhoneChange}
+                      disabled={phoneChangeRequested}
+                      style={{
+                        alignSelf: isRTL ? "flex-start" : "flex-end",
+                        border: "1px solid rgba(151,116,28,0.45)",
+                        background: phoneChangeRequested ? "#f1f5f9" : "linear-gradient(180deg,#fffaf0,#f1dfad)",
+                        color: phoneChangeRequested ? "#64748b" : "#000000",
+                        borderRadius: 12,
+                        padding: "8px 12px",
+                        fontWeight: 900,
+                        cursor: phoneChangeRequested ? "not-allowed" : "pointer",
+                        boxShadow: "0 8px 18px rgba(120,88,20,0.12)",
+                      }}
+                    >
+                      {phoneChangeRequested
+                        ? tr("تم إرسال طلب تغيير الرقم", "Phone change request sent")
+                        : tr("طلب تغيير رقم الهاتف", "Request phone number change")}
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div>

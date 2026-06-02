@@ -1,5 +1,5 @@
 import React, {useEffect, useMemo, useRef, useState} from "react";
-import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
+import { addDoc, collection, doc, getDoc, getDocs, query, serverTimestamp, where } from "firebase/firestore";
 import { useI18n } from "../i18n/I18nProvider";
 import { useAuth } from "../auth/AuthContext";
 import { db } from "../firebase/firebase";
@@ -8,6 +8,7 @@ import { loadTenantSettings, saveTenantSettings } from "../services/tenantData";
 const EXAM_CENTER_DATA_KEY = "exam-manager:exam-center-data:v1";
 const EXAM_CENTER_LOGO_KEY = "exam-manager:exam-center-logo:v1";
 const CONTROL_HEAD_NAME_KEY = "exam-manager:control-head-name:v1";
+const PHONE_CHANGE_REQUEST_KEY = "exam-manager:diploma-phone-change-request:v1";
 
 /**
  * Cloud document for Diploma Exam Center settings.
@@ -64,6 +65,10 @@ type ExamCenterData = {
   governorate: string;
   semester: string;
   phone: string;
+  phoneMasked?: string;
+  phoneLocked?: boolean;
+  phoneLockedAtISO?: string;
+  phoneChangeRequestedAtISO?: string;
   address: string;
   controlHeadName: string;
   academicYear?: string;
@@ -141,11 +146,44 @@ function normalizeExamCenterData(value: Partial<ExamCenterData> | null | undefin
     centerCode: examCenterCode,
     governorate: String(value?.governorate || "").trim(),
     semester: String(value?.semester || "").trim(),
-    phone: String(value?.phone || "").trim(),
+    phone: normalizePhoneForStorage(value?.phone),
+    phoneMasked: String(value?.phoneMasked || maskPhoneNumber(value?.phone) || "").trim(),
+    phoneLocked: Boolean(value?.phoneLocked && normalizePhoneForStorage(value?.phone)),
+    phoneLockedAtISO: String(value?.phoneLockedAtISO || "").trim(),
+    phoneChangeRequestedAtISO: String(value?.phoneChangeRequestedAtISO || "").trim(),
     address: String(value?.address || "").trim(),
     controlHeadName: String(value?.controlHeadName || localStorage.getItem(CONTROL_HEAD_NAME_KEY) || "").trim(),
     academicYear: String(value?.academicYear || "").trim(),
   };
+}
+
+
+function normalizePhoneForStorage(value: unknown) {
+  return String(value ?? "")
+    .replace(/[^\d+]/g, "")
+    .trim();
+}
+
+function maskPhoneNumber(value: unknown) {
+  const normalized = normalizePhoneForStorage(value);
+  if (!normalized) return "";
+  const hasPlus = normalized.startsWith("+");
+  const body = hasPlus ? normalized.slice(1) : normalized;
+  if (body.length <= 2) return hasPlus ? `+${body}` : body;
+  const masked = `${body.slice(0, 1)}${"x".repeat(Math.max(body.length - 2, 1))}${body.slice(-1)}`;
+  return hasPlus ? `+${masked}` : masked;
+}
+
+function isPhoneLockedValue(value: Partial<ExamCenterData> | null | undefined) {
+  return Boolean(value?.phoneLocked && normalizePhoneForStorage(value?.phone));
+}
+
+function maskEmail(value: unknown) {
+  const email = cleanText(value).toLowerCase();
+  const [name, domain] = email.split("@");
+  if (!name || !domain) return email || "—";
+  if (name.length <= 2) return `${name.slice(0, 1)}***@${domain}`;
+  return `${name.slice(0, 1)}${"*".repeat(Math.min(Math.max(name.length - 2, 3), 12))}${name.slice(-1)}@${domain}`;
 }
 
 function getAcademicYearFromSystemDate(now = new Date()) {
@@ -284,10 +322,21 @@ export default function Settings12() {
     governorate: "",
     semester: "",
     phone: "",
+    phoneMasked: "",
+    phoneLocked: false,
+    phoneLockedAtISO: "",
+    phoneChangeRequestedAtISO: "",
     address: "",
     controlHeadName: "",
     academicYear: "",
   });
+
+  const isPhoneLocked = Boolean(data.phoneLocked && normalizePhoneForStorage(data.phone));
+  const displayedPhone = isPhoneLocked ? maskPhoneNumber(data.phone) : data.phone;
+  const phoneChangeRequested = Boolean(data.phoneChangeRequestedAtISO);
+  const [isPhoneChangeDialogOpen, setIsPhoneChangeDialogOpen] = useState(false);
+  const [phoneChangeEmailInput, setPhoneChangeEmailInput] = useState("");
+  const [isSubmittingPhoneChangeRequest, setIsSubmittingPhoneChangeRequest] = useState(false);
 
   const governorateOptions = useMemo<string[]>(() => {
     const options: string[] = Array.from(governorates, (item) => String(item));
@@ -530,12 +579,106 @@ useEffect(() => {
 
   const handleChange = (field: keyof ExamCenterData, value: string) => {
     if (field === "governorate" && autoGovernorate) return;
-    setData((prev) => ({ ...prev, [field]: value }));
+    if (field === "phone" && isPhoneLocked) return;
+    const nextValue = field === "phone" ? normalizePhoneForStorage(value) : value;
+    setData((prev) => ({ ...prev, [field]: nextValue }));
+  };
+
+  const requestPhoneChange = () => {
+    setPhoneChangeEmailInput("");
+    setIsPhoneChangeDialogOpen(true);
+  };
+
+  const submitPhoneChangeRequest = async () => {
+    const typedEmail = cleanText(phoneChangeEmailInput).toLowerCase();
+    const expectedEmail = cleanText(currentEmail).toLowerCase();
+
+    if (!expectedEmail) {
+      setSaveNotice({
+        kind: "error",
+        title: tr("تعذر تحديد البريد", "Email could not be resolved"),
+        message: tr(
+          "لم يتم العثور على بريد الحساب الحالي. سجل الخروج ثم ادخل مرة أخرى وحاول مجددًا.",
+          "The current account email could not be found. Sign out, sign in again, and try again."
+        ),
+      });
+      window.setTimeout(() => setSaveNotice(null), 5600);
+      return;
+    }
+
+    if (typedEmail !== expectedEmail) {
+      setSaveNotice({
+        kind: "error",
+        title: tr("البريد غير مطابق", "Email does not match"),
+        message: tr(
+          "البريد الإلكتروني المدخل غير مطابق لبريد الحساب الحالي، لذلك لم يتم إرسال طلب تغيير رقم الهاتف.",
+          "The entered email does not match the current account email, so the phone change request was not submitted."
+        ),
+      });
+      window.setTimeout(() => setSaveNotice(null), 5600);
+      return;
+    }
+
+    const requestedAt = new Date().toISOString();
+    const requestPayload = {
+      tenantId,
+      page: "Settings12",
+      requestType: "phone_change",
+      status: "pending",
+      requesterEmail: expectedEmail,
+      maskedPhone: maskPhoneNumber(data.phone),
+      centerName: cleanText(data.name),
+      governorate: cleanText(data.governorate),
+      createdAtISO: requestedAt,
+    };
+
+    setIsSubmittingPhoneChangeRequest(true);
+    try {
+      await addDoc(collection(db, "tenants", tenantId, "phoneChangeRequests"), {
+        ...requestPayload,
+        createdAt: serverTimestamp(),
+      });
+      try {
+        localStorage.setItem(PHONE_CHANGE_REQUEST_KEY, JSON.stringify(requestPayload));
+      } catch {
+        // ignore local cache errors
+      }
+      setData((prev) => ({ ...prev, phoneChangeRequestedAtISO: requestedAt }));
+      setIsPhoneChangeDialogOpen(false);
+      setPhoneChangeEmailInput("");
+      setSaveNotice({
+        kind: "success",
+        title: tr("تم إرسال طلب تغيير الرقم", "Phone change request submitted"),
+        message: tr(
+          "تم إرسال طلب تغيير رقم الهاتف إلى السحابة بنجاح. ستتم إضافة إرسال البريد الحقيقي في المرحلة التالية.",
+          "The phone change request was submitted to the cloud successfully. Real email sending will be added in the next phase."
+        ),
+      });
+      window.setTimeout(() => setSaveNotice(null), 5600);
+    } catch (error) {
+      setSaveNotice({
+        kind: "error",
+        title: tr("تعذر إرسال الطلب", "Request could not be submitted"),
+        message: tr(
+          "تعذر تسجيل طلب تغيير رقم الهاتف في السحابة. تحقق من الاتصال والصلاحيات ثم حاول مرة أخرى.",
+          "The phone change request could not be saved to the cloud. Check connection and permissions, then try again."
+        ),
+      });
+      window.setTimeout(() => setSaveNotice(null), 5600);
+    } finally {
+      setIsSubmittingPhoneChangeRequest(false);
+    }
   };
 
   const saveData = async () => {
+    const phoneValue = normalizePhoneForStorage(data.phone);
+    const shouldLockPhone = Boolean(phoneValue);
     const normalizedData = normalizeExamCenterData({
       ...data,
+      phone: phoneValue,
+      phoneMasked: shouldLockPhone ? maskPhoneNumber(phoneValue) : "",
+      phoneLocked: shouldLockPhone,
+      phoneLockedAtISO: shouldLockPhone ? data.phoneLockedAtISO || new Date().toISOString() : "",
       centerCode: data.examCenterCode || data.centerCode,
       academicYear,
     });
@@ -592,7 +735,7 @@ useEffect(() => {
   const previewCenter = data.name?.trim() || tr("اسم مركز الامتحانات", "Exam Center Name");
   const previewCenterCode = data.examCenterCode?.trim() || data.centerCode?.trim() || tr("رمز مركز الامتحان", "Exam Center Code");
   const previewSemester = data.semester?.trim() || tr("الفصل الدراسي", "Semester");
-  const previewPhone = data.phone?.trim() || tr("رقم الهاتف", "Phone Number");
+  const previewPhone = (isPhoneLocked ? maskPhoneNumber(data.phone) : data.phone?.trim()) || tr("رقم الهاتف", "Phone Number");
   const previewAddress = data.address?.trim() || tr("العنوان", "Address");
   const previewControlHead = data.controlHeadName?.trim() || tr("اسم رئيس الكنترول", "Control Head Name");
 
@@ -624,6 +767,24 @@ useEffect(() => {
   return (
     
     <div className="settings12PageRoot" style={{ ...pageWrap, direction: isRTL ? "rtl" : "ltr" }}>
+      {isPhoneChangeDialogOpen && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 99999, display: "grid", placeItems: "center", padding: 20, background: "rgba(15,23,42,0.34)", backdropFilter: "blur(4px)" }}>
+          <div role="dialog" aria-modal="true" style={{ width: "min(560px, 96vw)", borderRadius: 24, border: "2px solid rgba(212,175,55,0.55)", background: "linear-gradient(180deg,#fffdf7,#fff7e5)", boxShadow: "0 30px 90px rgba(15,23,42,0.28)", padding: 24, color: "#000", direction: isRTL ? "rtl" : "ltr" }}>
+            <h3 style={{ margin: 0, fontSize: 20, fontWeight: 1000 }}>{tr("تأكيد طلب تغيير رقم الهاتف", "Confirm phone change request")}</h3>
+            <p style={{ margin: "12px 0 0", lineHeight: 1.9, fontWeight: 800, color: "#334155" }}>
+              {tr("لإرسال طلب تغيير رقم الهاتف، أدخل البريد الإلكتروني المرتبط بالحساب الحالي. لن يتم إرسال الطلب إذا كان البريد غير مطابق.", "To submit a phone change request, enter the email address linked to the current account. The request will not be submitted if the email does not match.")}
+            </p>
+            <div style={{ marginTop: 14, padding: "10px 12px", borderRadius: 14, background: "#f8fafc", border: "1px solid #e2e8f0", fontWeight: 900 }}>
+              {tr("البريد المسجل:", "Registered email:")} {maskEmail(currentEmail)}
+            </div>
+            <input value={phoneChangeEmailInput} onChange={(event) => setPhoneChangeEmailInput(event.target.value)} placeholder={tr("اكتب البريد الإلكتروني للتأكيد", "Enter email for confirmation")} style={{ marginTop: 14, width: "100%", boxSizing: "border-box", border: "2px solid #d4af37", borderRadius: 14, padding: "12px 14px", fontWeight: 900, color: "#000", background: "#fff" }} autoFocus />
+            <div style={{ marginTop: 18, display: "flex", gap: 10, justifyContent: isRTL ? "flex-start" : "flex-end", flexWrap: "wrap" }}>
+              <button type="button" onClick={() => { if (isSubmittingPhoneChangeRequest) return; setIsPhoneChangeDialogOpen(false); setPhoneChangeEmailInput(""); }} style={{ border: "1px solid #cbd5e1", background: "#fff", borderRadius: 12, padding: "10px 16px", fontWeight: 900, cursor: "pointer" }}>{tr("إلغاء", "Cancel")}</button>
+              <button type="button" onClick={submitPhoneChangeRequest} disabled={isSubmittingPhoneChangeRequest} style={{ border: "1px solid #a98322", background: isSubmittingPhoneChangeRequest ? "#e2e8f0" : "linear-gradient(135deg,#b88718,#f7d56b)", color: "#111827", borderRadius: 12, padding: "10px 16px", fontWeight: 1000, cursor: isSubmittingPhoneChangeRequest ? "wait" : "pointer" }}>{isSubmittingPhoneChangeRequest ? tr("جاري الإرسال...", "Submitting...") : tr("إرسال الطلب", "Submit request")}</button>
+            </div>
+          </div>
+        </div>
+      )}
       <style>{`
         html,
         body,
@@ -864,12 +1025,47 @@ useEffect(() => {
 
             <FieldCard label={tr("رقم الهاتف", "Phone Number")} accent={fieldTones[4]}>
               <input
-                value={data.phone}
+                value={displayedPhone}
                 onChange={(e) => handleChange("phone", e.target.value)}
                 placeholder={tr("اكتب رقم الهاتف", "Enter phone number")}
-                style={toneInputStyles(inputStyle, fieldTones[4])}
+                style={{
+                  ...toneInputStyles(inputStyle, fieldTones[4]),
+                  letterSpacing: isPhoneLocked ? "0.08em" : undefined,
+                  background: isPhoneLocked ? "#f8fafc" : toneInputStyles(inputStyle, fieldTones[4]).background,
+                  cursor: isPhoneLocked ? "not-allowed" : "text",
+                }}
                 className="settings12-field"
+                disabled={isPhoneLocked}
+                inputMode="tel"
               />
+              {isPhoneLocked ? (
+                <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+                  <div style={{ fontSize: 12, fontWeight: 900, color: "#475569", lineHeight: 1.8 }}>
+                    {tr(
+                      "تم حفظ رقم الهاتف مرة واحدة، لذلك يظهر مخفيًا ولا يمكن تعديله مباشرة.",
+                      "The phone number was saved once, so it is masked and cannot be edited directly."
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={requestPhoneChange}
+                    disabled={phoneChangeRequested}
+                    style={{
+                      border: "1px solid #d4af37",
+                      background: phoneChangeRequested ? "#f1f5f9" : "linear-gradient(135deg,#fff7ed,#fef3c7)",
+                      color: phoneChangeRequested ? "#64748b" : "#7c2d12",
+                      borderRadius: 14,
+                      padding: "10px 14px",
+                      fontWeight: 1000,
+                      cursor: phoneChangeRequested ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {phoneChangeRequested
+                      ? tr("تم إرسال طلب تغيير الرقم", "Phone change request sent")
+                      : tr("طلب تغيير رقم الهاتف", "Request phone number change")}
+                  </button>
+                </div>
+              ) : null}
             </FieldCard>
 
             <FieldCard label={tr("اسم رئيس الكنترول", "Control Head Name")} accent={fieldTones[5]}>
