@@ -28,6 +28,7 @@ import CandidateWrittenWarning12 from "./pages/CandidateWrittenWarning12";
 import About12 from "./pages/About12";
 import Suggestions12Page from "./pages/Suggestions12Page";
 import StudentSeatRegister12Page from "./pages/StudentSeatRegister12Page";
+import ChangePhoneRequest from "./pages/ChangePhoneRequest";
 import Teachers from "./pages/Teachers";
 import Exams from "./pages/Exams";
 import Rooms from "./pages/Rooms";
@@ -560,6 +561,16 @@ export default function App() {
          <SuperAdminRoute>
          <SuperSuggestions />
          </SuperAdminRoute>
+        }
+      />
+
+      {/* صفحة تغيير رقم الهاتف من رابط البريد - مستقلة عن Layout المدرسة والدبلوم */}
+      <Route
+        path="/t/:tenantId/change-phone"
+        element={
+          <TenantRoute>
+            <ChangePhoneRequest />
+          </TenantRoute>
         }
       />
 
