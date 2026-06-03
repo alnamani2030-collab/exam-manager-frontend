@@ -16,7 +16,6 @@ import Teachers12 from "./pages/Teachers12";
 import Exams12 from "./pages/Exams12";
 import Rooms12 from "./pages/Rooms12";
 import Settings12 from "./pages/Settings12";
-import ChangePhoneRequest from "./pages/ChangePhoneRequest";
 import Setting12 from "./pages/Setting12";
 import Unavailability12 from "./pages/Unavailability12";
 import TaskDistributionRun12 from "./pages/TaskDistributionRun12";
@@ -46,6 +45,7 @@ import Archive from "./pages/Archive";
 import Audit from "./pages/Audit";
 import ActivityLogs from "./pages/ActivityLogs";
 import Sync from "./pages/Sync";
+import Sync12 from "./pages/Sync12";
 import Unavailability from "./pages/Unavailability";
 import Settings from "./pages/Settings";
 import Settings1 from "./pages/Settings1";
@@ -311,15 +311,6 @@ export default function App() {
         }
       />
 
-
-      <Route
-        path="/t/:tenantId/change-phone"
-        element={
-          <ProtectedRoute>
-            <ChangePhoneRequest />
-          </ProtectedRoute>
-        }
-      />
 
       <Route
         path="/programs-gateway"
@@ -659,7 +650,7 @@ export default function App() {
         {/* مسارات خاصة بمركز الدبلوم حتى لا تفتح أدوات السحابة داخل Layout المدرسة */}
         <Route path="cloud-health12" element={<CloudStorageHealth12 />} />
         <Route path="cloud-backup12" element={<CloudBackup12 />} />
-        <Route path="sync12" element={<Sync />} />
+        <Route path="sync12" element={<Sync12 />} />
         <Route path="suggestions12page" element={<Suggestions12Page />} />
         <Route path="about12" element={<About12 />} />
       </Route>
