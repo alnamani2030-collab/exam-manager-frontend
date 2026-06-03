@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../i18n/I18nProvider";
 import { useAuth } from "../auth/AuthContext";
+import { getFunctions, httpsCallable } from "firebase/functions";
 import { loadTenantArray, loadTenantSettings, replaceTenantArray, subscribeTenantArray } from "../services/tenantData";
 
 type AttendanceStatus = "حاضر" | "غائب";
@@ -189,6 +190,18 @@ function safeJson<T>(raw: string | null, fallback: T): T {
 
 function clean(value: unknown) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function normalizeStudentSeatEmailCode(value: unknown) {
+  return String(value || "").replace(/\D/g, "").slice(0, 6);
+}
+
+function maskEmailForStudentSeatAccess(value: unknown) {
+  const email = String(value || "").trim();
+  const [local, domain] = email.split("@");
+  if (!local || !domain) return email ? "***" : "";
+  if (local.length <= 2) return `${local.slice(0, 1)}***@${domain}`;
+  return `${local.slice(0, 1)}${"*".repeat(Math.max(local.length - 2, 3))}${local.slice(-1)}@${domain}`;
 }
 
 function normalizeStatus(value: unknown): AttendanceStatus {
@@ -524,6 +537,90 @@ export default function StudentSeatRegister12Page() {
   const cloudHydratedRef = useRef(false);
   const cloudRecordsSignatureRef = useRef("");
 
+  const [emailGateCode, setEmailGateCode] = useState("");
+  const [emailGateCodeSent, setEmailGateCodeSent] = useState(false);
+  const [emailGateSending, setEmailGateSending] = useState(false);
+  const [emailGateVerifying, setEmailGateVerifying] = useState(false);
+  const [emailGateMessage, setEmailGateMessage] = useState("");
+  const [emailGateError, setEmailGateError] = useState("");
+  const [emailGateVerified, setEmailGateVerified] = useState(false);
+
+  const emailGateSessionKey = useMemo(() => `exam-manager:student-seat-register12-email-code-access:${tenantId}`, [tenantId]);
+  const currentUserEmail = useMemo(
+    () => String(user?.email || user?.profile?.email || user?.userProfile?.email || "").trim(),
+    [user?.email, user?.profile?.email, user?.userProfile?.email]
+  );
+  const maskedCurrentUserEmail = useMemo(() => maskEmailForStudentSeatAccess(currentUserEmail), [currentUserEmail]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setEmailGateVerified(window.sessionStorage.getItem(emailGateSessionKey) === "1");
+    setEmailGateCode("");
+    setEmailGateCodeSent(false);
+    setEmailGateSending(false);
+    setEmailGateVerifying(false);
+    setEmailGateMessage("");
+    setEmailGateError("");
+  }, [emailGateSessionKey]);
+
+  const sendEmailGateCode = useCallback(async () => {
+    if (!tenantId) {
+      setEmailGateError("معرف المركز غير متوفر.");
+      return;
+    }
+
+    setEmailGateSending(true);
+    setEmailGateError("");
+    setEmailGateMessage("");
+
+    try {
+      const fn = httpsCallable(getFunctions(undefined, "us-central1"), "sendControl12AccessCodeEmail");
+      const result = await fn({
+        tenantId,
+        page: "StudentSeatRegister12",
+        pageLabel: "سجل أرقام جلوس الطلبة",
+      });
+      const data = (result.data || {}) as any;
+      setEmailGateCodeSent(true);
+      setEmailGateMessage(data?.message || "تم إرسال رمز الدخول إلى البريد الإلكتروني المسجل للحساب.");
+    } catch (error: any) {
+      console.error("sendStudentSeatRegister12AccessCode failed:", error);
+      setEmailGateError(error?.message || "تعذر إرسال رمز الدخول إلى البريد الإلكتروني.");
+    } finally {
+      setEmailGateSending(false);
+    }
+  }, [tenantId]);
+
+  const verifyEmailGateCode = useCallback(async () => {
+    const code = normalizeStudentSeatEmailCode(emailGateCode);
+    if (code.length !== 6) {
+      setEmailGateError("أدخل رمزًا مكونًا من 6 أرقام.");
+      return;
+    }
+
+    setEmailGateVerifying(true);
+    setEmailGateError("");
+    setEmailGateMessage("");
+
+    try {
+      const fn = httpsCallable(getFunctions(undefined, "us-central1"), "verifyControl12AccessCode");
+      await fn({ tenantId, code, page: "StudentSeatRegister12" });
+      try {
+        window.sessionStorage.setItem(emailGateSessionKey, "1");
+      } catch {
+        // Ignore storage failures; current state still unlocks the page.
+      }
+      setEmailGateVerified(true);
+      setEmailGateCode("");
+      setEmailGateMessage("تم التحقق بنجاح.");
+    } catch (error: any) {
+      console.error("verifyStudentSeatRegister12AccessCode failed:", error);
+      setEmailGateError(error?.message || "رمز الدخول غير صحيح أو انتهت صلاحيته.");
+    } finally {
+      setEmailGateVerifying(false);
+    }
+  }, [emailGateCode, emailGateSessionKey, tenantId]);
+
   useEffect(() => {
     const normalized = normalizeRecordsList(records);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
@@ -596,7 +693,7 @@ export default function StudentSeatRegister12Page() {
     }
 
     refresh();
-    void refreshCenterFromCloud();
+    if (emailGateVerified) void refreshCenterFromCloud();
 
     window.addEventListener("storage", refresh);
     window.addEventListener("exam-manager:changed", refresh);
@@ -606,9 +703,17 @@ export default function StudentSeatRegister12Page() {
       window.removeEventListener("exam-manager:changed", refresh);
       window.removeEventListener("exam-manager:control-head-changed", refresh);
     };
-  }, [tenantId]);
+  }, [tenantId, emailGateVerified]);
 
   useEffect(() => {
+    if (!emailGateVerified) {
+      cloudHydratedRef.current = false;
+      setCloudLoading(false);
+      setCloudStatus("");
+      setCloudError("");
+      return;
+    }
+
     let mounted = true;
     let unsubscribeStudents: (() => void) | undefined;
     let unsubscribeExams: (() => void) | undefined;
@@ -701,7 +806,7 @@ export default function StudentSeatRegister12Page() {
       unsubscribeStudents?.();
       unsubscribeExams?.();
     };
-  }, [tenantId, currentUserId]);
+  }, [tenantId, currentUserId, emailGateVerified]);
 
   const currentIndex = useMemo(() => records.findIndex((record) => record.id === selectedId), [records, selectedId]);
   const academicYear = centerData.academicYear || currentAcademicYear();
@@ -1097,6 +1202,116 @@ export default function StudentSeatRegister12Page() {
   };
 
   const displayRecordNo = records.length ? `${currentIndex >= 0 ? currentIndex + 1 : 0} / ${records.length}` : "0 / 0";
+  const emailGateBusy = emailGateSending || emailGateVerifying;
+
+  if (!emailGateVerified) {
+    return (
+      <div dir="rtl" style={pageStyle}>
+        <style>{`
+          html, body, #root {
+            margin: 0 !important;
+            min-height: 100% !important;
+            background: #f7f3e7 !important;
+          }
+          .studentSeatEmailCodeInput::placeholder {
+            color: #111827 !important;
+            font-weight: 1000 !important;
+            opacity: 0.75 !important;
+          }
+        `}</style>
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.42)",
+            zIndex: 2147483647,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 18,
+          }}
+        >
+          <div
+            style={{
+              width: "min(720px, 96vw)",
+              background: "linear-gradient(180deg, #fffdf7 0%, #f7f3e7 100%)",
+              border: "5px solid #d4af37",
+              borderRadius: 30,
+              boxShadow: "0 0 0 7px rgba(212,175,55,0.20) inset, 0 24px 80px rgba(0,0,0,0.22)",
+              padding: 24,
+              color: "#000",
+              fontWeight: 1000,
+              textAlign: "right",
+            }}
+          >
+            <div style={{ fontSize: 24, fontWeight: 1000, color: "#000", marginBottom: 10 }}>
+              تحقق برمز البريد لفتح سجل أرقام جلوس الطلبة
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 1000, color: "#000", lineHeight: 1.9, marginBottom: 14 }}>
+              اضغط زر إرسال الرمز، ثم أدخل رمز التحقق المكون من 6 أرقام المرسل إلى بريد الحساب
+              {maskedCurrentUserEmail ? ` (${maskedCurrentUserEmail})` : ""}.
+            </div>
+
+            <input
+              className="studentSeatEmailCodeInput"
+              value={emailGateCode}
+              onChange={(event) => {
+                setEmailGateCode(normalizeStudentSeatEmailCode(event.target.value));
+                setEmailGateError("");
+                setEmailGateMessage("");
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") void verifyEmailGateCode();
+              }}
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              placeholder="أدخل رمز التحقق المرسل إلى البريد"
+              disabled={!emailGateCodeSent || emailGateBusy}
+              style={{
+                width: "100%",
+                minHeight: 58,
+                border: "3px solid #d4af37",
+                borderRadius: 18,
+                background: "#fffaf0",
+                color: "#000",
+                WebkitTextFillColor: "#000",
+                fontWeight: 1000,
+                fontSize: 20,
+                textAlign: "center",
+                outline: "none",
+                boxSizing: "border-box",
+                padding: "10px 14px",
+              }}
+            />
+
+            {emailGateMessage ? (
+              <div style={{ marginTop: 12, border: "2px solid #16a34a", background: "#f0fdf4", color: "#000", borderRadius: 14, padding: "10px 12px", fontWeight: 1000, lineHeight: 1.7 }}>
+                {emailGateMessage}
+              </div>
+            ) : null}
+
+            {emailGateError ? (
+              <div style={{ marginTop: 12, border: "2px solid #dc2626", background: "#fef2f2", color: "#000", borderRadius: 14, padding: "10px 12px", fontWeight: 1000, lineHeight: 1.7 }}>
+                {emailGateError}
+              </div>
+            ) : null}
+
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end", marginTop: 18 }}>
+              <button type="button" onClick={() => history.back()} disabled={emailGateBusy} style={{ minHeight: 48, border: "3px solid #d4af37", borderRadius: 16, background: "#fffdf7", color: "#000", fontWeight: 1000, cursor: "pointer", padding: "10px 16px" }}>
+                رجوع
+              </button>
+              <button type="button" onClick={() => void sendEmailGateCode()} disabled={emailGateBusy} style={{ minHeight: 48, border: "3px solid #1d4ed8", borderRadius: 16, background: "#bfdbfe", color: "#000", fontWeight: 1000, cursor: "pointer", padding: "10px 16px" }}>
+                {emailGateSending ? "جاري الإرسال..." : "إرسال رمز الدخول إلى البريد"}
+              </button>
+              <button type="button" onClick={() => void verifyEmailGateCode()} disabled={!emailGateCodeSent || emailGateBusy} style={{ minHeight: 48, border: "3px solid #14532d", borderRadius: 16, background: emailGateCodeSent ? "#bbf7d0" : "#e5e7eb", color: "#000", fontWeight: 1000, cursor: emailGateCodeSent ? "pointer" : "not-allowed", padding: "10px 16px" }}>
+                {emailGateVerifying ? "جاري التحقق..." : "تحقق وفتح الصفحة"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div dir="rtl" style={pageStyle}>

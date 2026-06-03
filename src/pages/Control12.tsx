@@ -15,6 +15,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { useI18n } from "../i18n/I18nProvider";
 import { db } from "../firebase/firebase";
+import { getFunctions, httpsCallable } from "firebase/functions";
 import { tenantPath } from "../config/tenantRoutes";
 
 type ControlMember = {
@@ -89,6 +90,17 @@ const EXAM_CENTER_DATA_KEY = "exam-manager:exam-center-data:v1";
 const EXAM_CENTER_LOGO_KEY = "exam-manager:exam-center-logo:v1";
 const APP_LOGO_KEY = "exam-manager:app-logo";
 const CONTROL_HEAD_NAME_KEY = "exam-manager:control-head-name:v1";
+
+const maskEmailForGate = (email: string) => {
+  const safe = String(email || "").trim();
+  const [name, domain] = safe.split("@");
+  if (!name || !domain) return safe ? "****" : "";
+  if (name.length <= 2) return `${name.charAt(0)}***@${domain}`;
+  return `${name.charAt(0)}${"*".repeat(Math.max(3, name.length - 2))}${name.charAt(name.length - 1)}@${domain}`;
+};
+
+const normalizeAccessCode = (value: string) => String(value || "").replace(/\D/g, "").slice(0, 6);
+
 
 const PAGE_BG =
   "radial-gradient(1200px 520px at 50% -10%, rgba(212, 175, 55, 0.18), transparent 62%), linear-gradient(180deg, #fffdf7 0%, #f7f3e7 48%, #fffaf0 100%)";
@@ -324,6 +336,17 @@ export default function SchoolControl() {
   const [exams, setExams] = useState<any[]>([]);
   const [busy, setBusy] = useState(false);
   const [printingId, setPrintingId] = useState("");
+  const [accessCode, setAccessCode] = useState("");
+  const [accessCodeSent, setAccessCodeSent] = useState(false);
+  const [accessGateBusy, setAccessGateBusy] = useState(false);
+  const [accessGateMessage, setAccessGateMessage] = useState("");
+  const [accessGateError, setAccessGateError] = useState("");
+  const accessSessionKey = useMemo(
+    () => `yr:control12-access-ok:${tenantId || "no-tenant"}:${String(user?.email || user?.uid || "guest")}`,
+    [tenantId, user?.email, user?.uid]
+  );
+  const [controlAccessVerified, setControlAccessVerified] = useState(false);
+
   const importInputRef = useRef<HTMLInputElement | null>(null);
 
   const [memberForm, setMemberForm] = useState({
@@ -353,7 +376,77 @@ export default function SchoolControl() {
   });
 
   useEffect(() => {
-    if (!tenantId) return;
+    // عند كل دخول جديد للصفحة أو تغير المركز/المستخدم، نعيد قفل الصفحة.
+    // لا نستخدم sessionStorage هنا حتى لا تفتح الصفحة مباشرة بعد تحقق سابق.
+    setControlAccessVerified(false);
+    setAccessCode("");
+    setAccessCodeSent(false);
+    setAccessGateMessage("");
+    setAccessGateError("");
+  }, [accessSessionKey]);
+
+  const sendControlAccessCode = async () => {
+    if (!tenantId) {
+      setAccessGateError(tr("معرف المركز غير متوفر.", "Center ID is missing."));
+      return;
+    }
+
+    setAccessGateBusy(true);
+    setAccessGateError("");
+    setAccessGateMessage("");
+
+    try {
+      const fn = httpsCallable(getFunctions(undefined, "us-central1"), "sendControl12AccessCodeEmail");
+      const result = await fn({ tenantId });
+      const data = (result.data || {}) as any;
+      setAccessCodeSent(true);
+      setAccessGateMessage(
+        data?.message ||
+          tr(
+            "تم إرسال رمز الدخول إلى البريد الإلكتروني المسجل للحساب.",
+            "The access code was sent to the account email."
+          )
+      );
+    } catch (error: any) {
+      console.error("sendControlAccessCode failed:", error);
+      setAccessGateError(
+        error?.message ||
+          tr("تعذر إرسال رمز الدخول إلى البريد الإلكتروني.", "Failed to send the access code.")
+      );
+    } finally {
+      setAccessGateBusy(false);
+    }
+  };
+
+  const verifyControlAccessCode = async () => {
+    const code = normalizeAccessCode(accessCode);
+    if (code.length !== 6) {
+      setAccessGateError(tr("أدخل رمزًا مكونًا من 6 أرقام.", "Enter a 6-digit code."));
+      return;
+    }
+
+    setAccessGateBusy(true);
+    setAccessGateError("");
+    setAccessGateMessage("");
+
+    try {
+      const fn = httpsCallable(getFunctions(undefined, "us-central1"), "verifyControl12AccessCode");
+      await fn({ tenantId, code });
+      setControlAccessVerified(true);
+      setAccessGateMessage(tr("تم التحقق بنجاح.", "Verified successfully."));
+    } catch (error: any) {
+      console.error("verifyControlAccessCode failed:", error);
+      setAccessGateError(
+        error?.message ||
+          tr("رمز الدخول غير صحيح أو انتهت صلاحيته.", "The code is invalid or expired.")
+      );
+    } finally {
+      setAccessGateBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!tenantId || !controlAccessVerified) return;
     if (authLoading) return;
     if (!user?.uid) return;
 
@@ -433,7 +526,7 @@ export default function SchoolControl() {
     return () => {
       mounted = false;
     };
-  }, [tenantId, authLoading, user?.uid]);
+  }, [tenantId, authLoading, user?.uid, controlAccessVerified]);
 
   useEffect(() => {
     const refreshOfficialData = () => setOfficialDataVersion((value) => value + 1);
@@ -958,6 +1051,147 @@ ${membersTable}
     win.focus();
     win.print();
   };
+
+  if (!controlAccessVerified) {
+    const maskedEmail = maskEmailForGate(String(user?.email || ""));
+
+    return (
+      <div
+        style={{
+          direction: isRTL ? "rtl" : "ltr",
+          minHeight: "100vh",
+          background: PAGE_BG,
+          color: "#000000",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 24,
+          boxSizing: "border-box",
+          fontWeight: 900,
+        }}
+      >
+        <div
+          style={{
+            width: "min(720px, 100%)",
+            background: "linear-gradient(180deg, #fffdf7 0%, #f7f3e7 100%)",
+            border: "2px solid rgba(139, 111, 18, 0.55)",
+            borderRadius: 28,
+            boxShadow: "0 24px 70px rgba(0,0,0,0.18)",
+            padding: 28,
+            color: "#000000",
+            fontWeight: 900,
+          }}
+        >
+          <div style={{ textAlign: "center", marginBottom: 18 }}>
+            <div style={{ fontSize: 28, fontWeight: 900, color: "#000000" }}>
+              {tr("تحقق أمني قبل فتح ملفات الكنترول", "Security verification before opening control files")}
+            </div>
+            <div style={{ marginTop: 10, fontSize: 16, color: "#000000", fontWeight: 900 }}>
+              {tr(
+                "اضغط إرسال رمز الدخول، ثم أدخل الرمز المرسل إلى البريد الإلكتروني المرتبط بالحساب.",
+                "Send the access code, then enter the code sent to the account email."
+              )}
+            </div>
+          </div>
+
+          <div
+            style={{
+              background: "#fff8db",
+              border: "1px solid rgba(139, 111, 18, 0.35)",
+              borderRadius: 18,
+              padding: 16,
+              marginBottom: 16,
+              color: "#000000",
+              fontWeight: 900,
+            }}
+          >
+            <div>{tr("البريد المستهدف", "Target email")}: {maskedEmail || tr("غير متوفر", "Unavailable")}</div>
+            <div style={{ marginTop: 6 }}>{tr("المركز", "Center")}: {tenantId || "-"}</div>
+          </div>
+
+          <div style={{ display: "grid", gap: 12 }}>
+            <button
+              type="button"
+              disabled={accessGateBusy || !tenantId || authLoading}
+              onClick={sendControlAccessCode}
+              style={{
+                ...buttonStyle("linear-gradient(180deg, #dcfce7 0%, #86efac 100%)"),
+                width: "100%",
+                justifyContent: "center",
+                color: "#000000",
+                fontWeight: 900,
+              }}
+            >
+              {accessGateBusy ? tr("جار المعالجة...", "Processing...") : tr("إرسال رمز الدخول إلى البريد", "Send access code to email")}
+            </button>
+
+            <input
+              value={accessCode}
+              onChange={(event) => setAccessCode(normalizeAccessCode(event.target.value))}
+              placeholder={tr("أدخل رمز الدخول المكون من 6 أرقام", "Enter the 6-digit access code")}
+              inputMode="numeric"
+              maxLength={6}
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                border: "2px solid rgba(139, 111, 18, 0.45)",
+                borderRadius: 16,
+                padding: "14px 16px",
+                fontSize: 20,
+                textAlign: "center",
+                letterSpacing: 4,
+                color: "#000000",
+                fontWeight: 900,
+                background: "#ffffff",
+                outline: "none",
+              }}
+            />
+
+            <button
+              type="button"
+              disabled={accessGateBusy || !accessCodeSent || normalizeAccessCode(accessCode).length !== 6}
+              onClick={verifyControlAccessCode}
+              style={{
+                ...buttonStyle("linear-gradient(180deg, #dbeafe 0%, #93c5fd 100%)"),
+                width: "100%",
+                justifyContent: "center",
+                color: "#000000",
+                fontWeight: 900,
+              }}
+            >
+              {tr("تحقق وفتح الصفحة", "Verify and open page")}
+            </button>
+
+            {accessGateMessage ? (
+              <div style={{ color: "#065f46", background: "#dcfce7", border: "1px solid #86efac", borderRadius: 14, padding: 12, fontWeight: 900 }}>
+                {accessGateMessage}
+              </div>
+            ) : null}
+            {accessGateError ? (
+              <div style={{ color: "#7f1d1d", background: "#fee2e2", border: "1px solid #fecaca", borderRadius: 14, padding: 12, fontWeight: 900 }}>
+                {accessGateError}
+              </div>
+            ) : null}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => navigate(tenantPath(tenantId, "/dashboard12"))}
+            style={{
+              marginTop: 16,
+              width: "100%",
+              ...buttonStyle("linear-gradient(180deg, #f3f4f6 0%, #e5e7eb 100%)"),
+              justifyContent: "center",
+              color: "#000000",
+              fontWeight: 900,
+            }}
+          >
+            {tr("العودة للوحة الرئيسية", "Back to dashboard")}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
