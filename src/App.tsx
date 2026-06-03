@@ -16,6 +16,7 @@ import Teachers12 from "./pages/Teachers12";
 import Exams12 from "./pages/Exams12";
 import Rooms12 from "./pages/Rooms12";
 import Settings12 from "./pages/Settings12";
+import ChangePhoneRequest from "./pages/ChangePhoneRequest";
 import Setting12 from "./pages/Setting12";
 import Unavailability12 from "./pages/Unavailability12";
 import TaskDistributionRun12 from "./pages/TaskDistributionRun12";
@@ -310,6 +311,15 @@ export default function App() {
         }
       />
 
+
+      <Route
+        path="/t/:tenantId/change-phone"
+        element={
+          <ProtectedRoute>
+            <ChangePhoneRequest />
+          </ProtectedRoute>
+        }
+      />
 
       <Route
         path="/programs-gateway"
