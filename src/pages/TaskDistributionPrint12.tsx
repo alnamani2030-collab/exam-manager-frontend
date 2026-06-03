@@ -29,6 +29,200 @@ const DIPLOMA_EXAM_CENTER_SETTINGS_DOC_ID = "diplomaExamCenter";
 const PRINT12_LATEST_RUN_SETTINGS_DOC_ID = "latestTaskDistributionRun12";
 const PRINT12_ASSIGNMENTS_SUBCOLLECTION = "taskDistributionAssignments12";
 
+/** ✅ Phone access gate helpers for sensitive diploma print pages */
+function print12PhoneDigitsOnly(value: unknown): string {
+  return String(value ?? "").replace(/[^\d٠-٩۰-۹]/g, "").replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d))).replace(/[۰-۹]/g, (d) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)));
+}
+
+function print12MaskPhoneFirstLast(value: unknown): string {
+  const digits = print12PhoneDigitsOnly(value);
+  if (!digits) return "";
+  if (digits.length <= 2) return digits[0] ? `${digits[0]}x` : "";
+  return `${digits.slice(0, 1)}${"x".repeat(Math.max(1, digits.length - 2))}${digits.slice(-1)}`;
+}
+
+function print12PickRegisteredPhone(data: any): string {
+  if (!data || typeof data !== "object") return "";
+  const direct = [
+    data.phone,
+    data.phoneNumber,
+    data.mobile,
+    data.mobileNumber,
+    data.centerPhone,
+    data.schoolPhone,
+    data.contactPhone,
+    data.officialPhone,
+    data.settingsPhone,
+    data.registeredPhone,
+  ];
+  for (const value of direct) {
+    const digits = print12PhoneDigitsOnly(value);
+    if (digits) return digits;
+  }
+  return "";
+}
+
+function print12ReadLocalRegisteredPhone(): string {
+  const candidates = [
+    "exam-manager:settings12:center-data:v1",
+    "exam-manager:center-data:v1",
+    "exam-manager:exam-center-data:v1",
+    "exam-manager:control-center-data:v1",
+    "exam-manager:school-control:center-data:v1",
+    "exam-manager:schoolControl:center-data:v1",
+    "exam-manager:center-control-data:v1",
+    "exam-manager:control-data:v1",
+  ];
+  for (const key of candidates) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw);
+      const fromRoot = print12PickRegisteredPhone(parsed);
+      if (fromRoot) return fromRoot;
+      const fromPayload = print12PickRegisteredPhone(parsed?.data || parsed?.settings || parsed?.center || parsed?.school || parsed?.config);
+      if (fromPayload) return fromPayload;
+    } catch {
+      // ignore malformed localStorage values
+    }
+  }
+  return "";
+}
+
+function Print12PhoneGateScreen(props: {
+  lang: "ar" | "en";
+  tenantId: string;
+  registeredPhone: string;
+  loading: boolean;
+  error: string;
+  value: string;
+  setValue: (value: string) => void;
+  onVerify: () => void;
+  onGoSettings: () => void;
+}) {
+  const isAr = props.lang === "ar";
+  const masked = print12MaskPhoneFirstLast(props.registeredPhone);
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
+        direction: isAr ? "rtl" : "ltr",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 24,
+        background:
+          "radial-gradient(circle at top, rgba(212,175,55,.20), transparent 36%), linear-gradient(135deg,#fff8e1 0%,#fffdf7 55%,#f8ecd0 100%)",
+        color: "#000000",
+        fontWeight: 900,
+      }}
+    >
+      <div
+        style={{
+          width: "min(760px, 100%)",
+          border: "3px solid #d6b24a",
+          borderRadius: 28,
+          background: "rgba(255,255,255,.94)",
+          boxShadow: "0 22px 55px rgba(81,58,8,.18)",
+          padding: 28,
+          color: "#000000",
+          fontWeight: 900,
+        }}
+      >
+        <div style={{ display: "inline-flex", border: "1.5px solid #d6b24a", borderRadius: 999, padding: "8px 16px", background: "#fff8df", color: "#000000", fontWeight: 1000 }}>
+          {isAr ? "حماية الدخول" : "Access protection"}
+        </div>
+        <h1 style={{ margin: "18px 0 10px", color: "#000000", fontWeight: 1000, fontSize: 30 }}>
+          {isAr ? "التحقق من رقم الهاتف" : "Phone verification"}
+        </h1>
+        <p style={{ margin: 0, color: "#000000", fontWeight: 900, lineHeight: 1.9 }}>
+          {isAr
+            ? "للوصول إلى بوابة تقارير توزيع المهام، أدخل رقم الهاتف المسجل في إعدادات مركز الدبلوم."
+            : "To access task distribution reports, enter the phone number registered in diploma center settings."}
+        </p>
+
+        <div style={{ marginTop: 18, display: "grid", gap: 12 }}>
+          <div style={{ border: "1.5px solid #e5cf87", borderRadius: 18, padding: 14, background: "#fffaf0", color: "#000000", fontWeight: 1000 }}>
+            {isAr ? "الرقم المسجل:" : "Registered phone:"}{" "}
+            <span style={{ color: "#000000", fontWeight: 1000 }}>{masked || (props.loading ? (isAr ? "جاري التحميل..." : "Loading...") : "—")}</span>
+          </div>
+
+          {!props.loading && !props.registeredPhone ? (
+            <div style={{ border: "2px solid #b91c1c", borderRadius: 18, padding: 14, background: "#fff1f2", color: "#000000", fontWeight: 1000 }}>
+              {isAr ? "لا يوجد رقم هاتف مسجل في إعدادات مركز الدبلوم. يرجى تسجيل الرقم أولًا." : "No phone number is registered in diploma center settings. Please register it first."}
+            </div>
+          ) : null}
+
+          <input
+            value={props.value}
+            onChange={(e) => props.setValue(e.target.value)}
+            inputMode="numeric"
+            placeholder={isAr ? "أدخل رقم الهاتف المسجل" : "Enter registered phone number"}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") props.onVerify();
+            }}
+            disabled={props.loading || !props.registeredPhone}
+            style={{
+              width: "100%",
+              boxSizing: "border-box",
+              border: "2px solid #d6b24a",
+              borderRadius: 18,
+              padding: "15px 18px",
+              fontSize: 18,
+              color: "#000000",
+              fontWeight: 1000,
+              outline: "none",
+              background: "#ffffff",
+            }}
+          />
+
+          {props.error ? (
+            <div style={{ border: "2px solid #b91c1c", borderRadius: 18, padding: 12, background: "#fff1f2", color: "#000000", fontWeight: 1000 }}>
+              {props.error}
+            </div>
+          ) : null}
+
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center", marginTop: 6 }}>
+            <button
+              type="button"
+              onClick={props.onVerify}
+              disabled={props.loading || !props.registeredPhone}
+              style={{
+                minWidth: 190,
+                border: "2px solid #b88700",
+                borderRadius: 18,
+                padding: "13px 20px",
+                background: "linear-gradient(180deg,#fff4c2,#d6a921)",
+                color: "#000000",
+                fontWeight: 1000,
+                cursor: props.loading || !props.registeredPhone ? "not-allowed" : "pointer",
+              }}
+            >
+              {isAr ? "دخول الصفحة" : "Open page"}
+            </button>
+            <button
+              type="button"
+              onClick={props.onGoSettings}
+              style={{
+                minWidth: 190,
+                border: "2px solid #111827",
+                borderRadius: 18,
+                padding: "13px 20px",
+                background: "#ffffff",
+                color: "#000000",
+                fontWeight: 1000,
+                cursor: "pointer",
+              }}
+            >
+              {isAr ? "العودة لإعدادات الدبلوم" : "Back to diploma settings"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** -------------------------------------------
  * Helpers: safe localStorage JSON read
  * ------------------------------------------ */
@@ -947,6 +1141,64 @@ export default function TaskDistributionPrint() {
   const tr = React.useCallback((ar: string, en: string) => (lang === "ar" ? ar : en), [lang]);
   const tenantId = String(effectiveTenantId || user?.tenantId || "").trim() || "default";
 
+  const [phoneGateAllowed, setPhoneGateAllowed] = useState<boolean>(() => {
+    try {
+      return sessionStorage.getItem(`yr:phone-gate:task-print12:${tenantId}`) === "ok";
+    } catch {
+      return false;
+    }
+  });
+  const [phoneGateValue, setPhoneGateValue] = useState("");
+  const [phoneGateError, setPhoneGateError] = useState("");
+  const [phoneGateLoading, setPhoneGateLoading] = useState(true);
+  const [registeredGatePhone, setRegisteredGatePhone] = useState("");
+
+  useEffect(() => {
+    let mounted = true;
+    setPhoneGateLoading(true);
+    setPhoneGateError("");
+    async function loadGatePhone() {
+      try {
+        const cloud = await loadTenantSettings<any>(tenantId, DIPLOMA_EXAM_CENTER_SETTINGS_DOC_ID, {});
+        const fromCloud = print12PickRegisteredPhone(cloud);
+        const fromLocal = print12PickRegisteredPhone(readEffectiveCenterData()) || print12ReadLocalRegisteredPhone();
+        const phone = fromCloud || fromLocal;
+        if (!mounted) return;
+        setRegisteredGatePhone(phone);
+        setPhoneGateLoading(false);
+      } catch {
+        if (!mounted) return;
+        setRegisteredGatePhone(print12PickRegisteredPhone(readEffectiveCenterData()) || print12ReadLocalRegisteredPhone());
+        setPhoneGateLoading(false);
+      }
+    }
+    void loadGatePhone();
+    return () => {
+      mounted = false;
+    };
+  }, [tenantId]);
+
+  const verifyPhoneGate = () => {
+    const expected = print12PhoneDigitsOnly(registeredGatePhone);
+    const actual = print12PhoneDigitsOnly(phoneGateValue);
+    if (!expected) {
+      setPhoneGateError(tr("لا يوجد رقم هاتف مسجل في إعدادات مركز الدبلوم.", "No registered phone number was found in diploma settings."));
+      return;
+    }
+    if (!actual || actual !== expected) {
+      setPhoneGateError(tr("رقم الهاتف غير مطابق للرقم المسجل.", "The phone number does not match the registered number."));
+      return;
+    }
+    try {
+      sessionStorage.setItem(`yr:phone-gate:task-print12:${tenantId}`, "ok");
+    } catch {
+      // ignore
+    }
+    setPhoneGateAllowed(true);
+    setPhoneGateError("");
+  };
+
+
   const printAreaRef = useRef<HTMLDivElement | null>(null);
 
   const [run, setRun] = useState(() => loadRun(tenantId));
@@ -1219,14 +1471,6 @@ export default function TaskDistributionPrint() {
     return teacherEmployeeIndex.get(key) || "";
   }
 
-  function maskEmployeeNoForPrint(value: string) {
-    const raw = String(value || "").trim();
-    if (!raw) return "";
-    const chars = Array.from(raw.replace(/\s+/g, ""));
-    if (chars.length <= 4) return chars.join("");
-    return chars.map((ch, index) => (index < 2 || index >= chars.length - 2 ? ch : "x")).join("");
-  }
-
   const masterTableRows = useMemo<AnyAssignment[]>(() => {
     const m1 = readJson<any>("exam-manager:task-distribution:master-table:v1");
     const m2 = readJson<any>("exam-manager:task-distribution:all-table:v1");
@@ -1439,7 +1683,7 @@ export default function TaskDistributionPrint() {
 `;
     const teacherLine = teacherNameFilter ? `${tr("المعلم", "Teacher")}: ${teacherNameFilter}
 ` : "";
-    const empLine = teacherNameFilter ? `${tr("الرقم الوظيفي", "Employee No")}: ${maskEmployeeNoForPrint(getTeacherEmployeeNoByName(teacherNameFilter)) || "—"}
+    const empLine = teacherNameFilter ? `${tr("الرقم الوظيفي", "Employee No")}: ${getTeacherEmployeeNoByName(teacherNameFilter) || "—"}
 ` : "";
     const subjectLine = subjectFilter ? `${tr("المادة", "Subject")}: ${translateSubject(subjectFilter, lang)}
 ` : "";
@@ -1675,7 +1919,7 @@ export default function TaskDistributionPrint() {
   }
 
   function TeacherSheet(props: { teacherName: string; rows: AnyAssignment[]; pageBreak?: boolean; createdAtISO: string }) {
-    const employeeNo = maskEmployeeNoForPrint(getTeacherEmployeeNoByName(props.teacherName));
+    const employeeNo = getTeacherEmployeeNoByName(props.teacherName);
 
     return (
       <div className="print-sheet" style={{ ...styles.sheet, ...(props.pageBreak ? styles.pageBreak : {}), direction: lang === "ar" ? "rtl" : "ltr" }}>
@@ -1812,6 +2056,23 @@ export default function TaskDistributionPrint() {
     window.setTimeout(() => {
       openPrintDialog();
     }, 650);
+  }
+
+
+  if (!phoneGateAllowed) {
+    return (
+      <Print12PhoneGateScreen
+        lang={lang as "ar" | "en"}
+        tenantId={tenantId}
+        registeredPhone={registeredGatePhone}
+        loading={phoneGateLoading}
+        error={phoneGateError}
+        value={phoneGateValue}
+        setValue={setPhoneGateValue}
+        onVerify={verifyPhoneGate}
+        onGoSettings={() => nav(`/t/${tenantId}/settings12`)}
+      />
+    );
   }
 
   return (
