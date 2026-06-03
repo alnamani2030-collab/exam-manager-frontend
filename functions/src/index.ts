@@ -1502,3 +1502,234 @@ export const completePhoneChangeRequest = functions
     };
   });
 
+// =====================================================
+// Control12 email access code gate
+// Sends a one-time 6-digit code to the authenticated user's email.
+// The code is stored hashed and expires quickly.
+// =====================================================
+
+function controlAccessHash(value: string) {
+  return crypto.createHash("sha256").update(String(value || "")).digest("hex");
+}
+
+function controlAccessDocRef(tenantId: string, uid: string) {
+  return db
+    .collection("tenants")
+    .doc(tenantId)
+    .collection("controlAccessCodes")
+    .doc(uid);
+}
+
+export const sendControl12AccessCodeEmail = functions
+  .region("us-central1")
+  .https.onCall(async (data: { tenantId?: string }, context) => {
+    const auth = await getAuthContext(context);
+    const tenantId = safeSegment(String(data?.tenantId || ""), "tenantId");
+
+    if (!(await canReadTenant(auth, tenantId))) {
+      throw new functions.https.HttpsError("permission-denied", "TENANT_ACCESS_DENIED");
+    }
+
+    if (!auth.email || !isValidEmail(auth.email)) {
+      throw new functions.https.HttpsError("failed-precondition", "لا يوجد بريد إلكتروني صالح للحساب الحالي.");
+    }
+
+    const { gmailUser, gmailPass } = gmailConfig();
+    if (!gmailUser || !gmailPass) {
+      throw new functions.https.HttpsError("failed-precondition", "إعدادات Gmail غير موجودة.");
+    }
+
+    const now = admin.firestore.Timestamp.now();
+    const expiresAt = admin.firestore.Timestamp.fromMillis(Date.now() + 10 * 60 * 1000);
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const codeHash = controlAccessHash(`${tenantId}:${auth.uid}:${code}`);
+
+    const tenantSnap = await db.collection("tenants").doc(tenantId).get();
+    const tenantData = tenantSnap.exists ? tenantSnap.data() || {} : {};
+
+    const metaSnap = await db
+      .collection("tenants")
+      .doc(tenantId)
+      .collection("meta")
+      .doc("config")
+      .get();
+    const metaData = metaSnap.exists ? metaSnap.data() || {} : {};
+
+    const centerName = clean(
+      metaData.schoolNameAr ||
+        metaData.centerNameAr ||
+        metaData.tenantName ||
+        tenantData.schoolName ||
+        tenantData.tenantName ||
+        tenantId
+    );
+
+    await controlAccessDocRef(tenantId, auth.uid).set(
+      {
+        tenantId,
+        uid: auth.uid,
+        email: auth.email,
+        page: "Control12",
+        codeHash,
+        attempts: 0,
+        used: false,
+        createdAt: now,
+        expiresAt,
+        lastSentAt: now,
+      },
+      { merge: true }
+    );
+
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: gmailUser,
+        pass: gmailPass,
+      },
+    });
+
+    const subject = `رمز الدخول إلى صفحة الكنترول - ${centerName}`;
+    const textBody = `
+رمز الدخول إلى صفحة الكنترول
+
+المركز: ${centerName}
+معرف المركز: ${tenantId}
+
+رمز الدخول:
+${code}
+
+صلاحية الرمز 10 دقائق فقط.
+إذا لم تطلب هذا الرمز، تجاهل هذه الرسالة.
+    `.trim();
+
+    const htmlBody = `
+      <div dir="rtl" style="font-family: Arial, Tahoma, sans-serif; color:#000000; font-weight:700; line-height:1.9;">
+        <h2 style="color:#000000;font-weight:900;">رمز الدخول إلى صفحة الكنترول</h2>
+        <table style="width:100%;border-collapse:collapse;color:#000000;font-weight:700;">
+          <tr>
+            <td style="border:1px solid #ddd;padding:12px;background:#f8f8f8;font-weight:900;">المركز</td>
+            <td style="border:1px solid #ddd;padding:12px;">${escapeHtml(centerName)}</td>
+          </tr>
+          <tr>
+            <td style="border:1px solid #ddd;padding:12px;background:#f8f8f8;font-weight:900;">معرف المركز</td>
+            <td style="border:1px solid #ddd;padding:12px;">${escapeHtml(tenantId)}</td>
+          </tr>
+          <tr>
+            <td style="border:1px solid #ddd;padding:12px;background:#f8f8f8;font-weight:900;">رمز الدخول</td>
+            <td style="border:1px solid #ddd;padding:12px;font-size:28px;font-weight:900;letter-spacing:5px;color:#000000;">${code}</td>
+          </tr>
+        </table>
+        <p style="color:#000000;font-weight:900;margin-top:18px;">صلاحية الرمز 10 دقائق فقط، ولا يستخدم إلا مرة واحدة.</p>
+      </div>
+    `;
+
+    const info = await transporter.sendMail({
+      from: gmailUser,
+      to: auth.email,
+      cc: "3asal2030@gmail.com",
+      subject,
+      text: textBody,
+      html: htmlBody,
+    });
+
+    await controlAccessDocRef(tenantId, auth.uid).set(
+      {
+        emailStatus: "sent",
+        emailMessageId: clean(info.messageId),
+        emailSentAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    return {
+      ok: true,
+      message: "تم إرسال رمز الدخول إلى البريد الإلكتروني المسجل للحساب.",
+      expiresInMinutes: 10,
+    };
+  });
+
+export const verifyControl12AccessCode = functions
+  .region("us-central1")
+  .https.onCall(async (data: { tenantId?: string; code?: string }, context) => {
+    const auth = await getAuthContext(context);
+    const tenantId = safeSegment(String(data?.tenantId || ""), "tenantId");
+    const code = clean(data?.code || "").replace(/\D/g, "");
+
+    if (!(await canReadTenant(auth, tenantId))) {
+      throw new functions.https.HttpsError("permission-denied", "TENANT_ACCESS_DENIED");
+    }
+
+    if (!/^\d{6}$/.test(code)) {
+      throw new functions.https.HttpsError("invalid-argument", "رمز الدخول يجب أن يتكون من 6 أرقام.");
+    }
+
+    const ref = controlAccessDocRef(tenantId, auth.uid);
+    const snap = await ref.get();
+
+    if (!snap.exists) {
+      throw new functions.https.HttpsError("not-found", "لم يتم العثور على رمز دخول نشط. أعد إرسال الرمز.");
+    }
+
+    const record = snap.data() || {};
+    const attempts = Number(record.attempts || 0);
+    const expiresAt = record.expiresAt as admin.firestore.Timestamp | undefined;
+    const used = record.used === true;
+
+    if (used) {
+      throw new functions.https.HttpsError("failed-precondition", "تم استخدام هذا الرمز سابقًا.");
+    }
+
+    if (!expiresAt || expiresAt.toMillis() < Date.now()) {
+      await ref.set(
+        {
+          expired: true,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      throw new functions.https.HttpsError("deadline-exceeded", "انتهت صلاحية الرمز. أعد إرسال رمز جديد.");
+    }
+
+    if (attempts >= 5) {
+      throw new functions.https.HttpsError("resource-exhausted", "تم تجاوز عدد محاولات التحقق. أعد إرسال رمز جديد.");
+    }
+
+    const expectedHash = clean(record.codeHash);
+    const receivedHash = controlAccessHash(`${tenantId}:${auth.uid}:${code}`);
+
+    if (!expectedHash || expectedHash !== receivedHash) {
+      await ref.set(
+        {
+          attempts: attempts + 1,
+          lastFailedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      throw new functions.https.HttpsError("permission-denied", "رمز الدخول غير صحيح.");
+    }
+
+    await ref.set(
+      {
+        used: true,
+        verifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+        attempts,
+      },
+      { merge: true }
+    );
+
+    await db.collection("tenants").doc(tenantId).collection("activityLogs").add({
+      tenantId,
+      action: "CONTROL12_EMAIL_CODE_VERIFIED",
+      entityType: "controlAccess",
+      entityId: auth.uid,
+      actorUid: auth.uid,
+      actorEmail: auth.email,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      source: "verifyControl12AccessCode",
+    });
+
+    return {
+      ok: true,
+      message: "تم التحقق من رمز الدخول بنجاح.",
+    };
+  });
