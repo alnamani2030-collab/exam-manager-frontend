@@ -40,6 +40,196 @@ type ExamMeta = {
   time: string;
 };
 
+
+
+/** ✅ Phone access gate helpers for sensitive school print pages */
+function printPhoneDigitsOnly(value: unknown): string {
+  return String(value ?? "")
+    .replace(/[^\d٠-٩۰-۹]/g, "")
+    .replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)))
+    .replace(/[۰-۹]/g, (d) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)));
+}
+
+function printMaskPhoneFirstLast(value: unknown): string {
+  const digits = printPhoneDigitsOnly(value);
+  if (!digits) return "";
+  if (digits.length <= 2) return digits[0] ? `${digits[0]}x` : "";
+  return `${digits.slice(0, 1)}${"x".repeat(Math.max(1, digits.length - 2))}${digits.slice(-1)}`;
+}
+
+function printPickRegisteredPhone(data: any): string {
+  if (!data || typeof data !== "object") return "";
+  const direct = [
+    data.phone,
+    data.phoneNumber,
+    data.mobile,
+    data.mobileNumber,
+    data.schoolPhone,
+    data.centerPhone,
+    data.contactPhone,
+    data.officialPhone,
+    data.settingsPhone,
+    data.registeredPhone,
+  ];
+  for (const value of direct) {
+    const digits = printPhoneDigitsOnly(value);
+    if (digits) return digits;
+  }
+  return "";
+}
+
+function printReadLocalRegisteredPhone(): string {
+  const candidates = [
+    SCHOOL_DATA_KEY,
+    "exam-manager:settings1:school-data:v1",
+    "exam-manager:school-data:v1",
+    "exam-manager:school-settings:v1",
+    "exam-manager:settings:school:v1",
+  ];
+  for (const key of candidates) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw);
+      const fromRoot = printPickRegisteredPhone(parsed);
+      if (fromRoot) return fromRoot;
+      const fromPayload = printPickRegisteredPhone(parsed?.data || parsed?.settings || parsed?.center || parsed?.school || parsed?.config);
+      if (fromPayload) return fromPayload;
+    } catch {
+      // ignore malformed localStorage values
+    }
+  }
+  return "";
+}
+
+function PrintPhoneGateScreen(props: {
+  tenantId: string;
+  registeredPhone: string;
+  loading: boolean;
+  error: string;
+  value: string;
+  setValue: (value: string) => void;
+  onVerify: () => void;
+  onGoSettings: () => void;
+}) {
+  const isAr = true;
+  const masked = printMaskPhoneFirstLast(props.registeredPhone);
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
+        direction: "rtl",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 24,
+        background:
+          "radial-gradient(circle at top, rgba(212,175,55,.20), transparent 36%), linear-gradient(135deg,#fff8e1 0%,#fffdf7 55%,#f8ecd0 100%)",
+        color: "#000000",
+        fontWeight: 900,
+      }}
+    >
+      <div
+        style={{
+          width: "min(760px, 100%)",
+          border: "3px solid #d6b24a",
+          borderRadius: 28,
+          background: "rgba(255,255,255,.94)",
+          boxShadow: "0 22px 55px rgba(81,58,8,.18)",
+          padding: 28,
+          color: "#000000",
+          fontWeight: 900,
+        }}
+      >
+        <div style={{ display: "inline-flex", border: "1.5px solid #d6b24a", borderRadius: 999, padding: "8px 16px", background: "#fff8df", color: "#000000", fontWeight: 1000 }}>
+          حماية الدخول
+        </div>
+        <h1 style={{ margin: "18px 0 10px", color: "#000000", fontWeight: 1000, fontSize: 30 }}>التحقق من رقم الهاتف</h1>
+        <p style={{ margin: 0, color: "#000000", fontWeight: 900, lineHeight: 1.9 }}>
+          للوصول إلى بوابة تقارير توزيع المهام، أدخل رقم الهاتف المسجل في إعدادات المدرسة.
+        </p>
+
+        <div style={{ marginTop: 18, display: "grid", gap: 12 }}>
+          <div style={{ border: "1.5px solid #e5cf87", borderRadius: 18, padding: 14, background: "#fffaf0", color: "#000000", fontWeight: 1000 }}>
+            الرقم المسجل: <span style={{ color: "#000000", fontWeight: 1000 }}>{masked || (props.loading ? "جاري التحميل..." : "—")}</span>
+          </div>
+
+          {!props.loading && !props.registeredPhone ? (
+            <div style={{ border: "2px solid #b91c1c", borderRadius: 18, padding: 14, background: "#fff1f2", color: "#000000", fontWeight: 1000 }}>
+              لا يوجد رقم هاتف مسجل في إعدادات المدرسة. يرجى تسجيل الرقم أولًا.
+            </div>
+          ) : null}
+
+          <input
+            value={props.value}
+            onChange={(e) => props.setValue(e.target.value)}
+            inputMode="numeric"
+            placeholder="أدخل رقم الهاتف المسجل"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") props.onVerify();
+            }}
+            disabled={props.loading || !props.registeredPhone}
+            style={{
+              width: "100%",
+              boxSizing: "border-box",
+              border: "2px solid #d6b24a",
+              borderRadius: 18,
+              padding: "15px 18px",
+              fontSize: 18,
+              color: "#000000",
+              fontWeight: 1000,
+              outline: "none",
+              background: "#ffffff",
+            }}
+          />
+
+          {props.error ? (
+            <div style={{ border: "2px solid #b91c1c", borderRadius: 18, padding: 12, background: "#fff1f2", color: "#000000", fontWeight: 1000 }}>
+              {props.error}
+            </div>
+          ) : null}
+
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center", marginTop: 6 }}>
+            <button
+              type="button"
+              onClick={props.onVerify}
+              disabled={props.loading || !props.registeredPhone}
+              style={{
+                minWidth: 190,
+                border: "2px solid #b88700",
+                borderRadius: 18,
+                padding: "13px 20px",
+                background: "linear-gradient(180deg,#fff4c2,#d6a921)",
+                color: "#000000",
+                fontWeight: 1000,
+                cursor: props.loading || !props.registeredPhone ? "not-allowed" : "pointer",
+              }}
+            >
+              دخول الصفحة
+            </button>
+            <button
+              type="button"
+              onClick={props.onGoSettings}
+              style={{
+                minWidth: 190,
+                border: "2px solid #111827",
+                borderRadius: 18,
+                padding: "13px 20px",
+                background: "#ffffff",
+                color: "#000000",
+                fontWeight: 1000,
+                cursor: "pointer",
+              }}
+            >
+              العودة لإعدادات المدرسة
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** -------------------------------------------
  * Helpers: safe localStorage JSON read
  * ------------------------------------------ */
@@ -1354,6 +1544,58 @@ export default function TaskDistributionPrint() {
   const { user, effectiveTenantId } = useAuth() as any;
   const tenantId = String(effectiveTenantId || user?.tenantId || "").trim() || "default";
 
+  const [phoneGateAllowed, setPhoneGateAllowed] = useState<boolean>(() => {
+    try {
+      return sessionStorage.getItem(`yr:phone-gate:task-print:${tenantId}`) === "ok";
+    } catch {
+      return false;
+    }
+  });
+  const [phoneGateValue, setPhoneGateValue] = useState("");
+  const [phoneGateError, setPhoneGateError] = useState("");
+  const [phoneGateLoading, setPhoneGateLoading] = useState(true);
+  const [registeredGatePhone, setRegisteredGatePhone] = useState("");
+
+  useEffect(() => {
+    let mounted = true;
+    setPhoneGateLoading(true);
+    setPhoneGateError("");
+    const phone = printReadLocalRegisteredPhone();
+    if (mounted) {
+      setRegisteredGatePhone(phone);
+      setPhoneGateLoading(false);
+    }
+    const onStorage = () => {
+      if (!mounted) return;
+      setRegisteredGatePhone(printReadLocalRegisteredPhone());
+    };
+    window.addEventListener("storage", onStorage);
+    return () => {
+      mounted = false;
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [tenantId]);
+
+  const verifyPhoneGate = () => {
+    const expected = printPhoneDigitsOnly(registeredGatePhone);
+    const actual = printPhoneDigitsOnly(phoneGateValue);
+    if (!expected) {
+      setPhoneGateError("لا يوجد رقم هاتف مسجل في إعدادات المدرسة.");
+      return;
+    }
+    if (!actual || actual !== expected) {
+      setPhoneGateError("رقم الهاتف غير مطابق للرقم المسجل.");
+      return;
+    }
+    try {
+      sessionStorage.setItem(`yr:phone-gate:task-print:${tenantId}`, "ok");
+    } catch {
+      // ignore
+    }
+    setPhoneGateAllowed(true);
+    setPhoneGateError("");
+  };
+
   const printAreaRef = useRef<HTMLDivElement | null>(null);
 
   const [run, setRun] = useState(() => loadRun(tenantId));
@@ -2578,6 +2820,21 @@ export default function TaskDistributionPrint() {
     window.setTimeout(() => {
       openPrintDialog();
     }, 650);
+  }
+
+  if (!phoneGateAllowed) {
+    return (
+      <PrintPhoneGateScreen
+        tenantId={tenantId}
+        registeredPhone={registeredGatePhone}
+        loading={phoneGateLoading}
+        error={phoneGateError}
+        value={phoneGateValue}
+        setValue={setPhoneGateValue}
+        onVerify={verifyPhoneGate}
+        onGoSettings={() => nav(`/t/${tenantId}/settings1`)}
+      />
+    );
   }
 
   return (

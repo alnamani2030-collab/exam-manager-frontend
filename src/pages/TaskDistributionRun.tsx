@@ -218,6 +218,205 @@ function readJsonSafe<T = any>(key: string): T | null {
 }
 
 
+
+
+/** ✅ Phone access gate helpers for sensitive school task distribution pages */
+const TASKRUN_SCHOOL_DATA_KEY = "exam-manager:school-data:v1";
+
+function taskRunPhoneDigitsOnly(value: unknown): string {
+  return String(value ?? "")
+    .replace(/[^\d٠-٩۰-۹]/g, "")
+    .replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)))
+    .replace(/[۰-۹]/g, (d) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)));
+}
+
+function taskRunMaskPhoneFirstLast(value: unknown): string {
+  const digits = taskRunPhoneDigitsOnly(value);
+  if (!digits) return "";
+  if (digits.length <= 2) return digits[0] ? `${digits[0]}x` : "";
+  return `${digits.slice(0, 1)}${"x".repeat(Math.max(1, digits.length - 2))}${digits.slice(-1)}`;
+}
+
+function taskRunPickRegisteredPhone(data: any): string {
+  if (!data || typeof data !== "object") return "";
+  const direct = [
+    data.phone,
+    data.phoneNumber,
+    data.mobile,
+    data.mobileNumber,
+    data.schoolPhone,
+    data.centerPhone,
+    data.contactPhone,
+    data.officialPhone,
+    data.settingsPhone,
+    data.registeredPhone,
+  ];
+  for (const value of direct) {
+    const digits = taskRunPhoneDigitsOnly(value);
+    if (digits) return digits;
+  }
+  return "";
+}
+
+function taskRunReadLocalRegisteredPhone(): string {
+  const candidates = [
+    TASKRUN_SCHOOL_DATA_KEY,
+    "exam-manager:settings1:school-data:v1",
+    "exam-manager:school-data:v1",
+    "exam-manager:school-settings:v1",
+    "exam-manager:settings:school:v1",
+  ];
+  for (const key of candidates) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw);
+      const fromRoot = taskRunPickRegisteredPhone(parsed);
+      if (fromRoot) return fromRoot;
+      const fromPayload = taskRunPickRegisteredPhone(parsed?.data || parsed?.settings || parsed?.center || parsed?.school || parsed?.config);
+      if (fromPayload) return fromPayload;
+    } catch {
+      // ignore malformed localStorage values
+    }
+  }
+  return "";
+}
+
+function TaskRunPhoneGateScreen(props: {
+  lang: "ar" | "en";
+  tenantId: string;
+  registeredPhone: string;
+  loading: boolean;
+  error: string;
+  value: string;
+  setValue: (value: string) => void;
+  onVerify: () => void;
+  onGoSettings: () => void;
+}) {
+  const isAr = props.lang === "ar";
+  const masked = taskRunMaskPhoneFirstLast(props.registeredPhone);
+  const title = isAr ? "التحقق من رقم الهاتف" : "Phone verification";
+  const intro = isAr
+    ? "للوصول إلى منصة تشغيل توزيع المهام، أدخل رقم الهاتف المسجل في إعدادات المدرسة."
+    : "To access the task distribution runner, enter the phone number registered in school settings.";
+  const noPhone = isAr
+    ? "لا يوجد رقم هاتف مسجل في إعدادات المدرسة. يرجى تسجيل الرقم أولًا."
+    : "No phone number is registered in school settings. Please register it first.";
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
+        direction: isAr ? "rtl" : "ltr",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 24,
+        background:
+          "radial-gradient(circle at top, rgba(212,175,55,.20), transparent 36%), linear-gradient(135deg,#fff8e1 0%,#fffdf7 55%,#f8ecd0 100%)",
+        color: "#000000",
+        fontWeight: 900,
+      }}
+    >
+      <div
+        style={{
+          width: "min(760px, 100%)",
+          border: "3px solid #d6b24a",
+          borderRadius: 28,
+          background: "rgba(255,255,255,.94)",
+          boxShadow: "0 22px 55px rgba(81,58,8,.18)",
+          padding: 28,
+          color: "#000000",
+          fontWeight: 900,
+        }}
+      >
+        <div style={{ display: "inline-flex", border: "1.5px solid #d6b24a", borderRadius: 999, padding: "8px 16px", background: "#fff8df", color: "#000000", fontWeight: 1000 }}>
+          {isAr ? "حماية الدخول" : "Access protection"}
+        </div>
+        <h1 style={{ margin: "18px 0 10px", color: "#000000", fontWeight: 1000, fontSize: 30 }}>{title}</h1>
+        <p style={{ margin: 0, color: "#000000", fontWeight: 900, lineHeight: 1.9 }}>{intro}</p>
+
+        <div style={{ marginTop: 18, display: "grid", gap: 12 }}>
+          <div style={{ border: "1.5px solid #e5cf87", borderRadius: 18, padding: 14, background: "#fffaf0", color: "#000000", fontWeight: 1000 }}>
+            {isAr ? "الرقم المسجل:" : "Registered phone:"}{" "}
+            <span style={{ color: "#000000", fontWeight: 1000 }}>{masked || (props.loading ? (isAr ? "جاري التحميل..." : "Loading...") : "—")}</span>
+          </div>
+
+          {!props.loading && !props.registeredPhone ? (
+            <div style={{ border: "2px solid #b91c1c", borderRadius: 18, padding: 14, background: "#fff1f2", color: "#000000", fontWeight: 1000 }}>
+              {noPhone}
+            </div>
+          ) : null}
+
+          <input
+            value={props.value}
+            onChange={(e) => props.setValue(e.target.value)}
+            inputMode="numeric"
+            placeholder={isAr ? "أدخل رقم الهاتف المسجل" : "Enter registered phone number"}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") props.onVerify();
+            }}
+            disabled={props.loading || !props.registeredPhone}
+            style={{
+              width: "100%",
+              boxSizing: "border-box",
+              border: "2px solid #d6b24a",
+              borderRadius: 18,
+              padding: "15px 18px",
+              fontSize: 18,
+              color: "#000000",
+              fontWeight: 1000,
+              outline: "none",
+              background: "#ffffff",
+            }}
+          />
+
+          {props.error ? (
+            <div style={{ border: "2px solid #b91c1c", borderRadius: 18, padding: 12, background: "#fff1f2", color: "#000000", fontWeight: 1000 }}>
+              {props.error}
+            </div>
+          ) : null}
+
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center", marginTop: 6 }}>
+            <button
+              type="button"
+              onClick={props.onVerify}
+              disabled={props.loading || !props.registeredPhone}
+              style={{
+                minWidth: 190,
+                border: "2px solid #b88700",
+                borderRadius: 18,
+                padding: "13px 20px",
+                background: "linear-gradient(180deg,#fff4c2,#d6a921)",
+                color: "#000000",
+                fontWeight: 1000,
+                cursor: props.loading || !props.registeredPhone ? "not-allowed" : "pointer",
+              }}
+            >
+              {isAr ? "دخول الصفحة" : "Open page"}
+            </button>
+            <button
+              type="button"
+              onClick={props.onGoSettings}
+              style={{
+                minWidth: 190,
+                border: "2px solid #111827",
+                borderRadius: 18,
+                padding: "13px 20px",
+                background: "#ffffff",
+                color: "#000000",
+                fontWeight: 1000,
+                cursor: "pointer",
+              }}
+            >
+              {isAr ? "العودة لإعدادات المدرسة" : "Back to school settings"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function persistDistributionState(tenantId: string, out: any) {
   // ✅ حماية حفظ نهائية: لا يتم حفظ أي مهمة أخرى لمعلم مفرّغ للتصحيح في نفس اليوم
   const safeRun = applyCorrectionFreeProtectionToRun(ensureExplicitTaskTypes(out || {}));
@@ -3187,6 +3386,58 @@ export default function TaskDistributionRun() {
   const tr = (ar: string, en: string) => (lang === "ar" ? ar : en);
   const translateSubject = (value: string) => translateSubjectValue(value, lang);
   const APP_NAME = lang === "ar" ? APP_NAME_AR : APP_NAME_EN;
+  const [phoneGateAllowed, setPhoneGateAllowed] = useState<boolean>(() => {
+    try {
+      return sessionStorage.getItem(`yr:phone-gate:task-run:${tenantId}`) === "ok";
+    } catch {
+      return false;
+    }
+  });
+  const [phoneGateValue, setPhoneGateValue] = useState("");
+  const [phoneGateError, setPhoneGateError] = useState("");
+  const [phoneGateLoading, setPhoneGateLoading] = useState(true);
+  const [registeredGatePhone, setRegisteredGatePhone] = useState("");
+
+  useEffect(() => {
+    let mounted = true;
+    setPhoneGateLoading(true);
+    setPhoneGateError("");
+    const phone = taskRunReadLocalRegisteredPhone();
+    if (mounted) {
+      setRegisteredGatePhone(phone);
+      setPhoneGateLoading(false);
+    }
+    const onStorage = () => {
+      if (!mounted) return;
+      setRegisteredGatePhone(taskRunReadLocalRegisteredPhone());
+    };
+    window.addEventListener("storage", onStorage);
+    return () => {
+      mounted = false;
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [tenantId]);
+
+  const verifyPhoneGate = () => {
+    const expected = taskRunPhoneDigitsOnly(registeredGatePhone);
+    const actual = taskRunPhoneDigitsOnly(phoneGateValue);
+    if (!expected) {
+      setPhoneGateError(tr("لا يوجد رقم هاتف مسجل في إعدادات المدرسة.", "No registered phone number was found in school settings."));
+      return;
+    }
+    if (!actual || actual !== expected) {
+      setPhoneGateError(tr("رقم الهاتف غير مطابق للرقم المسجل.", "The phone number does not match the registered number."));
+      return;
+    }
+    try {
+      sessionStorage.setItem(`yr:phone-gate:task-run:${tenantId}`, "ok");
+    } catch {
+      // ignore
+    }
+    setPhoneGateAllowed(true);
+    setPhoneGateError("");
+  };
+
 
   const [fsTeachers, setFsTeachers] = useState<any[]>([]);
   const [fsExams, setFsExams] = useState<any[]>([]);
@@ -5669,6 +5920,22 @@ const GOLD_SUB = "rgba(0,0,0,0.82)";
         : fairnessGap <= 2
           ? tr("عدالة جيدة", "Good fairness")
           : tr("تحتاج مراجعة", "Needs review");
+
+  if (!phoneGateAllowed) {
+    return (
+      <TaskRunPhoneGateScreen
+        lang={lang as "ar" | "en"}
+        tenantId={tenantId}
+        registeredPhone={registeredGatePhone}
+        loading={phoneGateLoading}
+        error={phoneGateError}
+        value={phoneGateValue}
+        setValue={setPhoneGateValue}
+        onVerify={verifyPhoneGate}
+        onGoSettings={() => nav(`/t/${tenantId}/settings1`)}
+      />
+    );
+  }
 
   return (
     <div style={page} className="task-run-black-text-scope">
