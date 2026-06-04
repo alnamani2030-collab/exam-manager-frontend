@@ -92,19 +92,12 @@ function readOfficialLogo() {
   }
 }
 
-function normalizePhoneForTeacherAccess(value: unknown) {
-  return String(value || "").replace(/\D/g, "").trim();
-}
-
-function maskPhoneForTeacherAccess(value: unknown) {
-  const normalized = normalizePhoneForTeacherAccess(value);
-  if (!normalized) return "";
-  if (normalized.length <= 2) return normalized;
-  return `${normalized.slice(0, 1)}${"x".repeat(Math.max(normalized.length - 2, 1))}${normalized.slice(-1)}`;
-}
-
 function normalizeTeacherAccessCode(value: unknown) {
   return String(value || "").replace(/\D/g, "").slice(0, 6);
+}
+
+function normalizeTeacherAccessEmailForCheck(value: unknown) {
+  return String(value || "").trim().toLowerCase();
 }
 
 function maskEmailForTeacherAccess(value: unknown) {
@@ -115,6 +108,57 @@ function maskEmailForTeacherAccess(value: unknown) {
   return `${local.slice(0, 1)}${"*".repeat(Math.max(local.length - 2, 3))}${local.slice(-1)}@${domain}`;
 }
 
+const TEACHER_ACCESS_LOCK_MINUTES = 5;
+
+function getTeacherAccessLockStorageKey(tenantId: string) {
+  return `exam-manager:teachers12-email-code-lock-until:${tenantId || "default"}`;
+}
+
+function formatTeacherAccessCountdown(totalSeconds: number) {
+  const safe = Math.max(0, Math.ceil(totalSeconds || 0));
+  const minutes = Math.floor(safe / 60);
+  const seconds = safe % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function getTeacherAccessLockFromError(error: any) {
+  const details = error?.details || error?.customData?.details || {};
+  const candidate =
+    details?.lockedUntilISO ||
+    details?.lockedUntil ||
+    details?.retryAtISO ||
+    details?.lockUntilISO ||
+    error?.lockedUntilISO ||
+    "";
+
+  const directMs = candidate ? Date.parse(String(candidate)) : NaN;
+  if (Number.isFinite(directMs) && directMs > Date.now()) return directMs;
+
+  const retryAfterSecondsRaw =
+    details?.retryAfterSeconds ??
+    details?.retryAfter ??
+    error?.retryAfterSeconds ??
+    error?.retryAfter;
+
+  const retryAfterSeconds = Number(retryAfterSecondsRaw);
+  if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
+    return Date.now() + retryAfterSeconds * 1000;
+  }
+
+  const message = String(error?.message || "");
+  const code = String(error?.code || "");
+  if (
+    code.includes("resource-exhausted") ||
+    message.includes("resource-exhausted") ||
+    message.includes("تجاوز عدد محاولات") ||
+    message.includes("too many") ||
+    message.includes("Too many")
+  ) {
+    return Date.now() + TEACHER_ACCESS_LOCK_MINUTES * 60 * 1000;
+  }
+
+  return 0;
+}
 
 function TeachersOfficialHeader({
   lang,
@@ -225,98 +269,183 @@ function TeachersOfficialHeader({
 // ✅ قائمة المواد
 const SUBJECT_OPTIONS_RAW = [
   "", 
-  "المجال الاول (التربية الاسلامية و اللغة العربية )  ",
-  "المجال الثاني ( الرياضيات و  العلوم ) ",
-  "التخصصات الإدارية ",
-   "التربية الإسلامية ",
-  "التربية الإسلامية 1-4",
-  "التربية الإسلامية 5-8",
-  "التربية الإسلامية 9-12",
- 
-  
-  "اللغة العربية ",
-  "اللغة العربية 1-4",
-  "اللغة العربية 5-8",
-  "اللغة العربية 9-12",
-  
-  "اللغة الإنجليزية ",
-  "اللغة الإنجليزية 1-4",
-  "اللغة الإنجليزية 5-8",
-  "اللغة الإنجليزية 9-12",
+  "التربية الإسلامية 1",
+  "التربية الإسلامية 2",
+  "التربية الإسلامية 3",
+  "التربية الإسلامية 4",
+  "التربية الإسلامية 5",
+  "التربية الإسلامية 6",
+  "التربية الإسلامية 7",
+  "التربية الإسلامية 8",
+  "التربية الإسلامية 9",
+  "التربية الإسلامية 10",
+  "التربية الإسلامية 11",
+  "التربية الإسلامية 12",
 
   
-  "الرياضيات ",
-  "الرياضيات 1-4",
-  "الرياضيات 5-8",
-  "الرياضيات 9-12",
+  "اللغة العربية 1",
+  "اللغة العربية 2",
+  "اللغة العربية 3",
+  "اللغة العربية 4",
+  "اللغة العربية 5",
+  "اللغة العربية 6",
+  "اللغة العربية 7",
+  "اللغة العربية 8",
+  "اللغة العربية 9",
+  "اللغة العربية 10",
+  "اللغة العربية 11",
+  "اللغة العربية 12",
 
-  "الرياضيات الأساسية ",
-  "الرياضيات المتقدمة ",
   
+  "اللغة الإنجليزية 1",
+  "اللغة الإنجليزية 2",
+  "اللغة الإنجليزية 3",
+  "اللغة الإنجليزية 4",
+  "اللغة الإنجليزية 5",
+  "اللغة الإنجليزية 6",
+  "اللغة الإنجليزية 7",
+  "اللغة الإنجليزية 8",
+  "اللغة الإنجليزية 9",
+  "اللغة الإنجليزية 10",
+  "اللغة الإنجليزية 11",
+  "اللغة الإنجليزية 12",
 
-  "الدراسات الاجتماعية ",
-  "الدراسات الاجتماعية 1-4",
-  "الدراسات الاجتماعية 5-8",
-  "الدراسات الاجتماعية 9-10",
   
-  "التاريخ والحضارة الإسلامية ",
-  "الجغرافيا الاقتصادية ",
-  "هذا وطني ",
- 
+  "الرياضيات 1",
+  "الرياضيات 2",
+  "الرياضيات 3",
+  "الرياضيات 4",
+  "الرياضيات 5",
+  "الرياضيات 6",
+  "الرياضيات 7",
+  "الرياضيات 8",
+  "الرياضيات 9",
+  "الرياضيات 10",
+  "الرياضيات 11",
+  "الرياضيات 12",
+  "الرياضيات الأساسية 11",
+  "الرياضيات المتقدمة 11",
+  "الرياضيات الأساسية 12",
+  "الرياضيات المتقدمة 12",
+
+  "الدراسات الاجتماعية 5",
+  "الدراسات الاجتماعية 6",
+  "الدراسات الاجتماعية 7",
+  "الدراسات الاجتماعية 8",
+  "الدراسات الاجتماعية 9",
+  "الدراسات الاجتماعية 10",
+  "التاريخ والحضارة الإسلامية 11",
+  "الجغرافيا الاقتصادية 11",
+  "هذا وطني 11",
+  "التاريخ والحضارة الإسلامية 12",
+  "الجغرافيا الاقتصادية 12",
+  "هذا وطني 12",
+
   
-  "العلوم ",
-  "العلوم 1-4",
-  "العلوم 5-8",
+  "العلوم 1",
+  "العلوم 2",
+  "العلوم 3",
   "العلوم 4",
-  "الفيزياء 9-12",
+  "العلوم 5",
+  "العلوم 6",
+  "العلوم 7",
+  "العلوم 8",
+  "الفيزياء 9",
+  "الفيزياء 10",
+  "الفيزياء 11",
+  "الفيزياء 12",
+  "الكيمياء 9",
+  "الكيمياء 10",
+  "الكيمياء 11",
+  "الكيمياء 12",
+  "الأحياء 9",
+  "الأحياء 10",
+  "الأحياء 11",
+  "الأحياء 12",
   
-  "الكيمياء 9-12",
- 
-  "الأحياء 9-12",
+   "العلوم البيئية 11",
+  "العلوم البيئية 12",
+
+"الرياضة المدرسية 1",
+"الرياضة المدرسية 2",
+"الرياضة المدرسية 3",
+"الرياضة المدرسية 4",
+"الرياضة المدرسية 5",
+"الرياضة المدرسية 6",
+"الرياضة المدرسية 7",
+"الرياضة المدرسية 8",
+"الرياضة المدرسية 9",
+"الرياضة المدرسية 10",
+ "الرياضة المدرسية 11",
+ "الرياضة المدرسية 12",
+
+"الفنون التشكيلية 1",
+"الفنون التشكيلية 2",
+"الفنون التشكيلية 3",
+"الفنون التشكيلية 4",
+"الفنون التشكيلية 5",
+"الفنون التشكيلية 6",
+"الفنون التشكيلية 7",
+"الفنون التشكيلية 8",
+"الفنون التشكيلية 9",
+"الفنون التشكيلية 10",
+"الفنون التشكيلية 11",
+"الفنون التشكيلية 12",
+
+"المهارات الموسيقية 1",
+"المهارات الموسيقية 2",
+"المهارات الموسيقية 3",
+"المهارات الموسيقية 4",
+"المهارات الموسيقية 5",
+"المهارات الموسيقية 6",
+"المهارات الموسيقية 7",
+"المهارات الموسيقية 8",
+"المهارات الموسيقية 9",
+"المهارات الموسيقية 10",
+"المهارات الموسيقية 11",
+"المهارات الموسيقية 12",
+
+"الهوية و المواطنة 1",
+"الهوية و المواطنة 2",
+"الهوية و المواطنة 3",
+"الهوية و المواطنة 4",
+
+"المهارات الحياتية 5",
+"المهارات الحياتية 6",
+"المهارات الحياتية 7",
+"المهارات الحياتية 8",
+"المهارات الحياتية 9",
+"المهارات الحياتية 10",
+"المهارات الحياتية 11",
+"المهارات الحيانية 12",
+
+"تقنية المعلومات 1",
+"تقنية المعلومات 2",
+"تقنية المعلومات 3",
+"تقنية المعلومات 4",
+"تقنية المعلومات 5",
+"تقنية المعلومات 6",
+"تقنية المعلومات 7",
+"تقنية المعلومات 8",
+"تقنية المعلومات 9",
+"تقنية المعلومات 10",
+"تقنية المعلومات 11",
+"تقنية المعلومات 12",
+
+  "مواد التخصصات الهندسية والصناعية 12",
+  "مهارات اللغة الإنجليزية 11",
+  "مهارات اللغة الإنجليزية 12",
   
-  
-   "العلوم البيئية 11-12",
- 
-
-"الرياضة المدرسية ",
-"الرياضة المدرسية 1-4",
-"الرياضة المدرسية 5-8",
-"الرياضة المدرسية 9-12",
-"الفنون التشكيلية ",
-"الفنون التشكيلية 1-4",
-"الفنون التشكيلية 5-8",
-"الفنون التشكيلية 9-12",
-
-"الفنون التشكيلية ",
-"الفنون التشكيلية 1-4",
-"الفنون التشكيلية 5-8",
-"الفنون التشكيلية 9-12",
-
-"المهارات الموسيقية ",
-"المهارات الموسيقية 1-4",
-"المهارات الموسيقية 5-8",
-"المهارات الموسيقية 9-12",
-
-"الهوية و المواطنة 1-4",
-
-"المهارات الحياتية 5-8",
-"المهارات الحياتية 8-10",
-
-
-"تقنية المعلومات ",
-"تقنية المعلومات 1-4",
-"تقنية المعلومات 5-8",
-"تقنية المعلومات 9-12",
-
-  "مواد التخصصات الهندسية والصناعية ",
-  "مهارات اللغة الإنجليزية ",
-  "مهارات اللغة الإنجليزية ",
-  
-  "السفر و السياحة و إدارة الأعمال و تقنية المعلومات ",
-  "اللغة الفرنسية 9-12",
-  "اللغة الألمانية 9-12",
-  "اللغة الصينية 9-12",
-
+  "السفر و السياحة و إدارة الأعمال و تقنية المعلومات 12",
+  "اللغة الفرنسية 10",
+  "اللغة الألمانية 10",
+  "اللغة الصينية 10",
+  "اللغة الفرنسية 11",
+  "اللغة الألمانية 11",
+  "اللغة الصينية 11",
+  "اللغة الفرنسية 12",
+  "اللغة الألمانية 12",
+  "اللغة الصينية 12",
   
 ];
 
@@ -458,7 +587,7 @@ function safeParseTeachers(v: string | null): Teacher[] {
     return arr
       .map((x) => ({
         id: String(x.id ?? "").trim() || genId(),
-        employeeNo: normalizeEmployeeNoDigits(x.employeeNo),
+        employeeNo: String(x.employeeNo ?? "").trim(),
         fullName: String(x.fullName ?? "").trim(),
         subject1: String(x.subject1 ?? "").trim(),
         subject2: String(x.subject2 ?? "").trim(),
@@ -479,7 +608,7 @@ function normalizeTeachersList(rows: any[]): Teacher[] {
   return (Array.isArray(rows) ? rows : [])
     .map((x) => ({
       id: String(x.id ?? "").trim() || genId(),
-      employeeNo: normalizeEmployeeNoDigits(x.employeeNo),
+      employeeNo: String(x.employeeNo ?? "").trim(),
       fullName: String(x.fullName ?? x.name ?? "").trim(),
       subject1: String(x.subject1 ?? "").trim(),
       subject2: String(x.subject2 ?? "").trim(),
@@ -566,30 +695,6 @@ function normalizeHeader(h: string) {
     .replace(/[^\u0600-\u06FFa-z0-9]/g, "");
 }
 
-function normalizeEmployeeNoDigits(value: any) {
-  return String(value ?? "")
-    .trim()
-    .replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)))
-    .replace(/[۰-۹]/g, (d) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)))
-    .replace(/\s+/g, "");
-}
-
-function isEmployeeNoDigitsOnly(value: any) {
-  const v = normalizeEmployeeNoDigits(value);
-  return /^\d+$/.test(v);
-}
-
-function employeeNoInputDigitsOnly(value: any) {
-  return normalizeEmployeeNoDigits(value).replace(/\D+/g, "");
-}
-
-function maskEmployeeNoForDisplay(value: any) {
-  const v = normalizeEmployeeNoDigits(value);
-  if (!v) return "";
-  if (v.length <= 4) return v;
-  return `${v.slice(0, 2)}${"x".repeat(v.length - 4)}${v.slice(-2)}`;
-}
-
 function getCell(row: any, keys: string[]) {
   for (const k of keys) {
     if (row[k] != null && String(row[k]).trim() !== "") return String(row[k]).trim();
@@ -631,7 +736,7 @@ function parseTeachersFromObjects(rows: any[]): Teacher[] {
 
       return {
         id: genId(),
-        employeeNo: normalizeEmployeeNoDigits(employeeNo),
+        employeeNo: employeeNo.trim(),
         fullName: fullName.trim(),
         subject1: subject1.trim(),
         subject2: subject2.trim(),
@@ -992,13 +1097,19 @@ export default function Teachers() {
 
   const [officialCenterData, setOfficialCenterData] = useState<ExamCenterOfficialData>(() => readOfficialExamCenterData());
   const [officialLogo, setOfficialLogo] = useState<string>(() => readOfficialLogo());
+
   const [teacherAccessCode, setTeacherAccessCode] = useState("");
   const [teacherAccessCodeSent, setTeacherAccessCodeSent] = useState(false);
   const [teacherAccessBusy, setTeacherAccessBusy] = useState(false);
   const [teacherAccessMessage, setTeacherAccessMessage] = useState("");
   const [teacherAccessError, setTeacherAccessError] = useState("");
+  const [teacherAccessConfirmEmail, setTeacherAccessConfirmEmail] = useState("");
+  const [teacherAccessEmailConfirmed, setTeacherAccessEmailConfirmed] = useState(false);
   const [teacherAccessVerified, setTeacherAccessVerified] = useState(false);
+  const [teacherAccessLockedUntilMs, setTeacherAccessLockedUntilMs] = useState(0);
+  const [teacherAccessLockRemainingSeconds, setTeacherAccessLockRemainingSeconds] = useState(0);
   const teacherAccessSessionKey = useMemo(() => `exam-manager:teachers12-email-code-access:${tenantId}`, [tenantId]);
+  const teacherAccessLockStorageKey = useMemo(() => getTeacherAccessLockStorageKey(tenantId), [tenantId]);
   const currentUserEmail = useMemo(
     () => String(auth?.user?.email || auth?.profile?.email || auth?.userProfile?.email || "").trim(),
     [auth?.user?.email, auth?.profile?.email, auth?.userProfile?.email]
@@ -1013,14 +1124,105 @@ export default function Teachers() {
     setTeacherAccessBusy(false);
     setTeacherAccessMessage("");
     setTeacherAccessError("");
-  }, [teacherAccessSessionKey]);
+    setTeacherAccessConfirmEmail("");
+    setTeacherAccessEmailConfirmed(false);
+
+    const storedLockMs = Number(window.localStorage.getItem(teacherAccessLockStorageKey) || "0");
+    if (Number.isFinite(storedLockMs) && storedLockMs > Date.now()) {
+      setTeacherAccessLockedUntilMs(storedLockMs);
+      setTeacherAccessLockRemainingSeconds(Math.ceil((storedLockMs - Date.now()) / 1000));
+    } else {
+      window.localStorage.removeItem(teacherAccessLockStorageKey);
+      setTeacherAccessLockedUntilMs(0);
+      setTeacherAccessLockRemainingSeconds(0);
+    }
+  }, [teacherAccessSessionKey, teacherAccessLockStorageKey]);
+
+  useEffect(() => {
+    if (!teacherAccessLockedUntilMs) {
+      setTeacherAccessLockRemainingSeconds(0);
+      return;
+    }
+
+    const updateRemaining = () => {
+      const remaining = Math.ceil((teacherAccessLockedUntilMs - Date.now()) / 1000);
+      if (remaining <= 0) {
+        setTeacherAccessLockedUntilMs(0);
+        setTeacherAccessLockRemainingSeconds(0);
+        setTeacherAccessError("");
+        setTeacherAccessMessage("");
+        if (typeof window !== "undefined") {
+          window.localStorage.removeItem(teacherAccessLockStorageKey);
+        }
+        return;
+      }
+      setTeacherAccessLockRemainingSeconds(remaining);
+    };
+
+    updateRemaining();
+    const interval = window.setInterval(updateRemaining, 1000);
+    return () => window.clearInterval(interval);
+  }, [teacherAccessLockedUntilMs, teacherAccessLockStorageKey]);
+
+  const applyTeacherAccessLock = useCallback(
+    (lockedUntilMs: number) => {
+      if (!lockedUntilMs || lockedUntilMs <= Date.now()) return;
+
+      setTeacherAccessLockedUntilMs(lockedUntilMs);
+      setTeacherAccessLockRemainingSeconds(Math.ceil((lockedUntilMs - Date.now()) / 1000));
+      setTeacherAccessEmailConfirmed(false);
+      setTeacherAccessCodeSent(false);
+      setTeacherAccessCode("");
+      setTeacherAccessBusy(false);
+      setTeacherAccessMessage("");
+      setTeacherAccessError(
+        tr(
+          "تم تجاوز عدد محاولات التحقق. يمكنك طلب رمز جديد بعد انتهاء العد التنازلي.",
+          "Too many failed verification attempts. You can request a new code after the countdown ends."
+        )
+      );
+
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(teacherAccessLockStorageKey, String(lockedUntilMs));
+      }
+    },
+    [teacherAccessLockStorageKey, tr]
+  );
 
   const sendTeacherAccessCode = useCallback(async () => {
+    if (teacherAccessLockedUntilMs && teacherAccessLockedUntilMs > Date.now()) {
+      setTeacherAccessError(
+        tr(
+          "تم تجاوز عدد محاولات التحقق. لا يمكن طلب رمز جديد حتى انتهاء العد التنازلي.",
+          "Too many failed verification attempts. You cannot request a new code until the countdown ends."
+        )
+      );
+      return;
+    }
+
     if (!tenantId) {
       setTeacherAccessError(tr("معرف المركز غير متوفر.", "Center ID is missing."));
       return;
     }
 
+    const expectedEmail = normalizeTeacherAccessEmailForCheck(currentUserEmail);
+    const enteredEmail = normalizeTeacherAccessEmailForCheck(teacherAccessConfirmEmail);
+
+    if (!expectedEmail) {
+      setTeacherAccessEmailConfirmed(false);
+      setTeacherAccessError(tr("البريد الإلكتروني المسجل للحساب غير متوفر.", "The account email is unavailable."));
+      return;
+    }
+
+    if (!enteredEmail || enteredEmail !== expectedEmail) {
+      setTeacherAccessEmailConfirmed(false);
+      setTeacherAccessCodeSent(false);
+      setTeacherAccessCode("");
+      setTeacherAccessError(tr("البريد الإلكتروني غير مطابق للحساب الحالي. لن يتم إرسال رمز الدخول.", "The email does not match the current account. The access code will not be sent."));
+      return;
+    }
+
+    setTeacherAccessEmailConfirmed(true);
     setTeacherAccessBusy(true);
     setTeacherAccessError("");
     setTeacherAccessMessage("");
@@ -1033,6 +1235,9 @@ export default function Teachers() {
         pageLabel: "مركز إدارة بيانات الكادر التعليمي",
       });
       const data = (result.data || {}) as any;
+      if (typeof window !== "undefined") window.localStorage.removeItem(teacherAccessLockStorageKey);
+      setTeacherAccessLockedUntilMs(0);
+      setTeacherAccessLockRemainingSeconds(0);
       setTeacherAccessCodeSent(true);
       setTeacherAccessMessage(
         data?.message ||
@@ -1043,16 +1248,31 @@ export default function Teachers() {
       );
     } catch (error: any) {
       console.error("sendTeacherAccessCode failed:", error);
-      setTeacherAccessError(
-        error?.message ||
-          tr("تعذر إرسال رمز الدخول إلى البريد الإلكتروني.", "Failed to send the access code.")
-      );
+      const lockedUntilMs = getTeacherAccessLockFromError(error);
+      if (lockedUntilMs) {
+        applyTeacherAccessLock(lockedUntilMs);
+      } else {
+        setTeacherAccessError(
+          error?.message ||
+            tr("تعذر إرسال رمز الدخول إلى البريد الإلكتروني.", "Failed to send the access code.")
+        );
+      }
     } finally {
       setTeacherAccessBusy(false);
     }
-  }, [tenantId, tr]);
+  }, [tenantId, currentUserEmail, teacherAccessConfirmEmail, teacherAccessLockedUntilMs, teacherAccessLockStorageKey, applyTeacherAccessLock, tr]);
 
   const verifyTeacherAccessCode = useCallback(async () => {
+    if (teacherAccessLockedUntilMs && teacherAccessLockedUntilMs > Date.now()) {
+      setTeacherAccessError(
+        tr(
+          "تم تجاوز عدد محاولات التحقق. انتظر انتهاء العد التنازلي.",
+          "Too many failed verification attempts. Wait until the countdown ends."
+        )
+      );
+      return;
+    }
+
     const code = normalizeTeacherAccessCode(teacherAccessCode);
     if (code.length !== 6) {
       setTeacherAccessError(tr("أدخل رمزًا مكونًا من 6 أرقام.", "Enter a 6-digit code."));
@@ -1071,19 +1291,27 @@ export default function Teachers() {
       } catch {
         // Ignore storage failures; the current state still unlocks the page.
       }
+      if (typeof window !== "undefined") window.localStorage.removeItem(teacherAccessLockStorageKey);
+      setTeacherAccessLockedUntilMs(0);
+      setTeacherAccessLockRemainingSeconds(0);
       setTeacherAccessVerified(true);
       setTeacherAccessCode("");
       setTeacherAccessMessage(tr("تم التحقق بنجاح.", "Verified successfully."));
     } catch (error: any) {
       console.error("verifyTeacherAccessCode failed:", error);
-      setTeacherAccessError(
-        error?.message ||
-          tr("رمز الدخول غير صحيح أو انتهت صلاحيته.", "The code is invalid or expired.")
-      );
+      const lockedUntilMs = getTeacherAccessLockFromError(error);
+      if (lockedUntilMs) {
+        applyTeacherAccessLock(lockedUntilMs);
+      } else {
+        setTeacherAccessError(
+          error?.message ||
+            tr("رمز الدخول غير صحيح أو انتهت صلاحيته.", "The code is invalid or expired.")
+        );
+      }
     } finally {
       setTeacherAccessBusy(false);
     }
-  }, [teacherAccessCode, tenantId, teacherAccessSessionKey, tr]);
+  }, [teacherAccessCode, tenantId, teacherAccessSessionKey, teacherAccessLockStorageKey, teacherAccessLockedUntilMs, applyTeacherAccessLock, tr]);
 
   useEffect(() => {
     const refreshOfficialData = () => {
@@ -1151,6 +1379,7 @@ export default function Teachers() {
   }, [tenantId]);
 
   useEffect(() => {
+    if (!teacherAccessVerified) return;
     let mounted = true;
 
     async function loadCloudTeachers() {
@@ -1228,7 +1457,7 @@ export default function Teachers() {
     return () => {
       mounted = false;
     };
-  }, [tenantId, currentUserId, tr]);
+  }, [tenantId, currentUserId, tr, teacherAccessVerified]);
 
   const [query, setQuery] = useState("");
   const [adding, setAdding] = useState(false);
@@ -1486,7 +1715,7 @@ export default function Teachers() {
     const candidates = findDuplicates(employeeNo, ignoreId);
     setDupModal({
       open: true,
-      employeeNo: normalizeEmployeeNoDigits(employeeNo),
+      employeeNo: employeeNo.trim(),
       candidates,
       pending,
       context,
@@ -1501,16 +1730,15 @@ export default function Teachers() {
   }
 
   function saveAdd() {
-    const preparedTeacher = { ...newTeacher, employeeNo: normalizeEmployeeNoDigits(newTeacher.employeeNo) };
-    const basic = validateBasics(preparedTeacher);
+    const basic = validateBasics(newTeacher);
     if (!basic.ok) return alert(basic.msg);
 
-    const dups = findDuplicates(preparedTeacher.employeeNo, null);
+    const dups = findDuplicates(newTeacher.employeeNo, null);
     if (dups.length) {
-      return openDupModal(preparedTeacher.employeeNo, null, { ...preparedTeacher }, "add");
+      return openDupModal(newTeacher.employeeNo, null, { ...newTeacher }, "add");
     }
 
-    setTeachers((prev) => [{ ...preparedTeacher, id: preparedTeacher.id || genId() }, ...prev]);
+    setTeachers((prev) => [{ ...newTeacher, id: newTeacher.id || genId() }, ...prev]);
     setAdding(false);
     setNewTeacher({ ...emptyTeacher, id: genId() });
   }
@@ -1518,23 +1746,22 @@ export default function Teachers() {
   function startEdit(t: Teacher) {
     setAdding(false);
     setEditingId(t.id);
-    setEdit({ ...t, employeeNo: normalizeEmployeeNoDigits(t.employeeNo) });
+    setEdit({ ...t });
     setTimeout(() => topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
   }
 
   function saveEdit() {
     if (!editingId) return;
 
-    const preparedTeacher = { ...edit, employeeNo: normalizeEmployeeNoDigits(edit.employeeNo) };
-    const basic = validateBasics(preparedTeacher);
+    const basic = validateBasics(edit);
     if (!basic.ok) return alert(basic.msg);
 
-    const dups = findDuplicates(preparedTeacher.employeeNo, editingId);
+    const dups = findDuplicates(edit.employeeNo, editingId);
     if (dups.length) {
-      return openDupModal(preparedTeacher.employeeNo, editingId, { ...preparedTeacher }, "edit");
+      return openDupModal(edit.employeeNo, editingId, { ...edit }, "edit");
     }
 
-    setTeachers((prev) => prev.map((t) => (t.id === editingId ? { ...preparedTeacher, id: editingId } : t)));
+    setTeachers((prev) => prev.map((t) => (t.id === editingId ? { ...edit, id: editingId } : t)));
     setEditingId(null);
     setEdit({ ...emptyTeacher, id: "" });
   }
@@ -1640,19 +1867,19 @@ export default function Teachers() {
   function mergeImported(incoming: Teacher[]) {
     if (!incoming.length) return alert(tr("لا توجد بيانات صالحة للاستيراد.", "No valid data found for import."));
 
-    const existingByNo = new Map(teachers.map((t) => [normalizeEmployeeNoDigits(t.employeeNo), t]));
+    const existingByNo = new Map(teachers.map((t) => [t.employeeNo.trim(), t]));
     const next = [...teachers];
 
     for (const t of incoming) {
-      const key = normalizeEmployeeNoDigits(t.employeeNo);
+      const key = t.employeeNo.trim();
       if (!key) continue;
 
       if (existingByNo.has(key)) {
         const old = existingByNo.get(key)!;
         const ok = confirm(
           tr(
-            `⚠️ الرقم الوظيفي (${maskEmployeeNoForDisplay(key)}) موجود بالفعل باسم: (${old.fullName}).\nهل تريد استبدال البيانات بالاسم الجديد: (${t.fullName}) ؟`,
-            `⚠️ Employee number (${maskEmployeeNoForDisplay(key)}) already exists under: (${old.fullName}).\nDo you want to replace it with the new name: (${t.fullName})?`
+            `⚠️ الرقم الوظيفي (${key}) موجود بالفعل باسم: (${old.fullName}).\nهل تريد استبدال البيانات بالاسم الجديد: (${t.fullName}) ؟`,
+            `⚠️ Employee number (${key}) already exists under: (${old.fullName}).\nDo you want to replace it with the new name: (${t.fullName})?`
           )
         );
         if (ok) {
@@ -1837,15 +2064,12 @@ export default function Teachers() {
               <div style={{ fontWeight: 1000, marginBottom: 6, color: "#000000" }}>{tr("الرقم الوظيفي", "Employee Number")}</div>
               <input
                 style={inputStyle}
-                inputMode="numeric"
-                pattern="[0-9]*"
                 value={adding ? newTeacher.employeeNo : edit.employeeNo}
-                onChange={(e) => {
-                  const employeeNo = employeeNoInputDigitsOnly(e.target.value);
+                onChange={(e) =>
                   adding
-                    ? setNewTeacher({ ...newTeacher, employeeNo })
-                    : setEdit({ ...edit, employeeNo });
-                }}
+                    ? setNewTeacher({ ...newTeacher, employeeNo: e.target.value })
+                    : setEdit({ ...edit, employeeNo: e.target.value })
+                }
               />
             </div>
 
@@ -1953,6 +2177,8 @@ export default function Teachers() {
   };
 
   if (!teacherAccessVerified) {
+    const isLocked = Boolean(teacherAccessLockedUntilMs && teacherAccessLockRemainingSeconds > 0);
+
     return (
       <div style={pageStyle} ref={topRef} className="teachers12PageRoot teachers12PreviousChangesScope">
         <style>{`
@@ -1976,103 +2202,192 @@ export default function Teachers() {
           <div
             style={{
               ...modalCard,
-              maxWidth: 660,
+              maxWidth: 760,
               textAlign: isRTL ? "right" : "left",
               direction: isRTL ? "rtl" : "ltr",
               color: "#000000",
               fontWeight: 1000,
             }}
           >
-            <div style={{ fontSize: 23, fontWeight: 1000, marginBottom: 8, color: "#000000" }}>
+            <div style={{ fontSize: 25, fontWeight: 1000, marginBottom: 8, color: "#000000", textAlign: "center" }}>
               {tr("تحقق برمز البريد لفتح مركز إدارة بيانات الكادر التعليمي", "Email-code verification required to open teaching staff data management")}
             </div>
-            <div style={{ fontSize: 15, fontWeight: 1000, lineHeight: 1.9, color: "#000000", marginBottom: 12 }}>
+            <div style={{ fontSize: 16, fontWeight: 1000, lineHeight: 1.9, color: "#000000", marginBottom: 12, textAlign: "center" }}>
               {tr(
-                `اضغط زر إرسال الرمز، ثم أدخل رمز التحقق المكون من 6 أرقام المرسل إلى بريد الحساب${maskedCurrentUserEmail ? ` (${maskedCurrentUserEmail})` : ""}.`,
-                `Send the code, then enter the 6-digit verification code sent to the account email${maskedCurrentUserEmail ? ` (${maskedCurrentUserEmail})` : ""}.`
+                `أدخل البريد الإلكتروني الصحيح للحساب أولًا، ثم اطلب رمز الدخول المرسل إلى البريد${maskedCurrentUserEmail ? ` (${maskedCurrentUserEmail})` : ""}.`,
+                `Enter the correct account email first, then request the access code sent to email${maskedCurrentUserEmail ? ` (${maskedCurrentUserEmail})` : ""}.`
               )}
             </div>
 
-            <input
-              className="teachers12EmailCodeInput"
-              value={teacherAccessCode}
-              onChange={(event) => {
-                setTeacherAccessCode(normalizeTeacherAccessCode(event.target.value));
-                setTeacherAccessError("");
-                setTeacherAccessMessage("");
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") void verifyTeacherAccessCode();
-              }}
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              placeholder={tr("أدخل رمز التحقق المرسل إلى البريد", "Enter the verification code sent to email")}
-              style={{
-                ...inputStyle,
-                width: "100%",
-                marginTop: 8,
-                color: "#000000",
-                fontWeight: 1000,
-                WebkitTextFillColor: "#000000",
-              }}
-              disabled={!teacherAccessCodeSent || teacherAccessBusy}
-            />
+            {isLocked ? (
+              <>
+                <div
+                  style={{
+                    marginTop: 18,
+                    border: "3px solid #dc2626",
+                    background: "#fff1f2",
+                    color: "#000000",
+                    borderRadius: 20,
+                    padding: "24px 18px",
+                    fontWeight: 1000,
+                    lineHeight: 1.9,
+                    textAlign: "center",
+                  }}
+                >
+                  <div style={{ fontSize: 20, fontWeight: 1000, color: "#000000" }}>
+                    {tr("تم تجاوز عدد محاولات التحقق.", "Too many failed verification attempts.")}
+                  </div>
+                  <div style={{ fontSize: 17, fontWeight: 1000, color: "#000000", marginTop: 8 }}>
+                    {tr("يمكنك طلب رمز جديد بعد انتهاء العد التنازلي.", "You can request a new code after the countdown ends.")}
+                  </div>
+                  <div style={{ fontSize: 38, fontWeight: 1000, color: "#b91c1c", marginTop: 14 }}>
+                    {formatTeacherAccessCountdown(teacherAccessLockRemainingSeconds)}
+                  </div>
+                </div>
 
-            {teacherAccessMessage ? (
-              <div
-                style={{
-                  marginTop: 12,
-                  border: "2px solid #16a34a",
-                  background: "#f0fdf4",
-                  color: "#000000",
-                  borderRadius: 14,
-                  padding: "10px 12px",
-                  fontWeight: 1000,
-                  lineHeight: 1.7,
-                }}
-              >
-                {teacherAccessMessage}
-              </div>
-            ) : null}
+                <div
+                  style={{
+                    marginTop: 12,
+                    border: "2px solid #dc2626",
+                    background: "#fef2f2",
+                    color: "#000000",
+                    borderRadius: 14,
+                    padding: "10px 12px",
+                    fontWeight: 1000,
+                    lineHeight: 1.7,
+                    textAlign: "center",
+                  }}
+                >
+                  {tr(
+                    "تم إيقاف طلب الرمز والتحقق مؤقتًا حتى انتهاء العد التنازلي.",
+                    "Code requests and verification are temporarily disabled until the countdown ends."
+                  )}
+                </div>
 
-            {teacherAccessError ? (
-              <div
-                style={{
-                  marginTop: 12,
-                  border: "2px solid #dc2626",
-                  background: "#fef2f2",
-                  color: "#000000",
-                  borderRadius: 14,
-                  padding: "10px 12px",
-                  fontWeight: 1000,
-                  lineHeight: 1.7,
-                }}
-              >
-                {teacherAccessError}
-              </div>
-            ) : null}
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end", marginTop: 16 }}>
+                  <button type="button" style={btn("#fffdf7", "#000000")} onClick={() => history.back()}>
+                    {tr("رجوع", "Back")}
+                  </button>
+                  <button type="button" style={btn("#e5e7eb", "#000000")} disabled>
+                    {tr(`انتظر ${formatTeacherAccessCountdown(teacherAccessLockRemainingSeconds)}`, `Wait ${formatTeacherAccessCountdown(teacherAccessLockRemainingSeconds)}`)}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <input
+                  className="teachers12EmailCodeInput"
+                  value={teacherAccessConfirmEmail}
+                  onChange={(event) => {
+                    setTeacherAccessConfirmEmail(event.target.value);
+                    setTeacherAccessEmailConfirmed(false);
+                    setTeacherAccessCodeSent(false);
+                    setTeacherAccessCode("");
+                    setTeacherAccessError("");
+                    setTeacherAccessMessage("");
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") void sendTeacherAccessCode();
+                  }}
+                  inputMode="email"
+                  autoComplete="email"
+                  placeholder={tr("أدخل البريد الإلكتروني المرتبط بالحساب", "Enter the account email")}
+                  style={{
+                    ...inputStyle,
+                    width: "100%",
+                    marginTop: 8,
+                    color: "#000000",
+                    fontWeight: 1000,
+                    WebkitTextFillColor: "#000000",
+                    direction: "ltr",
+                  }}
+                  disabled={teacherAccessBusy}
+                />
 
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end", marginTop: 16 }}>
-              <button type="button" style={btn("#fffdf7", "#000000")} onClick={() => history.back()} disabled={teacherAccessBusy}>
-                {tr("رجوع", "Back")}
-              </button>
-              <button
-                type="button"
-                style={btn("#3b82f6", "#000000")}
-                onClick={() => void sendTeacherAccessCode()}
-                disabled={teacherAccessBusy}
-              >
-                {teacherAccessBusy ? tr("يرجى الانتظار...", "Please wait...") : tr("إرسال رمز الدخول إلى البريد", "Send access code to email")}
-              </button>
-              <button
-                type="button"
-                style={btn(teacherAccessCodeSent ? "#10b981" : "#94a3b8", "#000000")}
-                onClick={() => void verifyTeacherAccessCode()}
-                disabled={!teacherAccessCodeSent || teacherAccessBusy}
-              >
-                {tr("تحقق وفتح الصفحة", "Verify and open page")}
-              </button>
-            </div>
+                {teacherAccessEmailConfirmed && teacherAccessCodeSent ? (
+                  <input
+                    className="teachers12EmailCodeInput"
+                    value={teacherAccessCode}
+                    onChange={(event) => {
+                      setTeacherAccessCode(normalizeTeacherAccessCode(event.target.value));
+                      setTeacherAccessError("");
+                      setTeacherAccessMessage("");
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") void verifyTeacherAccessCode();
+                    }}
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    placeholder={tr("أدخل رمز التحقق المرسل إلى البريد", "Enter the verification code sent to email")}
+                    style={{
+                      ...inputStyle,
+                      width: "100%",
+                      marginTop: 8,
+                      color: "#000000",
+                      fontWeight: 1000,
+                      WebkitTextFillColor: "#000000",
+                    }}
+                    disabled={!teacherAccessEmailConfirmed || !teacherAccessCodeSent || teacherAccessBusy}
+                  />
+                ) : null}
+
+                {teacherAccessMessage ? (
+                  <div
+                    style={{
+                      marginTop: 12,
+                      border: "2px solid #16a34a",
+                      background: "#f0fdf4",
+                      color: "#000000",
+                      borderRadius: 14,
+                      padding: "10px 12px",
+                      fontWeight: 1000,
+                      lineHeight: 1.7,
+                    }}
+                  >
+                    {teacherAccessMessage}
+                  </div>
+                ) : null}
+
+                {teacherAccessError ? (
+                  <div
+                    style={{
+                      marginTop: 12,
+                      border: "2px solid #dc2626",
+                      background: "#fef2f2",
+                      color: "#000000",
+                      borderRadius: 14,
+                      padding: "10px 12px",
+                      fontWeight: 1000,
+                      lineHeight: 1.7,
+                    }}
+                  >
+                    {teacherAccessError}
+                  </div>
+                ) : null}
+
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end", marginTop: 16 }}>
+                  <button type="button" style={btn("#fffdf7", "#000000")} onClick={() => history.back()} disabled={teacherAccessBusy}>
+                    {tr("رجوع", "Back")}
+                  </button>
+                  <button
+                    type="button"
+                    style={btn("#3b82f6", "#000000")}
+                    onClick={() => void sendTeacherAccessCode()}
+                    disabled={teacherAccessBusy}
+                  >
+                    {teacherAccessBusy ? tr("يرجى الانتظار...", "Please wait...") : teacherAccessCodeSent ? tr("إعادة إرسال الرمز", "Resend code") : tr("تأكيد البريد وإرسال رمز الدخول", "Confirm email and send code")}
+                  </button>
+                  <button
+                    type="button"
+                    style={btn(teacherAccessEmailConfirmed && teacherAccessCodeSent ? "#10b981" : "#94a3b8", "#000000")}
+                    onClick={() => void verifyTeacherAccessCode()}
+                    disabled={!teacherAccessEmailConfirmed || !teacherAccessCodeSent || teacherAccessBusy}
+                  >
+                    {tr("تحقق وفتح الصفحة", "Verify and open page")}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -2396,8 +2711,8 @@ export default function Teachers() {
             </div>
             <div style={{ opacity: 0.95, marginBottom: 12, lineHeight: 1.8 }}>
               {tr(
-                `الرقم الوظيفي ${maskEmployeeNoForDisplay(dupModal.employeeNo)} مستخدم بالفعل.\nإمّا تغيّر الرقم، أو تختار اسم من الموجودين بنفس الرقم لاستبدال بياناته بالبيانات الحالية.`,
-                `Employee number ${maskEmployeeNoForDisplay(dupModal.employeeNo)} is already in use.\nEither change the number, or choose an existing name with the same number to replace its data with the current data.`
+                `الرقم الوظيفي ${dupModal.employeeNo} مستخدم بالفعل.\nإمّا تغيّر الرقم، أو تختار اسم من الموجودين بنفس الرقم لاستبدال بياناته بالبيانات الحالية.`,
+                `Employee number ${dupModal.employeeNo} is already in use.\nEither change the number, or choose an existing name with the same number to replace its data with the current data.`
               )}
             </div>
 
@@ -2414,7 +2729,7 @@ export default function Teachers() {
                   {dupModal.candidates.map((c) => (
                     <tr key={c.id}>
                       <td style={tdStyle}>{c.fullName}</td>
-                      <td style={tdStyle} title={maskEmployeeNoForDisplay(c.employeeNo)}>{maskEmployeeNoForDisplay(c.employeeNo)}</td>
+                      <td style={tdStyle}>{c.employeeNo}</td>
                       <td style={tdStyle}>
                         <button
                           style={btn("#f59e0b", "#000000")}
@@ -2617,7 +2932,7 @@ export default function Teachers() {
               ) : (
                 filtered.map((t) => (
                   <tr key={t.id}>
-                    <td style={tdStyle} className="col-emp" title={maskEmployeeNoForDisplay(t.employeeNo)}>{maskEmployeeNoForDisplay(t.employeeNo)}</td>
+                    <td style={tdStyle} className="col-emp">{t.employeeNo}</td>
                     <td style={{ ...tdStyle, color: "#000000", fontWeight: 1000 }} className="col-name"><span style={{ color: "#000000", fontWeight: 900, WebkitTextFillColor: "#000000", textShadow: "none" }}>{t.fullName}</span></td>
                     <td style={tdStyle}>{translateSubject(t.subject1)}</td>
                     <td style={tdStyle}>{translateSubject(t.subject2)}</td>
@@ -2736,7 +3051,7 @@ export default function Teachers() {
               ) : (
                 filtered.map((t) => (
                   <tr key={t.id}>
-                    <td style={tdStyle} className="col-emp" title={maskEmployeeNoForDisplay(t.employeeNo)}>{maskEmployeeNoForDisplay(t.employeeNo)}</td>
+                    <td style={tdStyle} className="col-emp">{t.employeeNo}</td>
                     <td style={{ ...tdStyle, color: "#000000", fontWeight: 1000 }} className="col-name"><span style={{ color: "#000000", fontWeight: 900, WebkitTextFillColor: "#000000", textShadow: "none" }}>{t.fullName}</span></td>
                     <td style={tdStyle}>{translateSubject(t.subject1)}</td>
                     <td style={tdStyle}>{translateSubject(t.subject2)}</td>

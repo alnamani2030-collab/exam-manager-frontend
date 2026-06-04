@@ -91,7 +91,7 @@ const EXAM_CENTER_LOGO_KEY = "exam-manager:exam-center-logo:v1";
 const APP_LOGO_KEY = "exam-manager:app-logo";
 const CONTROL_HEAD_NAME_KEY = "exam-manager:control-head-name:v1";
 
-const maskEmailForGate = (email: string) => {
+const maskEmailForControlAccess = (email: string) => {
   const safe = String(email || "").trim();
   const [name, domain] = safe.split("@");
   if (!name || !domain) return safe ? "****" : "";
@@ -99,7 +99,58 @@ const maskEmailForGate = (email: string) => {
   return `${name.charAt(0)}${"*".repeat(Math.max(3, name.length - 2))}${name.charAt(name.length - 1)}@${domain}`;
 };
 
-const normalizeAccessCode = (value: string) => String(value || "").replace(/\D/g, "").slice(0, 6);
+const normalizeControlAccessCode = (value: string) => String(value || "").replace(/\D/g, "").slice(0, 6);
+const normalizeControlAccessEmail = (value: string) => String(value || "").trim().toLowerCase();
+const CONTROL12_ACCESS_LOCK_MINUTES = 5;
+
+const getControl12AccessLockStorageKey = (tenantId: string) =>
+  `exam-manager:control12-email-code-lock-until:${tenantId || "default"}`;
+
+const formatControl12AccessCountdown = (totalSeconds: number) => {
+  const safe = Math.max(0, Math.ceil(totalSeconds || 0));
+  const minutes = Math.floor(safe / 60);
+  const seconds = safe % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+};
+
+const getControl12AccessLockFromError = (error: any) => {
+  const details = error?.details || error?.customData?.details || {};
+  const candidate =
+    details?.lockedUntilISO ||
+    details?.lockedUntil ||
+    details?.retryAtISO ||
+    details?.lockUntilISO ||
+    error?.lockedUntilISO ||
+    "";
+
+  const directMs = candidate ? Date.parse(String(candidate)) : NaN;
+  if (Number.isFinite(directMs) && directMs > Date.now()) return directMs;
+
+  const retryAfterSecondsRaw =
+    details?.retryAfterSeconds ??
+    details?.retryAfter ??
+    error?.retryAfterSeconds ??
+    error?.retryAfter;
+
+  const retryAfterSeconds = Number(retryAfterSecondsRaw);
+  if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
+    return Date.now() + retryAfterSeconds * 1000;
+  }
+
+  const message = String(error?.message || "");
+  const code = String(error?.code || "");
+  if (
+    code.includes("resource-exhausted") ||
+    message.includes("resource-exhausted") ||
+    message.includes("تجاوز عدد محاولات") ||
+    message.includes("too many") ||
+    message.includes("Too many")
+  ) {
+    return Date.now() + CONTROL12_ACCESS_LOCK_MINUTES * 60 * 1000;
+  }
+
+  return 0;
+};
 
 
 const PAGE_BG =
@@ -336,17 +387,6 @@ export default function SchoolControl() {
   const [exams, setExams] = useState<any[]>([]);
   const [busy, setBusy] = useState(false);
   const [printingId, setPrintingId] = useState("");
-  const [accessCode, setAccessCode] = useState("");
-  const [accessCodeSent, setAccessCodeSent] = useState(false);
-  const [accessGateBusy, setAccessGateBusy] = useState(false);
-  const [accessGateMessage, setAccessGateMessage] = useState("");
-  const [accessGateError, setAccessGateError] = useState("");
-  const accessSessionKey = useMemo(
-    () => `yr:control12-access-ok:${tenantId || "no-tenant"}:${String(user?.email || user?.uid || "guest")}`,
-    [tenantId, user?.email, user?.uid]
-  );
-  const [controlAccessVerified, setControlAccessVerified] = useState(false);
-
   const importInputRef = useRef<HTMLInputElement | null>(null);
 
   const [memberForm, setMemberForm] = useState({
@@ -375,80 +415,192 @@ export default function SchoolControl() {
     memberIds: ["", "", ""],
   });
 
-  useEffect(() => {
-    // عند كل دخول جديد للصفحة أو تغير المركز/المستخدم، نعيد قفل الصفحة.
-    // لا نستخدم sessionStorage هنا حتى لا تفتح الصفحة مباشرة بعد تحقق سابق.
-    setControlAccessVerified(false);
-    setAccessCode("");
-    setAccessCodeSent(false);
-    setAccessGateMessage("");
-    setAccessGateError("");
-  }, [accessSessionKey]);
+  const [controlAccessEmail, setControlAccessEmail] = useState("");
+  const [controlAccessEmailConfirmed, setControlAccessEmailConfirmed] = useState(false);
+  const [controlAccessCodeSent, setControlAccessCodeSent] = useState(false);
+  const [controlAccessCode, setControlAccessCode] = useState("");
+  const [controlAccessBusy, setControlAccessBusy] = useState(false);
+  const [controlAccessMessage, setControlAccessMessage] = useState("");
+  const [controlAccessError, setControlAccessError] = useState("");
+  const [controlAccessVerified, setControlAccessVerified] = useState(false);
+  const [controlAccessLockedUntilMs, setControlAccessLockedUntilMs] = useState(0);
+  const [controlAccessLockRemainingSeconds, setControlAccessLockRemainingSeconds] = useState(0);
 
-  const sendControlAccessCode = async () => {
-    if (!tenantId) {
-      setAccessGateError(tr("معرف المركز غير متوفر.", "Center ID is missing."));
+  const currentUserEmail = useMemo(
+    () => String(user?.email || authContext?.profile?.email || authContext?.userProfile?.email || "").trim(),
+    [user?.email, authContext?.profile?.email, authContext?.userProfile?.email]
+  );
+  const maskedCurrentUserEmail = useMemo(() => maskEmailForControlAccess(currentUserEmail), [currentUserEmail]);
+  const controlAccessLockStorageKey = useMemo(() => getControl12AccessLockStorageKey(tenantId), [tenantId]);
+
+  useEffect(() => {
+    setControlAccessVerified(false);
+    setControlAccessEmail("");
+    setControlAccessEmailConfirmed(false);
+    setControlAccessCodeSent(false);
+    setControlAccessCode("");
+    setControlAccessBusy(false);
+    setControlAccessMessage("");
+    setControlAccessError("");
+
+    if (typeof window === "undefined") return;
+    const storedLockMs = Number(window.localStorage.getItem(controlAccessLockStorageKey) || "0");
+    if (Number.isFinite(storedLockMs) && storedLockMs > Date.now()) {
+      setControlAccessLockedUntilMs(storedLockMs);
+      setControlAccessLockRemainingSeconds(Math.ceil((storedLockMs - Date.now()) / 1000));
+    } else {
+      window.localStorage.removeItem(controlAccessLockStorageKey);
+      setControlAccessLockedUntilMs(0);
+      setControlAccessLockRemainingSeconds(0);
+    }
+  }, [tenantId, controlAccessLockStorageKey]);
+
+  useEffect(() => {
+    if (!controlAccessLockedUntilMs) {
+      setControlAccessLockRemainingSeconds(0);
       return;
     }
 
-    setAccessGateBusy(true);
-    setAccessGateError("");
-    setAccessGateMessage("");
+    const updateRemaining = () => {
+      const remaining = Math.ceil((controlAccessLockedUntilMs - Date.now()) / 1000);
+      if (remaining <= 0) {
+        setControlAccessLockedUntilMs(0);
+        setControlAccessLockRemainingSeconds(0);
+        setControlAccessError("");
+        setControlAccessMessage("");
+        if (typeof window !== "undefined") {
+          window.localStorage.removeItem(controlAccessLockStorageKey);
+        }
+        return;
+      }
+      setControlAccessLockRemainingSeconds(remaining);
+    };
+
+    updateRemaining();
+    const interval = window.setInterval(updateRemaining, 1000);
+    return () => window.clearInterval(interval);
+  }, [controlAccessLockedUntilMs, controlAccessLockStorageKey]);
+
+  const applyControlAccessLock = (lockedUntilMs: number) => {
+    if (!lockedUntilMs || lockedUntilMs <= Date.now()) return;
+
+    setControlAccessLockedUntilMs(lockedUntilMs);
+    setControlAccessLockRemainingSeconds(Math.ceil((lockedUntilMs - Date.now()) / 1000));
+    setControlAccessEmailConfirmed(false);
+    setControlAccessCodeSent(false);
+    setControlAccessCode("");
+    setControlAccessBusy(false);
+    setControlAccessMessage("");
+    setControlAccessError(
+      tr(
+        "تم تجاوز عدد محاولات التحقق. يمكنك طلب رمز جديد بعد انتهاء العد التنازلي.",
+        "Too many failed verification attempts. You can request a new code after the countdown ends."
+      )
+    );
+
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(controlAccessLockStorageKey, String(lockedUntilMs));
+    }
+  };
+
+  const sendControlAccessCode = async () => {
+    if (controlAccessLockedUntilMs && controlAccessLockedUntilMs > Date.now()) {
+      setControlAccessError(
+        tr(
+          "تم تجاوز عدد محاولات التحقق. لا يمكن طلب رمز جديد حتى انتهاء العد التنازلي.",
+          "Too many failed verification attempts. You cannot request a new code until the countdown ends."
+        )
+      );
+      return;
+    }
+
+    if (!tenantId) {
+      setControlAccessError(tr("معرف المركز غير متوفر.", "Center ID is missing."));
+      return;
+    }
+
+    const expectedEmail = normalizeControlAccessEmail(currentUserEmail);
+    const enteredEmail = normalizeControlAccessEmail(controlAccessEmail);
+
+    if (!expectedEmail) {
+      setControlAccessEmailConfirmed(false);
+      setControlAccessError(tr("البريد الإلكتروني المسجل للحساب غير متوفر.", "The account email is unavailable."));
+      return;
+    }
+
+    if (!enteredEmail || enteredEmail !== expectedEmail) {
+      setControlAccessEmailConfirmed(false);
+      setControlAccessCodeSent(false);
+      setControlAccessCode("");
+      setControlAccessError(tr("البريد الإلكتروني غير مطابق للحساب الحالي. لن يتم إرسال رمز الدخول.", "The email does not match the current account. The access code will not be sent."));
+      return;
+    }
+
+    setControlAccessEmailConfirmed(true);
+    setControlAccessBusy(true);
+    setControlAccessError("");
+    setControlAccessMessage("");
 
     try {
       const fn = httpsCallable(getFunctions(undefined, "us-central1"), "sendControl12AccessCodeEmail");
-      const result = await fn({ tenantId });
+      const result = await fn({ tenantId, page: "Control12", pageLabel: "صفحة الكنترول" });
       const data = (result.data || {}) as any;
-      setAccessCodeSent(true);
-      setAccessGateMessage(
-        data?.message ||
-          tr(
-            "تم إرسال رمز الدخول إلى البريد الإلكتروني المسجل للحساب.",
-            "The access code was sent to the account email."
-          )
-      );
+      if (typeof window !== "undefined") window.localStorage.removeItem(controlAccessLockStorageKey);
+      setControlAccessLockedUntilMs(0);
+      setControlAccessLockRemainingSeconds(0);
+      setControlAccessCodeSent(true);
+      setControlAccessMessage(data?.message || tr("تم إرسال رمز الدخول إلى البريد الإلكتروني المسجل للحساب.", "The access code was sent to the account email."));
     } catch (error: any) {
       console.error("sendControlAccessCode failed:", error);
-      setAccessGateError(
-        error?.message ||
-          tr("تعذر إرسال رمز الدخول إلى البريد الإلكتروني.", "Failed to send the access code.")
-      );
+      const lockedUntilMs = getControl12AccessLockFromError(error);
+      if (lockedUntilMs) applyControlAccessLock(lockedUntilMs);
+      else setControlAccessError(error?.message || tr("تعذر إرسال رمز الدخول إلى البريد الإلكتروني.", "Failed to send the access code."));
     } finally {
-      setAccessGateBusy(false);
+      setControlAccessBusy(false);
     }
   };
 
   const verifyControlAccessCode = async () => {
-    const code = normalizeAccessCode(accessCode);
-    if (code.length !== 6) {
-      setAccessGateError(tr("أدخل رمزًا مكونًا من 6 أرقام.", "Enter a 6-digit code."));
+    if (controlAccessLockedUntilMs && controlAccessLockedUntilMs > Date.now()) {
+      setControlAccessError(tr("تم تجاوز عدد محاولات التحقق. انتظر انتهاء العد التنازلي.", "Too many failed verification attempts. Wait until the countdown ends."));
       return;
     }
 
-    setAccessGateBusy(true);
-    setAccessGateError("");
-    setAccessGateMessage("");
+    const code = normalizeControlAccessCode(controlAccessCode);
+    if (code.length !== 6) {
+      setControlAccessError(tr("أدخل رمزًا مكونًا من 6 أرقام.", "Enter a 6-digit code."));
+      return;
+    }
+
+    setControlAccessBusy(true);
+    setControlAccessError("");
+    setControlAccessMessage("");
 
     try {
       const fn = httpsCallable(getFunctions(undefined, "us-central1"), "verifyControl12AccessCode");
-      await fn({ tenantId, code });
+      await fn({ tenantId, code, page: "Control12" });
+      if (typeof window !== "undefined") window.localStorage.removeItem(controlAccessLockStorageKey);
+      setControlAccessLockedUntilMs(0);
+      setControlAccessLockRemainingSeconds(0);
       setControlAccessVerified(true);
-      setAccessGateMessage(tr("تم التحقق بنجاح.", "Verified successfully."));
+      setControlAccessCode("");
+      setControlAccessMessage(tr("تم التحقق بنجاح.", "Verified successfully."));
     } catch (error: any) {
       console.error("verifyControlAccessCode failed:", error);
-      setAccessGateError(
-        error?.message ||
-          tr("رمز الدخول غير صحيح أو انتهت صلاحيته.", "The code is invalid or expired.")
-      );
+      const lockedUntilMs = getControl12AccessLockFromError(error);
+      if (lockedUntilMs) applyControlAccessLock(lockedUntilMs);
+      else setControlAccessError(error?.message || tr("رمز الدخول غير صحيح أو انتهت صلاحيته.", "The code is invalid or expired."));
     } finally {
-      setAccessGateBusy(false);
+      setControlAccessBusy(false);
     }
   };
 
+
   useEffect(() => {
-    if (!tenantId || !controlAccessVerified) return;
+    if (!tenantId) return;
     if (authLoading) return;
     if (!user?.uid) return;
+    if (!controlAccessVerified) return;
 
     let mounted = true;
 
@@ -1053,141 +1205,45 @@ ${membersTable}
   };
 
   if (!controlAccessVerified) {
-    const maskedEmail = maskEmailForGate(String(user?.email || ""));
+    const isLocked = controlAccessLockedUntilMs > Date.now() && controlAccessLockRemainingSeconds > 0;
 
     return (
-      <div
-        style={{
-          direction: isRTL ? "rtl" : "ltr",
-          minHeight: "100vh",
-          background: PAGE_BG,
-          color: "#000000",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: 24,
-          boxSizing: "border-box",
-          fontWeight: 900,
-        }}
-      >
-        <div
-          style={{
-            width: "min(720px, 100%)",
-            background: "linear-gradient(180deg, #fffdf7 0%, #f7f3e7 100%)",
-            border: "2px solid rgba(139, 111, 18, 0.55)",
-            borderRadius: 28,
-            boxShadow: "0 24px 70px rgba(0,0,0,0.18)",
-            padding: 28,
-            color: "#000000",
-            fontWeight: 900,
-          }}
-        >
-          <div style={{ textAlign: "center", marginBottom: 18 }}>
-            <div style={{ fontSize: 28, fontWeight: 900, color: "#000000" }}>
-              {tr("تحقق أمني قبل فتح ملفات الكنترول", "Security verification before opening control files")}
-            </div>
-            <div style={{ marginTop: 10, fontSize: 16, color: "#000000", fontWeight: 900 }}>
-              {tr(
-                "اضغط إرسال رمز الدخول، ثم أدخل الرمز المرسل إلى البريد الإلكتروني المرتبط بالحساب.",
-                "Send the access code, then enter the code sent to the account email."
-              )}
-            </div>
-          </div>
+      <div style={{ direction: isRTL ? "rtl" : "ltr", minHeight: "100vh", background: PAGE_BG, color: "#000000", padding: 18, boxSizing: "border-box", display: "grid", placeItems: "center", fontWeight: 1000 }}>
+        <div style={{ width: "min(980px, 96vw)", border: "4px solid #d4af37", borderRadius: 30, background: "linear-gradient(180deg, #fffdf7 0%, #f8f4e8 100%)", boxShadow: "0 18px 42px rgba(0,0,0,0.18)", padding: window.innerWidth < 700 ? 18 : 34, color: "#000000", fontWeight: 1000 }}>
+          <style>{`
+            .control12EmailCodeInput { color: #111827 !important; font-weight: 1000 !important; font-size: 20px !important; background: #fffef8 !important; -webkit-text-fill-color: #111827 !important; }
+            .control12EmailCodeInput::placeholder { color: #111827 !important; font-weight: 1000 !important; opacity: 0.72 !important; }
+          `}</style>
 
-          <div
-            style={{
-              background: "#fff8db",
-              border: "1px solid rgba(139, 111, 18, 0.35)",
-              borderRadius: 18,
-              padding: 16,
-              marginBottom: 16,
-              color: "#000000",
-              fontWeight: 900,
-            }}
-          >
-            <div>{tr("البريد المستهدف", "Target email")}: {maskedEmail || tr("غير متوفر", "Unavailable")}</div>
-            <div style={{ marginTop: 6 }}>{tr("المركز", "Center")}: {tenantId || "-"}</div>
-          </div>
+          <div style={{ fontSize: window.innerWidth < 700 ? 26 : 38, fontWeight: 1000, marginBottom: 12, color: "#000000", textAlign: "center", lineHeight: 1.4 }}>{tr("تحقق برمز البريد لفتح صفحة الكنترول", "Email-code verification required to open Control page")}</div>
+          <div style={{ fontSize: 18, fontWeight: 1000, lineHeight: 1.9, color: "#000000", marginBottom: 20, textAlign: "center" }}>{tr(`أدخل البريد الإلكتروني الصحيح للحساب أولًا، ثم اطلب رمز الدخول المرسل إلى البريد${maskedCurrentUserEmail ? ` (${maskedCurrentUserEmail})` : ""}.`, `Enter the correct account email first, then request the access code sent to email${maskedCurrentUserEmail ? ` (${maskedCurrentUserEmail})` : ""}.`)}</div>
 
-          <div style={{ display: "grid", gap: 12 }}>
-            <button
-              type="button"
-              disabled={accessGateBusy || !tenantId || authLoading}
-              onClick={sendControlAccessCode}
-              style={{
-                ...buttonStyle("linear-gradient(180deg, #dcfce7 0%, #86efac 100%)"),
-                width: "100%",
-                justifyContent: "center",
-                color: "#000000",
-                fontWeight: 900,
-              }}
-            >
-              {accessGateBusy ? tr("جار المعالجة...", "Processing...") : tr("إرسال رمز الدخول إلى البريد", "Send access code to email")}
-            </button>
-
-            <input
-              value={accessCode}
-              onChange={(event) => setAccessCode(normalizeAccessCode(event.target.value))}
-              placeholder={tr("أدخل رمز الدخول المكون من 6 أرقام", "Enter the 6-digit access code")}
-              inputMode="numeric"
-              maxLength={6}
-              style={{
-                width: "100%",
-                boxSizing: "border-box",
-                border: "2px solid rgba(139, 111, 18, 0.45)",
-                borderRadius: 16,
-                padding: "14px 16px",
-                fontSize: 20,
-                textAlign: "center",
-                letterSpacing: 4,
-                color: "#000000",
-                fontWeight: 900,
-                background: "#ffffff",
-                outline: "none",
-              }}
-            />
-
-            <button
-              type="button"
-              disabled={accessGateBusy || !accessCodeSent || normalizeAccessCode(accessCode).length !== 6}
-              onClick={verifyControlAccessCode}
-              style={{
-                ...buttonStyle("linear-gradient(180deg, #dbeafe 0%, #93c5fd 100%)"),
-                width: "100%",
-                justifyContent: "center",
-                color: "#000000",
-                fontWeight: 900,
-              }}
-            >
-              {tr("تحقق وفتح الصفحة", "Verify and open page")}
-            </button>
-
-            {accessGateMessage ? (
-              <div style={{ color: "#065f46", background: "#dcfce7", border: "1px solid #86efac", borderRadius: 14, padding: 12, fontWeight: 900 }}>
-                {accessGateMessage}
+          {isLocked ? (
+            <>
+              <div style={{ marginTop: 18, border: "3px solid #dc2626", background: "#fff1f2", color: "#000000", borderRadius: 20, padding: "24px 18px", fontWeight: 1000, lineHeight: 1.9, textAlign: "center" }}>
+                <div style={{ fontSize: 22, fontWeight: 1000, color: "#000000" }}>{tr("تم تجاوز عدد محاولات التحقق.", "Too many failed verification attempts.")}</div>
+                <div style={{ fontSize: 18, fontWeight: 1000, color: "#000000", marginTop: 8 }}>{tr("يمكنك طلب رمز جديد بعد انتهاء العد التنازلي.", "You can request a new code after the countdown ends.")}</div>
+                <div style={{ fontSize: 44, fontWeight: 1000, color: "#b91c1c", marginTop: 14 }}>{formatControl12AccessCountdown(controlAccessLockRemainingSeconds)}</div>
               </div>
-            ) : null}
-            {accessGateError ? (
-              <div style={{ color: "#7f1d1d", background: "#fee2e2", border: "1px solid #fecaca", borderRadius: 14, padding: 12, fontWeight: 900 }}>
-                {accessGateError}
+              <div style={{ marginTop: 12, border: "2px solid #dc2626", background: "#fef2f2", color: "#000000", borderRadius: 14, padding: "10px 12px", fontWeight: 1000, lineHeight: 1.7, textAlign: "center" }}>{tr("تم إيقاف طلب الرمز والتحقق مؤقتًا حتى انتهاء العد التنازلي.", "Code requests and verification are temporarily disabled until the countdown ends.")}</div>
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "flex-end", marginTop: 22 }}>
+                <button type="button" style={buttonStyle("linear-gradient(180deg, #dbeafe 0%, #bfdbfe 100%)")} onClick={() => navigate(tenantPath(tenantId, "/dashboard12"))}>{tr("رجوع", "Back")}</button>
+                <button type="button" style={{ ...buttonStyle("linear-gradient(180deg, #e5e7eb 0%, #d1d5db 100%)"), opacity: 0.75, cursor: "not-allowed" }} disabled>{tr(`انتظر ${formatControl12AccessCountdown(controlAccessLockRemainingSeconds)}`, `Wait ${formatControl12AccessCountdown(controlAccessLockRemainingSeconds)}`)}</button>
               </div>
-            ) : null}
-          </div>
-
-          <button
-            type="button"
-            onClick={() => navigate(tenantPath(tenantId, "/dashboard12"))}
-            style={{
-              marginTop: 16,
-              width: "100%",
-              ...buttonStyle("linear-gradient(180deg, #f3f4f6 0%, #e5e7eb 100%)"),
-              justifyContent: "center",
-              color: "#000000",
-              fontWeight: 900,
-            }}
-          >
-            {tr("العودة للوحة الرئيسية", "Back to dashboard")}
-          </button>
+            </>
+          ) : (
+            <>
+              <input className="control12EmailCodeInput" value={controlAccessEmail} onChange={(event) => { setControlAccessEmail(event.target.value); setControlAccessEmailConfirmed(false); setControlAccessCodeSent(false); setControlAccessCode(""); setControlAccessError(""); setControlAccessMessage(""); }} onKeyDown={(event) => { if (event.key === "Enter") void sendControlAccessCode(); }} inputMode="email" autoComplete="email" placeholder={tr("أدخل البريد الإلكتروني المرتبط بالحساب", "Enter the account email")} style={{ width: "100%", border: "3px solid #d4af37", borderRadius: 16, padding: "15px 18px", boxSizing: "border-box", outline: "none", marginTop: 14, textAlign: "center" }} />
+              {controlAccessCodeSent && controlAccessEmailConfirmed && <input className="control12EmailCodeInput" value={controlAccessCode} onChange={(event) => setControlAccessCode(normalizeControlAccessCode(event.target.value))} onKeyDown={(event) => { if (event.key === "Enter") void verifyControlAccessCode(); }} inputMode="numeric" maxLength={6} placeholder={tr("أدخل رمز التحقق المكون من 6 أرقام", "Enter the 6-digit verification code")} style={{ width: "100%", border: "3px solid #d4af37", borderRadius: 16, padding: "15px 18px", boxSizing: "border-box", outline: "none", marginTop: 12, textAlign: "center", letterSpacing: 2 }} />}
+              {controlAccessMessage && <div style={{ marginTop: 12, color: "#065f46", background: "#ecfdf5", border: "2px solid #34d399", borderRadius: 14, padding: 12, fontWeight: 1000, textAlign: "center" }}>{controlAccessMessage}</div>}
+              {controlAccessError && <div style={{ marginTop: 12, color: "#000000", background: "#fef2f2", border: "2px solid #ef4444", borderRadius: 14, padding: 12, fontWeight: 1000, textAlign: "center" }}>{controlAccessError}</div>}
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "flex-end", marginTop: 22 }}>
+                <button type="button" style={buttonStyle("linear-gradient(180deg, #dbeafe 0%, #bfdbfe 100%)")} onClick={() => navigate(tenantPath(tenantId, "/dashboard12"))}>{tr("رجوع", "Back")}</button>
+                <button type="button" style={buttonStyle("linear-gradient(180deg, #dcfce7 0%, #bbf7d0 100%)")} disabled={controlAccessBusy} onClick={() => void sendControlAccessCode()}>{controlAccessBusy ? tr("جارٍ الإرسال...", "Sending...") : tr("إرسال رمز الدخول", "Send access code")}</button>
+                <button type="button" style={buttonStyle("linear-gradient(180deg, #fee2e2 0%, #fca5a5 100%)")} disabled={controlAccessBusy || !controlAccessCodeSent || !controlAccessEmailConfirmed} onClick={() => void verifyControlAccessCode()}>{controlAccessBusy ? tr("جارٍ التحقق...", "Verifying...") : tr("تحقق وفتح الصفحة", "Verify and open page")}</button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     );

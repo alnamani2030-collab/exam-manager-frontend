@@ -4,7 +4,9 @@ import { useAuth } from "../auth/AuthContext";
 import CloudBackup from "./CloudBackup";
 
 function normalizeEmailAccessCode(value: string): string {
-  return String(value || "").replace(/\D/g, "").slice(0, 6);
+  return String(value || "")
+    .replace(/\D/g, "")
+    .slice(0, 6);
 }
 
 function maskEmailForAccess(email: string): string {
@@ -16,10 +18,92 @@ function maskEmailForAccess(email: string): string {
   return `${name[0]}${"*".repeat(Math.max(3, name.length - 2))}${name[name.length - 1]}@${domain || ""}`;
 }
 
+function normalizeEmailForAccessCheck(value: string): string {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
+}
+
+const EMAIL_CODE_LOCK_MS = 5 * 60 * 1000;
+
+function formatEmailGateCountdown(totalSeconds: number): string {
+  const safeSeconds = Math.max(0, Math.ceil(Number(totalSeconds) || 0));
+  const minutes = Math.floor(safeSeconds / 60);
+  const seconds = safeSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function getStoredEmailGateLockUntil(storageKey: string): string {
+  if (typeof window === "undefined") return "";
+  try {
+    const stored = window.localStorage.getItem(storageKey) || "";
+    if (!stored) return "";
+    const time = Date.parse(stored);
+    if (!Number.isFinite(time) || time <= Date.now()) {
+      window.localStorage.removeItem(storageKey);
+      return "";
+    }
+    return new Date(time).toISOString();
+  } catch {
+    return "";
+  }
+}
+
+function storeEmailGateLockUntil(
+  storageKey: string,
+  lockedUntilISO: string,
+): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (!lockedUntilISO) {
+      window.localStorage.removeItem(storageKey);
+      return;
+    }
+    window.localStorage.setItem(storageKey, lockedUntilISO);
+  } catch {
+    // Ignore localStorage failures; Firestore/server lock still protects sending and verification.
+  }
+}
+
+function clearEmailGateLock(storageKey: string): void {
+  storeEmailGateLockUntil(storageKey, "");
+}
+
+function extractEmailGateLockedUntil(error: any): string {
+  const details = error?.details || error?.customData?._tokenResponse || {};
+  const direct =
+    details?.lockedUntilISO ||
+    details?.lockUntilISO ||
+    details?.retryAtISO ||
+    "";
+  if (direct && Number.isFinite(Date.parse(String(direct))))
+    return String(direct);
+
+  const retryAfterSeconds = Number(
+    details?.retryAfterSeconds || details?.retryAfter || 0,
+  );
+  if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
+    return new Date(Date.now() + retryAfterSeconds * 1000).toISOString();
+  }
+
+  const code = String(error?.code || "").toLowerCase();
+  const message = String(error?.message || "");
+  if (
+    code.includes("resource-exhausted") ||
+    message.includes("محاولات") ||
+    message.includes("القفل")
+  ) {
+    return new Date(Date.now() + EMAIL_CODE_LOCK_MS).toISOString();
+  }
+
+  return "";
+}
+
 function EmailCodeGate({
   tenantId,
   currentUserEmail,
   sessionKey,
+  lockKey,
   page,
   pageLabel,
   onVerified,
@@ -27,6 +111,7 @@ function EmailCodeGate({
   tenantId: string;
   currentUserEmail: string;
   sessionKey: string;
+  lockKey: string;
   page: string;
   pageLabel: string;
   onVerified: () => void;
@@ -37,8 +122,87 @@ function EmailCodeGate({
   const [verifying, setVerifying] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [confirmEmail, setConfirmEmail] = useState("");
+  const [emailConfirmed, setEmailConfirmed] = useState(false);
+  const [lockedUntilISO, setLockedUntilISO] = useState("");
+  const [remainingLockSeconds, setRemainingLockSeconds] = useState(0);
 
-  const maskedEmail = useMemo(() => maskEmailForAccess(currentUserEmail), [currentUserEmail]);
+  const maskedEmail = useMemo(
+    () => maskEmailForAccess(currentUserEmail),
+    [currentUserEmail],
+  );
+  const isLocked = remainingLockSeconds > 0;
+
+  const activateLock = useCallback(
+    (untilISO: string) => {
+      const fallbackISO = new Date(
+        Date.now() + EMAIL_CODE_LOCK_MS,
+      ).toISOString();
+      const nextISO =
+        untilISO && Number.isFinite(Date.parse(untilISO))
+          ? untilISO
+          : fallbackISO;
+      const nextSeconds = Math.max(
+        1,
+        Math.ceil((Date.parse(nextISO) - Date.now()) / 1000),
+      );
+      setLockedUntilISO(nextISO);
+      setRemainingLockSeconds(nextSeconds);
+      setEmailConfirmed(false);
+      setCodeSent(false);
+      setCode("");
+      setMessage("");
+      setError(
+        `تم تجاوز عدد محاولات التحقق. يمكنك طلب رمز جديد بعد ${formatEmailGateCountdown(nextSeconds)}.`,
+      );
+      storeEmailGateLockUntil(lockKey, nextISO);
+    },
+    [lockKey],
+  );
+
+  const clearLock = useCallback(() => {
+    setLockedUntilISO("");
+    setRemainingLockSeconds(0);
+    clearEmailGateLock(lockKey);
+  }, [lockKey]);
+
+  useEffect(() => {
+    const storedLock = getStoredEmailGateLockUntil(lockKey);
+    if (storedLock) {
+      const seconds = Math.max(
+        1,
+        Math.ceil((Date.parse(storedLock) - Date.now()) / 1000),
+      );
+      setLockedUntilISO(storedLock);
+      setRemainingLockSeconds(seconds);
+      setEmailConfirmed(false);
+      setCodeSent(false);
+      setCode("");
+      setMessage("");
+      setError(
+        `تم تجاوز عدد محاولات التحقق. يمكنك طلب رمز جديد بعد ${formatEmailGateCountdown(seconds)}.`,
+      );
+    }
+  }, [lockKey]);
+
+  useEffect(() => {
+    if (!lockedUntilISO) return;
+    const tick = () => {
+      const seconds = Math.max(
+        0,
+        Math.ceil((Date.parse(lockedUntilISO) - Date.now()) / 1000),
+      );
+      setRemainingLockSeconds(seconds);
+      if (seconds <= 0) {
+        setLockedUntilISO("");
+        setError("");
+        clearEmailGateLock(lockKey);
+      }
+    };
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [lockKey, lockedUntilISO]);
 
   const sendCode = useCallback(async () => {
     if (!tenantId) {
@@ -46,29 +210,87 @@ function EmailCodeGate({
       return;
     }
 
+    if (isLocked) {
+      setError(
+        `تم تجاوز عدد محاولات التحقق. يمكنك طلب رمز جديد بعد ${formatEmailGateCountdown(remainingLockSeconds)}.`,
+      );
+      return;
+    }
+
+    const expectedEmail = normalizeEmailForAccessCheck(currentUserEmail);
+    const enteredEmail = normalizeEmailForAccessCheck(confirmEmail);
+
+    if (!expectedEmail) {
+      setEmailConfirmed(false);
+      setError("البريد الإلكتروني المسجل للحساب غير متوفر.");
+      return;
+    }
+
+    if (!enteredEmail || enteredEmail !== expectedEmail) {
+      setEmailConfirmed(false);
+      setCodeSent(false);
+      setCode("");
+      setError(
+        "البريد الإلكتروني غير مطابق للحساب الحالي. لن يتم إرسال رمز الدخول.",
+      );
+      return;
+    }
+
+    setEmailConfirmed(true);
     setSending(true);
     setError("");
     setMessage("");
 
     try {
-      const fn = httpsCallable(getFunctions(undefined, "us-central1"), "sendControl12AccessCodeEmail");
+      const fn = httpsCallable(
+        getFunctions(undefined, "us-central1"),
+        "sendControl12AccessCodeEmail",
+      );
       const result = await fn({
         tenantId,
         page,
         pageLabel,
       });
       const data = (result.data || {}) as any;
+      clearLock();
       setCodeSent(true);
-      setMessage(data?.message || "تم إرسال رمز الدخول إلى البريد الإلكتروني المسجل للحساب.");
+      setMessage(
+        data?.message ||
+          "تم إرسال رمز الدخول إلى البريد الإلكتروني المسجل للحساب.",
+      );
     } catch (err: any) {
       console.error(`send ${page} access code failed:`, err);
-      setError(err?.message || "تعذر إرسال رمز الدخول إلى البريد الإلكتروني.");
+      const lockISO = extractEmailGateLockedUntil(err);
+      if (lockISO) {
+        activateLock(lockISO);
+      } else {
+        setError(
+          err?.message || "تعذر إرسال رمز الدخول إلى البريد الإلكتروني.",
+        );
+      }
     } finally {
       setSending(false);
     }
-  }, [page, pageLabel, tenantId]);
+  }, [
+    activateLock,
+    clearLock,
+    confirmEmail,
+    currentUserEmail,
+    isLocked,
+    page,
+    pageLabel,
+    remainingLockSeconds,
+    tenantId,
+  ]);
 
   const verifyCode = useCallback(async () => {
+    if (isLocked) {
+      setError(
+        `تم تجاوز عدد محاولات التحقق. يمكنك طلب رمز جديد بعد ${formatEmailGateCountdown(remainingLockSeconds)}.`,
+      );
+      return;
+    }
+
     const normalized = normalizeEmailAccessCode(code);
     if (normalized.length !== 6) {
       setError("أدخل رمزًا مكونًا من 6 أرقام.");
@@ -80,8 +302,12 @@ function EmailCodeGate({
     setMessage("");
 
     try {
-      const fn = httpsCallable(getFunctions(undefined, "us-central1"), "verifyControl12AccessCode");
+      const fn = httpsCallable(
+        getFunctions(undefined, "us-central1"),
+        "verifyControl12AccessCode",
+      );
       await fn({ tenantId, code: normalized, page });
+      clearLock();
       try {
         window.sessionStorage.setItem(sessionKey, "1");
       } catch {
@@ -92,11 +318,26 @@ function EmailCodeGate({
       onVerified();
     } catch (err: any) {
       console.error(`verify ${page} access code failed:`, err);
-      setError(err?.message || "رمز الدخول غير صحيح أو انتهت صلاحيته.");
+      const lockISO = extractEmailGateLockedUntil(err);
+      if (lockISO) {
+        activateLock(lockISO);
+      } else {
+        setError(err?.message || "رمز الدخول غير صحيح أو انتهت صلاحيته.");
+      }
     } finally {
       setVerifying(false);
     }
-  }, [code, onVerified, page, sessionKey, tenantId]);
+  }, [
+    activateLock,
+    clearLock,
+    code,
+    isLocked,
+    onVerified,
+    page,
+    remainingLockSeconds,
+    sessionKey,
+    tenantId,
+  ]);
 
   const inputStyle: React.CSSProperties = {
     width: "100%",
@@ -113,6 +354,13 @@ function EmailCodeGate({
     boxSizing: "border-box",
   };
 
+  const emailInputStyle: React.CSSProperties = {
+    ...inputStyle,
+    direction: "ltr",
+    textAlign: "center",
+    letterSpacing: 0,
+  };
+
   const buttonStyle: React.CSSProperties = {
     border: "1px solid rgba(164, 120, 24, 0.55)",
     borderRadius: 16,
@@ -121,8 +369,8 @@ function EmailCodeGate({
     color: "#000",
     fontWeight: 900,
     fontSize: 15,
-    cursor: sending || verifying ? "not-allowed" : "pointer",
-    opacity: sending || verifying ? 0.7 : 1,
+    cursor: sending || verifying || isLocked ? "not-allowed" : "pointer",
+    opacity: sending || verifying || isLocked ? 0.7 : 1,
   };
 
   return (
@@ -165,11 +413,26 @@ function EmailCodeGate({
           تحقق أمني
         </div>
 
-        <h1 style={{ margin: "0 0 10px", fontSize: 30, color: "#000", fontWeight: 900 }}>
+        <h1
+          style={{
+            margin: "0 0 10px",
+            fontSize: 30,
+            color: "#000",
+            fontWeight: 900,
+          }}
+        >
           رمز دخول عبر البريد الإلكتروني
         </h1>
-        <p style={{ margin: "0 0 18px", lineHeight: 1.9, color: "#000", fontWeight: 900 }}>
-          لحماية صفحة {pageLabel}، اضغط على زر إرسال الرمز ثم أدخل الرمز المرسل إلى البريد المسجل للحساب.
+        <p
+          style={{
+            margin: "0 0 18px",
+            lineHeight: 1.9,
+            color: "#000",
+            fontWeight: 900,
+          }}
+        >
+          لحماية صفحة {pageLabel}، أدخل البريد الإلكتروني الصحيح للحساب أولًا،
+          ثم اطلب رمز الدخول.
         </p>
 
         <div
@@ -183,35 +446,138 @@ function EmailCodeGate({
             fontWeight: 900,
           }}
         >
-          البريد المسجل: <span style={{ color: "#000", fontWeight: 900 }}>{maskedEmail || "غير متوفر"}</span>
+          البريد المسجل:{" "}
+          <span style={{ color: "#000", fontWeight: 900 }}>
+            {maskedEmail || "غير متوفر"}
+          </span>
         </div>
 
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
-          <button type="button" onClick={sendCode} disabled={sending || verifying} style={buttonStyle}>
-            {sending ? "جاري إرسال الرمز..." : codeSent ? "إعادة إرسال الرمز" : "إرسال رمز الدخول إلى البريد"}
-          </button>
-        </div>
+        {isLocked ? (
+          <div
+            style={{
+              border: "2px solid rgba(185, 28, 28, 0.35)",
+              borderRadius: 20,
+              background: "#fff1f2",
+              color: "#000",
+              fontWeight: 900,
+              padding: 18,
+              marginBottom: 16,
+              textAlign: "center",
+            }}
+          >
+            <div style={{ fontSize: 18, marginBottom: 8 }}>
+              تم إيقاف التحقق مؤقتًا بسبب استنفاد المحاولات.
+            </div>
+            <div style={{ fontSize: 34, letterSpacing: 2 }}>
+              {formatEmailGateCountdown(remainingLockSeconds)}
+            </div>
+            <div style={{ marginTop: 8 }}>
+              لا يمكن طلب رمز جديد أو إدخال رمز حتى انتهاء العد التنازلي.
+            </div>
+          </div>
+        ) : null}
 
-        <label style={{ display: "block", marginBottom: 8, color: "#000", fontWeight: 900 }}>
-          رمز التحقق
-        </label>
-        <input
-          value={code}
-          onChange={(event) => setCode(normalizeEmailAccessCode(event.target.value))}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") void verifyCode();
-          }}
-          inputMode="numeric"
-          maxLength={6}
-          placeholder="000000"
-          style={inputStyle}
-        />
+        {!isLocked ? (
+          <>
+            <label
+              style={{
+                display: "block",
+                marginBottom: 8,
+                color: "#000",
+                fontWeight: 900,
+              }}
+            >
+              أدخل البريد الإلكتروني الخاص بالحساب
+            </label>
+            <input
+              value={confirmEmail}
+              onChange={(event) => {
+                setConfirmEmail(event.target.value);
+                setEmailConfirmed(false);
+                setCodeSent(false);
+                setCode("");
+                setMessage("");
+                setError("");
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") void sendCode();
+              }}
+              inputMode="email"
+              autoComplete="email"
+              placeholder="example@domain.com"
+              style={emailInputStyle}
+            />
 
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 16 }}>
-          <button type="button" onClick={verifyCode} disabled={verifying || sending} style={buttonStyle}>
-            {verifying ? "جاري التحقق..." : "تأكيد الرمز وفتح الصفحة"}
-          </button>
-        </div>
+            <div
+              style={{
+                display: "flex",
+                gap: 12,
+                flexWrap: "wrap",
+                marginTop: 16,
+                marginBottom: 16,
+              }}
+            >
+              <button
+                type="button"
+                onClick={sendCode}
+                disabled={sending || verifying || isLocked}
+                style={buttonStyle}
+              >
+                {sending
+                  ? "جاري إرسال الرمز..."
+                  : codeSent
+                    ? "إعادة إرسال الرمز"
+                    : "تأكيد البريد وإرسال رمز الدخول"}
+              </button>
+            </div>
+
+            {emailConfirmed && codeSent ? (
+              <>
+                <label
+                  style={{
+                    display: "block",
+                    marginBottom: 8,
+                    color: "#000",
+                    fontWeight: 900,
+                  }}
+                >
+                  رمز التحقق
+                </label>
+                <input
+                  value={code}
+                  onChange={(event) =>
+                    setCode(normalizeEmailAccessCode(event.target.value))
+                  }
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") void verifyCode();
+                  }}
+                  inputMode="numeric"
+                  maxLength={6}
+                  placeholder="000000"
+                  style={inputStyle}
+                />
+
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 12,
+                    flexWrap: "wrap",
+                    marginTop: 16,
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={verifyCode}
+                    disabled={verifying || sending || isLocked}
+                    style={buttonStyle}
+                  >
+                    {verifying ? "جاري التحقق..." : "تأكيد الرمز وفتح الصفحة"}
+                  </button>
+                </div>
+              </>
+            ) : null}
+          </>
+        ) : null}
 
         {message ? (
           <div
@@ -258,14 +624,31 @@ function EmailCodeGate({
 export default function CloudBackup12() {
   const auth = useAuth() as any;
   const tenantId = useMemo(
-    () => String(auth?.effectiveTenantId || auth?.tenantId || auth?.user?.tenantId || "").trim(),
-    [auth?.effectiveTenantId, auth?.tenantId, auth?.user?.tenantId]
+    () =>
+      String(
+        auth?.effectiveTenantId || auth?.tenantId || auth?.user?.tenantId || "",
+      ).trim(),
+    [auth?.effectiveTenantId, auth?.tenantId, auth?.user?.tenantId],
   );
   const currentUserEmail = useMemo(
-    () => String(auth?.user?.email || auth?.profile?.email || auth?.userProfile?.email || "").trim(),
-    [auth?.user?.email, auth?.profile?.email, auth?.userProfile?.email]
+    () =>
+      String(
+        auth?.user?.email ||
+          auth?.profile?.email ||
+          auth?.userProfile?.email ||
+          "",
+      ).trim(),
+    [auth?.user?.email, auth?.profile?.email, auth?.userProfile?.email],
   );
-  const sessionKey = useMemo(() => `exam-manager:cloudbackup12-email-code-access:${tenantId}`, [tenantId]);
+  const sessionKey = useMemo(
+    () => `exam-manager:cloudbackup12-email-code-access:${tenantId}`,
+    [tenantId],
+  );
+  const lockKey = useMemo(
+    () =>
+      `exam-manager:cloudbackup12-email-code-lock:${tenantId}:${normalizeEmailForAccessCheck(currentUserEmail)}`,
+    [currentUserEmail, tenantId],
+  );
   const [verified, setVerified] = useState(false);
 
   useEffect(() => {
@@ -279,6 +662,7 @@ export default function CloudBackup12() {
         tenantId={tenantId}
         currentUserEmail={currentUserEmail}
         sessionKey={sessionKey}
+        lockKey={lockKey}
         page="CloudBackup12"
         pageLabel="النسخ السحابي"
         onVerified={() => setVerified(true)}
