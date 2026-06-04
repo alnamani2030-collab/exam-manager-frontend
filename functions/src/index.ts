@@ -1520,6 +1520,20 @@ function controlAccessDocRef(tenantId: string, uid: string) {
     .doc(uid);
 }
 
+const CONTROL_ACCESS_MAX_ATTEMPTS = 5;
+const CONTROL_ACCESS_LOCK_MINUTES = 5;
+
+function controlAccessLockUntilTimestamp() {
+  return admin.firestore.Timestamp.fromMillis(Date.now() + CONTROL_ACCESS_LOCK_MINUTES * 60 * 1000);
+}
+
+function timestampToMillis(value: unknown) {
+  if (value && typeof (value as admin.firestore.Timestamp).toMillis === "function") {
+    return (value as admin.firestore.Timestamp).toMillis();
+  }
+  return 0;
+}
+
 export const sendControl12AccessCodeEmail = functions
   .region("us-central1")
   .https.onCall(async (data: { tenantId?: string }, context) => {
@@ -1564,7 +1578,26 @@ export const sendControl12AccessCodeEmail = functions
         tenantId
     );
 
-    await controlAccessDocRef(tenantId, auth.uid).set(
+    const accessRef = controlAccessDocRef(tenantId, auth.uid);
+    const existingAccessSnap = await accessRef.get();
+    const existingAccess = existingAccessSnap.exists ? existingAccessSnap.data() || {} : {};
+    const existingLockedUntilMillis = timestampToMillis(existingAccess.lockedUntil);
+
+    if (existingLockedUntilMillis > Date.now()) {
+      const secondsLeft = Math.max(Math.ceil((existingLockedUntilMillis - Date.now()) / 1000), 1);
+      const minutesLeft = Math.ceil(secondsLeft / 60);
+      throw new functions.https.HttpsError(
+        "resource-exhausted",
+        `تم تجاوز عدد محاولات التحقق. يمكنك طلب رمز جديد بعد ${minutesLeft} دقيقة.`,
+        {
+          reason: "EMAIL_CODE_LOCKED_TOO_MANY_FAILED_ATTEMPTS",
+          retryAfterSeconds: secondsLeft,
+          lockedUntilISO: new Date(existingLockedUntilMillis).toISOString(),
+        }
+      );
+    }
+
+    await accessRef.set(
       {
         tenantId,
         uid: auth.uid,
@@ -1572,6 +1605,9 @@ export const sendControl12AccessCodeEmail = functions
         page: "Control12",
         codeHash,
         attempts: 0,
+        lockedUntil: null,
+        lockedAt: null,
+        lockedReason: null,
         used: false,
         createdAt: now,
         expiresAt,
@@ -1674,6 +1710,21 @@ export const verifyControl12AccessCode = functions
     const attempts = Number(record.attempts || 0);
     const expiresAt = record.expiresAt as admin.firestore.Timestamp | undefined;
     const used = record.used === true;
+    const lockedUntilMillis = timestampToMillis(record.lockedUntil);
+
+    if (lockedUntilMillis > Date.now()) {
+      const minutesLeft = Math.ceil((lockedUntilMillis - Date.now()) / 60000);
+      const secondsLeft = Math.max(Math.ceil((lockedUntilMillis - Date.now()) / 1000), 1);
+      throw new functions.https.HttpsError(
+        "resource-exhausted",
+        `تم إيقاف التحقق مؤقتًا بسبب إدخال رمز خاطئ عدة مرات. حاول بعد ${minutesLeft} دقيقة.`,
+        {
+          reason: "EMAIL_CODE_LOCKED_TOO_MANY_FAILED_ATTEMPTS",
+          retryAfterSeconds: secondsLeft,
+          lockedUntilISO: new Date(lockedUntilMillis).toISOString(),
+        }
+      );
+    }
 
     if (used) {
       throw new functions.https.HttpsError("failed-precondition", "تم استخدام هذا الرمز سابقًا.");
@@ -1690,29 +1741,95 @@ export const verifyControl12AccessCode = functions
       throw new functions.https.HttpsError("deadline-exceeded", "انتهت صلاحية الرمز. أعد إرسال رمز جديد.");
     }
 
-    if (attempts >= 5) {
-      throw new functions.https.HttpsError("resource-exhausted", "تم تجاوز عدد محاولات التحقق. أعد إرسال رمز جديد.");
+    if (attempts >= CONTROL_ACCESS_MAX_ATTEMPTS) {
+      const lockedUntil = controlAccessLockUntilTimestamp();
+      await ref.set(
+        {
+          lockedAt: admin.firestore.FieldValue.serverTimestamp(),
+          lockedUntil,
+          lockedReason: "too_many_failed_attempts",
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      const lockedUntilMillis = timestampToMillis(lockedUntil);
+      throw new functions.https.HttpsError(
+        "resource-exhausted",
+        `تم تجاوز عدد محاولات التحقق. يمكنك طلب رمز جديد بعد ${CONTROL_ACCESS_LOCK_MINUTES} دقائق.`,
+        {
+          reason: "EMAIL_CODE_LOCKED_TOO_MANY_FAILED_ATTEMPTS",
+          retryAfterSeconds: CONTROL_ACCESS_LOCK_MINUTES * 60,
+          lockedUntilISO: new Date(lockedUntilMillis).toISOString(),
+        }
+      );
     }
 
     const expectedHash = clean(record.codeHash);
     const receivedHash = controlAccessHash(`${tenantId}:${auth.uid}:${code}`);
 
     if (!expectedHash || expectedHash !== receivedHash) {
+      const nextAttempts = attempts + 1;
+      const shouldLock = nextAttempts >= CONTROL_ACCESS_MAX_ATTEMPTS;
+      const lockedUntil = shouldLock ? controlAccessLockUntilTimestamp() : null;
+
       await ref.set(
         {
-          attempts: attempts + 1,
+          attempts: nextAttempts,
           lastFailedAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          ...(shouldLock
+            ? {
+                lockedAt: admin.firestore.FieldValue.serverTimestamp(),
+                lockedUntil,
+                lockedReason: "too_many_failed_attempts",
+              }
+            : {}),
         },
         { merge: true }
       );
-      throw new functions.https.HttpsError("permission-denied", "رمز الدخول غير صحيح.");
+
+      if (shouldLock) {
+        await db.collection("tenants").doc(tenantId).collection("activityLogs").add({
+          tenantId,
+          action: "EMAIL_CODE_LOCKED_TOO_MANY_FAILED_ATTEMPTS",
+          entityType: "controlAccess",
+          entityId: auth.uid,
+          actorUid: auth.uid,
+          actorEmail: auth.email,
+          attempts: nextAttempts,
+          lockedMinutes: CONTROL_ACCESS_LOCK_MINUTES,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          source: "verifyControl12AccessCode",
+        });
+
+        const lockedUntilMillis = timestampToMillis(lockedUntil);
+        throw new functions.https.HttpsError(
+          "resource-exhausted",
+          `تم إيقاف التحقق مؤقتًا بسبب إدخال رمز خاطئ ${CONTROL_ACCESS_MAX_ATTEMPTS} مرات. حاول بعد ${CONTROL_ACCESS_LOCK_MINUTES} دقيقة أو أعد إرسال رمز جديد لاحقًا.`,
+          {
+            reason: "EMAIL_CODE_LOCKED_TOO_MANY_FAILED_ATTEMPTS",
+            retryAfterSeconds: CONTROL_ACCESS_LOCK_MINUTES * 60,
+            lockedUntilISO: new Date(lockedUntilMillis).toISOString(),
+          }
+        );
+      }
+
+      const remainingAttempts = Math.max(CONTROL_ACCESS_MAX_ATTEMPTS - nextAttempts, 0);
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        `رمز الدخول غير صحيح. المحاولات المتبقية: ${remainingAttempts}.`
+      );
     }
 
     await ref.set(
       {
         used: true,
         verifiedAt: admin.firestore.FieldValue.serverTimestamp(),
-        attempts,
+        attempts: 0,
+        lockedUntil: null,
+        lockedAt: null,
+        lockedReason: null,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       },
       { merge: true }
     );
@@ -1733,3 +1850,4 @@ export const verifyControl12AccessCode = functions
       message: "تم التحقق من رمز الدخول بنجاح.",
     };
   });
+
