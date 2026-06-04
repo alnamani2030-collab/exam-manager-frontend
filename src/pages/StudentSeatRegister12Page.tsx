@@ -204,6 +204,31 @@ function maskEmailForStudentSeatAccess(value: unknown) {
   return `${local.slice(0, 1)}${"*".repeat(Math.max(local.length - 2, 3))}${local.slice(-1)}@${domain}`;
 }
 
+function normalizeStudentSeatEmailForCheck(value: unknown) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function getStudentSeatEmailGateErrorDetails(error: any): any {
+  return error?.details || error?.customData?.details || error?.data || {};
+}
+
+function getStudentSeatLockedUntilISOFromError(error: any, fallbackSeconds = 5 * 60) {
+  const details = getStudentSeatEmailGateErrorDetails(error);
+  const explicit = String(details?.lockedUntilISO || details?.lockedUntil || "").trim();
+  if (explicit && !Number.isNaN(new Date(explicit).getTime())) return explicit;
+
+  const retryAfterSeconds = Number(details?.retryAfterSeconds || details?.retryAfter || 0);
+  const seconds = Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0 ? retryAfterSeconds : fallbackSeconds;
+  return new Date(Date.now() + seconds * 1000).toISOString();
+}
+
+function formatStudentSeatCountdown(totalSeconds: number) {
+  const seconds = Math.max(0, Math.ceil(Number(totalSeconds) || 0));
+  const mm = String(Math.floor(seconds / 60)).padStart(2, "0");
+  const ss = String(seconds % 60).padStart(2, "0");
+  return `${mm}:${ss}`;
+}
+
 function normalizeStatus(value: unknown): AttendanceStatus {
   return clean(value).includes("غائب") ? "غائب" : "حاضر";
 }
@@ -543,14 +568,27 @@ export default function StudentSeatRegister12Page() {
   const [emailGateVerifying, setEmailGateVerifying] = useState(false);
   const [emailGateMessage, setEmailGateMessage] = useState("");
   const [emailGateError, setEmailGateError] = useState("");
+  const [emailGateConfirmEmail, setEmailGateConfirmEmail] = useState("");
+  const [emailGateEmailConfirmed, setEmailGateEmailConfirmed] = useState(false);
   const [emailGateVerified, setEmailGateVerified] = useState(false);
+  const [emailGateLockedUntilISO, setEmailGateLockedUntilISO] = useState("");
+  const [emailGateClockNow, setEmailGateClockNow] = useState(() => Date.now());
 
   const emailGateSessionKey = useMemo(() => `exam-manager:student-seat-register12-email-code-access:${tenantId}`, [tenantId]);
+  const emailGateLockStorageKey = useMemo(() => `exam-manager:student-seat-register12-email-code-lock:${tenantId}`, [tenantId]);
   const currentUserEmail = useMemo(
     () => String(user?.email || user?.profile?.email || user?.userProfile?.email || "").trim(),
     [user?.email, user?.profile?.email, user?.userProfile?.email]
   );
   const maskedCurrentUserEmail = useMemo(() => maskEmailForStudentSeatAccess(currentUserEmail), [currentUserEmail]);
+  const emailGateLockedUntilMillis = useMemo(() => {
+    if (!emailGateLockedUntilISO) return 0;
+    const millis = new Date(emailGateLockedUntilISO).getTime();
+    return Number.isFinite(millis) ? millis : 0;
+  }, [emailGateLockedUntilISO]);
+  const emailGateLockRemainingSeconds = Math.max(0, Math.ceil((emailGateLockedUntilMillis - emailGateClockNow) / 1000));
+  const emailGateIsLocked = emailGateLockRemainingSeconds > 0;
+  const emailGateCountdownText = formatStudentSeatCountdown(emailGateLockRemainingSeconds);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -561,7 +599,54 @@ export default function StudentSeatRegister12Page() {
     setEmailGateVerifying(false);
     setEmailGateMessage("");
     setEmailGateError("");
-  }, [emailGateSessionKey]);
+    setEmailGateConfirmEmail("");
+    setEmailGateEmailConfirmed(false);
+    setEmailGateClockNow(Date.now());
+
+    const savedLockedUntilISO = String(window.localStorage.getItem(emailGateLockStorageKey) || "").trim();
+    const savedLockedUntilMillis = savedLockedUntilISO ? new Date(savedLockedUntilISO).getTime() : 0;
+    if (savedLockedUntilMillis > Date.now()) {
+      setEmailGateLockedUntilISO(savedLockedUntilISO);
+      setEmailGateError("تم تجاوز عدد محاولات التحقق. انتظر انتهاء العد التنازلي قبل طلب رمز جديد.");
+    } else {
+      setEmailGateLockedUntilISO("");
+      window.localStorage.removeItem(emailGateLockStorageKey);
+    }
+  }, [emailGateSessionKey, emailGateLockStorageKey]);
+
+  useEffect(() => {
+    if (!emailGateIsLocked) return;
+    const timer = window.setInterval(() => {
+      const now = Date.now();
+      setEmailGateClockNow(now);
+      if (emailGateLockedUntilMillis > 0 && emailGateLockedUntilMillis <= now) {
+        setEmailGateLockedUntilISO("");
+        setEmailGateError("");
+        try {
+          window.localStorage.removeItem(emailGateLockStorageKey);
+        } catch {
+          // Ignore storage cleanup failures.
+        }
+      }
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [emailGateIsLocked, emailGateLockedUntilMillis, emailGateLockStorageKey]);
+
+  const applyEmailGateLock = useCallback((error: any) => {
+    const lockedUntilISO = getStudentSeatLockedUntilISOFromError(error);
+    setEmailGateLockedUntilISO(lockedUntilISO);
+    setEmailGateClockNow(Date.now());
+    setEmailGateCode("");
+    setEmailGateCodeSent(false);
+    setEmailGateEmailConfirmed(false);
+    setEmailGateMessage("");
+    setEmailGateError("تم تجاوز عدد محاولات التحقق. لا يمكن طلب رمز جديد حتى انتهاء العد التنازلي.");
+    try {
+      window.localStorage.setItem(emailGateLockStorageKey, lockedUntilISO);
+    } catch {
+      // Ignore storage failures; state still enforces the lock for this mount.
+    }
+  }, [emailGateLockStorageKey]);
 
   const sendEmailGateCode = useCallback(async () => {
     if (!tenantId) {
@@ -569,6 +654,29 @@ export default function StudentSeatRegister12Page() {
       return;
     }
 
+    if (emailGateIsLocked) {
+      setEmailGateError(`تم تجاوز عدد محاولات التحقق. يمكنك طلب رمز جديد بعد ${emailGateCountdownText}.`);
+      return;
+    }
+
+    const expectedEmail = normalizeStudentSeatEmailForCheck(currentUserEmail);
+    const enteredEmail = normalizeStudentSeatEmailForCheck(emailGateConfirmEmail);
+
+    if (!expectedEmail) {
+      setEmailGateEmailConfirmed(false);
+      setEmailGateError("البريد الإلكتروني المسجل للحساب غير متوفر.");
+      return;
+    }
+
+    if (!enteredEmail || enteredEmail !== expectedEmail) {
+      setEmailGateEmailConfirmed(false);
+      setEmailGateCodeSent(false);
+      setEmailGateCode("");
+      setEmailGateError("البريد الإلكتروني غير مطابق للحساب الحالي. لن يتم إرسال رمز الدخول.");
+      return;
+    }
+
+    setEmailGateEmailConfirmed(true);
     setEmailGateSending(true);
     setEmailGateError("");
     setEmailGateMessage("");
@@ -585,13 +693,24 @@ export default function StudentSeatRegister12Page() {
       setEmailGateMessage(data?.message || "تم إرسال رمز الدخول إلى البريد الإلكتروني المسجل للحساب.");
     } catch (error: any) {
       console.error("sendStudentSeatRegister12AccessCode failed:", error);
+      const code = String(error?.code || "");
+      const reason = String(getStudentSeatEmailGateErrorDetails(error)?.reason || "");
+      if (code.includes("resource-exhausted") || reason === "EMAIL_CODE_LOCKED_TOO_MANY_FAILED_ATTEMPTS") {
+        applyEmailGateLock(error);
+        return;
+      }
       setEmailGateError(error?.message || "تعذر إرسال رمز الدخول إلى البريد الإلكتروني.");
     } finally {
       setEmailGateSending(false);
     }
-  }, [tenantId]);
+  }, [tenantId, currentUserEmail, emailGateConfirmEmail, emailGateIsLocked, emailGateCountdownText, applyEmailGateLock]);
 
   const verifyEmailGateCode = useCallback(async () => {
+    if (emailGateIsLocked) {
+      setEmailGateError(`تم تجاوز عدد محاولات التحقق. يمكنك المحاولة بعد ${emailGateCountdownText}.`);
+      return;
+    }
+
     const code = normalizeStudentSeatEmailCode(emailGateCode);
     if (code.length !== 6) {
       setEmailGateError("أدخل رمزًا مكونًا من 6 أرقام.");
@@ -615,11 +734,17 @@ export default function StudentSeatRegister12Page() {
       setEmailGateMessage("تم التحقق بنجاح.");
     } catch (error: any) {
       console.error("verifyStudentSeatRegister12AccessCode failed:", error);
+      const code = String(error?.code || "");
+      const reason = String(getStudentSeatEmailGateErrorDetails(error)?.reason || "");
+      if (code.includes("resource-exhausted") || reason === "EMAIL_CODE_LOCKED_TOO_MANY_FAILED_ATTEMPTS") {
+        applyEmailGateLock(error);
+        return;
+      }
       setEmailGateError(error?.message || "رمز الدخول غير صحيح أو انتهت صلاحيته.");
     } finally {
       setEmailGateVerifying(false);
     }
-  }, [emailGateCode, emailGateSessionKey, tenantId]);
+  }, [emailGateCode, emailGateSessionKey, tenantId, emailGateIsLocked, emailGateCountdownText, applyEmailGateLock]);
 
   useEffect(() => {
     const normalized = normalizeRecordsList(records);
@@ -1203,6 +1328,7 @@ export default function StudentSeatRegister12Page() {
 
   const displayRecordNo = records.length ? `${currentIndex >= 0 ? currentIndex + 1 : 0} / ${records.length}` : "0 / 0";
   const emailGateBusy = emailGateSending || emailGateVerifying;
+  const emailGateActionsDisabled = emailGateBusy || emailGateIsLocked;
 
   if (!emailGateVerified) {
     return (
@@ -1248,25 +1374,42 @@ export default function StudentSeatRegister12Page() {
               تحقق برمز البريد لفتح سجل أرقام جلوس الطلبة
             </div>
             <div style={{ fontSize: 16, fontWeight: 1000, color: "#000", lineHeight: 1.9, marginBottom: 14 }}>
-              اضغط زر إرسال الرمز، ثم أدخل رمز التحقق المكون من 6 أرقام المرسل إلى بريد الحساب
+              أدخل البريد الإلكتروني الصحيح للحساب أولًا، ثم اطلب رمز الدخول المرسل إلى البريد
               {maskedCurrentUserEmail ? ` (${maskedCurrentUserEmail})` : ""}.
             </div>
 
+            {emailGateIsLocked ? (
+              <div style={{ border: "3px solid #dc2626", background: "#fef2f2", color: "#000", borderRadius: 18, padding: "16px 18px", fontWeight: 1000, lineHeight: 1.9, textAlign: "center", marginTop: 12 }}>
+                <div style={{ fontSize: 20, fontWeight: 1000, color: "#000" }}>
+                  تم تجاوز عدد محاولات التحقق.
+                </div>
+                <div style={{ fontSize: 18, fontWeight: 1000, color: "#000", marginTop: 8 }}>
+                  يمكنك طلب رمز جديد بعد انتهاء العد التنازلي.
+                </div>
+                <div style={{ marginTop: 14, fontSize: 34, fontWeight: 1000, color: "#991b1b", direction: "ltr" }}>
+                  {emailGateCountdownText}
+                </div>
+              </div>
+            ) : (
+              <>
             <input
               className="studentSeatEmailCodeInput"
-              value={emailGateCode}
+              value={emailGateConfirmEmail}
               onChange={(event) => {
-                setEmailGateCode(normalizeStudentSeatEmailCode(event.target.value));
+                setEmailGateConfirmEmail(event.target.value);
+                setEmailGateEmailConfirmed(false);
+                setEmailGateCodeSent(false);
+                setEmailGateCode("");
                 setEmailGateError("");
                 setEmailGateMessage("");
               }}
               onKeyDown={(event) => {
-                if (event.key === "Enter") void verifyEmailGateCode();
+                if (event.key === "Enter") void sendEmailGateCode();
               }}
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              placeholder="أدخل رمز التحقق المرسل إلى البريد"
-              disabled={!emailGateCodeSent || emailGateBusy}
+              inputMode="email"
+              autoComplete="email"
+              placeholder="أدخل البريد الإلكتروني المرتبط بالحساب"
+              disabled={emailGateActionsDisabled}
               style={{
                 width: "100%",
                 minHeight: 58,
@@ -1281,8 +1424,46 @@ export default function StudentSeatRegister12Page() {
                 outline: "none",
                 boxSizing: "border-box",
                 padding: "10px 14px",
+                marginBottom: 12,
+                direction: "ltr",
               }}
             />
+
+            {emailGateEmailConfirmed && emailGateCodeSent ? (
+              <input
+                className="studentSeatEmailCodeInput"
+                value={emailGateCode}
+                onChange={(event) => {
+                  setEmailGateCode(normalizeStudentSeatEmailCode(event.target.value));
+                  setEmailGateError("");
+                  setEmailGateMessage("");
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") void verifyEmailGateCode();
+                }}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                placeholder="أدخل رمز التحقق المرسل إلى البريد"
+                disabled={!emailGateCodeSent || emailGateActionsDisabled}
+                style={{
+                  width: "100%",
+                  minHeight: 58,
+                  border: "3px solid #d4af37",
+                  borderRadius: 18,
+                  background: "#fffaf0",
+                  color: "#000",
+                  WebkitTextFillColor: "#000",
+                  fontWeight: 1000,
+                  fontSize: 20,
+                  textAlign: "center",
+                  outline: "none",
+                  boxSizing: "border-box",
+                  padding: "10px 14px",
+                }}
+              />
+            ) : null}
+              </>
+            )}
 
             {emailGateMessage ? (
               <div style={{ marginTop: 12, border: "2px solid #16a34a", background: "#f0fdf4", color: "#000", borderRadius: 14, padding: "10px 12px", fontWeight: 1000, lineHeight: 1.7 }}>
@@ -1300,10 +1481,10 @@ export default function StudentSeatRegister12Page() {
               <button type="button" onClick={() => history.back()} disabled={emailGateBusy} style={{ minHeight: 48, border: "3px solid #d4af37", borderRadius: 16, background: "#fffdf7", color: "#000", fontWeight: 1000, cursor: "pointer", padding: "10px 16px" }}>
                 رجوع
               </button>
-              <button type="button" onClick={() => void sendEmailGateCode()} disabled={emailGateBusy} style={{ minHeight: 48, border: "3px solid #1d4ed8", borderRadius: 16, background: "#bfdbfe", color: "#000", fontWeight: 1000, cursor: "pointer", padding: "10px 16px" }}>
-                {emailGateSending ? "جاري الإرسال..." : "إرسال رمز الدخول إلى البريد"}
+              <button type="button" onClick={() => void sendEmailGateCode()} disabled={emailGateActionsDisabled} style={{ minHeight: 48, border: "3px solid #1d4ed8", borderRadius: 16, background: emailGateIsLocked ? "#e5e7eb" : "#bfdbfe", color: "#000", fontWeight: 1000, cursor: emailGateActionsDisabled ? "not-allowed" : "pointer", padding: "10px 16px" }}>
+                {emailGateIsLocked ? `انتظر ${emailGateCountdownText}` : emailGateSending ? "جاري الإرسال..." : emailGateCodeSent ? "إعادة إرسال الرمز" : "تأكيد البريد وإرسال رمز الدخول"}
               </button>
-              <button type="button" onClick={() => void verifyEmailGateCode()} disabled={!emailGateCodeSent || emailGateBusy} style={{ minHeight: 48, border: "3px solid #14532d", borderRadius: 16, background: emailGateCodeSent ? "#bbf7d0" : "#e5e7eb", color: "#000", fontWeight: 1000, cursor: emailGateCodeSent ? "pointer" : "not-allowed", padding: "10px 16px" }}>
+              <button type="button" onClick={() => void verifyEmailGateCode()} disabled={!emailGateEmailConfirmed || !emailGateCodeSent || emailGateActionsDisabled} style={{ minHeight: 48, border: "3px solid #14532d", borderRadius: 16, background: emailGateEmailConfirmed && emailGateCodeSent && !emailGateIsLocked ? "#bbf7d0" : "#e5e7eb", color: "#000", fontWeight: 1000, cursor: emailGateEmailConfirmed && emailGateCodeSent && !emailGateActionsDisabled ? "pointer" : "not-allowed", padding: "10px 16px" }}>
                 {emailGateVerifying ? "جاري التحقق..." : "تحقق وفتح الصفحة"}
               </button>
             </div>
