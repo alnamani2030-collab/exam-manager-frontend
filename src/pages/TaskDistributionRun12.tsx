@@ -5,7 +5,7 @@
 // - الإجمالي = المراقبة + الاحتياط + مراقب الدور
 // - حذف مسارات المراجعة والتصحيح من قلب التوزيع والجداول النشطة
 // - إبقاء توافق قراءة البيانات القديمة عند الحاجة بدون إدخالها في الإجمالي
-// - الحفاظ على الشروط النشطة: شرط "بن"، منع معلم المادة من مراقبة مادته، منع تكرار مراقبة 3 ساعات، منع مراقبة يومين متتاليين إلا عند الضرورة، منع اليوم الثالث بعد يومين مراقبة متتاليين، عدم التوفر، والعدالة
+// - الحفاظ على الشروط النشطة: شرط "بن"، منع معلم المادة من مراقبة مادته، منع تكرار مراقبة 3 ساعات، عدم التوفر، والعدالة
 
 import React, {useEffect, useMemo, useRef, useState} from "react";
 import { useNavigate } from "react-router-dom";
@@ -52,7 +52,7 @@ function TaskDistributionReadinessSection(props: any) {
   const note = styles.note || {};
   const pill = styles.pill || {};
 
-  const periodLabel = (period: any) => periodToAMPM(String(period || "AM")) === "PM" ? "الثانية" : "الأولى";
+  const periodLabel = (period: any) => String(period || "AM") === "PM" ? "الثانية" : "الأولى";
   const statusLabel = (status: any) => {
     const s = String(status || "").toUpperCase();
     if (s === "SAFE") return "مريح";
@@ -206,7 +206,6 @@ const TASKRUN12_CONTROL_HEAD_NAME_KEY = "exam-manager:control-head-name:v1";
 const DIPLOMA_EXAM_CENTER_SETTINGS_DOC_ID = "diplomaExamCenter";
 const TASKRUN12_ROOMS_SUBCOLLECTION = "rooms";
 const TASKRUN12_ROOM_BLOCKS_SUBCOLLECTION = "roomBlocks";
-const TASKRUN12_EXAM_ROOM_ASSIGNMENTS_SUBCOLLECTION = "examRoomAssignments";
 const TASKRUN12_LATEST_RUN_SETTINGS_DOC_ID = "latestTaskDistributionRun12";
 const TASKRUN12_ASSIGNMENTS_SUBCOLLECTION = "taskDistributionAssignments12";
 
@@ -222,202 +221,6 @@ type TaskRun12ExamCenterData = {
   academicYear?: string;
   logo?: string;
 };
-
-/** ✅ Phone access gate helpers for sensitive diploma pages */
-function taskRun12PhoneDigitsOnly(value: unknown): string {
-  return String(value ?? "").replace(/[^\d٠-٩۰-۹]/g, "").replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d))).replace(/[۰-۹]/g, (d) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)));
-}
-
-function taskRun12MaskPhoneFirstLast(value: unknown): string {
-  const digits = taskRun12PhoneDigitsOnly(value);
-  if (!digits) return "";
-  if (digits.length <= 2) return digits[0] ? `${digits[0]}x` : "";
-  return `${digits.slice(0, 1)}${"x".repeat(Math.max(1, digits.length - 2))}${digits.slice(-1)}`;
-}
-
-function taskRun12PickRegisteredPhone(data: any): string {
-  if (!data || typeof data !== "object") return "";
-  const direct = [
-    data.phone,
-    data.phoneNumber,
-    data.mobile,
-    data.mobileNumber,
-    data.centerPhone,
-    data.schoolPhone,
-    data.contactPhone,
-    data.officialPhone,
-    data.settingsPhone,
-    data.registeredPhone,
-  ];
-  for (const value of direct) {
-    const digits = taskRun12PhoneDigitsOnly(value);
-    if (digits) return digits;
-  }
-  return "";
-}
-
-function taskRun12ReadLocalRegisteredPhone(): string {
-  const candidates = [
-    TASKRUN12_EXAM_CENTER_DATA_KEY,
-    "exam-manager:settings12:center-data:v1",
-    "exam-manager:center-data:v1",
-    "exam-manager:exam-center-data:v1",
-    "exam-manager:control-center-data:v1",
-    "exam-manager:school-control:center-data:v1",
-    "exam-manager:schoolControl:center-data:v1",
-    "exam-manager:center-control-data:v1",
-    "exam-manager:control-data:v1",
-  ];
-  for (const key of candidates) {
-    try {
-      const raw = localStorage.getItem(key);
-      if (!raw) continue;
-      const parsed = JSON.parse(raw);
-      const fromRoot = taskRun12PickRegisteredPhone(parsed);
-      if (fromRoot) return fromRoot;
-      const fromPayload = taskRun12PickRegisteredPhone(parsed?.data || parsed?.settings || parsed?.center || parsed?.school || parsed?.config);
-      if (fromPayload) return fromPayload;
-    } catch {
-      // ignore malformed localStorage values
-    }
-  }
-  return "";
-}
-
-function TaskRun12PhoneGateScreen(props: {
-  lang: "ar" | "en";
-  tenantId: string;
-  registeredPhone: string;
-  loading: boolean;
-  error: string;
-  value: string;
-  setValue: (value: string) => void;
-  onVerify: () => void;
-  onGoSettings: () => void;
-}) {
-  const isAr = props.lang === "ar";
-  const masked = taskRun12MaskPhoneFirstLast(props.registeredPhone);
-  const title = isAr ? "التحقق من رقم الهاتف" : "Phone verification";
-  const intro = isAr
-    ? "للوصول إلى منصة تشغيل توزيع المهام، أدخل رقم الهاتف المسجل في إعدادات مركز الدبلوم."
-    : "To access the task distribution runner, enter the phone number registered in diploma center settings.";
-  const noPhone = isAr
-    ? "لا يوجد رقم هاتف مسجل في إعدادات مركز الدبلوم. يرجى تسجيل الرقم أولًا."
-    : "No phone number is registered in diploma center settings. Please register it first.";
-  return (
-    <div
-      style={{
-        minHeight: "100vh",
-        direction: isAr ? "rtl" : "ltr",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 24,
-        background:
-          "radial-gradient(circle at top, rgba(212,175,55,.20), transparent 36%), linear-gradient(135deg,#fff8e1 0%,#fffdf7 55%,#f8ecd0 100%)",
-        color: "#000000",
-        fontWeight: 900,
-      }}
-    >
-      <div
-        style={{
-          width: "min(760px, 100%)",
-          border: "3px solid #d6b24a",
-          borderRadius: 28,
-          background: "rgba(255,255,255,.94)",
-          boxShadow: "0 22px 55px rgba(81,58,8,.18)",
-          padding: 28,
-          color: "#000000",
-          fontWeight: 900,
-        }}
-      >
-        <div style={{ display: "inline-flex", border: "1.5px solid #d6b24a", borderRadius: 999, padding: "8px 16px", background: "#fff8df", color: "#000000", fontWeight: 1000 }}>
-          {isAr ? "حماية الدخول" : "Access protection"}
-        </div>
-        <h1 style={{ margin: "18px 0 10px", color: "#000000", fontWeight: 1000, fontSize: 30 }}>{title}</h1>
-        <p style={{ margin: 0, color: "#000000", fontWeight: 900, lineHeight: 1.9 }}>{intro}</p>
-
-        <div style={{ marginTop: 18, display: "grid", gap: 12 }}>
-          <div style={{ border: "1.5px solid #e5cf87", borderRadius: 18, padding: 14, background: "#fffaf0", color: "#000000", fontWeight: 1000 }}>
-            {isAr ? "الرقم المسجل:" : "Registered phone:"}{" "}
-            <span style={{ color: "#000000", fontWeight: 1000 }}>{masked || (props.loading ? (isAr ? "جاري التحميل..." : "Loading...") : "—")}</span>
-          </div>
-
-          {!props.loading && !props.registeredPhone ? (
-            <div style={{ border: "2px solid #b91c1c", borderRadius: 18, padding: 14, background: "#fff1f2", color: "#000000", fontWeight: 1000 }}>
-              {noPhone}
-            </div>
-          ) : null}
-
-          <input
-            value={props.value}
-            onChange={(e) => props.setValue(e.target.value)}
-            inputMode="numeric"
-            placeholder={isAr ? "أدخل رقم الهاتف المسجل" : "Enter registered phone number"}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") props.onVerify();
-            }}
-            disabled={props.loading || !props.registeredPhone}
-            style={{
-              width: "100%",
-              boxSizing: "border-box",
-              border: "2px solid #d6b24a",
-              borderRadius: 18,
-              padding: "15px 18px",
-              fontSize: 18,
-              color: "#000000",
-              fontWeight: 1000,
-              outline: "none",
-              background: "#ffffff",
-            }}
-          />
-
-          {props.error ? (
-            <div style={{ border: "2px solid #b91c1c", borderRadius: 18, padding: 12, background: "#fff1f2", color: "#000000", fontWeight: 1000 }}>
-              {props.error}
-            </div>
-          ) : null}
-
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center", marginTop: 6 }}>
-            <button
-              type="button"
-              onClick={props.onVerify}
-              disabled={props.loading || !props.registeredPhone}
-              style={{
-                minWidth: 190,
-                border: "2px solid #b88700",
-                borderRadius: 18,
-                padding: "13px 20px",
-                background: "linear-gradient(180deg,#fff4c2,#d6a921)",
-                color: "#000000",
-                fontWeight: 1000,
-                cursor: props.loading || !props.registeredPhone ? "not-allowed" : "pointer",
-              }}
-            >
-              {isAr ? "دخول الصفحة" : "Open page"}
-            </button>
-            <button
-              type="button"
-              onClick={props.onGoSettings}
-              style={{
-                minWidth: 190,
-                border: "2px solid #111827",
-                borderRadius: 18,
-                padding: "13px 20px",
-                background: "#ffffff",
-                color: "#000000",
-                fontWeight: 1000,
-                cursor: "pointer",
-              }}
-            >
-              {isAr ? "العودة لإعدادات الدبلوم" : "Back to diploma settings"}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function taskRun12Clean(value: unknown) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
@@ -690,224 +493,6 @@ function readJsonSafe<T = any>(key: string): T | null {
 }
 
 
-function taskRun12AsArray(value: any): any[] {
-  if (Array.isArray(value)) return value;
-  if (Array.isArray(value?.rows)) return value.rows;
-  if (Array.isArray(value?.data)) return value.data;
-  if (Array.isArray(value?.items)) return value.items;
-  if (Array.isArray(value?.list)) return value.list;
-  return [];
-}
-
-function taskRun12ReadArrayFromStorage(keys: string[]): any[] {
-  if (typeof window === "undefined") return [];
-  for (const key of keys) {
-    const parsed = readJsonSafe<any>(key);
-    const rows = taskRun12AsArray(parsed);
-    if (rows.length) return rows;
-  }
-  return [];
-}
-
-function taskRun12ScanStorageForArray(pattern: RegExp): any[] {
-  if (typeof window === "undefined") return [];
-  try {
-    for (let i = 0; i < window.localStorage.length; i += 1) {
-      const key = window.localStorage.key(i) || "";
-      if (!pattern.test(key)) continue;
-      const parsed = readJsonSafe<any>(key);
-      const rows = taskRun12AsArray(parsed);
-      if (rows.length) return rows;
-    }
-  } catch {}
-  return [];
-}
-
-function taskRun12ReadTeachersFromStorage(): any[] {
-  return (
-    taskRun12ReadArrayFromStorage([
-      "exam-manager:teachers12-cache:v1",
-      "exam-manager:teachers12",
-      "exam-manager:teachers",
-    ]) || []
-  ).length
-    ? taskRun12ReadArrayFromStorage([
-        "exam-manager:teachers12-cache:v1",
-        "exam-manager:teachers12",
-        "exam-manager:teachers",
-      ])
-    : taskRun12ScanStorageForArray(/teachers12|teachers|الكادر|المعلم/i);
-}
-
-function taskRun12ReadExamsFromStorage(): any[] {
-  const rows = taskRun12ReadArrayFromStorage([
-    "exam-manager:exams12-cache:v1",
-    "exam-manager:exams12",
-    "exam-manager:exams",
-  ]);
-  return rows.length ? rows : taskRun12ScanStorageForArray(/exams12|exams|امتحان|الامتحانات/i);
-}
-
-function taskRun12ReadRoomsFromStorage(): any[] {
-  const rows = taskRun12ReadArrayFromStorage([
-    "exam-manager:rooms12-cache:v1",
-    "exam-manager:rooms12",
-    "exam-manager:rooms",
-  ]);
-  return rows.length ? rows : taskRun12ScanStorageForArray(/rooms12|rooms|القاعات|قاعة/i);
-}
-
-function taskRun12ReadRoomBlocksFromStorage(): any[] {
-  const rows = taskRun12ReadArrayFromStorage([
-    "exam-manager:roomBlocks12-cache:v1",
-    "exam-manager:roomBlocks12",
-    "exam-manager:roomBlocks",
-  ]);
-  return rows.length ? rows : taskRun12ScanStorageForArray(/roomBlocks12|roomBlocks|حظر.*قاعة/i);
-}
-
-function taskRun12ReadExamRoomAssignmentsFromStorage(tenantId?: string): any[] {
-  const suffix = String(tenantId || "default").trim() || "default";
-  const rows = taskRun12ReadArrayFromStorage([
-    `exam-manager:examRoomAssignments12_${suffix}`,
-    `exam-manager:examRoomAssignments_${suffix}`,
-    "exam-manager:examRoomAssignments12",
-    "exam-manager:examRoomAssignments",
-    "examRoomAssignments12",
-    "examRoomAssignments",
-  ]);
-  return rows.length ? rows : taskRun12ScanStorageForArray(/examRoomAssignments12|examRoomAssignments|ربط.*قاعة|قاعات.*ربط/i);
-}
-
-function taskRun12PickFirstNonEmptyArray(...lists: any[][]): any[] {
-  for (const list of lists) {
-    if (Array.isArray(list) && list.length) return list;
-  }
-  return [];
-}
-
-function taskRun12NormalizePeriodKey(period: any): "AM" | "PM" {
-  return periodToAMPM(String(period || ""));
-}
-
-function taskRun12NormalizeRoom(row: any) {
-  const id = String(row?.id ?? row?.roomId ?? "").trim();
-  const roomName = taskRun12Clean(row?.roomName || row?.name || row?.room || row?.label || row?.title || "");
-  const code = taskRun12Clean(row?.code || row?.roomCode || row?.roomNo || row?.number || "");
-  return {
-    ...row,
-    id,
-    roomName,
-    code,
-    building: taskRun12Clean(row?.building || ""),
-    capacity: Number(row?.capacity ?? 0) || 0,
-    status: row?.status === "inactive" ? "inactive" : "active",
-  };
-}
-
-function taskRun12NormalizeExamRoomAssignment(row: any) {
-  const id = String(row?.id ?? row?.assignmentId ?? row?.__uid ?? "").trim() || `exam_room_${Math.random().toString(16).slice(2)}`;
-  return {
-    ...row,
-    id,
-    examId: String(row?.examId ?? row?.examID ?? row?.exam?.id ?? "").trim(),
-    roomId: String(row?.roomId ?? row?.roomID ?? row?.room?.id ?? "").trim(),
-    roomName: taskRun12Clean(row?.roomName || row?.room?.roomName || row?.room?.name || row?.room || ""),
-    roomCode: taskRun12Clean(row?.roomCode || row?.code || row?.room?.code || ""),
-    dateISO: String(row?.dateISO ?? row?.date ?? "").trim(),
-    period: String(row?.period ?? "").trim(),
-    time: String(row?.time ?? "").trim(),
-  };
-}
-
-function taskRun12RoomDisplayLabel(room: any, fallbackNo: number) {
-  return taskRun12Clean(room?.code || room?.roomCode || room?.roomName || room?.name || room?.label || `لجنة ${fallbackNo}`);
-}
-
-function taskRun12BuildExamRoomRows(exam: any, roomsCount: number) {
-  const linked = Array.isArray(exam?.assignedRooms) ? exam.assignedRooms : [];
-  if (linked.length) {
-    return linked.slice(0, Math.max(1, Number(roomsCount) || linked.length)).map((room: any, index: number) => {
-      const no = index + 1;
-      const roomName = taskRun12Clean(room?.roomName || room?.name || "");
-      const roomCode = taskRun12Clean(room?.roomCode || room?.code || "");
-      const roomLabel = taskRun12RoomDisplayLabel({ ...room, roomName, code: roomCode }, no);
-      return {
-        committeeNo: no,
-        committeeNumber: no,
-        roomNo: no,
-        roomNumber: no,
-        roomId: String(room?.roomId || room?.id || "").trim(),
-        roomName,
-        roomCode,
-        roomLabel,
-        actualRoomNo: roomLabel,
-      };
-    });
-  }
-
-  return Array.from({ length: Math.max(0, Number(roomsCount) || 0) }, (_, index) => {
-    const no = index + 1;
-    return {
-      committeeNo: no,
-      committeeNumber: no,
-      roomNo: no,
-      roomNumber: no,
-      roomId: "",
-      roomName: "",
-      roomCode: "",
-      roomLabel: String(no),
-      actualRoomNo: String(no),
-    };
-  });
-}
-
-function taskRun12BuildSourceSnapshot(input: {
-  teachers: any[];
-  exams: any[];
-  rooms: any[];
-  roomBlocks: any[];
-  examRoomAssignments: any[];
-  officialCenterData?: any;
-}) {
-  return {
-    generatedAtISO: new Date().toISOString(),
-    teachersCount: Array.isArray(input.teachers) ? input.teachers.length : 0,
-    examsCount: Array.isArray(input.exams) ? input.exams.length : 0,
-    roomsCount: Array.isArray(input.rooms) ? input.rooms.length : 0,
-    roomBlocksCount: Array.isArray(input.roomBlocks) ? input.roomBlocks.length : 0,
-    examRoomAssignmentsCount: Array.isArray(input.examRoomAssignments) ? input.examRoomAssignments.length : 0,
-    teachers: (input.teachers || []).map((t: any) => ({
-      id: String(t?.id || ""),
-      employeeNo: String(t?.employeeNo || ""),
-      fullName: String(t?.fullName || t?.name || ""),
-      subject1: String(t?.subject1 || ""),
-      subject2: String(t?.subject2 || ""),
-      subject3: String(t?.subject3 || ""),
-      subject4: String(t?.subject4 || ""),
-    })),
-    exams: (input.exams || []).map((e: any) => ({
-      id: String(e?.id || ""),
-      subject: String(e?.subject || ""),
-      dateISO: String(e?.dateISO || e?.date || ""),
-      period: String(e?.period || ""),
-      time: String(e?.time || ""),
-      roomsCount: Number(e?.roomsCount || 0) || 0,
-      assignedRooms: Array.isArray(e?.assignedRooms) ? e.assignedRooms : [],
-    })),
-    rooms: (input.rooms || []).map((r: any) => ({
-      id: String(r?.id || ""),
-      roomName: String(r?.roomName || r?.name || ""),
-      code: String(r?.code || ""),
-      status: String(r?.status || "active"),
-    })),
-    roomBlocks: input.roomBlocks || [],
-    examRoomAssignments: input.examRoomAssignments || [],
-    officialCenterData: input.officialCenterData || null,
-  };
-}
-
-
 function persistDistributionState(tenantId: string, out: any) {
   const safeRun = ensureExplicitTaskTypes(out || {});
   const assignments = Array.isArray(safeRun?.assignments) ? safeRun.assignments : [];
@@ -920,7 +505,6 @@ function persistDistributionState(tenantId: string, out: any) {
       runCreatedAtISO: String((safeRun as any)?.createdAtISO || ""),
       updatedAtISO: new Date().toISOString(),
       source: "run",
-      sourceSnapshot: (safeRun as any)?.sourceSnapshot || null,
     },
     warnings: Array.isArray((safeRun as any)?.warnings) ? (safeRun as any).warnings : [],
     debug: (safeRun as any)?.debug || null,
@@ -983,7 +567,6 @@ async function persistDistributionStateToCloud(tenantId: string, out: any, by?: 
       warnings: Array.isArray((safeRun as any)?.warnings) ? (safeRun as any).warnings : [],
       debug: (safeRun as any)?.debug || null,
       summary: (safeRun as any)?.debug?.summary || null,
-      sourceSnapshot: (safeRun as any)?.sourceSnapshot || null,
       run: {
         ...safeRun,
         assignments: normalizedAssignments,
@@ -1182,8 +765,6 @@ function reasonLabel(code?: string) {
       return "تعارض في نفس الفترة";
     case "BACK_TO_BACK_BLOCK":
       return "منع حسب القيود";
-    case "CONSECUTIVE_INVIGILATION_DAYS":
-      return "مراقبة في يوم متتالٍ ممنوعة";
     case "SPECIALTY_BLOCK":
       return "ممنوع لمعلم المادة";
     case "DUTY_ALREADY_ASSIGNED":
@@ -1268,20 +849,11 @@ function buildTeacherSubject1Map(teachers: any[]) {
 }
 
 function periodToAMPM(p: string): "AM" | "PM" {
-  const raw = String(p || "").replace(/\s+/g, " ").trim();
-  const lower = raw.toLowerCase();
-  const compact = lower.replace(/[\.\s_-]+/g, "");
-  if (
-    raw.includes("الثانية") ||
-    raw.includes("ثانيه") ||
-    lower.includes("second") ||
-    compact === "pm" ||
-    compact === "bm" ||
-    compact === "p2" ||
-    compact === "period2" ||
-    compact === "2" ||
-    compact === "p"
-  ) return "PM";
+  const x = String(p || "").trim();
+  if (!x) return "AM";
+  if (x === "AM" || x === "PM") return x;
+  if (x.includes("الثانية")) return "PM";
+  if (x.includes("الأولى")) return "AM";
   return "AM";
 }
 
@@ -1318,119 +890,6 @@ function workDateISO(dateISO: string) {
   // تبقى الدالة لتوحيد قراءة التاريخ فقط بدون تغيير اليوم.
   const d = String(dateISO || "").trim();
   return d;
-}
-
-function getAdjacentDateISOs(dateISO: string) {
-  const d = workDateISO(String(dateISO || "").trim());
-  if (!d) return [];
-  return [addDaysISO(d, -1), addDaysISO(d, 1)]
-    .map((x) => workDateISO(String(x || "").trim()))
-    .filter(Boolean);
-}
-
-function hasAdjacentInvigilationDate(invigilationDates: Set<string> | undefined, dateISO: string) {
-  if (!invigilationDates || !dateISO) return false;
-  return getAdjacentDateISOs(dateISO).some((adjacentDateISO) => invigilationDates.has(adjacentDateISO));
-}
-
-function hasTeacherAdjacentInvigilation(
-  invigilationDatesByTeacher: Map<string, Set<string>>,
-  teacherId: string,
-  dateISO: string
-) {
-  const tid = String(teacherId || "").trim();
-  const d = workDateISO(String(dateISO || "").trim());
-  if (!tid || !d) return false;
-  return hasAdjacentInvigilationDate(invigilationDatesByTeacher.get(tid), d);
-}
-
-function wouldCreateThreeConsecutiveInvigilationDays(invigilationDates: Set<string> | undefined, dateISO: string) {
-  const d = workDateISO(String(dateISO || "").trim());
-  if (!invigilationDates || !d) return false;
-
-  const normalizedDates = new Set<string>(
-    Array.from(invigilationDates)
-      .map((value) => workDateISO(String(value || "").trim()))
-      .filter(Boolean)
-  );
-
-  // ✅ الشرط التجاري الجديد:
-  // إذا كان المعلم لديه مراقبة في يومين متتاليين، فلا يتم تكليفه مراقبة في اليوم الثالث.
-  // الفحص يشمل كل الاحتمالات حتى لا يؤدي الإسناد اليدوي أو إعادة التوازن إلى تكوين 3 أيام متتالية.
-  const has = (offset: number) => normalizedDates.has(workDateISO(addDaysISO(d, offset)));
-  return (
-    (has(-2) && has(-1)) ||
-    (has(-1) && has(1)) ||
-    (has(1) && has(2))
-  );
-}
-
-function wouldTeacherCreateThreeConsecutiveInvigilationDays(
-  invigilationDatesByTeacher: Map<string, Set<string>>,
-  teacherId: string,
-  dateISO: string
-) {
-  const tid = String(teacherId || "").trim();
-  const d = workDateISO(String(dateISO || "").trim());
-  if (!tid || !d) return false;
-  return wouldCreateThreeConsecutiveInvigilationDays(invigilationDatesByTeacher.get(tid), d);
-}
-
-function hasAdjacentInvigilationAssignment(
-  assignments: any[],
-  teacherId: string,
-  dateISO: string,
-  excludedAssignmentIds: Set<string> = new Set<string>()
-) {
-  const tid = String(teacherId || "").trim();
-  const d = workDateISO(String(dateISO || "").trim());
-  if (!tid || !d) return false;
-
-  for (let index = 0; index < (Array.isArray(assignments) ? assignments.length : 0); index++) {
-    const assignment = assignments[index];
-    const assignmentId = assignmentIdentity(assignment, index);
-    if (excludedAssignmentIds.has(assignmentId)) continue;
-
-    const assTeacherId = String((assignment as any)?.teacherId || "").trim();
-    if (assTeacherId !== tid) continue;
-
-    const assTaskType = normalizeStoredTaskTypeGlobal((assignment as any)?.taskType || (assignment as any)?.role || "");
-    if (assTaskType !== "INVIGILATION") continue;
-
-    const assDateISO = workDateISO(String((assignment as any)?.dateISO || (assignment as any)?.date || "").trim());
-    if (getAdjacentDateISOs(d).includes(assDateISO)) return true;
-  }
-
-  return false;
-}
-
-function wouldCreateThreeConsecutiveInvigilationAssignment(
-  assignments: any[],
-  teacherId: string,
-  dateISO: string,
-  excludedAssignmentIds: Set<string> = new Set<string>()
-) {
-  const tid = String(teacherId || "").trim();
-  const d = workDateISO(String(dateISO || "").trim());
-  if (!tid || !d) return false;
-
-  const invigilationDates = new Set<string>();
-  for (let index = 0; index < (Array.isArray(assignments) ? assignments.length : 0); index++) {
-    const assignment = assignments[index];
-    const assignmentId = assignmentIdentity(assignment, index);
-    if (excludedAssignmentIds.has(assignmentId)) continue;
-
-    const assTeacherId = String((assignment as any)?.teacherId || "").trim();
-    if (assTeacherId !== tid) continue;
-
-    const assTaskType = normalizeStoredTaskTypeGlobal((assignment as any)?.taskType || (assignment as any)?.role || "");
-    if (assTaskType !== "INVIGILATION") continue;
-
-    const assDateISO = workDateISO(String((assignment as any)?.dateISO || (assignment as any)?.date || "").trim());
-    if (assDateISO) invigilationDates.add(assDateISO);
-  }
-
-  return wouldCreateThreeConsecutiveInvigilationDays(invigilationDates, d);
 }
 
 /* ============================================================
@@ -1537,7 +996,6 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
   const occupiedSlots = new Map<string, Set<string>>(); // teacherId -> set(date__period)
   const dayHasAnyPeriod = new Map<string, Set<string>>(); // teacherId -> set(dateISO)
   const teacherDayFirstInvDuration = new Map<string, number>(); // key teacherId__dateISO -> durationMinutes of first invigilation
-  const teacherInvigilationDates = new Map<string, Set<string>>(); // teacherId -> INVIGILATION dates, used to block consecutive days
 
   // ✅ NEW: منع تكرار مراقبة 3 ساعات
   const teacherHad3HoursInv = new Map<string, boolean>(); // teacherId -> true إذا أخذ 180 دقيقة مرة
@@ -1548,7 +1006,6 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
     dutyCounts.set(id, 0);
     occupiedSlots.set(id, new Set<string>());
     dayHasAnyPeriod.set(id, new Set<string>());
-    teacherInvigilationDates.set(id, new Set<string>());
     teacherHad3HoursInv.set(id, false);
   });
 
@@ -1644,21 +1101,6 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
       if (dur === 180 && (teacherHad3HoursInv.get(teacherId) || false)) {
         return { ok: false, reason: "BACK_TO_BACK_BLOCK" as const };
       }
-
-      // ✅ شرط تجاري جديد: إذا كُلف المعلم مراقبة في يومين متتاليين، اليوم الثالث يكون غير مكلف مراقبة.
-      // هذا الشرط صلب ولا يتم كسره حتى في حالة الضرورة، حتى لا تتكون 3 أيام مراقبة متتالية.
-      if (wouldTeacherCreateThreeConsecutiveInvigilationDays(teacherInvigilationDates, teacherId, dateISO)) {
-        return { ok: false, reason: "THREE_CONSECUTIVE_INVIGILATION_DAYS" as const };
-      }
-
-      // ✅ شرط تجاري: لا يكلف المعلم مراقبة في يومين متتاليين قدر الإمكان.
-      // ✅ يسمح بكسر الشرط فقط عند الضرورة إذا لم يوجد بديل مناسب.
-      const allowConsecutiveInvigilation =
-        meta?.allowConsecutiveInvigilation === true ||
-        meta?.allowConsecutiveInvigilationDays === true;
-      if (!allowConsecutiveInvigilation && hasTeacherAdjacentInvigilation(teacherInvigilationDates, teacherId, dateISO)) {
-        return { ok: false, reason: "CONSECUTIVE_INVIGILATION_DAYS" as const };
-      }
     }
 
     if (smartBySpecialty && taskType === "INVIGILATION") {
@@ -1709,18 +1151,7 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
       if (dur === 180) {
         teacherHad3HoursInv.set(teacherId, true);
       }
-
-      if (!teacherInvigilationDates.has(teacherId)) {
-        teacherInvigilationDates.set(teacherId, new Set<string>());
-      }
-      teacherInvigilationDates.get(teacherId)!.add(dateISO);
     }
-
-    const {
-      allowConsecutiveInvigilation,
-      allowConsecutiveInvigilationDays,
-      ...assignmentMeta
-    } = meta || {};
 
     assignments.push({
       teacherId,
@@ -1731,7 +1162,7 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
       date: dateISO,
       period,
       subject,
-      ...(assignmentMeta || {}),
+      ...meta,
     });
   }
 
@@ -1778,22 +1209,6 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
         return { assigned: true as const };
       }
 
-      // ✅ ضرورة فقط: إذا لم يوجد أي بديل يحقق شرط عدم اليومين المتتاليين،
-      // نعيد المحاولة مع السماح بهذا الشرط فقط، مع إبقاء باقي الشروط كما هي.
-      const necessityMeta = {
-        ...(meta || {}),
-        allowConsecutiveInvigilation: true,
-        consecutiveInvigilationAllowedBecauseNecessary: true,
-      };
-      for (const c of baseCandidates) {
-        const chk = canAssign(c.id, dateISO, period, taskType, subject, necessityMeta);
-        if (!chk.ok) continue;
-
-        commitAssign(c.id, dateISO, period, taskType, subject, necessityMeta);
-        rr = (c.idx + 1) % n;
-        return { assigned: true as const, relaxedConsecutiveInvigilation: true as const };
-      }
-
       return { assigned: false as const, reason: "NO_TEACHERS" as const };
     }
 
@@ -1838,11 +1253,9 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
     const dateISO = workDateISO(rawDate); // ✅ بدون ترحيل الجمعة/السبت إلى الأحد
     const period = periodToAMPM(String(exam.period || ""));
     const subject = String(exam.subject || "").trim();
-    const rawRoomsCount = Number(exam.roomsCount || 0) || 0;
-    const examRoomRows = taskRun12BuildExamRoomRows(exam, rawRoomsCount);
-    const roomsCount = examRoomRows.length;
+    const roomsCount = Number(exam.roomsCount || 0) || 0;
 
-    if (!dateISO || !subject || roomsCount <= 0) continue;
+    if (!dateISO || !subject) continue;
 
     const invPerRoom = Math.max(1, Number(guessInvigilatorsPerRoom(exam, constraints) || 1));
     const neededInv = roomsCount * invPerRoom;
@@ -1851,17 +1264,6 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
     let assignedInvHere = 0;
 
     for (let committeeNo = 1; committeeNo <= roomsCount; committeeNo++) {
-      const committeeRoomMeta = examRoomRows[committeeNo - 1] || {
-        committeeNo,
-        committeeNumber: committeeNo,
-        roomNo: committeeNo,
-        roomNumber: committeeNo,
-        roomId: "",
-        roomName: "",
-        roomCode: "",
-        roomLabel: String(committeeNo),
-        actualRoomNo: String(committeeNo),
-      };
       // ============ حالة 1 مراقب في اللجنة ============
       if (invPerRoom === 1) {
         const n = teacherIds.length;
@@ -1895,58 +1297,29 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
               a.rrDist - b.rrDist
           );
 
-        const baseInvMeta = {
-          durationMinutes: Number(exam.durationMinutes ?? 0) || 0,
-        };
-        const assignmentInvMeta = {
-          examId: exam.id,
-          examSubject: subject,
-          committeeNo,
-          committeeNumber: committeeNo,
-          roomNo: committeeNo,
-          roomNumber: committeeNo,
-          ...committeeRoomMeta,
-          invigilatorIndex: 1,
-          durationMinutes: Number(exam.durationMinutes ?? 0) || 0,
-        };
-
         let ok = false;
         for (const c of candidatesAll) {
-          const chk = canAssign(c.id, dateISO, period, "INVIGILATION", subject, baseInvMeta);
+          const chk = canAssign(c.id, dateISO, period, "INVIGILATION", subject, {
+            durationMinutes: Number(exam.durationMinutes ?? 0) || 0,
+          });
           if (!chk.ok) continue;
 
-          commitAssign(c.id, dateISO, period, "INVIGILATION", subject, assignmentInvMeta);
+          commitAssign(c.id, dateISO, period, "INVIGILATION", subject, {
+            examId: exam.id,
+            examSubject: subject,
+            committeeNo,
+            committeeNumber: committeeNo,
+            roomNo: committeeNo,
+            roomNumber: committeeNo,
+            invigilatorIndex: 1,
+            durationMinutes: Number(exam.durationMinutes ?? 0) || 0,
+          });
 
           rr = (c.idx + 1) % n;
           ok = true;
           assignedInvHere += 1;
           invAssigned += 1;
           break;
-        }
-
-        // ✅ ضرورة فقط: السماح بيومين متتاليين إذا لم يوجد بديل مناسب.
-        if (!ok) {
-          const necessityBaseMeta = {
-            ...baseInvMeta,
-            allowConsecutiveInvigilation: true,
-          };
-          const necessityAssignmentMeta = {
-            ...assignmentInvMeta,
-            allowConsecutiveInvigilation: true,
-            consecutiveInvigilationAllowedBecauseNecessary: true,
-          };
-          for (const c of candidatesAll) {
-            const chk = canAssign(c.id, dateISO, period, "INVIGILATION", subject, necessityBaseMeta);
-            if (!chk.ok) continue;
-
-            commitAssign(c.id, dateISO, period, "INVIGILATION", subject, necessityAssignmentMeta);
-
-            rr = (c.idx + 1) % n;
-            ok = true;
-            assignedInvHere += 1;
-            invAssigned += 1;
-            break;
-          }
         }
 
         if (!ok) {
@@ -2001,47 +1374,31 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
 
         let firstPicked: any = null;
         let secondPicked: any = null;
-        let consecutiveNecessityPair = false;
 
-        const pickPair = (allowConsecutiveInvigilation = false) => {
-          const pairMeta = {
+        const cand1 = buildCandidates();
+
+        for (const c1 of cand1) {
+          const chk1 = canAssign(c1.id, dateISO, period, "INVIGILATION", subject, {
             durationMinutes: Number(exam.durationMinutes ?? 0) || 0,
-            ...(allowConsecutiveInvigilation ? { allowConsecutiveInvigilation: true } : {}),
-          };
-          const cand1 = buildCandidates();
+          });
+          if (!chk1.ok) continue;
 
-          for (const c1 of cand1) {
-            const chk1 = canAssign(c1.id, dateISO, period, "INVIGILATION", subject, pairMeta);
-            if (!chk1.ok) continue;
+          const cand2 = buildCandidates().filter((c2) => c2.id !== c1.id);
 
-            const cand2 = buildCandidates().filter((c2) => c2.id !== c1.id);
+          for (const c2 of cand2) {
+            // ✅ ممنوع: بدون بن + بدون بن
+            if (!c1.ben && !c2.ben) continue;
 
-            for (const c2 of cand2) {
-              // ✅ ممنوع: بدون بن + بدون بن
-              if (!c1.ben && !c2.ben) continue;
+            const chk2 = canAssign(c2.id, dateISO, period, "INVIGILATION", subject, {
+              durationMinutes: Number(exam.durationMinutes ?? 0) || 0,
+            });
+            if (!chk2.ok) continue;
 
-              const chk2 = canAssign(c2.id, dateISO, period, "INVIGILATION", subject, pairMeta);
-              if (!chk2.ok) continue;
-
-              return { first: c1, second: c2 };
-            }
+            firstPicked = c1;
+            secondPicked = c2;
+            break;
           }
-          return null;
-        };
-
-        const strictPair = pickPair(false);
-        if (strictPair) {
-          firstPicked = strictPair.first;
-          secondPicked = strictPair.second;
-        } else {
-          // ✅ ضرورة فقط: إذا فشل إيجاد زوج مناسب بدون يومين متتاليين،
-          // نعيد المحاولة مع السماح بهذا الشرط فقط.
-          const necessityPair = pickPair(true);
-          if (necessityPair) {
-            firstPicked = necessityPair.first;
-            secondPicked = necessityPair.second;
-            consecutiveNecessityPair = true;
-          }
+          if (firstPicked && secondPicked) break;
         }
 
         if (!firstPicked || !secondPicked) {
@@ -2065,15 +1422,8 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
           committeeNumber: committeeNo,
           roomNo: committeeNo,
           roomNumber: committeeNo,
-          ...committeeRoomMeta,
           invigilatorIndex: 1,
           durationMinutes: Number(exam.durationMinutes ?? 0) || 0,
-          ...(consecutiveNecessityPair
-            ? {
-                allowConsecutiveInvigilation: true,
-                consecutiveInvigilationAllowedBecauseNecessary: true,
-              }
-            : {}),
         });
         assignedInvHere += 1;
         invAssigned += 1;
@@ -2085,15 +1435,8 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
           committeeNumber: committeeNo,
           roomNo: committeeNo,
           roomNumber: committeeNo,
-          ...committeeRoomMeta,
           invigilatorIndex: 2,
           durationMinutes: Number(exam.durationMinutes ?? 0) || 0,
-          ...(consecutiveNecessityPair
-            ? {
-                allowConsecutiveInvigilation: true,
-                consecutiveInvigilationAllowedBecauseNecessary: true,
-              }
-            : {}),
         });
         assignedInvHere += 1;
         invAssigned += 1;
@@ -2111,7 +1454,6 @@ function runTaskDistributionLocal(params: { teachers: any[]; exams: any[]; const
           committeeNumber: committeeNo,
           roomNo: committeeNo,
           roomNumber: committeeNo,
-          ...committeeRoomMeta,
           invigilatorIndex: j,
           durationMinutes: Number(exam.durationMinutes ?? 0) || 0,
         });
@@ -2312,64 +1654,6 @@ const nav = useNavigate();
   const translateSubject = (value: string) => translateSubjectValue(value, lang);
   const APP_NAME = lang === "ar" ? APP_NAME_AR : APP_NAME_EN;
 
-  const [phoneGateAllowed, setPhoneGateAllowed] = useState<boolean>(() => {
-    try {
-      return sessionStorage.getItem(`yr:phone-gate:task-run12:${tenantId}`) === "ok";
-    } catch {
-      return false;
-    }
-  });
-  const [phoneGateValue, setPhoneGateValue] = useState("");
-  const [phoneGateError, setPhoneGateError] = useState("");
-  const [phoneGateLoading, setPhoneGateLoading] = useState(true);
-  const [registeredGatePhone, setRegisteredGatePhone] = useState("");
-
-  useEffect(() => {
-    let mounted = true;
-    setPhoneGateLoading(true);
-    setPhoneGateError("");
-    async function loadGatePhone() {
-      try {
-        const cloud = await loadTenantSettings<any>(tenantId, DIPLOMA_EXAM_CENTER_SETTINGS_DOC_ID, {});
-        const fromCloud = taskRun12PickRegisteredPhone(cloud);
-        const fromLocal = taskRun12ReadLocalRegisteredPhone();
-        const phone = fromCloud || fromLocal;
-        if (!mounted) return;
-        setRegisteredGatePhone(phone);
-        setPhoneGateLoading(false);
-      } catch {
-        if (!mounted) return;
-        setRegisteredGatePhone(taskRun12ReadLocalRegisteredPhone());
-        setPhoneGateLoading(false);
-      }
-    }
-    void loadGatePhone();
-    return () => {
-      mounted = false;
-    };
-  }, [tenantId]);
-
-  const verifyPhoneGate = () => {
-    const expected = taskRun12PhoneDigitsOnly(registeredGatePhone);
-    const actual = taskRun12PhoneDigitsOnly(phoneGateValue);
-    if (!expected) {
-      setPhoneGateError(tr("لا يوجد رقم هاتف مسجل في إعدادات مركز الدبلوم.", "No registered phone number was found in diploma settings."));
-      return;
-    }
-    if (!actual || actual !== expected) {
-      setPhoneGateError(tr("رقم الهاتف غير مطابق للرقم المسجل.", "The phone number does not match the registered number."));
-      return;
-    }
-    try {
-      sessionStorage.setItem(`yr:phone-gate:task-run12:${tenantId}`, "ok");
-    } catch {
-      // ignore
-    }
-    setPhoneGateAllowed(true);
-    setPhoneGateError("");
-  };
-
-
   const [officialCenterData, setOfficialCenterData] = useState<TaskRun12ExamCenterData>(() =>
     taskRun12ReadExamCenterData()
   );
@@ -2443,7 +1727,6 @@ const nav = useNavigate();
   const [fsExams, setFsExams] = useState<any[]>([]);
   const [fsRooms, setFsRooms] = useState<any[]>([]);
   const [fsRoomBlocks, setFsRoomBlocks] = useState<any[]>([]);
-  const [fsExamRoomAssignments, setFsExamRoomAssignments] = useState<any[]>([]);
   const [fsLoading, setFsLoading] = useState(false);
   const [fsLoaded, setFsLoaded] = useState(false);
   const [cloudSyncMessage, setCloudSyncMessage] = useState("");
@@ -2460,7 +1743,6 @@ const nav = useNavigate();
     let unsubscribeExams: (() => void) | undefined;
     let unsubscribeRooms: (() => void) | undefined;
     let unsubscribeRoomBlocks: (() => void) | undefined;
-    let unsubscribeExamRoomAssignments: (() => void) | undefined;
 
     async function loadCloudOperationalData() {
       if (!tenantId) return;
@@ -2472,12 +1754,11 @@ const nav = useNavigate();
       setCloudSyncMessage(lang === "ar" ? "جاري تحميل بيانات التشغيل من السحابة..." : "Loading operational data from cloud...");
 
       try {
-        const [t, e, r, rb, era] = await Promise.all([
-          loadTenantArray<any>(tenantId, "teachers", { cacheFallback: true }),
-          loadTenantArray<any>(tenantId, "exams", { cacheFallback: true }),
-          loadTenantArray<any>(tenantId, TASKRUN12_ROOMS_SUBCOLLECTION, { cacheFallback: true }),
-          loadTenantArray<any>(tenantId, TASKRUN12_ROOM_BLOCKS_SUBCOLLECTION, { cacheFallback: true }),
-          loadTenantArray<any>(tenantId, TASKRUN12_EXAM_ROOM_ASSIGNMENTS_SUBCOLLECTION, { cacheFallback: true }),
+        const [t, e, r, rb] = await Promise.all([
+          loadTenantArray<any>(tenantId, "teachers"),
+          loadTenantArray<any>(tenantId, "exams"),
+          loadTenantArray<any>(tenantId, TASKRUN12_ROOMS_SUBCOLLECTION),
+          loadTenantArray<any>(tenantId, TASKRUN12_ROOM_BLOCKS_SUBCOLLECTION),
         ]);
 
         if (!mounted) return;
@@ -2486,7 +1767,6 @@ const nav = useNavigate();
         setFsExams(Array.isArray(e) ? e : []);
         setFsRooms(Array.isArray(r) ? r : []);
         setFsRoomBlocks(Array.isArray(rb) ? rb : []);
-        setFsExamRoomAssignments(Array.isArray(era) ? era : []);
         setCloudSyncMessage(lang === "ar" ? "تم تحميل بيانات التشغيل من السحابة." : "Operational data loaded from cloud.");
 
         unsubscribeTeachers = subscribeTenantArray<any>(
@@ -2512,19 +1792,12 @@ const nav = useNavigate();
           TASKRUN12_ROOM_BLOCKS_SUBCOLLECTION,
           (items) => setFsRoomBlocks(Array.isArray(items) ? items : [])
         );
-
-        unsubscribeExamRoomAssignments = subscribeTenantArray<any>(
-          tenantId,
-          TASKRUN12_EXAM_ROOM_ASSIGNMENTS_SUBCOLLECTION,
-          (items) => setFsExamRoomAssignments(Array.isArray(items) ? items : [])
-        );
       } catch {
         if (!mounted) return;
         setFsTeachers([]);
         setFsExams([]);
         setFsRooms([]);
         setFsRoomBlocks([]);
-        setFsExamRoomAssignments([]);
         setCloudSyncError(lang === "ar" ? "تعذر تحميل بيانات التشغيل من السحابة." : "Could not load operational data from cloud.");
       } finally {
         if (mounted) setFsLoading(false);
@@ -2541,7 +1814,6 @@ const nav = useNavigate();
       unsubscribeExams?.();
       unsubscribeRooms?.();
       unsubscribeRoomBlocks?.();
-      unsubscribeExamRoomAssignments?.();
     };
   }, [tenantId]);
 
@@ -2564,21 +1836,11 @@ const nav = useNavigate();
     };
   }, [tenantId]);
 
-  // ✅ مصدر البيانات الفعلي للتشغيل:
-  // 1) Firestore داخل tenant من صفحات الدبلوم.
-  // 2) AppData إذا كانت الصفحة تعمل محليًا.
-  // 3) LocalStorage من صفحات Teachers12 / Exams12 / Rooms12 / Unavailability12 كنسخة احتياطية.
-  const localTeachersRows = useMemo(() => taskRun12ReadTeachersFromStorage(), [tenantId, fsLoaded]);
-  const localExamsRows = useMemo(() => taskRun12ReadExamsFromStorage(), [tenantId, fsLoaded]);
-  const localRoomsRows = useMemo(() => taskRun12ReadRoomsFromStorage(), [tenantId, fsLoaded]);
-  const localRoomBlocksRows = useMemo(() => taskRun12ReadRoomBlocksFromStorage(), [tenantId, fsLoaded]);
-  const localExamRoomAssignmentsRows = useMemo(() => taskRun12ReadExamRoomAssignmentsFromStorage(tenantId), [tenantId, fsLoaded]);
-
-  const teachersRaw = taskRun12PickFirstNonEmptyArray(fsTeachers, appTeachers as any[], localTeachersRows) as any[];
-  const examsRaw = taskRun12PickFirstNonEmptyArray(fsExams, appExams as any[], localExamsRows) as any[];
-  const roomsRaw = taskRun12PickFirstNonEmptyArray(fsRooms, localRoomsRows) as any[];
-  const roomBlocksRaw = taskRun12PickFirstNonEmptyArray(fsRoomBlocks, localRoomBlocksRows) as any[];
-  const examRoomAssignmentsRaw = taskRun12PickFirstNonEmptyArray(fsExamRoomAssignments, localExamRoomAssignmentsRows) as any[];
+  // ✅ مصدر البيانات الفعلي للتشغيل: Firestore داخل tenant إن وُجد، وإلا AppData
+  // ثم نفلتر بقوة حتى لا يتم التشغيل بصفوف/عناصر “فارغة” بعد الحذف.
+  // إذا تم تحميل Firestore (حتى لو كانت النتيجة فارغة) نعتمد عليه كحقيقة.
+  const teachersRaw = (fsLoaded ? fsTeachers : appTeachers) as any[];
+  const examsRaw = (fsLoaded ? fsExams : appExams) as any[];
 
   const teachers = useMemo(() => {
     const list = Array.isArray(teachersRaw) ? teachersRaw : [];
@@ -2599,74 +1861,13 @@ const nav = useNavigate();
       .filter((t: any) => t.id && (t.fullName || t.name || t.employeeNo));
   }, [teachersRaw]);
 
-  const rooms = useMemo(() => {
-    const list = Array.isArray(roomsRaw) ? roomsRaw : [];
-    return list
-      .map(taskRun12NormalizeRoom)
-      .filter((room: any) => room.id || room.roomName || room.code);
-  }, [roomsRaw]);
-
-  const roomBlocks = useMemo(() => {
-    const list = Array.isArray(roomBlocksRaw) ? roomBlocksRaw : [];
-    return list.filter(Boolean);
-  }, [roomBlocksRaw]);
-
-  const examRoomAssignments = useMemo(() => {
-    const list = Array.isArray(examRoomAssignmentsRaw) ? examRoomAssignmentsRaw : [];
-    return list
-      .map(taskRun12NormalizeExamRoomAssignment)
-      .filter((row: any) => row.examId && (row.roomId || row.roomName || row.roomCode));
-  }, [examRoomAssignmentsRaw]);
-
   const exams = useMemo(() => {
     const list = Array.isArray(examsRaw) ? examsRaw : [];
-    const roomById = new Map<string, any>();
-    for (const room of rooms) {
-      const id = String(room?.id || "").trim();
-      if (id) roomById.set(id, room);
-    }
-
-    const assignmentsByExamId = new Map<string, any[]>();
-    for (const assignment of examRoomAssignments) {
-      const examId = String(assignment?.examId || "").trim();
-      if (!examId) continue;
-      if (!assignmentsByExamId.has(examId)) assignmentsByExamId.set(examId, []);
-      assignmentsByExamId.get(examId)!.push(assignment);
-    }
-
     return list
       .map((e: any) => {
-        const id = String(e?.id ?? "").trim();
         const dateISO = String(e?.dateISO ?? e?.date ?? "").trim();
-        const linkedAssignments = (assignmentsByExamId.get(id) || []).slice().sort((a: any, b: any) => {
-          const aLabel = taskRun12Clean(a?.roomCode || a?.roomName || a?.roomId);
-          const bLabel = taskRun12Clean(b?.roomCode || b?.roomName || b?.roomId);
-          return aLabel.localeCompare(bLabel, "ar", { numeric: true, sensitivity: "base" });
-        });
-
-        const assignedRooms = linkedAssignments.map((assignment: any, index: number) => {
-          const room = roomById.get(String(assignment?.roomId || "").trim()) || {};
-          const roomName = taskRun12Clean(assignment?.roomName || room?.roomName || room?.name || "");
-          const roomCode = taskRun12Clean(assignment?.roomCode || room?.code || "");
-          const label = taskRun12RoomDisplayLabel({ ...room, roomName, code: roomCode }, index + 1);
-          return {
-            id: String(assignment?.id || `${id}_room_${index + 1}`),
-            examId: id,
-            roomId: String(assignment?.roomId || room?.id || ""),
-            roomName,
-            roomCode,
-            roomLabel: label,
-            committeeNo: index + 1,
-            committeeNumber: index + 1,
-          };
-        });
-
-        const roomsCountFromExam = Number(e?.roomsCount ?? 0) || 0;
-        const roomsCount = assignedRooms.length || roomsCountFromExam;
-
         return {
-          ...e,
-          id,
+          id: String(e?.id ?? "").trim(),
           subject: String(e?.subject ?? "").trim(),
           dateISO,
           date: dateISO,
@@ -2674,13 +1875,11 @@ const nav = useNavigate();
           time: String(e?.time ?? "").trim(),
           durationMinutes: Number(e?.durationMinutes ?? 0) || 0,
           period: String(e?.period ?? "").trim(),
-          roomsCount,
-          assignedRooms,
-          roomAssignmentsCount: assignedRooms.length,
+          roomsCount: Number(e?.roomsCount ?? 0) || 0,
         };
       })
       .filter((e: any) => e.id && e.subject && e.dateISO);
-  }, [examsRaw, rooms, examRoomAssignments]);
+  }, [examsRaw]);
 
   const teachersCount = teachers.length;
   const examsCount = exams.length;
@@ -2705,9 +1904,6 @@ const nav = useNavigate();
   const [unavailabilityVersion, setUnavailabilityVersion] = useState(0);
   const [masterTableVersion, setMasterTableVersion] = useState(0);
   const [manualSuggestionHistory, setManualSuggestionHistory] = useState<ManualSuggestionHistoryEntry[]>(() => loadManualSuggestionHistory(tenantId));
-  const [deleteDistributionConfirmOpen, setDeleteDistributionConfirmOpen] = useState(false);
-  const [runDistributionConfirmOpen, setRunDistributionConfirmOpen] = useState(false);
-  const [pendingRunConstraints, setPendingRunConstraints] = useState<any | null>(null);
 
 
   // ✅ حذف نهائي لصف "عدد أيام التصحيح" فقط من كرت القيود والأنصبة.
@@ -3398,17 +2594,15 @@ const nav = useNavigate();
       const occupiedSlots = new Map<string, Set<string>>();
       const dayHasAnyPeriod = new Map<string, Set<string>>();
       const teacherDayFirstInvDuration = new Map<string, number>();
-      const teacherInvigilationDates = new Map<string, Set<string>>();
       const teacherHad3HoursInv = new Map<string, boolean>();
       for (const teacherId of teacherIds) {
         quotaTotals.set(teacherId, 0);
         invCounts.set(teacherId, 0);
         occupiedSlots.set(teacherId, new Set<string>());
         dayHasAnyPeriod.set(teacherId, new Set<string>());
-        teacherInvigilationDates.set(teacherId, new Set<string>());
         teacherHad3HoursInv.set(teacherId, false);
       }
-      return { quotaTotals, invCounts, occupiedSlots, dayHasAnyPeriod, teacherDayFirstInvDuration, teacherInvigilationDates, teacherHad3HoursInv };
+      return { quotaTotals, invCounts, occupiedSlots, dayHasAnyPeriod, teacherDayFirstInvDuration, teacherHad3HoursInv };
     }
 
     function buildSimulationArtifactsFromAssignments(sourceAssignments: any[]) {
@@ -3451,11 +2645,6 @@ const nav = useNavigate();
             state.teacherHad3HoursInv.set(teacherId, true);
           }
 
-          if (!state.teacherInvigilationDates.has(teacherId)) {
-            state.teacherInvigilationDates.set(teacherId, new Set<string>());
-          }
-          state.teacherInvigilationDates.get(teacherId)!.add(dateISO);
-
           const examKey = String((ass as any)?.examId || `${key}__${String((ass as any)?.subject || "").trim()}`).trim();
           const committeeNo = Math.max(1, Number((ass as any)?.committeeNo || (ass as any)?.committeeNumber || (ass as any)?.roomNo || (ass as any)?.roomNumber || 1) || 1);
           if (!committeeMap.has(examKey)) committeeMap.set(examKey, new Map<number, any[]>());
@@ -3488,7 +2677,6 @@ const nav = useNavigate();
         occupiedSlots: new Map(Array.from(state.occupiedSlots.entries()).map(([teacherId, periods]: any) => [teacherId, new Set(Array.from(periods))])),
         dayHasAnyPeriod: new Map(Array.from(state.dayHasAnyPeriod.entries()).map(([teacherId, dates]: any) => [teacherId, new Set(Array.from(dates))])),
         teacherDayFirstInvDuration: new Map(state.teacherDayFirstInvDuration),
-        teacherInvigilationDates: new Map(Array.from((state.teacherInvigilationDates || new Map()).entries()).map(([teacherId, dates]: any) => [teacherId, new Set(Array.from(dates || []))])),
         teacherHad3HoursInv: new Map(state.teacherHad3HoursInv),
       };
     }
@@ -3520,11 +2708,6 @@ const nav = useNavigate();
       if (taskType === "INVIGILATION") {
         const durationMinutes = Number(meta?.durationMinutes ?? 0) || 0;
         if (durationMinutes === 180 && (state.teacherHad3HoursInv.get(teacherId) || false)) return false;
-        if (wouldCreateThreeConsecutiveInvigilationDays(state.teacherInvigilationDates?.get(teacherId), dateISO)) return false;
-        const allowConsecutiveInvigilation =
-          meta?.allowConsecutiveInvigilation === true ||
-          meta?.allowConsecutiveInvigilationDays === true;
-        if (!allowConsecutiveInvigilation && hasAdjacentInvigilationDate(state.teacherInvigilationDates?.get(teacherId), dateISO)) return false;
       }
 
 
@@ -3555,10 +2738,6 @@ const nav = useNavigate();
         if (durationMinutes === 180) {
           state.teacherHad3HoursInv.set(teacherId, true);
         }
-        if (!state.teacherInvigilationDates.has(teacherId)) {
-          state.teacherInvigilationDates.set(teacherId, new Set<string>());
-        }
-        state.teacherInvigilationDates.get(teacherId)!.add(dateISO);
       }
     }
 
@@ -3624,7 +2803,6 @@ const nav = useNavigate();
       const teacherName = teacherNameMapLocal.get(teacherId) || "";
 
       if (durationMinutes === 180 && (state.teacherHad3HoursInv.get(teacherId) || false)) return false;
-      if (hasAdjacentInvigilationDate(state.teacherInvigilationDates?.get(teacherId), dateISO)) return false;
 
       if (smartBySpecialty) {
         const subjects = teacherSubjectSetMap.get(teacherId);
@@ -3695,8 +2873,6 @@ const nav = useNavigate();
       }
 
       if (durationMinutes === 180 && (state.teacherHad3HoursInv.get(teacherId) || false)) blockers.push("THREE_HOURS_REPEAT");
-      if (wouldCreateThreeConsecutiveInvigilationDays(state.teacherInvigilationDates?.get(teacherId), dateISO)) blockers.push("THREE_CONSECUTIVE_INVIGILATION_DAYS");
-      else if (hasAdjacentInvigilationDate(state.teacherInvigilationDates?.get(teacherId), dateISO)) blockers.push("CONSECUTIVE_INVIGILATION_DAYS");
 
       if (blockers.length !== 1) return null;
       return blockers[0];
@@ -4166,7 +3342,7 @@ const nav = useNavigate();
         key: 'restrictions',
         title: tr('القيود المؤثرة','Effective Constraints'),
         value: `${unavailabilityRules.length}`,
-        sub: tr(`عدم توفر: ${unavailabilityRules.length} • منع معلم المادة • شرط بن • منع تكرار مراقبة 3 ساعات • منع مراقبة يومين متتاليين • منع اليوم الثالث بعد يومين متتاليين`, `Unavailability: ${unavailabilityRules.length} • Subject-teacher block • Ben rule • No repeated 3-hour invigilation • No consecutive-day invigilation • No third consecutive invigilation day`),
+        sub: tr(`عدم توفر: ${unavailabilityRules.length} • منع معلم المادة • شرط بن • منع تكرار مراقبة 3 ساعات`, `Unavailability: ${unavailabilityRules.length} • Subject-teacher block • Ben rule • No repeated 3-hour invigilation`),
         tone: unavailabilityRules.length ? 'warn' : 'neutral',
       },
     ];
@@ -4394,31 +3570,19 @@ const nav = useNavigate();
 
     if (!out) return;
 
-    const enrichedOut = ensureExplicitTaskTypes({
-      ...out,
-      sourceSnapshot: taskRun12BuildSourceSnapshot({
-        teachers,
-        exams,
-        rooms,
-        roomBlocks,
-        examRoomAssignments,
-        officialCenterData,
-      }),
-    });
-
-    persistDistributionState(tenantId, enrichedOut);
-    setRunOut(enrichedOut);
+    persistDistributionState(tenantId, out);
+    setRunOut(out);
     setMasterTableVersion((prev) => prev + 1);
     setCloudSyncMessage(tr("جاري حفظ نتائج التشغيل في السحابة...", "Saving run results to cloud..."));
     try {
-      await persistDistributionStateToCloud(tenantId, enrichedOut, currentUserId || undefined);
+      await persistDistributionStateToCloud(tenantId, out, currentUserId || undefined);
       setCloudSyncMessage(tr("تم حفظ نتائج التشغيل في السحابة.", "Run results saved to cloud."));
     } catch {
       setCloudSyncError(tr("تم إنشاء التوزيع محليًا، لكن تعذر حفظ النتائج في السحابة.", "Distribution was generated locally, but cloud save failed."));
     }
   }
 
-  function executeDeleteAllDistributionData() {
+  function deleteAllDistributionData() {
     clearRun(tenantId);
 
     // ✅ امسح أي جداول/ملخصات محفوظة (حتى صفحة Settings لا تعرض بيانات قديمة)
@@ -4471,36 +3635,6 @@ const nav = useNavigate();
     setRuntimeError(null);
     setManualSuggestionHistory([]);
     setIsReadinessCleared(true);
-  }
-
-  function requestDeleteAllDistributionData() {
-    setDeleteDistributionConfirmOpen(true);
-  }
-
-  function cancelDeleteAllDistributionData() {
-    setDeleteDistributionConfirmOpen(false);
-  }
-
-  function confirmDeleteAllDistributionData() {
-    setDeleteDistributionConfirmOpen(false);
-    executeDeleteAllDistributionData();
-  }
-
-  function requestRunDistribution(customConstraints?: any) {
-    setPendingRunConstraints(customConstraints ?? null);
-    setRunDistributionConfirmOpen(true);
-  }
-
-  function cancelRunDistribution() {
-    setRunDistributionConfirmOpen(false);
-    setPendingRunConstraints(null);
-  }
-
-  function confirmRunDistribution() {
-    const nextConstraints = pendingRunConstraints ?? undefined;
-    setRunDistributionConfirmOpen(false);
-    setPendingRunConstraints(null);
-    void run(nextConstraints);
   }
 
   async function handleAddSuggestedTeacherToMasterTable(row: any, suggestion: any) {
@@ -4599,12 +3733,6 @@ const nav = useNavigate();
       if (sameTeacherSameSlot) {
         return { ok: false, message: tr(`المعلم ${teacherName} موجود بالفعل في الجدول الشامل لنفس الفترة، لذلك لا يمكن نقله إليها مرة أخرى.`, `Teacher ${teacherName} already exists in the master table for the same period, so it cannot be moved there again.`) };
       }
-      if (
-        preferredTaskType === "INVIGILATION" &&
-        hasAdjacentInvigilationAssignment(currentAssignments, teacherId, dateISO, new Set<string>([donorAssignmentId]))
-      ) {
-        return { ok: false, message: tr(`لا يمكن نقل ${teacherName} إلى المراقبة في ${dateISO} لأنه لديه مراقبة في اليوم السابق أو التالي.`, `Cannot move ${teacherName} to invigilation on ${dateISO} because the teacher has invigilation on the previous or next day.`) };
-      }
       const previousAssignmentSnapshot = JSON.parse(JSON.stringify(currentAssignments[donorIdx]));
       const donorTaskLabel = TASK_TYPE_LABEL_AR[String(suggestion?.transferFromTaskType || normalizeStoredTaskTypeGlobal((previousAssignmentSnapshot as any)?.taskType || (previousAssignmentSnapshot as any)?.role || ""))] || String(suggestion?.transferFromTaskType || "");
       const donorSlotLabel = `${String(suggestion?.transferFromDateISO || workDateISO(String((previousAssignmentSnapshot as any)?.dateISO || (previousAssignmentSnapshot as any)?.date || "").trim()) || "")} ${String(suggestion?.transferFromPeriod || periodToAMPM(String((previousAssignmentSnapshot as any)?.period || "AM"))) === "PM" ? tr("الفترة الثانية","Second Period") : tr("الفترة الأولى","First Period")}`;
@@ -4669,9 +3797,6 @@ const nav = useNavigate();
     }
 
     if (sameTeacherSameSlot && String((sameTeacherSameSlot as any)?.taskType || "").trim() === "RESERVE" && preferredTaskType === "INVIGILATION") {
-      if (hasAdjacentInvigilationAssignment(currentAssignments, teacherId, dateISO)) {
-        return { ok: false, message: tr(`لا يمكن تحويل ${teacherName} إلى مراقبة في ${dateISO} لأنه لديه مراقبة في اليوم السابق أو التالي.`, `Cannot convert ${teacherName} to invigilation on ${dateISO} because the teacher has invigilation on the previous or next day.`) };
-      }
       const previousAssignmentId = String((sameTeacherSameSlot as any)?.__uid || (sameTeacherSameSlot as any)?.id || "").trim();
       const previousAssignmentSnapshot = JSON.parse(JSON.stringify(sameTeacherSameSlot));
       const nextAssignments = currentAssignments.map((ass: any) => {
@@ -4734,14 +3859,6 @@ const nav = useNavigate();
         meta: { teacherId, teacherName, dateISO, period, taskType: "INVIGILATION", subject, source: normalizedSuggestionSource === "FREE" ? "RESERVE" : normalizedSuggestionSource },
       }).catch(() => {});
       return { ok: true, message: tr(`${note}. إذا بقي عجز في نفس الفترة ستظهر لك اقتراحات جديدة مباشرة، ويمكنك التراجع من سجل الإضافات الأخيرة.`, `${note}. If a shortage remains in the same period, new suggestions will appear immediately, and you can undo it from the recent additions history.`) };
-    }
-
-    if (preferredTaskType === "INVIGILATION" && wouldCreateThreeConsecutiveInvigilationAssignment(currentAssignments, teacherId, dateISO)) {
-      return { ok: false, message: tr(`لا يمكن إضافة ${teacherName} للمراقبة في ${dateISO} لأن ذلك سيجعله مكلفًا بالمراقبة في 3 أيام متتالية.`, `Cannot add ${teacherName} to invigilation on ${dateISO} because it would create 3 consecutive invigilation days.`) };
-    }
-
-    if (preferredTaskType === "INVIGILATION" && hasAdjacentInvigilationAssignment(currentAssignments, teacherId, dateISO)) {
-      return { ok: false, message: tr(`لا يمكن إضافة ${teacherName} للمراقبة في ${dateISO} لأنه لديه مراقبة في اليوم السابق أو التالي.`, `Cannot add ${teacherName} to invigilation on ${dateISO} because the teacher has invigilation on the previous or next day.`) };
     }
 
     const now = Date.now();
@@ -5284,10 +4401,6 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
         return tr("تعارض في نفس الفترة","Same period conflict");
       case "BACK_TO_BACK_BLOCK":
         return tr("منع حسب القيود","Blocked by constraints");
-      case "CONSECUTIVE_INVIGILATION_DAYS":
-        return tr("مراقبة في يوم متتالٍ ممنوعة","Consecutive-day invigilation is blocked");
-      case "THREE_CONSECUTIVE_INVIGILATION_DAYS":
-        return tr("اليوم الثالث بعد يومين مراقبة متتاليين ممنوع","Third consecutive invigilation day is blocked");
       case "SPECIALTY_BLOCK":
         return tr("ممنوع لمعلم المادة","Blocked for subject teacher");
       case "ARABIC_ONCE":
@@ -5312,23 +4425,6 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
   }
 
   const correctionByTeacher: any[] = [];
-  if (!phoneGateAllowed) {
-    return (
-      <TaskRun12PhoneGateScreen
-        lang={lang as "ar" | "en"}
-        tenantId={tenantId}
-        registeredPhone={registeredGatePhone}
-        loading={phoneGateLoading}
-        error={phoneGateError}
-        value={phoneGateValue}
-        setValue={setPhoneGateValue}
-        onVerify={verifyPhoneGate}
-        onGoSettings={() => nav(`/t/${tenantId}/settings12`)}
-      />
-    );
-  }
-
-
 
   return (
     
@@ -6057,11 +5153,11 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
         runOut={runOut}
         hasBasics={hasBasics}
         isRunning={isRunning}
-        onRun={requestRunDistribution}
+        onRun={run}
         onGoHome={() => nav("/")}
         onGoResults={() => nav("/task-distribution/results")}
         onGoSuggestions={() => nav("/task-distribution/suggestions")}
-        onDeleteAllDistributionData={requestDeleteAllDistributionData}
+        onDeleteAllDistributionData={deleteAllDistributionData}
         onReloadConstraints={() => {
           setIsReadinessCleared(false);
           setConstraints(loadDistributionConstraints({ ...DEFAULT_CONSTRAINTS }));
@@ -6102,282 +5198,6 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
           gold2: GOLD_2,
         }}
       />
-
-      {runDistributionConfirmOpen ? (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="runDistributionConfirmTitle"
-          onClick={cancelRunDistribution}
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 999999,
-            display: "flex",
-            alignItems: "flex-start",
-            justifyContent: "center",
-            padding: "95px 18px 24px",
-            background: "rgba(17, 24, 39, 0.28)",
-          }}
-        >
-          <div
-            onClick={(event) => event.stopPropagation()}
-            style={{
-              width: "min(640px, 96vw)",
-              direction: "rtl",
-              borderRadius: 28,
-              border: `3px solid ${GOLD_2}`,
-              background: "linear-gradient(180deg, #fffdf6 0%, #f8edcf 100%)",
-              boxShadow: "0 26px 70px rgba(0,0,0,.26), inset 0 0 0 1px rgba(255,255,255,.65)",
-              overflow: "hidden",
-              color: "#000000",
-              fontFamily: "Tahoma, Arial, sans-serif",
-            }}
-          >
-            <div
-              style={{
-                padding: "18px 22px",
-                background: "linear-gradient(90deg, #d4af37 0%, #f3df91 50%, #d4af37 100%)",
-                borderBottom: "2px solid #111827",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 12,
-              }}
-            >
-              <div id="runDistributionConfirmTitle" style={{ fontSize: 22, fontWeight: 1000, color: "#000000" }}>
-                {tr("تأكيد بدء التوزيع", "Confirm starting distribution")}
-              </div>
-              <div
-                aria-hidden="true"
-                style={{
-                  width: 42,
-                  height: 42,
-                  borderRadius: "50%",
-                  border: "2px solid #111827",
-                  display: "grid",
-                  placeItems: "center",
-                  background: "#fff8dc",
-                  fontSize: 22,
-                  fontWeight: 1000,
-                }}
-              >
-                ✓
-              </div>
-            </div>
-
-            <div style={{ padding: "24px 26px 10px", textAlign: "center" }}>
-              <div style={{ fontSize: 25, fontWeight: 1000, color: "#000000", lineHeight: 1.8 }}>
-                {tr("هل تريد بدء التوزيع؟", "Do you want to start distribution?")}
-              </div>
-              <div
-                style={{
-                  margin: "12px auto 0",
-                  maxWidth: 520,
-                  padding: "13px 16px",
-                  borderRadius: 18,
-                  border: "1.5px solid rgba(126, 98, 18, .35)",
-                  background: "rgba(255, 250, 240, .88)",
-                  fontSize: 15,
-                  fontWeight: 900,
-                  lineHeight: 1.9,
-                  color: "#000000",
-                }}
-              >
-                {tr(
-                  "سيتم تشغيل خوارزمية توزيع المهام اعتمادًا على بيانات الكادر والقاعات والامتحانات والغياب الحالية. يمكنك الضغط على إلغاء للرجوع بدون تشغيل.",
-                  "The task distribution algorithm will run using the current staff, rooms, exams, and unavailability data. Press cancel to go back without running."
-                )}
-              </div>
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "center",
-                gap: 14,
-                flexWrap: "wrap",
-                padding: "18px 22px 24px",
-              }}
-            >
-              <button
-                type="button"
-                onClick={confirmRunDistribution}
-                style={{
-                  minWidth: 170,
-                  border: "2px solid #064e3b",
-                  borderRadius: 18,
-                  padding: "13px 20px",
-                  cursor: "pointer",
-                  background: "linear-gradient(180deg, #bbf7d0 0%, #22c55e 100%)",
-                  color: "#000000",
-                  fontSize: 17,
-                  fontWeight: 1000,
-                  boxShadow: "0 10px 20px rgba(6, 78, 59, .18)",
-                }}
-              >
-                {tr("نعم، ابدأ التوزيع", "Yes, start distribution")}
-              </button>
-              <button
-                type="button"
-                onClick={cancelRunDistribution}
-                style={{
-                  minWidth: 150,
-                  border: "2px solid #111827",
-                  borderRadius: 18,
-                  padding: "13px 20px",
-                  cursor: "pointer",
-                  background: "linear-gradient(180deg, #ffffff 0%, #f4e8c6 100%)",
-                  color: "#000000",
-                  fontSize: 17,
-                  fontWeight: 1000,
-                  boxShadow: "0 10px 20px rgba(17, 24, 39, .12)",
-                }}
-              >
-                {tr("إلغاء", "Cancel")}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {deleteDistributionConfirmOpen ? (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="deleteDistributionConfirmTitle"
-          onClick={cancelDeleteAllDistributionData}
-          style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 999999,
-            display: "flex",
-            alignItems: "flex-start",
-            justifyContent: "center",
-            padding: "95px 18px 24px",
-            background: "rgba(17, 24, 39, 0.34)",
-          }}
-        >
-          <div
-            onClick={(event) => event.stopPropagation()}
-            style={{
-              width: "min(620px, 96vw)",
-              direction: "rtl",
-              borderRadius: 28,
-              border: `3px solid ${GOLD_2}`,
-              background: "linear-gradient(180deg, #fffdf6 0%, #f8edcf 100%)",
-              boxShadow: "0 26px 70px rgba(0,0,0,.28), inset 0 0 0 1px rgba(255,255,255,.65)",
-              overflow: "hidden",
-              color: "#000000",
-              fontFamily: "Tahoma, Arial, sans-serif",
-            }}
-          >
-            <div
-              style={{
-                padding: "18px 22px",
-                background: "linear-gradient(90deg, #d4af37 0%, #f3df91 50%, #d4af37 100%)",
-                borderBottom: "2px solid #111827",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 12,
-              }}
-            >
-              <div id="deleteDistributionConfirmTitle" style={{ fontSize: 22, fontWeight: 1000, color: "#000000" }}>
-                {tr("تأكيد حذف بيانات التوزيع", "Confirm deleting distribution data")}
-              </div>
-              <div
-                aria-hidden="true"
-                style={{
-                  width: 42,
-                  height: 42,
-                  borderRadius: "50%",
-                  border: "2px solid #111827",
-                  display: "grid",
-                  placeItems: "center",
-                  background: "#fff8dc",
-                  fontSize: 22,
-                  fontWeight: 1000,
-                }}
-              >
-                !
-              </div>
-            </div>
-
-            <div style={{ padding: "24px 26px 10px", textAlign: "center" }}>
-              <div style={{ fontSize: 25, fontWeight: 1000, color: "#000000", lineHeight: 1.8 }}>
-                {tr("هل تريد حذف بيانات التوزيع؟", "Do you want to delete distribution data?")}
-              </div>
-              <div
-                style={{
-                  margin: "12px auto 0",
-                  maxWidth: 500,
-                  padding: "13px 16px",
-                  borderRadius: 18,
-                  border: "1.5px solid rgba(126, 98, 18, .35)",
-                  background: "rgba(255, 250, 240, .88)",
-                  fontSize: 15,
-                  fontWeight: 900,
-                  lineHeight: 1.9,
-                  color: "#000000",
-                }}
-              >
-                {tr(
-                  "سيتم حذف نتائج التوزيع الحالية من هذه الصفحة والجداول المرتبطة. يمكنك الضغط على إلغاء للرجوع بدون حذف.",
-                  "The current distribution results will be cleared from this page and linked tables. Press cancel to go back without deleting."
-                )}
-              </div>
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "center",
-                gap: 14,
-                flexWrap: "wrap",
-                padding: "18px 22px 24px",
-              }}
-            >
-              <button
-                type="button"
-                onClick={confirmDeleteAllDistributionData}
-                style={{
-                  minWidth: 170,
-                  border: "2px solid #7f1d1d",
-                  borderRadius: 18,
-                  padding: "13px 20px",
-                  cursor: "pointer",
-                  background: "linear-gradient(180deg, #fecaca 0%, #ef4444 100%)",
-                  color: "#000000",
-                  fontSize: 17,
-                  fontWeight: 1000,
-                  boxShadow: "0 10px 20px rgba(127, 29, 29, .18)",
-                }}
-              >
-                {tr("نعم، احذف البيانات", "Yes, delete data")}
-              </button>
-              <button
-                type="button"
-                onClick={cancelDeleteAllDistributionData}
-                style={{
-                  minWidth: 150,
-                  border: "2px solid #111827",
-                  borderRadius: 18,
-                  padding: "13px 20px",
-                  cursor: "pointer",
-                  background: "linear-gradient(180deg, #ffffff 0%, #f4e8c6 100%)",
-                  color: "#000000",
-                  fontSize: 17,
-                  fontWeight: 1000,
-                  boxShadow: "0 10px 20px rgba(17, 24, 39, .12)",
-                }}
-              >
-                {tr("إلغاء", "Cancel")}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
 
       <TaskDistributionRunFeedback
         errors={errors}
@@ -6436,7 +5256,7 @@ const GOLD_SUB = "rgba(201,162,39,0.75)";
         sortMode={sortMode}
         setSortMode={setSortMode}
         navToResults={() => nav("/task-distribution/results")}
-        onDeleteAllDistributionData={requestDeleteAllDistributionData}
+        onDeleteAllDistributionData={deleteAllDistributionData}
         styles={{
           fairnessWrap,
           fairnessHeader,
