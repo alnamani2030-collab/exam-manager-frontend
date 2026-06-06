@@ -242,7 +242,7 @@ function TeachersOfficialHeader({
         {[
           { label: tr("إجمالي المعلمين", "Total Teachers"), value: String(teachersCount) },
           { label: tr("المعروض في الجدول", "Displayed Rows"), value: String(filteredCount) },
-          { label: tr("رقم الهاتف", "Phone"), value: centerData.phone || "—" },
+          { label: tr("رقم الهاتف", "Phone"), value: maskPhoneForDisplay(centerData.phone) },
           { label: tr("العنوان", "Address"), value: centerData.address || "—" },
         ].map((item) => (
           <div
@@ -565,6 +565,19 @@ function getTeacherAccountNo(teacher: Partial<TeacherAccountFields> | null | und
       teacher?.iban ??
       ""
   ).trim();
+}
+
+function maskPhoneForDisplay(value: any) {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  if (!digits) return "—";
+  if (digits.length <= 2) return "X".repeat(digits.length);
+  return `${digits.slice(0, 1)}${"X".repeat(Math.max(0, digits.length - 2))}${digits.slice(-1)}`;
+}
+
+function maskBankAccountForDisplay(value: any) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "—";
+  return raw.replace(/[^\s-]/g, "X");
 }
 
 function setTeacherAccountNo<T extends Teacher>(teacher: T, value: string): T {
@@ -1803,8 +1816,8 @@ export default function Teachers() {
           t.fullName,
           lang === "ar" ? t.subject1 : translateSubject(t.subject1),
           lang === "ar" ? t.subject2 : translateSubject(t.subject2),
-          t.phone,
-          getTeacherAccountNo(t as TeacherAccountFields),
+          maskPhoneForDisplay(t.phone),
+          maskBankAccountForDisplay(getTeacherAccountNo(t as TeacherAccountFields)),
         ].map(escape).join(",")
       ),
     ];
@@ -1826,16 +1839,16 @@ export default function Teachers() {
               "اسم المعلم": t.fullName,
               "التخصص 1": t.subject1,
               "التخصص 2": t.subject2,
-              "الهاتف": t.phone,
-              "رقم الحساب": getTeacherAccountNo(t as TeacherAccountFields),
+              "الهاتف": maskPhoneForDisplay(t.phone),
+              "رقم الحساب": maskBankAccountForDisplay(getTeacherAccountNo(t as TeacherAccountFields)),
             }
           : {
               "Employee Number": t.employeeNo,
               "Teacher Name": t.fullName,
               "Specialization 1": translateSubject(t.subject1),
               "Specialization 2": translateSubject(t.subject2),
-              "Phone": t.phone,
-              "Account Number": getTeacherAccountNo(t as TeacherAccountFields),
+              "Phone": maskPhoneForDisplay(t.phone),
+              "Account Number": maskBankAccountForDisplay(getTeacherAccountNo(t as TeacherAccountFields)),
             }
       );
       const ws = XLSX.utils.json_to_sheet(rows);
@@ -2936,8 +2949,8 @@ export default function Teachers() {
                     <td style={{ ...tdStyle, color: "#000000", fontWeight: 1000 }} className="col-name"><span style={{ color: "#000000", fontWeight: 900, WebkitTextFillColor: "#000000", textShadow: "none" }}>{t.fullName}</span></td>
                     <td style={tdStyle}>{translateSubject(t.subject1)}</td>
                     <td style={tdStyle}>{translateSubject(t.subject2)}</td>
-                    <td style={tdStyle}>{t.phone}</td>
-                    <td style={tdStyle}>{getTeacherAccountNo(t as TeacherAccountFields)}</td>
+                    <td style={tdStyle}>{maskPhoneForDisplay(t.phone)}</td>
+                    <td style={tdStyle}>{maskBankAccountForDisplay(getTeacherAccountNo(t as TeacherAccountFields))}</td>
                     <td style={tdStyle}>
                       <div style={{ display: "flex", gap: 8 }}>
                         <button style={btn("#60a5fa", "#000000")} onClick={() => startEdit(t)}>
@@ -3055,8 +3068,8 @@ export default function Teachers() {
                     <td style={{ ...tdStyle, color: "#000000", fontWeight: 1000 }} className="col-name"><span style={{ color: "#000000", fontWeight: 900, WebkitTextFillColor: "#000000", textShadow: "none" }}>{t.fullName}</span></td>
                     <td style={tdStyle}>{translateSubject(t.subject1)}</td>
                     <td style={tdStyle}>{translateSubject(t.subject2)}</td>
-                    <td style={tdStyle}>{t.phone}</td>
-                    <td style={tdStyle}>{getTeacherAccountNo(t as TeacherAccountFields)}</td>
+                    <td style={tdStyle}>{maskPhoneForDisplay(t.phone)}</td>
+                    <td style={tdStyle}>{maskBankAccountForDisplay(getTeacherAccountNo(t as TeacherAccountFields))}</td>
                     <td style={tdStyle}>
                       <div style={{ display: "flex", gap: 8 }}>
                         <button style={btn("#60a5fa", "#000000")} onClick={() => startEdit(t)}>

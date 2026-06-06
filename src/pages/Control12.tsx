@@ -99,6 +99,16 @@ const maskEmailForControlAccess = (email: string) => {
   return `${name.charAt(0)}${"*".repeat(Math.max(3, name.length - 2))}${name.charAt(name.length - 1)}@${domain}`;
 };
 
+const maskDigitsKeepFirstLast = (value: any) => {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  if (!digits) return "-";
+  if (digits.length === 1) return "X";
+  if (digits.length === 2) return `${digits[0]}${digits[1]}`;
+  return `${digits[0]}${"X".repeat(Math.max(1, digits.length - 2))}${digits[digits.length - 1]}`;
+};
+
+const displayMaskedEmployeeOrPhone = (value: any) => maskDigitsKeepFirstLast(value);
+
 const normalizeControlAccessCode = (value: string) => String(value || "").replace(/\D/g, "").slice(0, 6);
 const normalizeControlAccessEmail = (value: string) => String(value || "").trim().toLowerCase();
 const CONTROL12_ACCESS_LOCK_MINUTES = 5;
@@ -947,7 +957,7 @@ export default function SchoolControl() {
         tr("رقم الهاتف", "Phone number"),
         tr("التوقيع", "Signature"),
       ],
-      ...members.map((item) => [item.name, item.employeeNo, item.specialization, item.assignment, item.phone, item.signature]),
+      ...members.map((item) => [item.name, displayMaskedEmployeeOrPhone(item.employeeNo), item.specialization, item.assignment, displayMaskedEmployeeOrPhone(item.phone), item.signature]),
     ];
 
     const csv = rows.map((row) => row.map(csvEscape).join(",")).join("\n");
@@ -1041,7 +1051,7 @@ export default function SchoolControl() {
         (member) => `
           <tr>
             <td>${member.name || "-"}</td>
-            <td>${member.employeeNo || "-"}</td>
+            <td>${displayMaskedEmployeeOrPhone(member.employeeNo)}</td>
             <td>${member.specialization || "-"}</td>
             <td>${member.signature || "-"}</td>
           </tr>`,
@@ -1367,10 +1377,10 @@ ${membersTable}
                     members.map((item) => (
                       <tr key={item.id}>
                         <Td>{item.name}</Td>
-                        <Td>{item.employeeNo}</Td>
+                        <Td>{displayMaskedEmployeeOrPhone(item.employeeNo)}</Td>
                         <Td>{item.specialization}</Td>
                         <Td>{item.assignment}</Td>
-                        <Td>{item.phone}</Td>
+                        <Td>{displayMaskedEmployeeOrPhone(item.phone)}</Td>
                         <Td>{item.signature}</Td>
                         <Td>
                           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -1479,10 +1489,10 @@ ${membersTable}
                       label={`${tr("العضو", "Member")} ${index + 1}`}
                       value={reportForm.memberIds[index]}
                       onChange={(v) => setReportMember(index, v)}
-                      options={members.map((member) => ({ value: member.id, label: `${member.name} - ${member.employeeNo}` }))}
+                      options={members.map((member) => ({ value: member.id, label: `${member.name} - ${displayMaskedEmployeeOrPhone(member.employeeNo)}` }))}
                     />
                     <div style={previewBoxStyle}>
-                      <div>{selected?.employeeNo || "-"}</div>
+                      <div>{displayMaskedEmployeeOrPhone(selected?.employeeNo)}</div>
                       <div>{selected?.specialization || "-"}</div>
                       <div>{selected?.signature || "-"}</div>
                     </div>

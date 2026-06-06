@@ -2,6 +2,8 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { useI18n } from "../i18n/I18nProvider";
+import { replaceTenantArray, saveTenantSettings, writeTenantAudit } from "../services/tenantData";
+import { saveRun, RUN_UPDATED_EVENT, MASTER_TABLE_UPDATED_EVENT } from "../utils/taskDistributionStorage";
 import { container } from "../styles/ui";
 import { subjectColors } from "./taskDistributionResults12/constants";
 import { ResultsPageHeader } from "./taskDistributionResults12/components/ResultsPageHeader";
@@ -254,6 +256,164 @@ const OFFICIAL_GOLDEN_TABLE_CSS = `
   }
 `;
 
+
+const RESULTS12_LATEST_RUN_SETTINGS_DOC_ID = "latestTaskDistributionRun12";
+const RESULTS12_ASSIGNMENTS_SUBCOLLECTION = "taskDistributionAssignments12";
+const RESULTS12_MASTER_TABLE_KEY = "exam-manager:task-distribution:master-table:v1";
+const RESULTS12_RESULTS_TABLE_KEY = "exam-manager:task-distribution:results-table:v1";
+const RESULTS12_ALL_TABLE_KEY = "exam-manager:task-distribution:all-table:v1";
+
+function results12LabelForTaskType(taskType: any) {
+  const normalized = normalizeResultsTaskType(taskType);
+  if (normalized === "INVIGILATION") return "مراقبة";
+  if (normalized === "RESERVE") return "احتياط";
+  if (normalized === "DUTY_INVIGILATOR") return "مراقب دور";
+  if (normalized === "REVIEW_FREE") return "فاضي للمراجعة";
+  if (normalized === "CORRECTION_FREE") return "فاضي للتصحيح";
+  return "مهمة";
+}
+
+function getResults12AssignmentUid(assignment: any, fallbackIndex = -1) {
+  return String(
+    assignment?.__uid ||
+      assignment?.uid ||
+      assignment?.id ||
+      assignment?.assignmentId ||
+      `${assignment?.teacherId || assignment?.teacherName || "teacher"}__${assignment?.dateISO || assignment?.date || "date"}__${assignment?.period || "period"}__${assignment?.taskType || "task"}__${fallbackIndex}`,
+  ).trim();
+}
+
+function normalizeResults12AssignmentForPersist(
+  assignment: any,
+  index: number,
+  runId: string,
+  runCreatedAtISO: string,
+) {
+  const id = getResults12AssignmentUid(assignment, index) || `${runId}_${index + 1}`;
+  const taskType = normalizeResultsTaskType(assignment?.taskType);
+  const normalized: any = {
+    ...(assignment || {}),
+    id,
+    __uid: String(assignment?.__uid || assignment?.uid || assignment?.id || id),
+    taskType,
+    taskTypeLabelAr: results12LabelForTaskType(taskType),
+    subject:
+      taskType === "DUTY_INVIGILATOR"
+        ? "مراقب دور"
+        : String(assignment?.subject || assignment?.examSubject || "").trim(),
+    runId,
+    runCreatedAtISO,
+    updatedAtISO: new Date().toISOString(),
+  };
+
+  const committeeValue =
+    assignment?.committeeNo ??
+    assignment?.committeeNumber ??
+    assignment?.roomNo ??
+    assignment?.roomNumber ??
+    assignment?.committee ??
+    assignment?.room;
+
+  if (taskType === "INVIGILATION" && committeeValue !== undefined && committeeValue !== null && String(committeeValue).trim()) {
+    const committeeString = String(committeeValue).trim();
+    normalized.committeeNo = committeeString;
+    normalized.committeeNumber = committeeString;
+    normalized.roomNo = committeeString;
+    normalized.roomNumber = committeeString;
+  }
+
+  if (taskType === "DUTY_INVIGILATOR") {
+    normalized.dutyInvigilator = true;
+    normalized.fullDay = assignment?.fullDay ?? true;
+    normalized.coversPeriods = assignment?.coversPeriods || ["AM", "PM"];
+  }
+
+  return normalized;
+}
+
+function results12AssignmentSlotKey(assignment: any) {
+  return [
+    String(assignment?.dateISO || assignment?.date || "").trim(),
+    String(assignment?.period || "AM").trim() || "AM",
+    String(assignment?.examId || "").trim(),
+    normalizeSubject(String(assignment?.subject || assignment?.examSubject || "").trim()),
+  ].join("__");
+}
+
+function results12GetCommitteeValue(assignment: any) {
+  const value =
+    assignment?.committeeNo ??
+    assignment?.committeeNumber ??
+    assignment?.roomNo ??
+    assignment?.roomNumber ??
+    assignment?.committee ??
+    assignment?.room;
+  const text = String(value ?? "").trim();
+  return text || "";
+}
+
+function results12EnsureCommitteeNumbersForInvigilation(assignments: any[]) {
+  const rows = (Array.isArray(assignments) ? assignments : []).map((item) => ({ ...(item || {}) }));
+  const slotCommitteeCounts = new Map<string, Map<string, number>>();
+
+  rows.forEach((assignment) => {
+    if (normalizeResultsTaskType(assignment?.taskType) !== "INVIGILATION") return;
+    const slotKey = results12AssignmentSlotKey(assignment);
+    const committeeValue = results12GetCommitteeValue(assignment);
+    if (!slotKey || !committeeValue) return;
+    if (!slotCommitteeCounts.has(slotKey)) slotCommitteeCounts.set(slotKey, new Map<string, number>());
+    const committeeMap = slotCommitteeCounts.get(slotKey)!;
+    committeeMap.set(committeeValue, (committeeMap.get(committeeValue) || 0) + 1);
+  });
+
+  rows.forEach((assignment) => {
+    if (normalizeResultsTaskType(assignment?.taskType) !== "INVIGILATION") return;
+
+    const slotKey = results12AssignmentSlotKey(assignment);
+    let committeeValue = results12GetCommitteeValue(assignment);
+    if (!slotCommitteeCounts.has(slotKey)) slotCommitteeCounts.set(slotKey, new Map<string, number>());
+    const committeeMap = slotCommitteeCounts.get(slotKey)!;
+
+    if (!committeeValue) {
+      const existingCommittees = Array.from(committeeMap.keys())
+        .filter(Boolean)
+        .sort((a, b) => Number(a) - Number(b) || String(a).localeCompare(String(b), "ar"));
+      committeeValue = existingCommittees[0] || "1";
+    }
+
+    const nextIndex = Number(assignment?.invigilatorIndex || 0) || ((committeeMap.get(committeeValue) || 0) + 1);
+    committeeMap.set(committeeValue, Math.max(committeeMap.get(committeeValue) || 0, nextIndex));
+
+    assignment.committeeNo = committeeValue;
+    assignment.committeeNumber = committeeValue;
+    assignment.roomNo = committeeValue;
+    assignment.roomNumber = committeeValue;
+    assignment.invigilatorIndex = nextIndex;
+  });
+
+  return rows;
+}
+
+
+function results12RemoveUndefinedForFirestore(value: any): any {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => results12RemoveUndefinedForFirestore(item))
+      .filter((item) => item !== undefined);
+  }
+  if (typeof value === "object") {
+    const out: any = {};
+    Object.entries(value).forEach(([key, item]) => {
+      const cleaned = results12RemoveUndefinedForFirestore(item);
+      if (cleaned !== undefined) out[key] = cleaned;
+    });
+    return out;
+  }
+  return value;
+}
+
 function normalizeSubject(subject: string) {
   return String(subject || "")
     .replace(/\s+/g, " ")
@@ -450,6 +610,10 @@ export default function TaskDistributionResults() {
     [lang],
   );
   const tenantId = React.useMemo(() => getTenantIdFromAuth(auth), [auth]);
+  const currentUserId = React.useMemo(
+    () => String((auth as any)?.user?.email || (auth as any)?.user?.uid || "").trim(),
+    [auth],
+  );
   const printAreaRef = React.useRef<HTMLDivElement>(null);
   const [showTeacherSidebar, setShowTeacherSidebar] = React.useState(true);
 
@@ -549,6 +713,126 @@ export default function TaskDistributionResults() {
     onArchived: () => nav("/archive"),
   });
 
+  const persistEditedAssignments12 = React.useCallback(
+    (nextAssignmentsInput: any[], note?: string, opts?: { skipUndo?: boolean }) => {
+      const nowISO = new Date().toISOString();
+      const runId = String(runForResults?.runId || `results12_${Date.now()}`).trim();
+      const createdAtISO = String(runForResults?.createdAtISO || nowISO).trim();
+      const normalizedAssignments = results12EnsureCommitteeNumbersForInvigilation(
+        (Array.isArray(nextAssignmentsInput) ? nextAssignmentsInput : []).map(
+          (assignment: any, index: number) =>
+            results12RemoveUndefinedForFirestore(
+              normalizeResults12AssignmentForPersist(assignment, index, runId, createdAtISO),
+            ),
+        ),
+      ).map((assignment: any) => results12RemoveUndefinedForFirestore(assignment));
+
+      const nextRun = results12RemoveUndefinedForFirestore(
+        normalizeRunForDutyInvigilator({
+          ...(runForResults || {}),
+          runId,
+          createdAtISO,
+          updatedAtISO: nowISO,
+          assignments: normalizedAssignments,
+        }),
+      );
+
+      const tablePayload = {
+        rows: normalizedAssignments,
+        data: normalizedAssignments,
+        assignments: normalizedAssignments,
+        meta: {
+          runId,
+          runCreatedAtISO: createdAtISO,
+          updatedAtISO: nowISO,
+          source: "task-distribution-results12",
+          note: note || "manual_edit_from_results12",
+        },
+        warnings: Array.isArray(nextRun?.warnings) ? nextRun.warnings : [],
+        debug: nextRun?.debug || null,
+      };
+
+      try {
+        if (!opts?.skipUndo) {
+          interaction.setUndoStack((prev: any[]) =>
+            [runForResults, ...(Array.isArray(prev) ? prev : [])].filter(Boolean).slice(0, 20),
+          );
+        }
+      } catch {}
+
+      saveRun(tenantId, nextRun);
+
+      try {
+        localStorage.setItem(RESULTS12_MASTER_TABLE_KEY, JSON.stringify(tablePayload));
+        localStorage.setItem(RESULTS12_RESULTS_TABLE_KEY, JSON.stringify(tablePayload));
+        localStorage.setItem(RESULTS12_ALL_TABLE_KEY, JSON.stringify(tablePayload));
+      } catch {}
+
+      try {
+        setRun(nextRun as any);
+      } catch {}
+
+      try {
+        window.dispatchEvent(
+          new CustomEvent(RUN_UPDATED_EVENT, { detail: { tenantId, source: "task-distribution-results12", note } }),
+        );
+      } catch {}
+      try {
+        window.dispatchEvent(
+          new CustomEvent(MASTER_TABLE_UPDATED_EVENT, { detail: { tenantId, source: "task-distribution-results12", note } }),
+        );
+      } catch {}
+
+      void (async () => {
+        try {
+          await replaceTenantArray(tenantId, RESULTS12_ASSIGNMENTS_SUBCOLLECTION, normalizedAssignments as any[], {
+            by: currentUserId || undefined,
+            audit: {
+              entity: RESULTS12_ASSIGNMENTS_SUBCOLLECTION,
+              meta: { source: "task-distribution-results12", note: note || "manual_edit", runId, count: normalizedAssignments.length },
+            },
+          } as any);
+
+          await saveTenantSettings(
+            tenantId,
+            RESULTS12_LATEST_RUN_SETTINGS_DOC_ID,
+            results12RemoveUndefinedForFirestore({
+              runId,
+              createdAtISO,
+              updatedAtISO: nowISO,
+              assignmentsCount: normalizedAssignments.length,
+              assignments: normalizedAssignments,
+              warnings: Array.isArray(nextRun?.warnings) ? nextRun.warnings : [],
+              debug: nextRun?.debug || null,
+              summary: nextRun?.debug?.summary || null,
+              run: nextRun,
+              updatedBy: currentUserId || undefined,
+            }),
+            { by: currentUserId || undefined } as any,
+          );
+
+          void writeTenantAudit(tenantId, {
+            action: "task_distribution_results12_manual_edit",
+            entity: RESULTS12_ASSIGNMENTS_SUBCOLLECTION,
+            by: currentUserId || undefined,
+            meta: { note: note || "manual_edit", runId, count: normalizedAssignments.length },
+          }).catch(() => {});
+        } catch (error) {
+          console.error("Failed to persist TaskDistributionResults12 changes", error);
+          alert(
+            tr(
+              "تم تعديل الجدول محليًا، لكن تعذر حفظه في السحابة. تحقق من الاتصال أو صلاحيات Firestore.",
+              "The table was updated locally, but cloud saving failed. Check connection or Firestore permissions.",
+            ),
+          );
+        }
+      })();
+
+      return nextRun;
+    },
+    [currentUserId, interaction, runForResults, setRun, tenantId, tr],
+  );
+
   const tableActions = useResultsTableActions({
     tenantId,
     run: runForResults,
@@ -560,7 +844,7 @@ export default function TaskDistributionResults() {
     unavailReasonMap: interaction.unavailReasonMap,
     markCellBlocked: interaction.markCellBlocked,
     normalizeSubject,
-    persistEditedAssignments: pageActions.persistEditedAssignments,
+    persistEditedAssignments: persistEditedAssignments12,
     displayDates: dataModel.displayDates,
     dateToSubCols: dataModel.dateToSubCols,
     allSubCols: dataModel.allSubCols,

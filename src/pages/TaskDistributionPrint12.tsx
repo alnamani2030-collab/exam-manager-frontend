@@ -9,7 +9,7 @@ import type { TaskType } from "../contracts/taskDistributionContract";
 /** -------------------------------------------
  * ✅ Keys
  * ------------------------------------------ */
-const SCHOOL_DATA_KEY = "exam-manager:شschool-data:v1";
+const SCHOOL_DATA_KEY = "exam-manager:school-data:v1";
 const CENTER_DATA_KEYS = [
   "exam-manager:school-data:v1",
   "exam-manager:center-data:v1",
@@ -22,6 +22,13 @@ const CENTER_DATA_KEYS = [
   "exam-manager:control-data:v1",
 ];
 const LOGO_KEY = "exam-manager:app-logo";
+const PRINT12_LOGO_KEYS = [
+  "exam-manager:exam-center-logo:v1",
+  "exam-manager:app-logo",
+  "exam-manager:center-logo:v1",
+  "exam-manager:school-logo:v1",
+  "exam-manager:settings12:logo:v1",
+];
 const DEFAULT_LOGO_URL = "https://i.imgur.com/vdDhSMh.png";
 const EXAMS_SUB = "exams";
 const TEACHERS_SUB = "teachers";
@@ -244,6 +251,18 @@ function firstNonEmpty(...values: any[]) {
   return "";
 }
 
+function firstStoredLogoUrl() {
+  for (const key of PRINT12_LOGO_KEYS) {
+    try {
+      const value = String(localStorage.getItem(key) || "").trim();
+      if (value) return value;
+    } catch {
+      // ignore localStorage access errors
+    }
+  }
+  return "";
+}
+
 function unwrapCenterPayload(raw: any): any {
   if (!raw || typeof raw !== "object") return raw || {};
   return raw.data || raw.centerData || raw.examCenterData || raw.controlData || raw.schoolData || raw.settings || raw.config || raw;
@@ -278,7 +297,8 @@ function normalizeCenterData(rawPayload: any): Partial<SchoolData> | null {
   );
 
   const semester = firstNonEmpty(data.semester, data.semesterLabel, data.term, data.termLabel, data.studySemester, data.studyTerm);
-  const phone = firstNonEmpty(data.phone, data.phoneNumber, data.mobile, data.centerPhone, data.controlPhone);
+  const centerCode = firstNonEmpty(data.examCenterCode, data.centerCode, data.code, data.examCode, data.schoolCode, data.id);
+  const phone = firstNonEmpty(data.phone, data.phoneNumber, data.mobile, data.centerPhone, data.controlPhone, data.officialPhone);
   const address = firstNonEmpty(data.address, data.officialAddress, data.centerAddress, data.location);
   const country = firstNonEmpty(data.country, data.countryName, data.sultanate);
   const ministry = firstNonEmpty(data.ministry, data.ministryName, data.educationMinistry);
@@ -299,11 +319,11 @@ function normalizeCenterData(rawPayload: any): Partial<SchoolData> | null {
   const academicYear = firstNonEmpty(data.academicYear, data.yearLabel, data.schoolYear, data.studyYear, data.academicYearLabel);
   const officialTitle = firstNonEmpty(data.officialTitle, data.officialName, data.title, data.centerOfficialTitle);
 
-  if (!name && !governorate && !semester && !phone && !address && !country && !ministry && !centerHead && !academicYear && !officialTitle) {
+  if (!name && !governorate && !semester && !centerCode && !phone && !address && !country && !ministry && !centerHead && !academicYear && !officialTitle) {
     return null;
   }
 
-  return { name, governorate, semester, phone, address, country, ministry, centerHead, academicYear, officialTitle };
+  return { name, governorate, semester, centerCode, phone, address, country, ministry, centerHead, academicYear, officialTitle };
 }
 
 function readCenterDataFromStorage(): Partial<SchoolData> | null {
@@ -332,6 +352,7 @@ function buildEmptyCenterData(): SchoolData {
     name: "",
     governorate: "",
     semester: "",
+    centerCode: "",
     phone: "",
     address: "",
     country: "",
@@ -351,16 +372,18 @@ function readEffectiveCenterData(): SchoolData {
 function mapCloudCenterToSchoolData(cloud: any): SchoolData | null {
   if (!cloud || typeof cloud !== "object") return null;
 
-  const name = firstNonEmpty(cloud.name, cloud.centerName, cloud.examCenterName, cloud.schoolName);
-  const governorate = firstNonEmpty(cloud.governorate, cloud.directorate, cloud.directorateName);
-  const semester = firstNonEmpty(cloud.semester, cloud.term, cloud.semesterLabel);
-  const phone = firstNonEmpty(cloud.phone, cloud.phoneNumber, cloud.mobile);
-  const address = firstNonEmpty(cloud.address, cloud.location);
-  const centerHead = firstNonEmpty(cloud.controlHeadName, cloud.centerHead, cloud.centerHeadName, cloud.headOfCenter);
-  const academicYear = firstNonEmpty(cloud.academicYear, cloud.yearLabel, cloud.schoolYear);
-  const officialTitle = firstNonEmpty(cloud.officialTitle, cloud.officialName, cloud.title);
+  const data = unwrapCenterPayload(cloud);
+  const name = firstNonEmpty(data.name, data.centerName, data.examCenterName, data.examCentreName, data.officialCenterName, data.schoolName);
+  const governorate = firstNonEmpty(data.governorate, data.governorateName, data.directorate, data.directorateName, data.educationDirectorate, data.generalDirectorate);
+  const semester = firstNonEmpty(data.semester, data.term, data.semesterLabel, data.termLabel, data.studySemester, data.studyTerm);
+  const centerCode = firstNonEmpty(data.examCenterCode, data.centerCode, data.code, data.examCode, data.schoolCode, data.id);
+  const phone = firstNonEmpty(data.phone, data.phoneNumber, data.mobile, data.centerPhone, data.controlPhone, data.officialPhone);
+  const address = firstNonEmpty(data.address, data.location, data.officialAddress, data.centerAddress);
+  const centerHead = firstNonEmpty(data.controlHeadName, data.centerHead, data.centerHeadName, data.headOfCenter, data.controlHead, data.controllerName, data.managerName, data.directorName, data.principalName);
+  const academicYear = firstNonEmpty(data.academicYear, data.yearLabel, data.schoolYear, data.studyYear, data.academicYearLabel);
+  const officialTitle = firstNonEmpty(data.officialTitle, data.officialName, data.title, data.centerOfficialTitle);
 
-  if (!name && !governorate && !semester && !phone && !address && !centerHead && !academicYear && !officialTitle) {
+  if (!name && !governorate && !semester && !centerCode && !phone && !address && !centerHead && !academicYear && !officialTitle) {
     return null;
   }
 
@@ -368,10 +391,11 @@ function mapCloudCenterToSchoolData(cloud: any): SchoolData | null {
     name,
     governorate,
     semester,
+    centerCode,
     phone,
     address,
-    country: firstNonEmpty(cloud.country, "سلطنة عمان"),
-    ministry: firstNonEmpty(cloud.ministry, "وزارة التعليم"),
+    country: firstNonEmpty(data.country, data.countryName, "سلطنة عمان"),
+    ministry: firstNonEmpty(data.ministry, data.ministryName, "وزارة التعليم"),
     centerHead,
     academicYear,
     officialTitle,
@@ -582,6 +606,12 @@ function getRowCommitteeNo(row: any) {
   return String(value).trim();
 }
 
+function maskPrint12CommitteeNo(value: unknown): string {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  return "X".repeat(Math.max(1, raw.length));
+}
+
 function taskLabel(t: TaskType | string, lang: "ar" | "en") {
   switch (t) {
     case "INVIGILATION":
@@ -605,6 +635,7 @@ type SchoolData = {
   name: string;
   governorate: string;
   semester: string;
+  centerCode?: string;
   phone: string;
   address: string;
   country?: string;
@@ -864,6 +895,13 @@ html, body {
 }
 
 .no-print { display: none !important; }
+.screen-only-committee-no { display: inline !important; }
+.print-only-committee-mask { display: none !important; }
+
+@media print {
+  .screen-only-committee-no { display: none !important; }
+  .print-only-committee-mask { display: inline !important; }
+}
 
 #print-page.single-page {
   width: 180mm;
@@ -1204,7 +1242,7 @@ export default function TaskDistributionPrint() {
   const [run, setRun] = useState(() => loadRun(tenantId));
   const [schoolData, setSchoolData] = useState<SchoolData>(() => readEffectiveCenterData());
   const [logoUrl, setLogoUrl] = useState(() => {
-    const savedLogo = (localStorage.getItem(LOGO_KEY) || "").trim();
+    const savedLogo = firstStoredLogoUrl();
     return savedLogo || DEFAULT_LOGO_URL;
   });
   const [examsList, setExamsList] = useState<Exam[]>([]);
@@ -1262,8 +1300,11 @@ export default function TaskDistributionPrint() {
         localStorage.setItem("exam-manager:exam-center-data:v1", JSON.stringify(center));
       }
 
-      const cloudLogo = firstNonEmpty(centerCloud?.logo, centerCloud?.logoUrl, localStorage.getItem(LOGO_KEY), DEFAULT_LOGO_URL);
+      const cloudLogo = firstNonEmpty(centerCloud?.logo, centerCloud?.logoUrl, centerCloud?.officialLogo, centerCloud?.centerLogo, firstStoredLogoUrl(), DEFAULT_LOGO_URL);
       setLogoUrl(cloudLogo);
+      if (cloudLogo) {
+        localStorage.setItem("exam-manager:exam-center-logo:v1", cloudLogo);
+      }
 
       const nextRun = buildPrintRunFromCloud(runCloud, Array.isArray(assignmentRows) ? assignmentRows : []);
       if (nextRun) {
@@ -1296,7 +1337,7 @@ export default function TaskDistributionPrint() {
     const keysToWatch = [
       taskDistributionKey(tenantId),
       ...CENTER_DATA_KEYS,
-      LOGO_KEY,
+      ...PRINT12_LOGO_KEYS,
       "exam-manager:task-distribution:master-table:v1",
       "exam-manager:task-distribution:all-table:v1",
       "exam-manager:task-distribution:results-table:v1",
@@ -1315,7 +1356,7 @@ export default function TaskDistributionPrint() {
 
       setSchoolData(readEffectiveCenterData());
 
-      const nextLogo = (localStorage.getItem(LOGO_KEY) || "").trim() || DEFAULT_LOGO_URL;
+      const nextLogo = firstStoredLogoUrl() || DEFAULT_LOGO_URL;
       setLogoUrl(nextLogo);
 
       refreshRosterFromFirestore();
@@ -1344,7 +1385,7 @@ export default function TaskDistributionPrint() {
       if (
         e.key === taskDistributionKey(tenantId) ||
         CENTER_DATA_KEYS.includes(e.key) ||
-        e.key === LOGO_KEY ||
+        PRINT12_LOGO_KEYS.includes(e.key) ||
         e.key === "exam-manager:task-distribution:master-table:v1" ||
         e.key === "exam-manager:task-distribution:all-table:v1" ||
         e.key === "exam-manager:task-distribution:results-table:v1"
@@ -1416,7 +1457,10 @@ export default function TaskDistributionPrint() {
     const semesterLabel = schoolData.semester?.trim() || (lang === "ar" ? "الفصل الدراسي الأول" : "First Semester");
     const yearLabel = schoolData.academicYear?.trim() || "2026/2025";
     const centerHeadName = schoolData.centerHead?.trim() || "";
-    return { countryName, ministryName, directorateName, schoolName, semesterLabel, yearLabel, centerHeadName };
+    const centerCode = String(schoolData.centerCode || "").trim();
+    const phone = schoolData.phone?.trim() || "";
+    const address = schoolData.address?.trim() || "";
+    return { countryName, ministryName, directorateName, schoolName, semesterLabel, yearLabel, centerHeadName, centerCode, phone, address };
   }, [schoolData, lang]);
 
   const examsIndex = useMemo(() => {
@@ -1655,6 +1699,10 @@ export default function TaskDistributionPrint() {
           ...floorMonitorRows.filter((r) => floorMonitorAppliesToPage(r, g.dISO, g.period)),
         ]),
       }))
+      // ✅ لا تطبع صفحة كشف يومي فارغة: إذا لم يكن داخل الصفحة أي مراقب فعلي،
+      // فهذا يعني غالبًا أنها صفحة نتجت من احتياط/مراقب دور أو تجميع زائد لنفس اليوم،
+      // فتظهر باسم المادة فقط بدون توزيع. نخفيها من الطباعة والعرض.
+      .filter((p) => Array.isArray(p.invigilators) && p.invigilators.length > 0)
       .sort((a, b) => {
         if (a.dISO !== b.dISO) return a.dISO.localeCompare(b.dISO);
         const pa = normalizePeriodKey(a.period);
@@ -1990,7 +2038,10 @@ export default function TaskDistributionPrint() {
                     <td style={styles.td}>{formatPeriod(per, lang)}</td>
                     <td style={styles.td}>{taskLabel(getTaskType(r), lang)}</td>
                     <td style={{ ...styles.td, wordBreak: "break-word", overflowWrap: "anywhere" }}>{translateSubject(sub, lang) || "—"}</td>
-                    <td style={styles.td}>{getRoomNumber(r) || "—"}</td>
+                    <td style={styles.td}>
+                      <span className="screen-only-committee-no">{getRoomNumber(r) || "—"}</span>
+                      <span className="print-only-committee-mask">{maskPrint12CommitteeNo(getRoomNumber(r)) || "—"}</span>
+                    </td>
                   </tr>
                 );
               })
@@ -2384,7 +2435,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   pageBreak: { pageBreakAfter: "always", breakAfter: "page" },
 
-  headerGrid: { display: "grid", gridTemplateColumns: "1fr 92px 1fr", gap: 10, alignItems: "center" },
+  headerGrid: { display: "grid", gridTemplateColumns: "minmax(260px,1fr) 92px minmax(260px,1fr)", gap: 10, alignItems: "center" },
   headerLeft: { textAlign: "left", lineHeight: 1.25 },
   headerLeftTitle: {
     fontSize: 16,
@@ -2397,7 +2448,7 @@ const styles: Record<string, React.CSSProperties> = {
   headerLeftSub: { fontSize: 12.5, fontWeight: 800, marginTop: 2 },
   headerCenter: { display: "flex", justifyContent: "center", alignItems: "center" },
   headerRight: { textAlign: "right", lineHeight: 1.3 },
-  headerRightLine: { fontSize: 12.5, fontWeight: 800 },
+  headerRightLine: { fontSize: 12, fontWeight: 800, marginTop: 1 },
 
   hr: { height: 2, background: "#111", opacity: 0.85, margin: "10px 0 12px 0" },
 
@@ -2510,7 +2561,13 @@ const printCss = `
   -webkit-text-fill-color: #FFD700 !important;
 }
 
+.screen-only-committee-no { display: inline !important; }
+.print-only-committee-mask { display: none !important; }
+
 @media print {
+  .screen-only-committee-no { display: none !important; }
+  .print-only-committee-mask { display: inline !important; }
+
   body * {
     visibility: hidden !important;
   }
