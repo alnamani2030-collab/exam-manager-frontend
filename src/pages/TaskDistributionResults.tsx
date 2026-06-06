@@ -1,6 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import { loadTenantSettings } from "../services/tenantData";
 import { useI18n } from "../i18n/I18nProvider";
 import { pageDark, container, cardDark } from "../styles/ui";
 import { subjectColors } from "./taskDistributionResults/constants";
@@ -17,6 +18,102 @@ import { useResultsDataModel } from "./taskDistributionResults/hooks/useResultsD
 import { useResultsPageActions } from "./taskDistributionResults/hooks/useResultsPageActions";
 import { useResultsTableActions } from "./taskDistributionResults/hooks/useResultsTableActions";
 import { useResultsClipboardShortcuts } from "./taskDistributionResults/hooks/useResultsClipboardShortcuts";
+
+
+const RESULTS_PHONE_AUTH_SETTINGS_DOC_ID = "settings1";
+const RESULTS_PHONE_AUTH_LOCAL_CENTER_KEY = "exam-manager:settings1:center-data:v1";
+const RESULTS_PHONE_AUTH_SETTINGS_DOC_CANDIDATES = [
+  "settings1",
+  "schoolSettings1",
+  "settings",
+  "schoolSettings",
+  "schoolData",
+  "examCenter",
+];
+const RESULTS_PHONE_AUTH_LOCAL_KEY_CANDIDATES = [
+  "exam-manager:settings1:center-data:v1",
+  "exam-manager:settings1:school-data:v1",
+  "exam-manager:school-data:v1",
+  "exam-manager:settings:center-data:v1",
+  "exam-manager:center-data:v1",
+  "exam-manager:exam-center-data:v1",
+];
+
+function normalizePhoneForResultsAuth(value: unknown) {
+  return String(value ?? "").replace(/[^\d]/g, "");
+}
+
+function maskPhoneForResultsAuth(value: unknown) {
+  const digits = normalizePhoneForResultsAuth(value);
+  if (!digits) return "—";
+  if (digits.length <= 2) return "X".repeat(digits.length);
+  return `${digits[0]}${"X".repeat(Math.max(1, digits.length - 2))}${digits[digits.length - 1]}`;
+}
+
+function firstResultsPhoneFromObject(value: any): string {
+  if (!value || typeof value !== "object") return "";
+  const candidates = [
+    value.phone,
+    value.phoneNumber,
+    value.mobile,
+    value.mobileNumber,
+    value.centerPhone,
+    value.schoolPhone,
+    value.controlPhone,
+    value.officialPhone,
+    value.whatsapp,
+    value.whatsApp,
+    value?.centerData?.phone,
+    value?.centerData?.phoneNumber,
+    value?.schoolData?.phone,
+    value?.schoolData?.phoneNumber,
+    value?.data?.phone,
+    value?.data?.phoneNumber,
+    value?.settings1?.phone,
+    value?.settings1?.phoneNumber,
+  ];
+  for (const item of candidates) {
+    const raw = String(item ?? "").trim();
+    if (normalizePhoneForResultsAuth(raw)) return raw;
+  }
+  return "";
+}
+
+function readResultsPhoneFromLocalStorage() {
+  try {
+    for (const key of RESULTS_PHONE_AUTH_LOCAL_KEY_CANDIDATES) {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw);
+      const phone = firstResultsPhoneFromObject(parsed);
+      if (phone) return phone;
+    }
+
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = String(localStorage.key(index) || "");
+      const lowerKey = key.toLowerCase();
+      const looksRelevant =
+        lowerKey.includes("settings1") ||
+        lowerKey.includes("settings") ||
+        lowerKey.includes("school") ||
+        lowerKey.includes("center") ||
+        lowerKey.includes("exam-manager");
+      if (!looksRelevant) continue;
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      try {
+        const parsed = JSON.parse(raw);
+        const phone = firstResultsPhoneFromObject(parsed);
+        if (phone) return phone;
+      } catch {}
+    }
+  } catch {}
+  return "";
+}
+
+function resultsPhoneAuthSessionKey(tenantId: string) {
+  return `yr:phone-gate:task-results:${String(tenantId || "default").trim() || "default"}`;
+}
 
 
 const OFFICIAL_PAGE_STYLE: React.CSSProperties = {
@@ -490,6 +587,91 @@ export default function TaskDistributionResults() {
   const [showTeacherSidebar, setShowTeacherSidebar] = React.useState(true);
   const [teacherSearchInput, setTeacherSearchInput] = React.useState("");
   const [activeTeacherSearch, setActiveTeacherSearch] = React.useState("");
+  const [phoneAuthPassed, setPhoneAuthPassed] = React.useState(() => {
+    try {
+      return sessionStorage.getItem(resultsPhoneAuthSessionKey(tenantId)) === "ok";
+    } catch {
+      return false;
+    }
+  });
+  const [registeredPhoneForAuth, setRegisteredPhoneForAuth] = React.useState("");
+  const [phoneAuthInput, setPhoneAuthInput] = React.useState("");
+  const [phoneAuthError, setPhoneAuthError] = React.useState("");
+  const [phoneAuthLoading, setPhoneAuthLoading] = React.useState(false);
+
+
+  React.useEffect(() => {
+    let alive = true;
+
+    async function loadRegisteredPhone() {
+      setPhoneAuthLoading(true);
+      setPhoneAuthError("");
+      try {
+        let phone = "";
+        for (const docId of RESULTS_PHONE_AUTH_SETTINGS_DOC_CANDIDATES) {
+          try {
+            const cloud = await loadTenantSettings<any>(tenantId, docId, {});
+            phone = firstResultsPhoneFromObject(cloud);
+            if (phone) break;
+          } catch {}
+        }
+        phone = String(phone || readResultsPhoneFromLocalStorage() || "").trim();
+        if (!alive) return;
+        setRegisteredPhoneForAuth(phone);
+        if (!phone) {
+          setPhoneAuthError(tr("لم يتم العثور على رقم هاتف مسجل في صفحة settings1.", "No registered phone number was found in settings1."));
+        }
+      } catch {
+        if (!alive) return;
+        const phone = readResultsPhoneFromLocalStorage();
+        setRegisteredPhoneForAuth(phone);
+        if (!phone) {
+          setPhoneAuthError(tr("تعذر تحميل رقم الهاتف المسجل. احفظ رقم الهاتف أولًا من صفحة settings1.", "Could not load the registered phone number. Save the phone number first in settings1."));
+        }
+      } finally {
+        if (alive) setPhoneAuthLoading(false);
+      }
+    }
+
+    try {
+      if (sessionStorage.getItem(resultsPhoneAuthSessionKey(tenantId)) === "ok") {
+        setPhoneAuthPassed(true);
+      } else {
+        setPhoneAuthPassed(false);
+      }
+    } catch {
+      setPhoneAuthPassed(false);
+    }
+
+    void loadRegisteredPhone();
+
+    return () => {
+      alive = false;
+    };
+  }, [tenantId, tr]);
+
+  const handlePhoneAuthSubmit = React.useCallback((event?: React.FormEvent) => {
+    event?.preventDefault();
+    const expected = normalizePhoneForResultsAuth(registeredPhoneForAuth);
+    const actual = normalizePhoneForResultsAuth(phoneAuthInput);
+
+    if (!expected) {
+      setPhoneAuthError(tr("لا يوجد رقم هاتف مسجل للمصادقة.", "There is no registered phone number for authentication."));
+      return;
+    }
+
+    if (actual !== expected) {
+      setPhoneAuthError(tr("رقم الهاتف غير مطابق.", "The phone number does not match."));
+      return;
+    }
+
+    try {
+      sessionStorage.setItem(resultsPhoneAuthSessionKey(tenantId), "ok");
+    } catch {}
+    setPhoneAuthPassed(true);
+    setPhoneAuthError("");
+    setPhoneAuthInput("");
+  }, [phoneAuthInput, registeredPhoneForAuth, tenantId, tr]);
 
   const formatPeriod = React.useCallback(
     (period?: string) => {
@@ -859,6 +1041,121 @@ export default function TaskDistributionResults() {
       />
     </>
   );
+
+  if (!phoneAuthPassed) {
+    return (
+      <div className="resultsOfficialCommercialScope" style={OFFICIAL_PAGE_STYLE}>
+        <style>{OFFICIAL_RESULTS_TABLE_CSS}</style>
+        <div style={{ ...container, width: "min(720px, 100%)", maxWidth: "100%" }}>
+          <section
+            style={{
+              ...OFFICIAL_CARD_STYLE,
+              marginTop: 60,
+              padding: 28,
+              direction: lang === "ar" ? "rtl" : "ltr",
+              textAlign: lang === "ar" ? "right" : "left",
+            }}
+          >
+            <h1 style={{ margin: 0, fontSize: 24, fontWeight: 950, color: "#111827" }}>
+              {tr("المصادقة برقم الهاتف", "Phone authentication")}
+            </h1>
+            <p style={{ margin: "12px 0 0", fontSize: 14, fontWeight: 800, color: "#374151", lineHeight: 1.9 }}>
+              {tr("أدخل رقم الهاتف المسجل في settings1 لفتح صفحة نتائج التوزيع.", "Enter the phone number registered in settings1 to open the distribution results page.")}
+            </p>
+            <div
+              style={{
+                marginTop: 14,
+                border: "1px solid rgba(151,116,28,.45)",
+                borderRadius: 14,
+                padding: "10px 12px",
+                background: "#fffaf0",
+                fontWeight: 900,
+                color: "#111827",
+              }}
+            >
+              {tr("الرقم المسجل:", "Registered number:")} {maskPhoneForResultsAuth(registeredPhoneForAuth)}
+            </div>
+
+            <form onSubmit={handlePhoneAuthSubmit} style={{ marginTop: 18, display: "grid", gap: 12 }}>
+              <input
+                value={phoneAuthInput}
+                onChange={(event) => {
+                  setPhoneAuthInput(event.target.value);
+                  setPhoneAuthError("");
+                }}
+                placeholder={tr("أدخل رقم الهاتف", "Enter phone number")}
+                inputMode="tel"
+                autoComplete="off"
+                disabled={phoneAuthLoading || !registeredPhoneForAuth}
+                style={{
+                  width: "100%",
+                  minHeight: 48,
+                  borderRadius: 14,
+                  border: "2px solid #b89435",
+                  padding: "10px 12px",
+                  background: "#fffdf7",
+                  color: "#111827",
+                  fontWeight: 900,
+                  fontSize: 16,
+                  outline: "none",
+                }}
+              />
+
+              {phoneAuthError ? (
+                <div
+                  style={{
+                    border: "1px solid rgba(220,38,38,.45)",
+                    background: "rgba(254,226,226,.86)",
+                    color: "#7f1d1d",
+                    borderRadius: 12,
+                    padding: "10px 12px",
+                    fontWeight: 900,
+                    lineHeight: 1.8,
+                  }}
+                >
+                  {phoneAuthError}
+                </div>
+              ) : null}
+
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-start" }}>
+                <button
+                  type="submit"
+                  disabled={phoneAuthLoading || !registeredPhoneForAuth}
+                  style={{
+                    border: "1px solid rgba(151,116,28,.65)",
+                    borderRadius: 14,
+                    padding: "11px 18px",
+                    background: "linear-gradient(180deg, #f4e2ad 0%, #d5b45a 100%)",
+                    color: "#111827",
+                    fontWeight: 950,
+                    cursor: phoneAuthLoading || !registeredPhoneForAuth ? "not-allowed" : "pointer",
+                    opacity: phoneAuthLoading || !registeredPhoneForAuth ? 0.65 : 1,
+                  }}
+                >
+                  {phoneAuthLoading ? tr("جاري التحميل...", "Loading...") : tr("دخول", "Enter")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => nav("/task-distribution/run")}
+                  style={{
+                    border: "1px solid rgba(151,116,28,.42)",
+                    borderRadius: 14,
+                    padding: "11px 18px",
+                    background: "#fffaf0",
+                    color: "#111827",
+                    fontWeight: 950,
+                    cursor: "pointer",
+                  }}
+                >
+                  {tr("رجوع", "Back")}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      </div>
+    );
+  }
 
   if (interaction.tableFullScreen && hasRun) {
     return (
