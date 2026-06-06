@@ -2,7 +2,7 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { useI18n } from "../i18n/I18nProvider";
-import { replaceTenantArray, saveTenantSettings, writeTenantAudit } from "../services/tenantData";
+import { loadTenantSettings, replaceTenantArray, saveTenantSettings, writeTenantAudit } from "../services/tenantData";
 import { saveRun, RUN_UPDATED_EVENT, MASTER_TABLE_UPDATED_EVENT } from "../utils/taskDistributionStorage";
 import { container } from "../styles/ui";
 import { subjectColors } from "./taskDistributionResults12/constants";
@@ -43,6 +43,32 @@ const OFFICIAL_HEADER_STYLES_INPUT: Parameters<
   goldLine: "#a98322",
   goldLineSoft: "rgba(151, 116, 28, 0.34)",
 };
+
+
+const RESULTS12_EXAM_CENTER_SETTINGS_DOC_ID = "diplomaExamCenter";
+const RESULTS12_PHONE_GATE_PREFIX = "yr:phone-gate:task-results12:";
+
+type Results12ExamCenterPhoneSettings = {
+  phone?: string;
+};
+
+function results12DigitsOnly(value: unknown) {
+  return String(value ?? "").replace(/\D+/g, "").trim();
+}
+
+function results12NormalizePhoneForCompare(value: unknown) {
+  const digits = results12DigitsOnly(value);
+  if (digits.length > 8 && digits.startsWith("968")) return digits.slice(3);
+  return digits;
+}
+
+function results12MaskPhone(value: unknown) {
+  const digits = results12NormalizePhoneForCompare(value);
+  if (!digits) return "—";
+  if (digits.length === 1) return "X";
+  if (digits.length === 2) return `${digits[0]}${digits[1]}`;
+  return `${digits[0]}${"X".repeat(Math.max(1, digits.length - 2))}${digits[digits.length - 1]}`;
+}
 
 const OFFICIAL_GOLDEN_TABLE_CSS = `
   .results12GoldenTableScope {
@@ -617,6 +643,85 @@ export default function TaskDistributionResults() {
   const printAreaRef = React.useRef<HTMLDivElement>(null);
   const [showTeacherSidebar, setShowTeacherSidebar] = React.useState(true);
 
+  const phoneGateKey = React.useMemo(
+    () => `${RESULTS12_PHONE_GATE_PREFIX}${tenantId}`,
+    [tenantId],
+  );
+  const [registeredPhone, setRegisteredPhone] = React.useState("");
+  const [phoneGateInput, setPhoneGateInput] = React.useState("");
+  const [phoneGateError, setPhoneGateError] = React.useState("");
+  const [phoneGateLoading, setPhoneGateLoading] = React.useState(true);
+  const [phoneGatePassed, setPhoneGatePassed] = React.useState(() => {
+    try {
+      return sessionStorage.getItem(`${RESULTS12_PHONE_GATE_PREFIX}${tenantId}`) === "ok";
+    } catch {
+      return false;
+    }
+  });
+
+  React.useEffect(() => {
+    let mounted = true;
+    setPhoneGateLoading(true);
+    setPhoneGateError("");
+
+    try {
+      setPhoneGatePassed(sessionStorage.getItem(phoneGateKey) === "ok");
+    } catch {
+      setPhoneGatePassed(false);
+    }
+
+    async function loadPhoneForGate() {
+      try {
+        const settings = await loadTenantSettings<Results12ExamCenterPhoneSettings>(
+          tenantId,
+          RESULTS12_EXAM_CENTER_SETTINGS_DOC_ID,
+          {},
+        );
+        if (!mounted) return;
+        setRegisteredPhone(results12NormalizePhoneForCompare(settings?.phone || ""));
+      } catch {
+        if (!mounted) return;
+        setRegisteredPhone("");
+        setPhoneGateError(tr("تعذر تحميل رقم الهاتف المسجل من السحابة.", "Could not load the registered phone number from cloud."));
+      } finally {
+        if (mounted) setPhoneGateLoading(false);
+      }
+    }
+
+    void loadPhoneForGate();
+
+    return () => {
+      mounted = false;
+    };
+  }, [tenantId, phoneGateKey, tr]);
+
+  const verifyPhoneGate = React.useCallback(() => {
+    const saved = results12NormalizePhoneForCompare(registeredPhone);
+    const entered = results12NormalizePhoneForCompare(phoneGateInput);
+
+    if (!saved) {
+      setPhoneGateError(tr("لا يوجد رقم هاتف محفوظ في إعدادات مركز الدبلوم.", "No phone number is saved in the Diploma Center settings."));
+      return;
+    }
+
+    if (!entered) {
+      setPhoneGateError(tr("أدخل رقم الهاتف أولًا.", "Enter the phone number first."));
+      return;
+    }
+
+    if (entered !== saved) {
+      setPhoneGateError(tr("رقم الهاتف غير مطابق.", "The phone number does not match."));
+      return;
+    }
+
+    try {
+      sessionStorage.setItem(phoneGateKey, "ok");
+    } catch {}
+    setPhoneGateError("");
+    setPhoneGatePassed(true);
+  }, [phoneGateInput, phoneGateKey, registeredPhone, tr]);
+
+
   const formatPeriod = React.useCallback(
     (period?: string) => {
       const raw = String(period || "AM").replace(/\s+/g, " ").trim();
@@ -1066,6 +1171,110 @@ export default function TaskDistributionResults() {
       />
     </>
   );
+
+
+  if (!phoneGatePassed) {
+    return (
+      <div className="results12GoldenTableScope" style={OFFICIAL_PAGE_STYLE}>
+        <style>{OFFICIAL_GOLDEN_TABLE_CSS}</style>
+        <div style={{ ...container, width: "min(780px, 100%)", maxWidth: "100%", margin: "0 auto", paddingTop: 48 }}>
+          <section
+            style={{
+              ...OFFICIAL_PANEL_STYLE,
+              padding: 24,
+              borderRadius: 20,
+              border: "2px solid #b89538",
+              boxShadow: "0 18px 44px rgba(80,60,20,0.18)",
+              direction: lang === "ar" ? "rtl" : "ltr",
+            }}
+          >
+            <h1 style={{ margin: 0, fontSize: 24, fontWeight: 950, color: "#111827" }}>
+              {tr("مصادقة رقم الهاتف", "Phone authentication")}
+            </h1>
+            <p style={{ margin: "12px 0 0", fontSize: 14, fontWeight: 800, lineHeight: 1.9, color: "#374151" }}>
+              {tr(
+                "أدخل رقم الهاتف المسجل في إعدادات مركز الدبلوم لفتح صفحة نتائج التوزيع.",
+                "Enter the phone number saved in Diploma Center settings to open the distribution results page.",
+              )}
+            </p>
+
+            <div style={{ marginTop: 18, padding: 12, border: "1px solid #d1b66a", borderRadius: 14, background: "#fff8df", fontWeight: 900 }}>
+              {tr("الرقم المسجل:", "Registered number:")} {phoneGateLoading ? tr("جاري التحميل...", "Loading...") : results12MaskPhone(registeredPhone)}
+            </div>
+
+            <input
+              type="tel"
+              inputMode="numeric"
+              autoComplete="off"
+              value={phoneGateInput}
+              onChange={(event) => {
+                setPhoneGateInput(event.target.value);
+                setPhoneGateError("");
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") verifyPhoneGate();
+              }}
+              placeholder={tr("أدخل رقم الهاتف", "Enter phone number")}
+              disabled={phoneGateLoading}
+              style={{
+                width: "100%",
+                marginTop: 14,
+                padding: "14px 16px",
+                borderRadius: 14,
+                border: "2px solid #947329",
+                background: "#fffdf7",
+                color: "#111827",
+                fontSize: 18,
+                fontWeight: 900,
+                outline: "none",
+                boxSizing: "border-box",
+              }}
+            />
+
+            {phoneGateError ? (
+              <div style={{ marginTop: 12, padding: 10, borderRadius: 12, border: "1px solid #dc2626", background: "#fef2f2", color: "#991b1b", fontWeight: 900 }}>
+                {phoneGateError}
+              </div>
+            ) : null}
+
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-start", flexWrap: "wrap", marginTop: 18 }}>
+              <button
+                type="button"
+                onClick={verifyPhoneGate}
+                disabled={phoneGateLoading}
+                style={{
+                  border: "2px solid #111827",
+                  borderRadius: 14,
+                  background: "linear-gradient(180deg, #f8ebc8 0%, #e3c978 100%)",
+                  color: "#111827",
+                  padding: "11px 18px",
+                  cursor: phoneGateLoading ? "not-allowed" : "pointer",
+                  fontWeight: 950,
+                }}
+              >
+                {tr("دخول", "Enter")}
+              </button>
+              <button
+                type="button"
+                onClick={() => nav("/task-distribution/run")}
+                style={{
+                  border: "2px solid #6b7280",
+                  borderRadius: 14,
+                  background: "#fffdf7",
+                  color: "#111827",
+                  padding: "11px 18px",
+                  cursor: "pointer",
+                  fontWeight: 900,
+                }}
+              >
+                {tr("عودة", "Back")}
+              </button>
+            </div>
+          </section>
+        </div>
+      </div>
+    );
+  }
 
   if (interaction.tableFullScreen && hasRun) {
     return (
