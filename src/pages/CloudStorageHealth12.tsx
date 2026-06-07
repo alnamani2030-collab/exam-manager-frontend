@@ -439,7 +439,12 @@ function EmailCodeGate({
                 if (event.key === "Enter") void sendCode();
               }}
               inputMode="email"
-              autoComplete="email"
+              autoComplete="new-password"
+          autoCorrect="off"
+          autoCapitalize="none"
+          spellCheck={false}
+          name="cloud_storage_health12_email_gate_no_autofill"
+          id="cloud_storage_health12_email_gate_no_autofill"
               placeholder="example@domain.com"
               style={emailInputStyle}
             />

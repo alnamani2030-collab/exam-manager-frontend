@@ -451,7 +451,12 @@ function EmailCodeGate({
                 if (event.key === "Enter") void sendCode();
               }}
               inputMode="email"
-              autoComplete="email"
+              autoComplete="new-password"
+          autoCorrect="off"
+          autoCapitalize="none"
+          spellCheck={false}
+          name="sync12_email_gate_no_autofill"
+          id="sync12_email_gate_no_autofill"
               placeholder="example@domain.com"
               style={emailInputStyle}
             />

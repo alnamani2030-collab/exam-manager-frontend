@@ -99,16 +99,6 @@ const maskEmailForControlAccess = (email: string) => {
   return `${name.charAt(0)}${"*".repeat(Math.max(3, name.length - 2))}${name.charAt(name.length - 1)}@${domain}`;
 };
 
-const maskDigitsKeepFirstLast = (value: any) => {
-  const digits = String(value ?? "").replace(/\D/g, "");
-  if (!digits) return "-";
-  if (digits.length === 1) return "X";
-  if (digits.length === 2) return `${digits[0]}${digits[1]}`;
-  return `${digits[0]}${"X".repeat(Math.max(1, digits.length - 2))}${digits[digits.length - 1]}`;
-};
-
-const displayMaskedEmployeeOrPhone = (value: any) => maskDigitsKeepFirstLast(value);
-
 const normalizeControlAccessCode = (value: string) => String(value || "").replace(/\D/g, "").slice(0, 6);
 const normalizeControlAccessEmail = (value: string) => String(value || "").trim().toLowerCase();
 const CONTROL12_ACCESS_LOCK_MINUTES = 5;
@@ -957,7 +947,7 @@ export default function SchoolControl() {
         tr("رقم الهاتف", "Phone number"),
         tr("التوقيع", "Signature"),
       ],
-      ...members.map((item) => [item.name, displayMaskedEmployeeOrPhone(item.employeeNo), item.specialization, item.assignment, displayMaskedEmployeeOrPhone(item.phone), item.signature]),
+      ...members.map((item) => [item.name, item.employeeNo, item.specialization, item.assignment, item.phone, item.signature]),
     ];
 
     const csv = rows.map((row) => row.map(csvEscape).join(",")).join("\n");
@@ -1051,7 +1041,7 @@ export default function SchoolControl() {
         (member) => `
           <tr>
             <td>${member.name || "-"}</td>
-            <td>${displayMaskedEmployeeOrPhone(member.employeeNo)}</td>
+            <td>${member.employeeNo || "-"}</td>
             <td>${member.specialization || "-"}</td>
             <td>${member.signature || "-"}</td>
           </tr>`,
@@ -1243,7 +1233,12 @@ ${membersTable}
             </>
           ) : (
             <>
-              <input className="control12EmailCodeInput" value={controlAccessEmail} onChange={(event) => { setControlAccessEmail(event.target.value); setControlAccessEmailConfirmed(false); setControlAccessCodeSent(false); setControlAccessCode(""); setControlAccessError(""); setControlAccessMessage(""); }} onKeyDown={(event) => { if (event.key === "Enter") void sendControlAccessCode(); }} inputMode="email" autoComplete="email" placeholder={tr("أدخل البريد الإلكتروني المرتبط بالحساب", "Enter the account email")} style={{ width: "100%", border: "3px solid #d4af37", borderRadius: 16, padding: "15px 18px", boxSizing: "border-box", outline: "none", marginTop: 14, textAlign: "center" }} />
+              <input className="control12EmailCodeInput" value={controlAccessEmail} onChange={(event) => { setControlAccessEmail(event.target.value); setControlAccessEmailConfirmed(false); setControlAccessCodeSent(false); setControlAccessCode(""); setControlAccessError(""); setControlAccessMessage(""); }} onKeyDown={(event) => { if (event.key === "Enter") void sendControlAccessCode(); }} inputMode="email" autoComplete="new-password"
+              autoCorrect="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              name="control12_email_gate_no_autofill"
+              id="control12_email_gate_no_autofill" placeholder={tr("أدخل البريد الإلكتروني المرتبط بالحساب", "Enter the account email")} style={{ width: "100%", border: "3px solid #d4af37", borderRadius: 16, padding: "15px 18px", boxSizing: "border-box", outline: "none", marginTop: 14, textAlign: "center" }} />
               {controlAccessCodeSent && controlAccessEmailConfirmed && <input className="control12EmailCodeInput" value={controlAccessCode} onChange={(event) => setControlAccessCode(normalizeControlAccessCode(event.target.value))} onKeyDown={(event) => { if (event.key === "Enter") void verifyControlAccessCode(); }} inputMode="numeric" maxLength={6} placeholder={tr("أدخل رمز التحقق المكون من 6 أرقام", "Enter the 6-digit verification code")} style={{ width: "100%", border: "3px solid #d4af37", borderRadius: 16, padding: "15px 18px", boxSizing: "border-box", outline: "none", marginTop: 12, textAlign: "center", letterSpacing: 2 }} />}
               {controlAccessMessage && <div style={{ marginTop: 12, color: "#065f46", background: "#ecfdf5", border: "2px solid #34d399", borderRadius: 14, padding: 12, fontWeight: 1000, textAlign: "center" }}>{controlAccessMessage}</div>}
               {controlAccessError && <div style={{ marginTop: 12, color: "#000000", background: "#fef2f2", border: "2px solid #ef4444", borderRadius: 14, padding: 12, fontWeight: 1000, textAlign: "center" }}>{controlAccessError}</div>}
@@ -1377,10 +1372,10 @@ ${membersTable}
                     members.map((item) => (
                       <tr key={item.id}>
                         <Td>{item.name}</Td>
-                        <Td>{displayMaskedEmployeeOrPhone(item.employeeNo)}</Td>
+                        <Td>{item.employeeNo}</Td>
                         <Td>{item.specialization}</Td>
                         <Td>{item.assignment}</Td>
-                        <Td>{displayMaskedEmployeeOrPhone(item.phone)}</Td>
+                        <Td>{item.phone}</Td>
                         <Td>{item.signature}</Td>
                         <Td>
                           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -1489,10 +1484,10 @@ ${membersTable}
                       label={`${tr("العضو", "Member")} ${index + 1}`}
                       value={reportForm.memberIds[index]}
                       onChange={(v) => setReportMember(index, v)}
-                      options={members.map((member) => ({ value: member.id, label: `${member.name} - ${displayMaskedEmployeeOrPhone(member.employeeNo)}` }))}
+                      options={members.map((member) => ({ value: member.id, label: `${member.name} - ${member.employeeNo}` }))}
                     />
                     <div style={previewBoxStyle}>
-                      <div>{displayMaskedEmployeeOrPhone(selected?.employeeNo)}</div>
+                      <div>{selected?.employeeNo || "-"}</div>
                       <div>{selected?.specialization || "-"}</div>
                       <div>{selected?.signature || "-"}</div>
                     </div>

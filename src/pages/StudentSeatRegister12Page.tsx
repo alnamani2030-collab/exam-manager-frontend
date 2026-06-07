@@ -1407,7 +1407,12 @@ export default function StudentSeatRegister12Page() {
                 if (event.key === "Enter") void sendEmailGateCode();
               }}
               inputMode="email"
-              autoComplete="email"
+              autoComplete="new-password"
+              autoCorrect="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              name="student_seat12_email_gate_no_autofill"
+              id="student_seat12_email_gate_no_autofill"
               placeholder="أدخل البريد الإلكتروني المرتبط بالحساب"
               disabled={emailGateActionsDisabled}
               style={{
