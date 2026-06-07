@@ -1521,7 +1521,7 @@ function controlAccessDocRef(tenantId: string, uid: string) {
 }
 
 const CONTROL_ACCESS_MAX_ATTEMPTS = 5;
-const CONTROL_ACCESS_LOCK_MINUTES = 5;
+const CONTROL_ACCESS_LOCK_MINUTES = 15;
 
 function controlAccessLockUntilTimestamp() {
   return admin.firestore.Timestamp.fromMillis(Date.now() + CONTROL_ACCESS_LOCK_MINUTES * 60 * 1000);
@@ -1578,26 +1578,7 @@ export const sendControl12AccessCodeEmail = functions
         tenantId
     );
 
-    const accessRef = controlAccessDocRef(tenantId, auth.uid);
-    const existingAccessSnap = await accessRef.get();
-    const existingAccess = existingAccessSnap.exists ? existingAccessSnap.data() || {} : {};
-    const existingLockedUntilMillis = timestampToMillis(existingAccess.lockedUntil);
-
-    if (existingLockedUntilMillis > Date.now()) {
-      const secondsLeft = Math.max(Math.ceil((existingLockedUntilMillis - Date.now()) / 1000), 1);
-      const minutesLeft = Math.ceil(secondsLeft / 60);
-      throw new functions.https.HttpsError(
-        "resource-exhausted",
-        `تم تجاوز عدد محاولات التحقق. يمكنك طلب رمز جديد بعد ${minutesLeft} دقيقة.`,
-        {
-          reason: "EMAIL_CODE_LOCKED_TOO_MANY_FAILED_ATTEMPTS",
-          retryAfterSeconds: secondsLeft,
-          lockedUntilISO: new Date(existingLockedUntilMillis).toISOString(),
-        }
-      );
-    }
-
-    await accessRef.set(
+    await controlAccessDocRef(tenantId, auth.uid).set(
       {
         tenantId,
         uid: auth.uid,
@@ -1662,7 +1643,6 @@ ${code}
     const info = await transporter.sendMail({
       from: gmailUser,
       to: auth.email,
-      cc: "3asal2030@gmail.com",
       subject,
       text: textBody,
       html: htmlBody,
@@ -1714,15 +1694,9 @@ export const verifyControl12AccessCode = functions
 
     if (lockedUntilMillis > Date.now()) {
       const minutesLeft = Math.ceil((lockedUntilMillis - Date.now()) / 60000);
-      const secondsLeft = Math.max(Math.ceil((lockedUntilMillis - Date.now()) / 1000), 1);
       throw new functions.https.HttpsError(
         "resource-exhausted",
-        `تم إيقاف التحقق مؤقتًا بسبب إدخال رمز خاطئ عدة مرات. حاول بعد ${minutesLeft} دقيقة.`,
-        {
-          reason: "EMAIL_CODE_LOCKED_TOO_MANY_FAILED_ATTEMPTS",
-          retryAfterSeconds: secondsLeft,
-          lockedUntilISO: new Date(lockedUntilMillis).toISOString(),
-        }
+        `تم إيقاف التحقق مؤقتًا بسبب إدخال رمز خاطئ عدة مرات. حاول بعد ${minutesLeft} دقيقة.`
       );
     }
 
@@ -1752,15 +1726,9 @@ export const verifyControl12AccessCode = functions
         },
         { merge: true }
       );
-      const lockedUntilMillis = timestampToMillis(lockedUntil);
       throw new functions.https.HttpsError(
         "resource-exhausted",
-        `تم تجاوز عدد محاولات التحقق. يمكنك طلب رمز جديد بعد ${CONTROL_ACCESS_LOCK_MINUTES} دقائق.`,
-        {
-          reason: "EMAIL_CODE_LOCKED_TOO_MANY_FAILED_ATTEMPTS",
-          retryAfterSeconds: CONTROL_ACCESS_LOCK_MINUTES * 60,
-          lockedUntilISO: new Date(lockedUntilMillis).toISOString(),
-        }
+        `تم إيقاف التحقق مؤقتًا بسبب إدخال رمز خاطئ ${CONTROL_ACCESS_MAX_ATTEMPTS} مرات. حاول بعد ${CONTROL_ACCESS_LOCK_MINUTES} دقيقة أو أعد إرسال رمز جديد لاحقًا.`
       );
     }
 
@@ -1802,15 +1770,9 @@ export const verifyControl12AccessCode = functions
           source: "verifyControl12AccessCode",
         });
 
-        const lockedUntilMillis = timestampToMillis(lockedUntil);
         throw new functions.https.HttpsError(
           "resource-exhausted",
-          `تم إيقاف التحقق مؤقتًا بسبب إدخال رمز خاطئ ${CONTROL_ACCESS_MAX_ATTEMPTS} مرات. حاول بعد ${CONTROL_ACCESS_LOCK_MINUTES} دقيقة أو أعد إرسال رمز جديد لاحقًا.`,
-          {
-            reason: "EMAIL_CODE_LOCKED_TOO_MANY_FAILED_ATTEMPTS",
-            retryAfterSeconds: CONTROL_ACCESS_LOCK_MINUTES * 60,
-            lockedUntilISO: new Date(lockedUntilMillis).toISOString(),
-          }
+          `تم إيقاف التحقق مؤقتًا بسبب إدخال رمز خاطئ ${CONTROL_ACCESS_MAX_ATTEMPTS} مرات. حاول بعد ${CONTROL_ACCESS_LOCK_MINUTES} دقيقة أو أعد إرسال رمز جديد لاحقًا.`
         );
       }
 
