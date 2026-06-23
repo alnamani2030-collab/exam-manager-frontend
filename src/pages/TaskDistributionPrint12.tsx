@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { useI18n } from "../i18n/I18nProvider";
 import { loadTenantArray, loadTenantSettings, subscribeTenantArray, writeTenantAudit } from "../services/tenantData";
-import { loadRun, saveRun, RUN_UPDATED_EVENT, taskDistributionKey } from "../utils/taskDistributionStorage";
+import { loadRun, saveRun, RUN_UPDATED_EVENT, MASTER_TABLE_UPDATED_EVENT, taskDistributionKey } from "../utils/taskDistributionStorage";
 import type { TaskType } from "../contracts/taskDistributionContract";
 
 /** -------------------------------------------
@@ -903,36 +903,40 @@ html, body {
   .print-only-committee-mask { display: inline !important; }
 }
 
-#print-page.single-page {
+/* ✅ A4 isolated print window: each generated report sheet is fitted inside one A4 page */
+#print-page {
   width: 180mm;
-  min-height: 268mm;
   margin: 0 auto;
-  overflow: hidden;
+  overflow: visible;
   position: relative;
   box-sizing: border-box;
 }
 
-#print-page.single-page #fit-target {
-  transform-origin: top center;
-}
-
+#print-page.single-page,
 #print-page.multi-page {
-  width: 100%;
-  height: auto;
+  width: 180mm;
+  margin: 0 auto;
   overflow: visible;
-  margin: 0;
-  position: static;
+  position: relative;
   box-sizing: border-box;
 }
 
-#print-page.multi-page #fit-target {
-  transform: none !important;
-  width: 100%;
+#print-page #fit-target {
+  width: 180mm;
+  margin: 0 auto;
+  transform-origin: top center;
+}
+
+.print-root {
+  width: 180mm !important;
+  margin: 0 auto !important;
 }
 
 .print-root .print-sheet {
   width: 180mm !important;
-  min-height: 268mm !important;
+  min-height: 0 !important;
+  height: 268mm !important;
+  max-height: 268mm !important;
   margin: 0 auto 0 auto !important;
   background: #fff !important;
   padding: 1.5mm 1.5mm 2mm 1.5mm !important;
@@ -940,13 +944,23 @@ html, body {
   border-radius: 0 !important;
   page-break-after: always;
   break-after: page;
+  page-break-inside: avoid !important;
+  break-inside: avoid !important;
   overflow: hidden !important;
+  position: relative !important;
   box-sizing: border-box !important;
 }
 
 .print-root .print-sheet:last-child {
   page-break-after: auto;
   break-after: auto;
+}
+
+.print-root .print-sheet-fit-inner {
+  width: 100%;
+  max-width: 100%;
+  transform-origin: top center;
+  box-sizing: border-box;
 }
 
 .print-root table {
@@ -986,8 +1000,30 @@ html, body {
     min-height: 297mm;
     overflow: visible !important;
   }
+
+  #print-page {
+    width: 180mm !important;
+    margin: 0 auto !important;
+  }
+
+  .print-root .print-sheet {
+    width: 180mm !important;
+    height: 268mm !important;
+    max-height: 268mm !important;
+    page-break-after: always;
+    break-after: page;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    overflow: hidden !important;
+  }
+
+  .print-root .print-sheet:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
 }
 `;
+
 
 async function printOnlyElement(el: HTMLElement, title = "report") {
   const clone = el.cloneNode(true) as HTMLElement;
@@ -1013,12 +1049,67 @@ async function printOnlyElement(el: HTMLElement, title = "report") {
       var maxW = 180 * pxPerMm;
       var maxH = 268 * pxPerMm;
 
-      function fitToOnePage() {
+      function prepareSheetsForFit() {
+        var sheets = Array.prototype.slice.call(document.querySelectorAll('.print-root .print-sheet') || []);
+        sheets.forEach(function (sheet) {
+          if (!sheet || sheet.getAttribute('data-yr-a4-fit-ready') === '1') return;
+
+          var inner = document.createElement('div');
+          inner.className = 'print-sheet-fit-inner';
+
+          while (sheet.firstChild) {
+            inner.appendChild(sheet.firstChild);
+          }
+
+          sheet.appendChild(inner);
+          sheet.setAttribute('data-yr-a4-fit-ready', '1');
+        });
+      }
+
+      function resetFit(inner) {
+        if (!inner) return;
+        inner.style.transform = 'none';
+        inner.style.width = '100%';
+        inner.style.maxWidth = '100%';
+      }
+
+      function fitOneSheet(sheet) {
+        if (!sheet) return;
+
+        var inner = sheet.querySelector('.print-sheet-fit-inner') || sheet;
+        resetFit(inner);
+
+        var contentW = Math.max(inner.scrollWidth || 0, inner.getBoundingClientRect().width || 0);
+        var contentH = Math.max(inner.scrollHeight || 0, inner.getBoundingClientRect().height || 0);
+
+        if (!contentW || !contentH) return;
+
+        var scaleW = maxW / contentW;
+        var scaleH = maxH / contentH;
+        var scale = Math.min(scaleW, scaleH, 1);
+
+        if (!Number.isFinite(scale) || scale <= 0) scale = 1;
+
+        inner.style.transformOrigin = 'top center';
+        inner.style.transform = 'scale(' + scale + ')';
+        inner.setAttribute('data-yr-a4-scale', String(scale));
+      }
+
+      function fitToA4Pages() {
+        prepareSheetsForFit();
+
+        var sheets = Array.prototype.slice.call(document.querySelectorAll('.print-root .print-sheet') || []);
+        if (sheets.length) {
+          sheets.forEach(function (sheet) {
+            fitOneSheet(sheet);
+          });
+          return;
+        }
+
         var target = document.getElementById('fit-target');
         if (!target) return;
 
-        var sheets = target.querySelectorAll('.print-sheet');
-        if (sheets && sheets.length > 1) return;
+        target.style.transform = 'none';
 
         var rect = target.getBoundingClientRect();
         var contentW = Math.max(rect.width, target.scrollWidth || 0);
@@ -1027,8 +1118,10 @@ async function printOnlyElement(el: HTMLElement, title = "report") {
 
         var scaleW = maxW / contentW;
         var scaleH = maxH / contentH;
-        var scale = Math.min(scaleW, scaleH, 0.88, 1);
+        var scale = Math.min(scaleW, scaleH, 1);
+        if (!Number.isFinite(scale) || scale <= 0) scale = 1;
 
+        target.style.transformOrigin = 'top center';
         target.style.transform = 'scale(' + scale + ')';
       }
 
@@ -1048,11 +1141,13 @@ async function printOnlyElement(el: HTMLElement, title = "report") {
 
       window.addEventListener('load', function () {
         whenImagesReady(function () {
-          fitToOnePage();
-          setTimeout(function () {
-            window.focus();
-            window.print();
-          }, 120);
+          requestAnimationFrame(function () {
+            fitToA4Pages();
+            setTimeout(function () {
+              window.focus();
+              window.print();
+            }, 180);
+          });
         });
       });
 
@@ -1068,7 +1163,13 @@ async function printOnlyElement(el: HTMLElement, title = "report") {
 
   const w = window.open("", "_blank", "width=950,height=720,top=80,left=120,resizable=yes,scrollbars=yes");
   if (!w) {
-    window.print();
+    document.body.classList.add("print-report-mode");
+    window.setTimeout(() => {
+      window.print();
+      window.setTimeout(() => {
+        document.body.classList.remove("print-report-mode");
+      }, 1000);
+    }, 120);
     return;
   }
 
@@ -1422,6 +1523,7 @@ export default function TaskDistributionPrint() {
     );
 
     window.addEventListener(RUN_UPDATED_EVENT, onRunUpdated as any);
+    window.addEventListener(MASTER_TABLE_UPDATED_EVENT, onRunUpdated as any);
     window.addEventListener("storage", onStorage);
     window.addEventListener("focus", refreshFromStorage);
 
@@ -1434,6 +1536,7 @@ export default function TaskDistributionPrint() {
       unsubscribeTeachers?.();
       unsubscribeExams?.();
       window.removeEventListener(RUN_UPDATED_EVENT, onRunUpdated as any);
+      window.removeEventListener(MASTER_TABLE_UPDATED_EVENT, onRunUpdated as any);
       window.removeEventListener("storage", onStorage);
       window.removeEventListener("focus", refreshFromStorage);
       window.clearInterval(iv);
@@ -1618,18 +1721,16 @@ export default function TaskDistributionPrint() {
     const isDailyAll = reportType === "daily" && !subjectFilter && dailyPages.length > 1;
     const isTeacherAll = reportType === "teacher" && !teacherNameFilter && allTeachersPages.length > 1;
 
-    if (isDailyAll || isTeacherAll) {
-      document.body.classList.add("print-report-mode");
-      setTimeout(() => {
-        window.print();
-        setTimeout(() => {
-          document.body.classList.remove("print-report-mode");
-        }, 1000);
-      }, 120);
-      return;
-    }
-
-    const safeTitle = (teacherNameFilter || (reportType === "daily" ? "daily" : "report")).trim() || "report";
+    /*
+      ✅ Print button behavior:
+      Use the isolated print window for both single-page and multi-page reports.
+      This keeps the original report data and layout, while fitting each generated
+      print sheet into one A4 page without splitting the same sheet.
+    */
+    const safeTitle = (
+      teacherNameFilter ||
+      (isDailyAll ? "daily_all" : isTeacherAll ? "teachers_all" : reportType === "daily" ? "daily" : "report")
+    ).trim() || "report";
     await printOnlyElement(el, safeTitle);
   }
 
@@ -2539,6 +2640,11 @@ const styles: Record<string, React.CSSProperties> = {
 const blackGoldDropdownOptionStyle = { background: "#000000", color: "#FFD700" } as const;
 
 const printCss = `
+@page {
+  size: A4 portrait;
+  margin: 6mm;
+}
+
 .td-print-select,
 .td-print-select:focus,
 .td-print-select:active,
@@ -2593,6 +2699,8 @@ const printCss = `
     padding: 1.5mm 1.5mm 2mm 1.5mm !important;
     page-break-after: always;
     break-after: page;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
     box-shadow: none !important;
     border-radius: 0 !important;
     overflow: hidden !important;
