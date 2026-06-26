@@ -567,6 +567,28 @@ function getTeacherAccountNo(teacher: Partial<TeacherAccountFields> | null | und
   ).trim();
 }
 
+function maskFirstAndLastOnly(value: unknown) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+
+  const chars = Array.from(raw);
+  const visibleIndexes = chars
+    .map((char, index) => (/\s/.test(char) ? -1 : index))
+    .filter((index) => index >= 0);
+
+  if (visibleIndexes.length <= 2) return raw;
+
+  const firstIndex = visibleIndexes[0];
+  const lastIndex = visibleIndexes[visibleIndexes.length - 1];
+
+  return chars
+    .map((char, index) => {
+      if (/\s/.test(char)) return char;
+      return index === firstIndex || index === lastIndex ? char : "X";
+    })
+    .join("");
+}
+
 function setTeacherAccountNo<T extends Teacher>(teacher: T, value: string): T {
   return { ...(teacher as any), accountNo: String(value || "").trim() } as T;
 }
@@ -1803,8 +1825,8 @@ export default function Teachers() {
           t.fullName,
           lang === "ar" ? t.subject1 : translateSubject(t.subject1),
           lang === "ar" ? t.subject2 : translateSubject(t.subject2),
-          t.phone,
-          getTeacherAccountNo(t as TeacherAccountFields),
+          maskFirstAndLastOnly(t.phone),
+          maskFirstAndLastOnly(getTeacherAccountNo(t as TeacherAccountFields)),
         ].map(escape).join(",")
       ),
     ];
@@ -1826,16 +1848,16 @@ export default function Teachers() {
               "اسم المعلم": t.fullName,
               "التخصص 1": t.subject1,
               "التخصص 2": t.subject2,
-              "الهاتف": t.phone,
-              "رقم الحساب": getTeacherAccountNo(t as TeacherAccountFields),
+              "الهاتف": maskFirstAndLastOnly(t.phone),
+              "رقم الحساب": maskFirstAndLastOnly(getTeacherAccountNo(t as TeacherAccountFields)),
             }
           : {
               "Employee Number": t.employeeNo,
               "Teacher Name": t.fullName,
               "Specialization 1": translateSubject(t.subject1),
               "Specialization 2": translateSubject(t.subject2),
-              "Phone": t.phone,
-              "Account Number": getTeacherAccountNo(t as TeacherAccountFields),
+              "Phone": maskFirstAndLastOnly(t.phone),
+              "Account Number": maskFirstAndLastOnly(getTeacherAccountNo(t as TeacherAccountFields)),
             }
       );
       const ws = XLSX.utils.json_to_sheet(rows);
@@ -2941,8 +2963,8 @@ export default function Teachers() {
                     <td style={{ ...tdStyle, color: "#000000", fontWeight: 1000 }} className="col-name"><span style={{ color: "#000000", fontWeight: 900, WebkitTextFillColor: "#000000", textShadow: "none" }}>{t.fullName}</span></td>
                     <td style={tdStyle}>{translateSubject(t.subject1)}</td>
                     <td style={tdStyle}>{translateSubject(t.subject2)}</td>
-                    <td style={tdStyle}>{t.phone}</td>
-                    <td style={tdStyle}>{getTeacherAccountNo(t as TeacherAccountFields)}</td>
+                    <td style={tdStyle}>{maskFirstAndLastOnly(t.phone) || "—"}</td>
+                    <td style={tdStyle}>{maskFirstAndLastOnly(getTeacherAccountNo(t as TeacherAccountFields)) || "—"}</td>
                     <td style={tdStyle}>
                       <div style={{ display: "flex", gap: 8 }}>
                         <button style={btn("#60a5fa", "#000000")} onClick={() => startEdit(t)}>
@@ -3060,8 +3082,8 @@ export default function Teachers() {
                     <td style={{ ...tdStyle, color: "#000000", fontWeight: 1000 }} className="col-name"><span style={{ color: "#000000", fontWeight: 900, WebkitTextFillColor: "#000000", textShadow: "none" }}>{t.fullName}</span></td>
                     <td style={tdStyle}>{translateSubject(t.subject1)}</td>
                     <td style={tdStyle}>{translateSubject(t.subject2)}</td>
-                    <td style={tdStyle}>{t.phone}</td>
-                    <td style={tdStyle}>{getTeacherAccountNo(t as TeacherAccountFields)}</td>
+                    <td style={tdStyle}>{maskFirstAndLastOnly(t.phone) || "—"}</td>
+                    <td style={tdStyle}>{maskFirstAndLastOnly(getTeacherAccountNo(t as TeacherAccountFields)) || "—"}</td>
                     <td style={tdStyle}>
                       <div style={{ display: "flex", gap: 8 }}>
                         <button style={btn("#60a5fa", "#000000")} onClick={() => startEdit(t)}>
