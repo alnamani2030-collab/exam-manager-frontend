@@ -135,6 +135,12 @@ function withCloudCacheBypass<T>(fn: () => T): T {
 
 function hasCache(tenantId: string, subCollection: string): boolean {
   if (typeof localStorage === "undefined") return false;
+
+  if (isSensitiveTenantArrayCache(subCollection)) {
+    removeCache(tenantId, subCollection);
+    return false;
+  }
+
   try {
     return localStorage.getItem(cacheKey(tenantId, subCollection)) !== null;
   } catch {
@@ -148,8 +154,31 @@ function hasUsableArrayCache(value: unknown): boolean {
   return Array.isArray(value) && value.length > 0;
 }
 
+function isSensitiveTenantArrayCache(subCollection: string) {
+  const sub = clean(subCollection).toLowerCase();
+  return sub === "teachers" || sub === "teachers12";
+}
+
+function removeCache(tenantId: string, subCollection: string) {
+  if (typeof localStorage === "undefined") return;
+
+  try {
+    withCloudCacheBypass(() => {
+      localStorage.removeItem(cacheKey(tenantId, subCollection));
+    });
+  } catch {
+    // Cache cleanup failure must not break the app.
+  }
+}
+
 function readCache<T>(tenantId: string, subCollection: string, fallback: T): T {
   if (typeof localStorage === "undefined") return fallback;
+
+  if (isSensitiveTenantArrayCache(subCollection)) {
+    removeCache(tenantId, subCollection);
+    return fallback;
+  }
+
   return safeJsonParse<T>(localStorage.getItem(cacheKey(tenantId, subCollection)), fallback);
 }
 
@@ -164,6 +193,11 @@ function writeCache<T>(tenantId: string, subCollection: string, value: T) {
   if (typeof localStorage === "undefined") return;
   try {
     withCloudCacheBypass(() => {
+      if (isSensitiveTenantArrayCache(subCollection)) {
+        localStorage.removeItem(cacheKey(tenantId, subCollection));
+        return;
+      }
+
       localStorage.setItem(cacheKey(tenantId, subCollection), JSON.stringify(value));
     });
   } catch {
