@@ -656,6 +656,39 @@ function areTeachersListsEqual(a: Teacher[], b: Teacher[]) {
   return stableTeachersSignature(a) === stableTeachersSignature(b);
 }
 
+function isSensitiveTeachersLocalStorageKey(key: string) {
+  const normalized = String(key || "").trim().toLowerCase();
+
+  if (
+    normalized === LEGACY_TEACHERS_CACHE_KEY.toLowerCase() ||
+    normalized === "teachers" ||
+    normalized === "teachers12" ||
+    normalized === "exam-manager:teachers" ||
+    normalized === "exam-manager:teachers12"
+  ) {
+    return true;
+  }
+
+  return /^exam-manager:cloud-cache:v1:[^:]+:(teachers|teachers12)$/i.test(normalized);
+}
+
+function purgeSensitiveTeachersLocalCache() {
+  if (typeof window === "undefined") return;
+
+  try {
+    const keysToRemove: string[] = [];
+
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i) || "";
+      if (isSensitiveTeachersLocalStorageKey(key)) keysToRemove.push(key);
+    }
+
+    keysToRemove.forEach((key) => window.localStorage.removeItem(key));
+  } catch {
+    // Local cache cleanup must never break the page.
+  }
+}
+
 function readLegacyTeachersFromLocalStorage(): Teacher[] {
   if (typeof window === "undefined") return [];
 
@@ -685,16 +718,20 @@ function readLegacyTeachersFromLocalStorage(): Teacher[] {
     // ignore localStorage scan errors
   }
 
+  // Security hardening:
+  // Teachers12 contains phone and bank/account data. Read legacy cache only as a
+  // one-time bridge, then remove it so full sensitive values are not kept at rest
+  // in the browser. Firestore remains the source of truth.
+  purgeSensitiveTeachersLocalCache();
+
   return best;
 }
 
-function cacheTeachersLocally(rows: Teacher[]) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(LEGACY_TEACHERS_CACHE_KEY, JSON.stringify(rows));
-  } catch {
-    // cache failure should not break the page
-  }
+function cacheTeachersLocally(_rows: Teacher[]) {
+  // Do not store Teachers12 rows in localStorage. The rows can include phone and
+  // account numbers. Keeping this function preserves existing call sites while
+  // making the cache fail-closed for sensitive teacher data.
+  purgeSensitiveTeachersLocalCache();
 }
 
 function downloadText(filename: string, content: string) {
@@ -1128,6 +1165,7 @@ export default function Teachers() {
   const [teacherAccessConfirmEmail, setTeacherAccessConfirmEmail] = useState("");
   const [teacherAccessEmailConfirmed, setTeacherAccessEmailConfirmed] = useState(false);
   const [teacherAccessVerified, setTeacherAccessVerified] = useState(false);
+  const [teacherAccessCheckingServerSession, setTeacherAccessCheckingServerSession] = useState(true);
   const [teacherAccessLockedUntilMs, setTeacherAccessLockedUntilMs] = useState(0);
   const [teacherAccessLockRemainingSeconds, setTeacherAccessLockRemainingSeconds] = useState(0);
   const teacherAccessSessionKey = useMemo(() => `exam-manager:teachers12-email-code-access:${tenantId}`, [tenantId]);
@@ -1140,7 +1178,12 @@ export default function Teachers() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    setTeacherAccessVerified(window.sessionStorage.getItem(teacherAccessSessionKey) === "1");
+
+    let mounted = true;
+    const hadLocalSession = window.sessionStorage.getItem(teacherAccessSessionKey) === "1";
+
+    setTeacherAccessVerified(false);
+    setTeacherAccessCheckingServerSession(hadLocalSession);
     setTeacherAccessCode("");
     setTeacherAccessCodeSent(false);
     setTeacherAccessBusy(false);
@@ -1158,7 +1201,59 @@ export default function Teachers() {
       setTeacherAccessLockedUntilMs(0);
       setTeacherAccessLockRemainingSeconds(0);
     }
-  }, [teacherAccessSessionKey, teacherAccessLockStorageKey]);
+
+    if (!hadLocalSession) {
+      setTeacherAccessCheckingServerSession(false);
+      return () => {
+        mounted = false;
+      };
+    }
+
+    async function verifyExistingServerSession() {
+      try {
+        const fn = httpsCallable(getFunctions(undefined, "us-central1"), "checkControl12AccessSession");
+        const result = await fn({ tenantId, page: "Teachers12" });
+        const data = (result.data || {}) as any;
+        if (!mounted) return;
+
+        if (data?.verified === true) {
+          setTeacherAccessVerified(true);
+          setTeacherAccessError("");
+          setTeacherAccessMessage("");
+          return;
+        }
+
+        window.sessionStorage.removeItem(teacherAccessSessionKey);
+        setTeacherAccessVerified(false);
+        setTeacherAccessMessage("");
+        setTeacherAccessError(
+          tr(
+            "انتهت جلسة التحقق المحفوظة. أدخل رمزًا جديدًا لفتح الصفحة.",
+            "The saved verification session has expired. Enter a new code to open the page."
+          )
+        );
+      } catch {
+        if (!mounted) return;
+        window.sessionStorage.removeItem(teacherAccessSessionKey);
+        setTeacherAccessVerified(false);
+        setTeacherAccessMessage("");
+        setTeacherAccessError(
+          tr(
+            "تعذر تأكيد جلسة التحقق من الخادم. أدخل رمزًا جديدًا لفتح الصفحة.",
+            "Could not confirm the verification session from the server. Enter a new code to open the page."
+          )
+        );
+      } finally {
+        if (mounted) setTeacherAccessCheckingServerSession(false);
+      }
+    }
+
+    void verifyExistingServerSession();
+
+    return () => {
+      mounted = false;
+    };
+  }, [tenantId, teacherAccessSessionKey, teacherAccessLockStorageKey, tr]);
 
   useEffect(() => {
     if (!teacherAccessLockedUntilMs) {
@@ -1307,16 +1402,21 @@ export default function Teachers() {
 
     try {
       const fn = httpsCallable(getFunctions(undefined, "us-central1"), "verifyControl12AccessCode");
-      await fn({ tenantId, code, page: "Teachers12" });
+      const result = await fn({ tenantId, code, page: "Teachers12" });
+      const data = (result.data || {}) as any;
+      if (data?.serverVerified !== true || data?.page !== "Teachers12") {
+        throw new Error("SERVER_VERIFICATION_SESSION_NOT_CONFIRMED");
+      }
       try {
         window.sessionStorage.setItem(teacherAccessSessionKey, "1");
       } catch {
-        // Ignore storage failures; the current state still unlocks the page.
+        // Ignore storage failures; the server session remains the real gate.
       }
       if (typeof window !== "undefined") window.localStorage.removeItem(teacherAccessLockStorageKey);
       setTeacherAccessLockedUntilMs(0);
       setTeacherAccessLockRemainingSeconds(0);
       setTeacherAccessVerified(true);
+      setTeacherAccessCheckingServerSession(false);
       setTeacherAccessCode("");
       setTeacherAccessMessage(tr("تم التحقق بنجاح.", "Verified successfully."));
     } catch (error: any) {
@@ -2241,7 +2341,26 @@ export default function Teachers() {
               )}
             </div>
 
-            {isLocked ? (
+            {teacherAccessCheckingServerSession ? (
+              <div
+                style={{
+                  marginTop: 18,
+                  border: "3px solid #d4af37",
+                  background: "#fffdf7",
+                  color: "#000000",
+                  borderRadius: 20,
+                  padding: "22px 18px",
+                  fontWeight: 1000,
+                  lineHeight: 1.9,
+                  textAlign: "center",
+                }}
+              >
+                {tr(
+                  "جاري تأكيد جلسة التحقق من الخادم...",
+                  "Confirming the verification session from the server..."
+                )}
+              </div>
+            ) : isLocked ? (
               <>
                 <div
                   style={{
