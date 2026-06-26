@@ -2902,13 +2902,19 @@ export default function Teachers() {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: tableFullScreen ? 0 : 10, flex: tableFullScreen ? "0 0 auto" : undefined, position: "relative", zIndex: tableFullScreen ? 2147483646 : 1 }}>
           <div style={{ fontWeight: 900, color: "#000000" }}>{tr("قائمة الكادر التعليمي", "Teaching Staff List")}</div>
 
-          <button
-            style={btn(tableFullScreen ? "#ef4444" : "#fffdf7", "#000000")}
-            onClick={() => setTableFullScreen((v) => !v)}
-            title={tableFullScreen ? tr("عودة للحجم الطبيعي", "Return to normal size") : tr("تكبير الجدول ملء الشاشة", "Fullscreen table")}
-          >
-            {tableFullScreen ? tr("إغلاق ملء الشاشة", "Exit Fullscreen") : tr("ملء الشاشة", "Fullscreen")}
-          </button>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", justifyContent: isRTL ? "flex-start" : "flex-end" }}>
+            <button style={btn("#3b82f6", "#000000")} onClick={startAdd}>
+              {tr("+ إضافة معلم جديد", "+ Add New Teacher")}
+            </button>
+
+            <button
+              style={btn(tableFullScreen ? "#ef4444" : "#fffdf7", "#000000")}
+              onClick={() => setTableFullScreen((v) => !v)}
+              title={tableFullScreen ? tr("عودة للحجم الطبيعي", "Return to normal size") : tr("تكبير الجدول ملء الشاشة", "Fullscreen table")}
+            >
+              {tableFullScreen ? tr("إغلاق ملء الشاشة", "Exit Fullscreen") : tr("ملء الشاشة", "Fullscreen")}
+            </button>
+          </div>
         </div>
 
         {tableFullScreen && renderTeacherEntryForm(true)}
@@ -3021,13 +3027,19 @@ export default function Teachers() {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: tableFullScreen ? 0 : 10, flex: tableFullScreen ? "0 0 auto" : undefined, position: "relative", zIndex: tableFullScreen ? 2147483646 : 1 }}>
           <div style={{ fontWeight: 900, color: "#000000" }}>{tr("قائمة الكادر التعليمي", "Teaching Staff List")}</div>
 
-          <button
-            style={btn(tableFullScreen ? "#ef4444" : "#fffdf7", "#000000")}
-            onClick={() => setTableFullScreen((v) => !v)}
-            title={tableFullScreen ? tr("عودة للحجم الطبيعي", "Return to normal size") : tr("تكبير الجدول ملء الشاشة", "Fullscreen table")}
-          >
-            {tableFullScreen ? tr("إغلاق ملء الشاشة", "Exit Fullscreen") : tr("ملء الشاشة", "Fullscreen")}
-          </button>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", justifyContent: isRTL ? "flex-start" : "flex-end" }}>
+            <button style={btn("#3b82f6", "#000000")} onClick={startAdd}>
+              {tr("+ إضافة معلم جديد", "+ Add New Teacher")}
+            </button>
+
+            <button
+              style={btn(tableFullScreen ? "#ef4444" : "#fffdf7", "#000000")}
+              onClick={() => setTableFullScreen((v) => !v)}
+              title={tableFullScreen ? tr("عودة للحجم الطبيعي", "Return to normal size") : tr("تكبير الجدول ملء الشاشة", "Fullscreen table")}
+            >
+              {tableFullScreen ? tr("إغلاق ملء الشاشة", "Exit Fullscreen") : tr("ملء الشاشة", "Fullscreen")}
+            </button>
+          </div>
         </div>
 
         {tableFullScreen && renderTeacherEntryForm(true)}
