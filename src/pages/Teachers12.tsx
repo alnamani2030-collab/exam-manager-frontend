@@ -3,7 +3,6 @@ import { createPortal } from "react-dom";
 import { type Teacher } from "../services/teachers.service";
 import { useI18n } from "../i18n/I18nProvider";
 import { useAuth } from "../auth/AuthContext";
-import { getFunctions, httpsCallable } from "firebase/functions";
 import { loadTenantArray, loadTenantSettings, replaceTenantArray } from "../services/tenantData";
 
 const SUBCOLLECTION = "teachers";
@@ -92,26 +91,42 @@ function readOfficialLogo() {
   }
 }
 
-function normalizeTeacherAccessCode(value: unknown) {
-  return String(value || "").replace(/\D/g, "").slice(0, 6);
+function normalizeTeacherAccessPhone(value: unknown) {
+  return String(value || "").replace(/\D/g, "");
 }
 
-function normalizeTeacherAccessEmailForCheck(value: unknown) {
-  return String(value || "").trim().toLowerCase();
+function maskPhoneForTeacherAccess(value: unknown) {
+  const digits = normalizeTeacherAccessPhone(value);
+  if (!digits) return "";
+  if (digits.length <= 2) return digits;
+  return `${digits.slice(0, 1)}${"x".repeat(Math.max(digits.length - 2, 1))}${digits.slice(-1)}`;
 }
 
-function maskEmailForTeacherAccess(value: unknown) {
-  const email = String(value || "").trim();
-  const [local, domain] = email.split("@");
-  if (!local || !domain) return email ? "***" : "";
-  if (local.length <= 2) return `${local.slice(0, 1)}***@${domain}`;
-  return `${local.slice(0, 1)}${"*".repeat(Math.max(local.length - 2, 3))}${local.slice(-1)}@${domain}`;
+function teacherAccessPhonesMatch(enteredValue: unknown, expectedValue: unknown) {
+  const entered = normalizeTeacherAccessPhone(enteredValue);
+  const expected = normalizeTeacherAccessPhone(expectedValue);
+
+  if (!entered || !expected) return false;
+  if (entered === expected) return true;
+
+  // يسمح بالتطابق إذا كان أحد الرقمين يحتوي رمز الدولة والآخر الرقم المحلي فقط.
+  // نطلب 8 أرقام على الأقل حتى لا يصبح التطابق ضعيفًا.
+  if (entered.length >= 8 && expected.length >= 8) {
+    return entered.endsWith(expected) || expected.endsWith(entered);
+  }
+
+  return false;
 }
 
 const TEACHER_ACCESS_LOCK_MINUTES = 5;
+const TEACHER_ACCESS_MAX_FAILED_ATTEMPTS = 5;
 
 function getTeacherAccessLockStorageKey(tenantId: string) {
-  return `exam-manager:teachers12-email-code-lock-until:${tenantId || "default"}`;
+  return `exam-manager:teachers12-phone-lock-until:${tenantId || "default"}`;
+}
+
+function getTeacherAccessAttemptsStorageKey(tenantId: string) {
+  return `exam-manager:teachers12-phone-attempts:${tenantId || "default"}`;
 }
 
 function formatTeacherAccessCountdown(totalSeconds: number) {
@@ -119,45 +134,6 @@ function formatTeacherAccessCountdown(totalSeconds: number) {
   const minutes = Math.floor(safe / 60);
   const seconds = safe % 60;
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-}
-
-function getTeacherAccessLockFromError(error: any) {
-  const details = error?.details || error?.customData?.details || {};
-  const candidate =
-    details?.lockedUntilISO ||
-    details?.lockedUntil ||
-    details?.retryAtISO ||
-    details?.lockUntilISO ||
-    error?.lockedUntilISO ||
-    "";
-
-  const directMs = candidate ? Date.parse(String(candidate)) : NaN;
-  if (Number.isFinite(directMs) && directMs > Date.now()) return directMs;
-
-  const retryAfterSecondsRaw =
-    details?.retryAfterSeconds ??
-    details?.retryAfter ??
-    error?.retryAfterSeconds ??
-    error?.retryAfter;
-
-  const retryAfterSeconds = Number(retryAfterSecondsRaw);
-  if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
-    return Date.now() + retryAfterSeconds * 1000;
-  }
-
-  const message = String(error?.message || "");
-  const code = String(error?.code || "");
-  if (
-    code.includes("resource-exhausted") ||
-    message.includes("resource-exhausted") ||
-    message.includes("تجاوز عدد محاولات") ||
-    message.includes("too many") ||
-    message.includes("Too many")
-  ) {
-    return Date.now() + TEACHER_ACCESS_LOCK_MINUTES * 60 * 1000;
-  }
-
-  return 0;
 }
 
 function TeachersOfficialHeader({
@@ -1157,40 +1133,26 @@ export default function Teachers() {
   const [officialCenterData, setOfficialCenterData] = useState<ExamCenterOfficialData>(() => readOfficialExamCenterData());
   const [officialLogo, setOfficialLogo] = useState<string>(() => readOfficialLogo());
 
-  const [teacherAccessCode, setTeacherAccessCode] = useState("");
-  const [teacherAccessCodeSent, setTeacherAccessCodeSent] = useState(false);
-  const [teacherAccessBusy, setTeacherAccessBusy] = useState(false);
-  const [teacherAccessMessage, setTeacherAccessMessage] = useState("");
+  const [teacherAccessPhone, setTeacherAccessPhone] = useState("");
   const [teacherAccessError, setTeacherAccessError] = useState("");
-  const [teacherAccessConfirmEmail, setTeacherAccessConfirmEmail] = useState("");
-  const [teacherAccessEmailConfirmed, setTeacherAccessEmailConfirmed] = useState(false);
+  const [teacherAccessMessage, setTeacherAccessMessage] = useState("");
   const [teacherAccessVerified, setTeacherAccessVerified] = useState(false);
-  const [teacherAccessCheckingServerSession, setTeacherAccessCheckingServerSession] = useState(true);
   const [teacherAccessLockedUntilMs, setTeacherAccessLockedUntilMs] = useState(0);
   const [teacherAccessLockRemainingSeconds, setTeacherAccessLockRemainingSeconds] = useState(0);
-  const teacherAccessSessionKey = useMemo(() => `exam-manager:teachers12-email-code-access:${tenantId}`, [tenantId]);
+  const teacherAccessSessionKey = useMemo(() => `exam-manager:teachers12-phone-access:${tenantId}`, [tenantId]);
   const teacherAccessLockStorageKey = useMemo(() => getTeacherAccessLockStorageKey(tenantId), [tenantId]);
-  const currentUserEmail = useMemo(
-    () => String(auth?.user?.email || auth?.profile?.email || auth?.userProfile?.email || "").trim(),
-    [auth?.user?.email, auth?.profile?.email, auth?.userProfile?.email]
-  );
-  const maskedCurrentUserEmail = useMemo(() => maskEmailForTeacherAccess(currentUserEmail), [currentUserEmail]);
+  const teacherAccessAttemptsStorageKey = useMemo(() => getTeacherAccessAttemptsStorageKey(tenantId), [tenantId]);
+  const officialCenterPhone = useMemo(() => String(officialCenterData.phone || "").trim(), [officialCenterData.phone]);
+  const officialCenterPhoneDigits = useMemo(() => normalizeTeacherAccessPhone(officialCenterPhone), [officialCenterPhone]);
+  const maskedOfficialCenterPhone = useMemo(() => maskPhoneForTeacherAccess(officialCenterPhone), [officialCenterPhone]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    let mounted = true;
-    const hadLocalSession = window.sessionStorage.getItem(teacherAccessSessionKey) === "1";
-
-    setTeacherAccessVerified(false);
-    setTeacherAccessCheckingServerSession(hadLocalSession);
-    setTeacherAccessCode("");
-    setTeacherAccessCodeSent(false);
-    setTeacherAccessBusy(false);
-    setTeacherAccessMessage("");
+    setTeacherAccessVerified(window.sessionStorage.getItem(teacherAccessSessionKey) === "1");
+    setTeacherAccessPhone("");
     setTeacherAccessError("");
-    setTeacherAccessConfirmEmail("");
-    setTeacherAccessEmailConfirmed(false);
+    setTeacherAccessMessage("");
 
     const storedLockMs = Number(window.localStorage.getItem(teacherAccessLockStorageKey) || "0");
     if (Number.isFinite(storedLockMs) && storedLockMs > Date.now()) {
@@ -1198,62 +1160,11 @@ export default function Teachers() {
       setTeacherAccessLockRemainingSeconds(Math.ceil((storedLockMs - Date.now()) / 1000));
     } else {
       window.localStorage.removeItem(teacherAccessLockStorageKey);
+      window.localStorage.removeItem(teacherAccessAttemptsStorageKey);
       setTeacherAccessLockedUntilMs(0);
       setTeacherAccessLockRemainingSeconds(0);
     }
-
-    if (!hadLocalSession) {
-      setTeacherAccessCheckingServerSession(false);
-      return () => {
-        mounted = false;
-      };
-    }
-
-    async function verifyExistingServerSession() {
-      try {
-        const fn = httpsCallable(getFunctions(undefined, "us-central1"), "checkControl12AccessSession");
-        const result = await fn({ tenantId, page: "Teachers12" });
-        const data = (result.data || {}) as any;
-        if (!mounted) return;
-
-        if (data?.verified === true) {
-          setTeacherAccessVerified(true);
-          setTeacherAccessError("");
-          setTeacherAccessMessage("");
-          return;
-        }
-
-        window.sessionStorage.removeItem(teacherAccessSessionKey);
-        setTeacherAccessVerified(false);
-        setTeacherAccessMessage("");
-        setTeacherAccessError(
-          tr(
-            "انتهت جلسة التحقق المحفوظة. أدخل رمزًا جديدًا لفتح الصفحة.",
-            "The saved verification session has expired. Enter a new code to open the page."
-          )
-        );
-      } catch {
-        if (!mounted) return;
-        window.sessionStorage.removeItem(teacherAccessSessionKey);
-        setTeacherAccessVerified(false);
-        setTeacherAccessMessage("");
-        setTeacherAccessError(
-          tr(
-            "تعذر تأكيد جلسة التحقق من الخادم. أدخل رمزًا جديدًا لفتح الصفحة.",
-            "Could not confirm the verification session from the server. Enter a new code to open the page."
-          )
-        );
-      } finally {
-        if (mounted) setTeacherAccessCheckingServerSession(false);
-      }
-    }
-
-    void verifyExistingServerSession();
-
-    return () => {
-      mounted = false;
-    };
-  }, [tenantId, teacherAccessSessionKey, teacherAccessLockStorageKey, tr]);
+  }, [teacherAccessSessionKey, teacherAccessLockStorageKey, teacherAccessAttemptsStorageKey]);
 
   useEffect(() => {
     if (!teacherAccessLockedUntilMs) {
@@ -1270,6 +1181,7 @@ export default function Teachers() {
         setTeacherAccessMessage("");
         if (typeof window !== "undefined") {
           window.localStorage.removeItem(teacherAccessLockStorageKey);
+          window.localStorage.removeItem(teacherAccessAttemptsStorageKey);
         }
         return;
       }
@@ -1279,107 +1191,29 @@ export default function Teachers() {
     updateRemaining();
     const interval = window.setInterval(updateRemaining, 1000);
     return () => window.clearInterval(interval);
-  }, [teacherAccessLockedUntilMs, teacherAccessLockStorageKey]);
+  }, [teacherAccessLockedUntilMs, teacherAccessLockStorageKey, teacherAccessAttemptsStorageKey]);
 
-  const applyTeacherAccessLock = useCallback(
-    (lockedUntilMs: number) => {
-      if (!lockedUntilMs || lockedUntilMs <= Date.now()) return;
+  const applyTeacherAccessLock = useCallback(() => {
+    const lockedUntilMs = Date.now() + TEACHER_ACCESS_LOCK_MINUTES * 60 * 1000;
 
-      setTeacherAccessLockedUntilMs(lockedUntilMs);
-      setTeacherAccessLockRemainingSeconds(Math.ceil((lockedUntilMs - Date.now()) / 1000));
-      setTeacherAccessEmailConfirmed(false);
-      setTeacherAccessCodeSent(false);
-      setTeacherAccessCode("");
-      setTeacherAccessBusy(false);
-      setTeacherAccessMessage("");
-      setTeacherAccessError(
-        tr(
-          "تم تجاوز عدد محاولات التحقق. يمكنك طلب رمز جديد بعد انتهاء العد التنازلي.",
-          "Too many failed verification attempts. You can request a new code after the countdown ends."
-        )
-      );
-
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem(teacherAccessLockStorageKey, String(lockedUntilMs));
-      }
-    },
-    [teacherAccessLockStorageKey, tr]
-  );
-
-  const sendTeacherAccessCode = useCallback(async () => {
-    if (teacherAccessLockedUntilMs && teacherAccessLockedUntilMs > Date.now()) {
-      setTeacherAccessError(
-        tr(
-          "تم تجاوز عدد محاولات التحقق. لا يمكن طلب رمز جديد حتى انتهاء العد التنازلي.",
-          "Too many failed verification attempts. You cannot request a new code until the countdown ends."
-        )
-      );
-      return;
-    }
-
-    if (!tenantId) {
-      setTeacherAccessError(tr("معرف المركز غير متوفر.", "Center ID is missing."));
-      return;
-    }
-
-    const expectedEmail = normalizeTeacherAccessEmailForCheck(currentUserEmail);
-    const enteredEmail = normalizeTeacherAccessEmailForCheck(teacherAccessConfirmEmail);
-
-    if (!expectedEmail) {
-      setTeacherAccessEmailConfirmed(false);
-      setTeacherAccessError(tr("البريد الإلكتروني المسجل للحساب غير متوفر.", "The account email is unavailable."));
-      return;
-    }
-
-    if (!enteredEmail || enteredEmail !== expectedEmail) {
-      setTeacherAccessEmailConfirmed(false);
-      setTeacherAccessCodeSent(false);
-      setTeacherAccessCode("");
-      setTeacherAccessError(tr("البريد الإلكتروني غير مطابق للحساب الحالي. لن يتم إرسال رمز الدخول.", "The email does not match the current account. The access code will not be sent."));
-      return;
-    }
-
-    setTeacherAccessEmailConfirmed(true);
-    setTeacherAccessBusy(true);
-    setTeacherAccessError("");
+    setTeacherAccessLockedUntilMs(lockedUntilMs);
+    setTeacherAccessLockRemainingSeconds(Math.ceil((lockedUntilMs - Date.now()) / 1000));
+    setTeacherAccessPhone("");
     setTeacherAccessMessage("");
+    setTeacherAccessError(
+      tr(
+        "تم تجاوز عدد محاولات التحقق. يمكنك المحاولة بعد انتهاء العد التنازلي.",
+        "Too many failed verification attempts. You can try again after the countdown ends."
+      )
+    );
 
-    try {
-      const fn = httpsCallable(getFunctions(undefined, "us-central1"), "sendControl12AccessCodeEmail");
-      const result = await fn({
-        tenantId,
-        page: "Teachers12",
-        pageLabel: "مركز إدارة بيانات الكادر التعليمي",
-      });
-      const data = (result.data || {}) as any;
-      if (typeof window !== "undefined") window.localStorage.removeItem(teacherAccessLockStorageKey);
-      setTeacherAccessLockedUntilMs(0);
-      setTeacherAccessLockRemainingSeconds(0);
-      setTeacherAccessCodeSent(true);
-      setTeacherAccessMessage(
-        data?.message ||
-          tr(
-            "تم إرسال رمز الدخول إلى البريد الإلكتروني المسجل للحساب.",
-            "The access code was sent to the account email."
-          )
-      );
-    } catch (error: any) {
-      console.error("sendTeacherAccessCode failed:", error);
-      const lockedUntilMs = getTeacherAccessLockFromError(error);
-      if (lockedUntilMs) {
-        applyTeacherAccessLock(lockedUntilMs);
-      } else {
-        setTeacherAccessError(
-          error?.message ||
-            tr("تعذر إرسال رمز الدخول إلى البريد الإلكتروني.", "Failed to send the access code.")
-        );
-      }
-    } finally {
-      setTeacherAccessBusy(false);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(teacherAccessLockStorageKey, String(lockedUntilMs));
+      window.localStorage.setItem(teacherAccessAttemptsStorageKey, String(TEACHER_ACCESS_MAX_FAILED_ATTEMPTS));
     }
-  }, [tenantId, currentUserEmail, teacherAccessConfirmEmail, teacherAccessLockedUntilMs, teacherAccessLockStorageKey, applyTeacherAccessLock, tr]);
+  }, [teacherAccessAttemptsStorageKey, teacherAccessLockStorageKey, tr]);
 
-  const verifyTeacherAccessCode = useCallback(async () => {
+  const verifyTeacherAccessPhone = useCallback(() => {
     if (teacherAccessLockedUntilMs && teacherAccessLockedUntilMs > Date.now()) {
       setTeacherAccessError(
         tr(
@@ -1390,50 +1224,73 @@ export default function Teachers() {
       return;
     }
 
-    const code = normalizeTeacherAccessCode(teacherAccessCode);
-    if (code.length !== 6) {
-      setTeacherAccessError(tr("أدخل رمزًا مكونًا من 6 أرقام.", "Enter a 6-digit code."));
+    if (!officialCenterPhoneDigits) {
+      setTeacherAccessError(
+        tr(
+          "رقم الهاتف غير مسجل في صفحة بيانات مركز الامتحان. حدّث بيانات المركز أولًا.",
+          "The phone number is not saved in the exam center data page. Update the center data first."
+        )
+      );
       return;
     }
 
-    setTeacherAccessBusy(true);
-    setTeacherAccessError("");
-    setTeacherAccessMessage("");
+    const enteredPhone = normalizeTeacherAccessPhone(teacherAccessPhone);
+    if (!enteredPhone) {
+      setTeacherAccessError(tr("أدخل رقم الهاتف المسجل.", "Enter the registered phone number."));
+      return;
+    }
 
-    try {
-      const fn = httpsCallable(getFunctions(undefined, "us-central1"), "verifyControl12AccessCode");
-      const result = await fn({ tenantId, code, page: "Teachers12" });
-      const data = (result.data || {}) as any;
-      if (data?.serverVerified !== true || data?.page !== "Teachers12") {
-        throw new Error("SERVER_VERIFICATION_SESSION_NOT_CONFIRMED");
-      }
+    if (teacherAccessPhonesMatch(enteredPhone, officialCenterPhoneDigits)) {
       try {
         window.sessionStorage.setItem(teacherAccessSessionKey, "1");
+        window.localStorage.removeItem(teacherAccessLockStorageKey);
+        window.localStorage.removeItem(teacherAccessAttemptsStorageKey);
       } catch {
-        // Ignore storage failures; the server session remains the real gate.
+        // Storage failure should not break the current page session.
       }
-      if (typeof window !== "undefined") window.localStorage.removeItem(teacherAccessLockStorageKey);
+
+      setTeacherAccessVerified(true);
+      setTeacherAccessPhone("");
+      setTeacherAccessError("");
+      setTeacherAccessMessage(tr("تم التحقق بنجاح.", "Verified successfully."));
       setTeacherAccessLockedUntilMs(0);
       setTeacherAccessLockRemainingSeconds(0);
-      setTeacherAccessVerified(true);
-      setTeacherAccessCheckingServerSession(false);
-      setTeacherAccessCode("");
-      setTeacherAccessMessage(tr("تم التحقق بنجاح.", "Verified successfully."));
-    } catch (error: any) {
-      console.error("verifyTeacherAccessCode failed:", error);
-      const lockedUntilMs = getTeacherAccessLockFromError(error);
-      if (lockedUntilMs) {
-        applyTeacherAccessLock(lockedUntilMs);
-      } else {
-        setTeacherAccessError(
-          error?.message ||
-            tr("رمز الدخول غير صحيح أو انتهت صلاحيته.", "The code is invalid or expired.")
-        );
-      }
-    } finally {
-      setTeacherAccessBusy(false);
+      return;
     }
-  }, [teacherAccessCode, tenantId, teacherAccessSessionKey, teacherAccessLockStorageKey, teacherAccessLockedUntilMs, applyTeacherAccessLock, tr]);
+
+    const previousAttempts =
+      typeof window !== "undefined"
+        ? Number(window.localStorage.getItem(teacherAccessAttemptsStorageKey) || "0")
+        : 0;
+    const nextAttempts = Number.isFinite(previousAttempts) ? previousAttempts + 1 : 1;
+
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(teacherAccessAttemptsStorageKey, String(nextAttempts));
+    }
+
+    if (nextAttempts >= TEACHER_ACCESS_MAX_FAILED_ATTEMPTS) {
+      applyTeacherAccessLock();
+      return;
+    }
+
+    const remainingAttempts = Math.max(0, TEACHER_ACCESS_MAX_FAILED_ATTEMPTS - nextAttempts);
+    setTeacherAccessMessage("");
+    setTeacherAccessError(
+      tr(
+        `رقم الهاتف غير مطابق لرقم الهاتف المسجل. المحاولات المتبقية: ${remainingAttempts}.`,
+        `The phone number does not match the registered phone. Remaining attempts: ${remainingAttempts}.`
+      )
+    );
+  }, [
+    applyTeacherAccessLock,
+    officialCenterPhoneDigits,
+    teacherAccessAttemptsStorageKey,
+    teacherAccessLockStorageKey,
+    teacherAccessLockedUntilMs,
+    teacherAccessPhone,
+    teacherAccessSessionKey,
+    tr,
+  ]);
 
   useEffect(() => {
     const refreshOfficialData = () => {
@@ -2300,6 +2157,7 @@ export default function Teachers() {
 
   if (!teacherAccessVerified) {
     const isLocked = Boolean(teacherAccessLockedUntilMs && teacherAccessLockRemainingSeconds > 0);
+    const displayedPhoneHint = maskedOfficialCenterPhone || tr("غير مسجل", "Not saved");
 
     return (
       <div style={pageStyle} ref={topRef} className="teachers12PageRoot teachers12PreviousChangesScope">
@@ -2313,7 +2171,7 @@ export default function Teachers() {
               radial-gradient(1200px 520px at 50% -10%, rgba(212, 175, 55, 0.18), transparent 62%),
               linear-gradient(180deg, #fffdf7 0%, #f7f3e7 48%, #fffaf0 100%) !important;
           }
-          .teachers12EmailCodeInput::placeholder {
+          .teachers12PhoneGateInput::placeholder {
             color: #111827 !important;
             font-weight: 1000 !important;
             opacity: 0.72 !important;
@@ -2332,35 +2190,16 @@ export default function Teachers() {
             }}
           >
             <div style={{ fontSize: 25, fontWeight: 1000, marginBottom: 8, color: "#000000", textAlign: "center" }}>
-              {tr("تحقق برمز البريد لفتح مركز إدارة بيانات الكادر التعليمي", "Email-code verification required to open teaching staff data management")}
+              {tr("تحقق مطلوب لفتح مركز إدارة بيانات الكادر التعليمي", "Verification required to open teaching staff data management")}
             </div>
             <div style={{ fontSize: 16, fontWeight: 1000, lineHeight: 1.9, color: "#000000", marginBottom: 12, textAlign: "center" }}>
               {tr(
-                `أدخل البريد الإلكتروني الصحيح للحساب أولًا، ثم اطلب رمز الدخول المرسل إلى البريد${maskedCurrentUserEmail ? ` (${maskedCurrentUserEmail})` : ""}.`,
-                `Enter the correct account email first, then request the access code sent to email${maskedCurrentUserEmail ? ` (${maskedCurrentUserEmail})` : ""}.`
+                `أدخل رقم الهاتف المسجل في صفحة بيانات مركز الامتحان. الرقم المسجل يظهر بهذا الشكل: ${displayedPhoneHint}.`,
+                `Enter the phone number saved in the exam center data page. The saved number appears as: ${displayedPhoneHint}.`
               )}
             </div>
 
-            {teacherAccessCheckingServerSession ? (
-              <div
-                style={{
-                  marginTop: 18,
-                  border: "3px solid #d4af37",
-                  background: "#fffdf7",
-                  color: "#000000",
-                  borderRadius: 20,
-                  padding: "22px 18px",
-                  fontWeight: 1000,
-                  lineHeight: 1.9,
-                  textAlign: "center",
-                }}
-              >
-                {tr(
-                  "جاري تأكيد جلسة التحقق من الخادم...",
-                  "Confirming the verification session from the server..."
-                )}
-              </div>
-            ) : isLocked ? (
+            {isLocked ? (
               <>
                 <div
                   style={{
@@ -2379,7 +2218,7 @@ export default function Teachers() {
                     {tr("تم تجاوز عدد محاولات التحقق.", "Too many failed verification attempts.")}
                   </div>
                   <div style={{ fontSize: 17, fontWeight: 1000, color: "#000000", marginTop: 8 }}>
-                    {tr("يمكنك طلب رمز جديد بعد انتهاء العد التنازلي.", "You can request a new code after the countdown ends.")}
+                    {tr("يمكنك المحاولة بعد انتهاء العد التنازلي.", "You can try again after the countdown ends.")}
                   </div>
                   <div style={{ fontSize: 38, fontWeight: 1000, color: "#b91c1c", marginTop: 14 }}>
                     {formatTeacherAccessCountdown(teacherAccessLockRemainingSeconds)}
@@ -2400,8 +2239,8 @@ export default function Teachers() {
                   }}
                 >
                   {tr(
-                    "تم إيقاف طلب الرمز والتحقق مؤقتًا حتى انتهاء العد التنازلي.",
-                    "Code requests and verification are temporarily disabled until the countdown ends."
+                    "تم إيقاف التحقق مؤقتًا حتى انتهاء العد التنازلي.",
+                    "Verification is temporarily disabled until the countdown ends."
                   )}
                 </div>
 
@@ -2417,27 +2256,24 @@ export default function Teachers() {
             ) : (
               <>
                 <input
-                  className="teachers12EmailCodeInput"
-                  value={teacherAccessConfirmEmail}
+                  className="teachers12PhoneGateInput"
+                  value={teacherAccessPhone}
                   onChange={(event) => {
-                    setTeacherAccessConfirmEmail(event.target.value);
-                    setTeacherAccessEmailConfirmed(false);
-                    setTeacherAccessCodeSent(false);
-                    setTeacherAccessCode("");
+                    setTeacherAccessPhone(event.target.value);
                     setTeacherAccessError("");
                     setTeacherAccessMessage("");
                   }}
                   onKeyDown={(event) => {
-                    if (event.key === "Enter") void sendTeacherAccessCode();
+                    if (event.key === "Enter") verifyTeacherAccessPhone();
                   }}
-                  inputMode="email"
-                  autoComplete="new-password"
+                  inputMode="tel"
+                  autoComplete="off"
                   autoCorrect="off"
                   autoCapitalize="none"
                   spellCheck={false}
-                  name="teachers12_email_gate_no_autofill"
-                  id="teachers12_email_gate_no_autofill"
-                  placeholder={tr("أدخل البريد الإلكتروني المرتبط بالحساب", "Enter the account email")}
+                  name="teachers12_phone_gate_no_autofill"
+                  id="teachers12_phone_gate_no_autofill"
+                  placeholder={tr("أدخل رقم الهاتف المسجل", "Enter the registered phone number")}
                   style={{
                     ...inputStyle,
                     width: "100%",
@@ -2447,35 +2283,7 @@ export default function Teachers() {
                     WebkitTextFillColor: "#000000",
                     direction: "ltr",
                   }}
-                  disabled={teacherAccessBusy}
                 />
-
-                {teacherAccessEmailConfirmed && teacherAccessCodeSent ? (
-                  <input
-                    className="teachers12EmailCodeInput"
-                    value={teacherAccessCode}
-                    onChange={(event) => {
-                      setTeacherAccessCode(normalizeTeacherAccessCode(event.target.value));
-                      setTeacherAccessError("");
-                      setTeacherAccessMessage("");
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") void verifyTeacherAccessCode();
-                    }}
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    placeholder={tr("أدخل رمز التحقق المرسل إلى البريد", "Enter the verification code sent to email")}
-                    style={{
-                      ...inputStyle,
-                      width: "100%",
-                      marginTop: 8,
-                      color: "#000000",
-                      fontWeight: 1000,
-                      WebkitTextFillColor: "#000000",
-                    }}
-                    disabled={!teacherAccessEmailConfirmed || !teacherAccessCodeSent || teacherAccessBusy}
-                  />
-                ) : null}
 
                 {teacherAccessMessage ? (
                   <div
@@ -2512,24 +2320,15 @@ export default function Teachers() {
                 ) : null}
 
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end", marginTop: 16 }}>
-                  <button type="button" style={btn("#fffdf7", "#000000")} onClick={() => history.back()} disabled={teacherAccessBusy}>
+                  <button type="button" style={btn("#fffdf7", "#000000")} onClick={() => history.back()}>
                     {tr("رجوع", "Back")}
                   </button>
                   <button
                     type="button"
-                    style={btn("#3b82f6", "#000000")}
-                    onClick={() => void sendTeacherAccessCode()}
-                    disabled={teacherAccessBusy}
+                    style={btn("#10b981", "#000000")}
+                    onClick={verifyTeacherAccessPhone}
                   >
-                    {teacherAccessBusy ? tr("يرجى الانتظار...", "Please wait...") : teacherAccessCodeSent ? tr("إعادة إرسال الرمز", "Resend code") : tr("تأكيد البريد وإرسال رمز الدخول", "Confirm email and send code")}
-                  </button>
-                  <button
-                    type="button"
-                    style={btn(teacherAccessEmailConfirmed && teacherAccessCodeSent ? "#10b981" : "#94a3b8", "#000000")}
-                    onClick={() => void verifyTeacherAccessCode()}
-                    disabled={!teacherAccessEmailConfirmed || !teacherAccessCodeSent || teacherAccessBusy}
-                  >
-                    {tr("تحقق وفتح الصفحة", "Verify and open page")}
+                    {tr("دخول", "Enter")}
                   </button>
                 </div>
               </>
