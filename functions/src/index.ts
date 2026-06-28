@@ -1512,16 +1512,55 @@ function controlAccessHash(value: string) {
   return crypto.createHash("sha256").update(String(value || "")).digest("hex");
 }
 
-function controlAccessDocRef(tenantId: string, uid: string) {
+const CONTROL_ACCESS_PAGE_LABELS: Record<string, string> = {
+  Control12: "صفحة الكنترول",
+  Teachers12: "مركز إدارة بيانات الكادر التعليمي",
+  StudentSeatRegister12Page: "صفحة سجل جلوس الطلبة",
+  StudentSeatRegister12: "صفحة سجل جلوس الطلبة",
+  CloudStorageHealth12: "صفحة فحص التخزين السحابي",
+  CloudBackup12: "صفحة النسخ الاحتياطي السحابي",
+  Sync12: "صفحة المزامنة السحابية",
+  TaskDistributionRun12: "صفحة تشغيل توزيع المهام",
+  TaskDistributionPrint12: "صفحة طباعة توزيع المهام",
+};
+
+function normalizeControlAccessPage(value: unknown) {
+  const page = clean(value || "Control12");
+  // Keep the function compatible with any existing protected page while preventing path injection.
+  if (!/^[A-Za-z0-9_-]{1,80}$/.test(page)) {
+    throw new functions.https.HttpsError("invalid-argument", "INVALID_ACCESS_PAGE");
+  }
+  return page;
+}
+
+function controlAccessPageLabel(page: string, fallback?: unknown) {
+  return clean(fallback) || CONTROL_ACCESS_PAGE_LABELS[page] || "صفحة محمية";
+}
+
+function controlAccessCodeDocId(uid: string, page: string) {
+  // Preserve the legacy Control12 document id so existing Control12 flows do not break.
+  return page === "Control12" ? uid : `${uid}_${page}`;
+}
+
+function controlAccessDocRef(tenantId: string, uid: string, page = "Control12") {
   return db
     .collection("tenants")
     .doc(tenantId)
     .collection("controlAccessCodes")
-    .doc(uid);
+    .doc(controlAccessCodeDocId(uid, page));
+}
+
+function controlAccessSessionDocRef(tenantId: string, uid: string, page: string) {
+  return db
+    .collection("tenants")
+    .doc(tenantId)
+    .collection("pageAccessSessions")
+    .doc(controlAccessCodeDocId(uid, page));
 }
 
 const CONTROL_ACCESS_MAX_ATTEMPTS = 5;
 const CONTROL_ACCESS_LOCK_MINUTES = 15;
+const CONTROL_ACCESS_SESSION_MINUTES = 30;
 
 function controlAccessLockUntilTimestamp() {
   return admin.firestore.Timestamp.fromMillis(Date.now() + CONTROL_ACCESS_LOCK_MINUTES * 60 * 1000);
@@ -1536,9 +1575,11 @@ function timestampToMillis(value: unknown) {
 
 export const sendControl12AccessCodeEmail = functions
   .region("us-central1")
-  .https.onCall(async (data: { tenantId?: string }, context) => {
+  .https.onCall(async (data: { tenantId?: string; page?: string; pageLabel?: string }, context) => {
     const auth = await getAuthContext(context);
     const tenantId = safeSegment(String(data?.tenantId || ""), "tenantId");
+    const page = normalizeControlAccessPage(data?.page);
+    const pageLabel = controlAccessPageLabel(page, data?.pageLabel);
 
     if (!(await canReadTenant(auth, tenantId))) {
       throw new functions.https.HttpsError("permission-denied", "TENANT_ACCESS_DENIED");
@@ -1556,7 +1597,7 @@ export const sendControl12AccessCodeEmail = functions
     const now = admin.firestore.Timestamp.now();
     const expiresAt = admin.firestore.Timestamp.fromMillis(Date.now() + 10 * 60 * 1000);
     const code = String(Math.floor(100000 + Math.random() * 900000));
-    const codeHash = controlAccessHash(`${tenantId}:${auth.uid}:${code}`);
+    const codeHash = controlAccessHash(`${tenantId}:${auth.uid}:${page}:${code}`);
 
     const tenantSnap = await db.collection("tenants").doc(tenantId).get();
     const tenantData = tenantSnap.exists ? tenantSnap.data() || {} : {};
@@ -1578,12 +1619,13 @@ export const sendControl12AccessCodeEmail = functions
         tenantId
     );
 
-    await controlAccessDocRef(tenantId, auth.uid).set(
+    await controlAccessDocRef(tenantId, auth.uid, page).set(
       {
         tenantId,
         uid: auth.uid,
         email: auth.email,
-        page: "Control12",
+        page,
+        pageLabel,
         codeHash,
         attempts: 0,
         lockedUntil: null,
@@ -1605,9 +1647,9 @@ export const sendControl12AccessCodeEmail = functions
       },
     });
 
-    const subject = `رمز الدخول إلى صفحة الكنترول - ${centerName}`;
+    const subject = `رمز الدخول إلى ${pageLabel} - ${centerName}`;
     const textBody = `
-رمز الدخول إلى صفحة الكنترول
+رمز الدخول إلى ${pageLabel}
 
 المركز: ${centerName}
 معرف المركز: ${tenantId}
@@ -1621,7 +1663,7 @@ ${code}
 
     const htmlBody = `
       <div dir="rtl" style="font-family: Arial, Tahoma, sans-serif; color:#000000; font-weight:700; line-height:1.9;">
-        <h2 style="color:#000000;font-weight:900;">رمز الدخول إلى صفحة الكنترول</h2>
+        <h2 style="color:#000000;font-weight:900;">رمز الدخول إلى ${escapeHtml(pageLabel)}</h2>
         <table style="width:100%;border-collapse:collapse;color:#000000;font-weight:700;">
           <tr>
             <td style="border:1px solid #ddd;padding:12px;background:#f8f8f8;font-weight:900;">المركز</td>
@@ -1648,8 +1690,10 @@ ${code}
       html: htmlBody,
     });
 
-    await controlAccessDocRef(tenantId, auth.uid).set(
+    await controlAccessDocRef(tenantId, auth.uid, page).set(
       {
+        page,
+        pageLabel,
         emailStatus: "sent",
         emailMessageId: clean(info.messageId),
         emailSentAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -1660,15 +1704,18 @@ ${code}
     return {
       ok: true,
       message: "تم إرسال رمز الدخول إلى البريد الإلكتروني المسجل للحساب.",
+      page,
+      pageLabel,
       expiresInMinutes: 10,
     };
   });
 
 export const verifyControl12AccessCode = functions
   .region("us-central1")
-  .https.onCall(async (data: { tenantId?: string; code?: string }, context) => {
+  .https.onCall(async (data: { tenantId?: string; code?: string; page?: string }, context) => {
     const auth = await getAuthContext(context);
     const tenantId = safeSegment(String(data?.tenantId || ""), "tenantId");
+    const page = normalizeControlAccessPage(data?.page);
     const code = clean(data?.code || "").replace(/\D/g, "");
 
     if (!(await canReadTenant(auth, tenantId))) {
@@ -1679,7 +1726,7 @@ export const verifyControl12AccessCode = functions
       throw new functions.https.HttpsError("invalid-argument", "رمز الدخول يجب أن يتكون من 6 أرقام.");
     }
 
-    const ref = controlAccessDocRef(tenantId, auth.uid);
+    const ref = controlAccessDocRef(tenantId, auth.uid, page);
     const snap = await ref.get();
 
     if (!snap.exists) {
@@ -1687,6 +1734,9 @@ export const verifyControl12AccessCode = functions
     }
 
     const record = snap.data() || {};
+    if (clean(record.page || "Control12") !== page) {
+      throw new functions.https.HttpsError("permission-denied", "ACCESS_CODE_PAGE_MISMATCH");
+    }
     const attempts = Number(record.attempts || 0);
     const expiresAt = record.expiresAt as admin.firestore.Timestamp | undefined;
     const used = record.used === true;
@@ -1733,7 +1783,7 @@ export const verifyControl12AccessCode = functions
     }
 
     const expectedHash = clean(record.codeHash);
-    const receivedHash = controlAccessHash(`${tenantId}:${auth.uid}:${code}`);
+    const receivedHash = controlAccessHash(`${tenantId}:${auth.uid}:${page}:${code}`);
 
     if (!expectedHash || expectedHash !== receivedHash) {
       const nextAttempts = attempts + 1;
@@ -1783,6 +1833,10 @@ export const verifyControl12AccessCode = functions
       );
     }
 
+    const sessionExpiresAt = admin.firestore.Timestamp.fromMillis(
+      Date.now() + CONTROL_ACCESS_SESSION_MINUTES * 60 * 1000
+    );
+
     await ref.set(
       {
         used: true,
@@ -1796,11 +1850,27 @@ export const verifyControl12AccessCode = functions
       { merge: true }
     );
 
+    await controlAccessSessionDocRef(tenantId, auth.uid, page).set(
+      {
+        tenantId,
+        uid: auth.uid,
+        email: auth.email,
+        page,
+        active: true,
+        verifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+        expiresAt: sessionExpiresAt,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        source: "verifyControl12AccessCode",
+      },
+      { merge: true }
+    );
+
     await db.collection("tenants").doc(tenantId).collection("activityLogs").add({
       tenantId,
-      action: "CONTROL12_EMAIL_CODE_VERIFIED",
+      action: page === "Control12" ? "CONTROL12_EMAIL_CODE_VERIFIED" : `${page}_EMAIL_CODE_VERIFIED`,
       entityType: "controlAccess",
       entityId: auth.uid,
+      page,
       actorUid: auth.uid,
       actorEmail: auth.email,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -1810,6 +1880,41 @@ export const verifyControl12AccessCode = functions
     return {
       ok: true,
       message: "تم التحقق من رمز الدخول بنجاح.",
+      serverVerified: true,
+      page,
+      sessionExpiresAtISO: sessionExpiresAt.toDate().toISOString(),
+    };
+  });
+
+export const checkControl12AccessSession = functions
+  .region("us-central1")
+  .https.onCall(async (data: { tenantId?: string; page?: string }, context) => {
+    const auth = await getAuthContext(context);
+    const tenantId = safeSegment(String(data?.tenantId || ""), "tenantId");
+    const page = normalizeControlAccessPage(data?.page);
+
+    if (!(await canReadTenant(auth, tenantId))) {
+      throw new functions.https.HttpsError("permission-denied", "TENANT_ACCESS_DENIED");
+    }
+
+    const snap = await controlAccessSessionDocRef(tenantId, auth.uid, page).get();
+    if (!snap.exists) {
+      return { ok: true, verified: false, page, reason: "NO_SERVER_SESSION" };
+    }
+
+    const session = snap.data() || {};
+    const expiresAtMillis = timestampToMillis(session.expiresAt);
+    const verified =
+      session.active === true &&
+      clean(session.uid) === auth.uid &&
+      clean(session.page) === page &&
+      expiresAtMillis > Date.now();
+
+    return {
+      ok: true,
+      verified,
+      page,
+      expiresAtISO: expiresAtMillis ? new Date(expiresAtMillis).toISOString() : "",
     };
   });
 
